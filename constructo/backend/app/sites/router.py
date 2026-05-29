@@ -6,6 +6,7 @@ assigned to via the SiteAssignment table. Visibility for reads is enforced
 through `effective_visible_site_ids`, which extends the frozen
 `app.auth.scoping.visible_site_ids` with assignment lookups.
 """
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -18,7 +19,7 @@ from app.auth.scoping import visible_site_ids
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
-from app.models import Company, Site, User, UserRole, WhatsappGroup
+from app.models import Company, Site, SiteEventModel, User, UserRole, WhatsappGroup
 from app.sites.models import SiteAssignment
 from app.sites.schemas import (
     CompanyCreate,
@@ -26,6 +27,7 @@ from app.sites.schemas import (
     OkOut,
     SiteAssignIn,
     SiteCreate,
+    SiteEventOut,
     SiteOut,
     SiteUpdate,
     UserCreate,
@@ -192,6 +194,69 @@ async def assign_site(
         session.add(SiteAssignment(site_id=site_id, user_id=body.user_id))
         await session.commit()
     return OkOut()
+
+
+# ---- site events (read) ----------------------------------------------------
+
+
+@router.get("/sites/{site_id}/events", response_model=Page[SiteEventOut])
+async def list_site_events(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    date: date | None = Query(None),  # filter by occurred_on
+    limit: int = Query(DEFAULT_LIMIT),
+    cursor: str | None = Query(None),
+) -> Page[SiteEventOut]:
+    """List a site's extracted events, scoped by site visibility.
+
+    owner/pm see any company site's events; supervisors only their assigned
+    sites'. Optionally filter by ``date`` (``occurred_on``). Cursor-paginated by
+    event id like the other list endpoints.
+    """
+    visible = await effective_visible_site_ids(session, user)
+    if site_id not in visible:
+        # Mirror get_site: 404 if it doesn't exist at all, else 403.
+        site = await session.get(Site, site_id)
+        if site is None:
+            raise AppError(404, "not_found", "Site not found")
+        raise AppError(403, "forbidden", "Site not in scope")
+
+    page_size = _parse_limit(limit)
+    after = _decode(cursor)
+
+    stmt = select(SiteEventModel).where(SiteEventModel.site_id == site_id)
+    if date is not None:
+        stmt = stmt.where(SiteEventModel.occurred_on == date)
+    stmt = stmt.order_by(SiteEventModel.id)
+    if after is not None:
+        stmt = stmt.where(SiteEventModel.id > UUID(after))
+    stmt = stmt.limit(page_size + 1)
+
+    rows = list((await session.execute(stmt)).scalars().all())
+    next_cursor = None
+    if len(rows) > page_size:
+        rows = rows[:page_size]
+        next_cursor = encode_cursor(str(rows[-1].id))
+
+    return Page[SiteEventOut](items=[_event_out(e) for e in rows], next_cursor=next_cursor)
+
+
+def _event_out(e: SiteEventModel) -> SiteEventOut:
+    return SiteEventOut(
+        id=e.id,
+        site_id=e.site_id,
+        event_type=e.event_type,
+        occurred_on=e.occurred_on,
+        summary=e.summary,
+        fields=e.fields or {},
+        confidence=e.confidence,
+        needs_clarification=e.needs_clarification,
+        source_message_ids=list(e.source_message_ids or []),
+        version=e.version,
+        supersedes_event_id=e.supersedes_event_id,
+        created_at=e.created_at,
+    )
 
 
 def _site_out(site: Site) -> SiteOut:

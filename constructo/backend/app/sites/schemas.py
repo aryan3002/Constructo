@@ -2,6 +2,7 @@
 
 Endpoints never return ORM objects directly; they map to these models.
 """
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -91,3 +92,23 @@ class WhatsappGroupOut(BaseModel):
     external_group_id: str
     source: str
     label: str | None
+
+
+# ---- site events (read) ----------------------------------------------------
+
+
+class SiteEventOut(BaseModel):
+    """Read-shape for a persisted site event (matches the SiteEvent contract)."""
+
+    id: UUID
+    site_id: UUID
+    event_type: str
+    occurred_on: date
+    summary: str
+    fields: dict
+    confidence: float
+    needs_clarification: bool
+    source_message_ids: list[UUID]
+    version: int
+    supersedes_event_id: UUID | None
+    created_at: datetime
