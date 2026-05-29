@@ -32,6 +32,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI deliberately calls Depends()/Header() in argument defaults.
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# events.py is the verbatim cross-agent contract; keep it exactly as specified.
+"app/contracts/events.py" = ["UP"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

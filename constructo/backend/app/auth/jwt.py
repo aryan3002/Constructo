@@ -1,5 +1,5 @@
 """JWT encode/decode helpers."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -7,7 +7,7 @@ from app.config import settings
 
 
 def create_access_token(subject: str, role: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "role": role,

@@ -7,7 +7,6 @@ from app.models import (
     Company,
     OwnerBrief,
     RawMessageModel,
-    Site,
     SiteEventModel,
     User,
     UserRole,

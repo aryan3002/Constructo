@@ -19,7 +19,9 @@ class AppError(Exception):
 
 
 def _envelope(status_code: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}})
+    return JSONResponse(
+        status_code=status_code, content={"error": {"code": code, "message": message}}
+    )
 
 
 def install_error_handlers(app: FastAPI) -> None:

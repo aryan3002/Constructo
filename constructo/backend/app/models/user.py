@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String, func
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
 
 
-class UserRole(str, Enum):
+class UserRole(StrEnum):
     owner = "owner"
     pm = "pm"
     supervisor = "supervisor"

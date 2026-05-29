@@ -4,23 +4,20 @@ Convention: ?limit=50&cursor=...  ->  {"items": [...], "next_cursor": ...}
 Cursors are opaque, URL-safe base64 strings so callers never depend on their contents.
 """
 import base64
-from typing import Generic, Optional, TypeVar
 
 from pydantic import BaseModel
-
-T = TypeVar("T")
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
 
-def encode_cursor(value: Optional[str]) -> Optional[str]:
+def encode_cursor(value: str | None) -> str | None:
     if value is None:
         return None
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii")
 
 
-def decode_cursor(cursor: Optional[str]) -> Optional[str]:
+def decode_cursor(cursor: str | None) -> str | None:
     if cursor is None:
         return None
     try:
@@ -29,6 +26,6 @@ def decode_cursor(cursor: Optional[str]) -> Optional[str]:
         raise ValueError("invalid cursor") from exc
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     items: list[T]
-    next_cursor: Optional[str] = None
+    next_cursor: str | None = None
