@@ -33,7 +33,9 @@ router = APIRouter(prefix="/api/v1", tags=["briefs"])
 
 
 class BriefRunIn(BaseModel):
-    company_id: UUID
+    # Optional: defaults to the authenticated user's own company. An owner/PM
+    # running their own brief shouldn't need to know/send their company id.
+    company_id: UUID | None = None
     brief_date: dt.date | None = Field(default=None, alias="date")
 
     model_config = {"populate_by_name": True}
@@ -73,7 +75,7 @@ async def run_brief(
     user: User = Depends(require_role(UserRole.owner, UserRole.pm)),
     session: AsyncSession = Depends(get_session),
 ) -> BriefRunOut:
-    if body.company_id != user.company_id:
+    if body.company_id is not None and body.company_id != user.company_id:
         raise AppError(403, "forbidden", "Cannot run a brief for another company")
 
     brief_date = body.brief_date or (

@@ -54,7 +54,12 @@ export const EVENT_TYPE_CLASSES: Record<SiteEventType, string> = {
 }
 
 export function formatDate(iso: string): string {
-  const d = new Date(iso)
+  // A plain "YYYY-MM-DD" is parsed by new Date() as UTC midnight, which renders
+  // a day early in timezones behind UTC. Parse the parts as a LOCAL date.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString(undefined, {
     day: 'numeric',
