@@ -19,6 +19,7 @@ dependencies = [
     "redis>=5.2",
     "apscheduler>=3.11",
     "openai>=1.55",
+    "pgvector>=0.4.2",
 ]
 
 [dependency-groups]

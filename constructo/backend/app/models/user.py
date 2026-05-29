@@ -31,6 +31,10 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(
         SAEnum(UserRole, name="user_role"), nullable=False, default=UserRole.owner
     )
+    # Phase B i18n: preferred UI/notification language (BCP-47-ish short code,
+    # e.g. "en" | "hi"). Nullable with an "en" default so existing rows keep
+    # working; not part of the frozen contracts.
+    language: Mapped[str | None] = mapped_column(String, nullable=True, server_default="en")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
