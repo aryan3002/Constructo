@@ -42,6 +42,10 @@ async def _setup_database():
 
     engine = create_async_engine(TEST_DATABASE_URL)
     async with engine.begin() as conn:
+        # pgvector extension is required by event_embeddings (vector column + HNSW
+        # index). Migration 0001 creates it for the migrated DB; create_all (used
+        # here instead of migrations) needs it created explicitly.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     await engine.dispose()
