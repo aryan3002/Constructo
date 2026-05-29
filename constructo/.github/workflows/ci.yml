@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pytest + ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      # pgvector image so migration 0001 `CREATE EXTENSION vector` succeeds.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: constructo
+          POSTGRES_PASSWORD: constructo
+          POSTGRES_DB: constructo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U constructo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # App connects to the CI Postgres service on the standard 5432. conftest.py
+      # derives the test DB by appending "_test" to this DB name (-> constructo_test)
+      # and creates it itself via an admin connection to .../postgres, so the
+      # service only needs to provision the base `constructo` database.
+      DATABASE_URL: postgresql+asyncpg://constructo:constructo@localhost:5432/constructo
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret-32-bytes-minimum-aaaa
+      INGEST_API_KEY: ci-ingest-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run database migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Lint (ruff)
+        run: uv run ruff check
+
+  web:
+    name: web (build + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  bridge:
+    name: bridge (typecheck + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: whatsapp-bridge
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: whatsapp-bridge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test

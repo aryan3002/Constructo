@@ -1,5 +1,7 @@
 # Constructo — AI Construction Management
 
+[![CI](https://github.com/aryan3002/Constructo/actions/workflows/ci.yml/badge.svg)](https://github.com/aryan3002/Constructo/actions/workflows/ci.yml)
+
 AI-native construction-management backend. As of **Wave 2** the full loop is wired
 end-to-end: a WhatsApp message is ingested, extracted into structured site events by a
 background worker, aggregated into a nightly owner brief, and delivered over WhatsApp.
