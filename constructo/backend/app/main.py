@@ -1,4 +1,14 @@
+import sys
 from contextlib import asynccontextmanager
+
+# Load .env into os.environ when running the server (uvicorn), so provider code
+# that reads os.environ directly (extraction LLM/STT/OCR, brief send) sees the
+# configured credentials without a manual `set -a && . .env`. Skipped under
+# pytest so tests keep full control of the environment via monkeypatch.
+if "pytest" not in sys.modules:
+    from dotenv import load_dotenv
+
+    load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
