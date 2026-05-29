@@ -25,5 +25,20 @@ services:
       timeout: 5s
       retries: 10
 
+# --- Application processes (Wave 2) -----------------------------------------
+# For the pilot we keep ONLY Postgres + Redis in compose, and run the Python
+# API and the extraction worker locally via `uv run` (faster dev loop, no image
+# rebuild). Exact commands:
+#
+#   API:    cd backend && uv run uvicorn app.main:app --reload --port 8000
+#   Worker: cd backend && uv run python -m app.queue_worker
+#
+# The worker pulls extraction jobs the API enqueues on Redis and runs
+# app.extraction.worker.handle_ingested for each ingested message. Both
+# processes read the same backend/.env (DATABASE_URL, REDIS_URL, MEDIA_DIR).
+#
+# To containerize later, add a `backend` image and a `worker` service whose
+# command is `python -m app.queue_worker`, both depending on postgres + redis.
+
 volumes:
   constructo_pgdata:
