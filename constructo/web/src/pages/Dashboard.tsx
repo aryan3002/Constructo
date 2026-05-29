@@ -1,4 +1,3 @@
-import { api } from '../api/client'
 import { todayIso } from '../api/config'
 import { useBrief, useRunBrief } from '../api/hooks'
 import { BriefCard } from '../components/BriefCard'
@@ -11,7 +10,7 @@ export function Dashboard() {
   const runBrief = useRunBrief()
 
   function handleRun() {
-    runBrief.mutate({ company_id: api.companyId, date })
+    runBrief.mutate({ date })
   }
 
   return (

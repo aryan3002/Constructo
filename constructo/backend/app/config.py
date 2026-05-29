@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
 
+    # Browser origins allowed to call the API (CORS). The web dashboard dev
+    # server runs on 5173 (Vite); 3000 covered for alternate setups.
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ]
+
     # ---- Wave 2 integration ------------------------------------------------
 
     # Extraction queue. When EXTRACTION_SYNC is true the ingest endpoint runs

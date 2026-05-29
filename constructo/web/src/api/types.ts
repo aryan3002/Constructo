@@ -68,7 +68,8 @@ export interface OwnerBrief {
 }
 
 export interface RunBriefRequest {
-  company_id: string
+  // Optional: the backend defaults to the authenticated user's own company.
+  company_id?: string
   date?: string
 }
 

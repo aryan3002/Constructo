@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
 from app.auth.router import router as auth_router
 from app.brief.router import router as brief_router
 from app.common.errors import install_error_handlers
+from app.config import settings
 from app.ingestion.router import router as ingest_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.sites.router import router as sites_router
@@ -25,6 +27,17 @@ app = FastAPI(
     title="Constructo API", version="0.1.0", openapi_url="/openapi.json", lifespan=lifespan
 )
 install_error_handlers(app)
+
+# CORS: allow the web dashboard (and other configured origins) to call the API
+# from the browser. Without this, cross-origin fetches (e.g. localhost:5173 ->
+# localhost:8000) are blocked by the browser and login silently fails.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/healthz")
