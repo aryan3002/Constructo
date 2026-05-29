@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://constructo:constructo@localhost:5433/constructo"
     redis_url: str = "redis://localhost:6379/0"
-    jwt_secret: str = "dev-secret-change-me"
+    jwt_secret: str = "dev-secret-change-me-to-a-real-32byte-key"
     ingest_api_key: str = "dev-ingest-key"
 
     jwt_algorithm: str = "HS256"
