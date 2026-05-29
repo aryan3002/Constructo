@@ -11,13 +11,15 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# NOTE: the git repo root is one level ABOVE the project dir, so the app lives in
+# constructo/. All job working-directories and cache paths are prefixed accordingly.
 jobs:
   backend:
     name: backend (pytest + ruff)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: constructo/backend
 
     services:
       # pgvector image so migration 0001 `CREATE EXTENSION vector` succeeds.
@@ -61,7 +63,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: backend/uv.lock
+          cache-dependency-glob: constructo/backend/uv.lock
 
       - name: Set up Python 3.12
         run: uv python install 3.12
@@ -83,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: constructo/web
 
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +95,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: constructo/web/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -109,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: whatsapp-bridge
+        working-directory: constructo/whatsapp-bridge
 
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +121,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: whatsapp-bridge/package-lock.json
+          cache-dependency-path: constructo/whatsapp-bridge/package-lock.json
 
       - name: Install dependencies
         run: npm ci
