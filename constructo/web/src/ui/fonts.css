@@ -1,0 +1,31 @@
+/* Constructo type spine — loaded from @fontsource (offline, no Google CDN).
+ * Must render BOTH Devanagari + Latin. Anek for display/headlines, Hind for
+ * body/UI, Spline Sans Mono for numerals/amounts/timestamps.
+ *
+ * Imported once at app entry (main.tsx) and in the gallery so the kit always
+ * renders with the real typefaces.
+ */
+
+/* Display / headlines — Anek (Latin + Devanagari) */
+@import '@fontsource/anek-latin/400.css';
+@import '@fontsource/anek-latin/500.css';
+@import '@fontsource/anek-latin/600.css';
+@import '@fontsource/anek-latin/700.css';
+@import '@fontsource/anek-devanagari/400.css';
+@import '@fontsource/anek-devanagari/600.css';
+@import '@fontsource/anek-devanagari/700.css';
+
+/* Body / UI — Hind (Latin + Devanagari) */
+@import '@fontsource/hind/400.css';
+@import '@fontsource/hind/500.css';
+@import '@fontsource/hind/600.css';
+@import '@fontsource/hind/700.css';
+@import '@fontsource/hind/devanagari-400.css';
+@import '@fontsource/hind/devanagari-500.css';
+@import '@fontsource/hind/devanagari-600.css';
+@import '@fontsource/hind/devanagari-700.css';
+
+/* Numerals / amounts / timestamps — Spline Sans Mono */
+@import '@fontsource/spline-sans-mono/400.css';
+@import '@fontsource/spline-sans-mono/500.css';
+@import '@fontsource/spline-sans-mono/600.css';
