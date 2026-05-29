@@ -1,6 +1,4 @@
-"""Ingestion endpoint: accept a RawMessage, persist it, stub-enqueue extraction."""
-from uuid import UUID
-
+"""Ingestion endpoint: accept a RawMessage, persist it, enqueue extraction."""
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,13 +7,9 @@ from app.config import settings
 from app.contracts.events import RawMessage
 from app.db import get_session
 from app.models import RawMessageModel
+from app.queue import enqueue_extraction
 
 router = APIRouter(prefix="/api/v1", tags=["ingestion"])
-
-
-async def enqueue_extraction(raw_message_id: UUID) -> None:
-    """Stub. Wave 1 wires this to Redis / a worker that runs AI event extraction."""
-    return None
 
 
 @router.post("/ingest")

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import all models so they register on Base.metadata.
 import app.models  # noqa: F401
+import app.sites.models  # noqa: F401  Wave 1: registers site_assignments table
 from alembic import context
 from app.config import settings
 from app.db import Base

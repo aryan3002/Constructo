@@ -1,9 +1,14 @@
-# Constructo — Backend Foundation (Wave 0)
+# Constructo — AI Construction Management
 
-AI-native construction-management backend. Wave 0 is the foundation other agents build on:
-Pydantic contracts, the database schema, JWT auth, and the WhatsApp ingestion endpoint.
-Event extraction, briefs, site CRUD, and the bridge/web app are **not** built here
-(see `app/extraction`, `app/sites`, `app/brief` — empty packages marked "implemented in Wave 1").
+AI-native construction-management backend. As of **Wave 2** the full loop is wired
+end-to-end: a WhatsApp message is ingested, extracted into structured site events by a
+background worker, aggregated into a nightly owner brief, and delivered over WhatsApp.
+
+Pipeline: **bridge → `POST /api/v1/ingest` → Redis queue → extraction worker → `site_events`
+→ nightly brief → WhatsApp send**, with the web dashboard reading events via
+`GET /api/v1/sites/{id}/events`.
+
+For a step-by-step run of the whole loop and a 5-minute demo script, see **[DEMO.md](DEMO.md)**.
 
 ## Tech stack
 
@@ -38,10 +43,23 @@ cp .env.example backend/.env   # then edit
 
 | Var | Default | Purpose |
 |-----|---------|---------|
-| `DATABASE_URL` | `postgresql+asyncpg://constructo:constructo@localhost:5433/constructo` | async Postgres DSN |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis DSN (reserved for Wave 1 worker) |
+| `DATABASE_URL` | `…/constructo` (use `constructo_wave2` for this branch) | async Postgres DSN |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis DSN for the extraction queue |
 | `JWT_SECRET` | dev placeholder (≥32 bytes) | HS256 signing key — **change in prod** |
 | `INGEST_API_KEY` | `dev-ingest-key` | required `X-Ingest-Key` for `/api/v1/ingest` |
+| `EXTRACTION_SYNC` | `false` | run extraction inline on ingest (no worker) — handy for tests/local |
+| `EXTRACTION_QUEUE` | `extraction` | RQ queue name |
+| `MEDIA_DIR` | `./media` | **shared** folder: bridge writes media, extraction reads it — set both to the same absolute path |
+| `ENABLE_SCHEDULER` | `false` | enable the in-process nightly-brief scheduler |
+| `BRIEF_HOUR` / `BRIEF_TIMEZONE` | `7` / `Asia/Kolkata` | when the nightly brief runs |
+| `WHATSAPP_SEND_MODE` | `dry_run` | `dry_run` \| `url` \| `cloud_api` |
+| `WHATSAPP_SEND_URL` | — | relay endpoint for `url` mode |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | — | Cloud API Bearer token + phone number id (`cloud_api` mode) |
+| `OPENAI_API_KEY` | — | enables real LLM/OCR/STT; absent → deterministic Fakes |
+
+> **Wave 2 DB:** set the DB name to `constructo_wave2`
+> (`…@localhost:5433/constructo_wave2`). Create it once with
+> `docker exec constructo-postgres-1 psql -U constructo -d constructo -c "CREATE DATABASE constructo_wave2"`.
 
 ## 3. Install dependencies
 
@@ -67,6 +85,55 @@ uv run uvicorn app.main:app --reload
 
 - Health check: <http://127.0.0.1:8000/healthz> → `{"status":"ok"}`
 - OpenAPI: <http://127.0.0.1:8000/openapi.json> · Swagger UI: <http://127.0.0.1:8000/docs>
+
+## 5b. Run the extraction worker
+
+`/api/v1/ingest` stores the message then enqueues an extraction job on Redis. A worker
+process drains that queue and writes `site_events`:
+
+```bash
+cd backend
+uv run python -m app.queue_worker
+```
+
+The worker runs `app.extraction.worker.handle_ingested` for each message (via a small sync
+wrapper, since RQ workers are synchronous). If Redis is down, `/ingest` still returns 200 —
+the row is stored and the enqueue is skipped with a warning (no 500). For tests / quick local
+runs without a worker, set `EXTRACTION_SYNC=true` to run extraction inline on ingest.
+
+## 5c. Nightly brief scheduler (optional)
+
+The API can schedule the nightly owner brief in-process (APScheduler). Off by default:
+
+```bash
+cd backend
+ENABLE_SCHEDULER=true BRIEF_HOUR=7 uv run uvicorn app.main:app
+# runs brief.schedule.run_nightly() daily at 07:00 Asia/Kolkata
+```
+
+You can also run it once, on demand: `uv run python -m app.brief.schedule`.
+
+## 5d. WhatsApp send modes
+
+`app.brief.send.send_brief(to_phone, text)` supports three modes via `WHATSAPP_SEND_MODE`:
+
+- `dry_run` (default): logs and returns `False`. No network.
+- `url`: POSTs `{to_phone, text}` to `WHATSAPP_SEND_URL`.
+- `cloud_api`: POSTs to `https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_NUMBER_ID}/messages`
+  with `Authorization: Bearer {WHATSAPP_TOKEN}` and a WhatsApp text body.
+
+> **Cloud API caveats.** Free-form text only delivers inside the **24-hour customer-service
+> window** — the owner/test number must have messaged your WhatsApp number within the last
+> 24h; otherwise Meta requires a **pre-approved template**. The Meta test access token also
+> **expires every 24h** — use a permanent **System User** token for a real pilot.
+> Pilot `phone_number_id`: `1094260843779305`.
+
+## 5e. Site events read endpoint
+
+`GET /api/v1/sites/{site_id}/events?date=YYYY-MM-DD&limit=&cursor=` returns
+`{items: [SiteEvent…], next_cursor}`, scoped by site visibility (owner/pm see any company
+site; supervisors only assigned sites). The web dashboard reads this directly (it no longer
+needs mock fallback once the API is up).
 
 ### Try the auth + ingest flow
 
@@ -119,7 +186,9 @@ uv run ruff format .    # format
 - **`visible_site_ids`** takes `(session, user)` (the spec wrote `(user)`) because it queries
   the DB. `owner`/`pm` see all company sites; `supervisor` returns `[]` until Wave 1 adds a
   user↔site assignment table.
-- **`enqueue_extraction`** in `app.ingestion.router` is a stub (returns `None`). Wave 1 wires
-  it to Redis / a worker.
+- **`enqueue_extraction`** now enqueues a real RQ job on Redis (Wave 2) — see
+  `app/queue.py` and `app/queue_worker.py`. It is resilient (no 500 if Redis is down) and
+  supports inline `EXTRACTION_SYNC` mode for tests/local.
 
-See `ARCHITECTURE.md` for the full contracts and import paths.
+See `ARCHITECTURE.md` for the full contracts and import paths, and **[DEMO.md](DEMO.md)** for
+the full end-to-end run + demo script.
