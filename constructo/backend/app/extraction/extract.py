@@ -14,10 +14,12 @@ network. The ``fields`` shapes follow the construction domain conventions in
 """
 from __future__ import annotations
 
+import os
 from datetime import date
 from typing import Any
 from uuid import UUID
 
+from app.config import settings
 from app.contracts.events import EventType, MediaType, RawMessage, SiteEvent
 from app.extraction.classify import classify
 from app.extraction.llm import LLMClient, get_llm_client
@@ -91,6 +93,30 @@ def _llm_schema(event_type: EventType) -> dict:
     }
 
 
+def _normalize_media_ref(media_url: str | None) -> str | None:
+    """Normalize a media reference into a local filesystem path the workers read.
+
+    The WhatsApp bridge and extraction share a ``MEDIA_DIR`` (see README /
+    ``app.config.settings.media_dir``). The bridge sets ``media_url`` to an
+    absolute local path; we also tolerate ``file://`` URIs and bare relative
+    paths (resolved against ``MEDIA_DIR``). Real http(s) URLs are passed through
+    unchanged so object-storage / Cloud-API URLs still work later.
+    """
+    if not media_url:
+        return media_url
+    ref = media_url.strip()
+    low = ref.lower()
+    if low.startswith(("http://", "https://")):
+        return ref
+    if low.startswith("file://"):
+        # file:///abs/path -> /abs/path
+        return ref[len("file://") :]
+    if os.path.isabs(ref):
+        return ref
+    # Bare relative path: resolve against the shared media dir.
+    return os.path.join(settings.media_dir, ref)
+
+
 def _looks_like_document(raw: RawMessage) -> bool:
     """An image is doc-like if its mime/text hints at a challan/invoice/PDF."""
     if raw.media_mime and "pdf" in raw.media_mime.lower():
@@ -103,14 +129,15 @@ async def _resolve_text(
     raw: RawMessage, stt: STTClient | None, ocr_client: OCRClient | None
 ) -> str:
     """Turn whatever media the message carries into plain text for the pipeline."""
-    if raw.media_type is MediaType.voice and raw.media_url:
-        return await run_transcribe(raw.media_url, client=stt)
+    media_ref = _normalize_media_ref(raw.media_url)
+    if raw.media_type is MediaType.voice and media_ref:
+        return await run_transcribe(media_ref, client=stt)
 
     needs_ocr = raw.media_type is MediaType.document or (
         raw.media_type is MediaType.image and _looks_like_document(raw)
     )
-    if needs_ocr and raw.media_url:
-        ocr_text = await run_ocr(raw.media_url, client=ocr_client)
+    if needs_ocr and media_ref:
+        ocr_text = await run_ocr(media_ref, client=ocr_client)
         # Keep any human caption alongside the OCR text.
         return f"{raw.text}\n{ocr_text}".strip() if raw.text else ocr_text
 
