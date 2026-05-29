@@ -1,0 +1,109 @@
+/* ============================================================================
+ * Constructo — "Blueprint & Daylight" design tokens.
+ *
+ * Two themes share one token spine and are switched via `data-theme` on a
+ * wrapping element (see ThemeProvider):
+ *   data-theme="site"      contractor app  — Uber-like: bold, warm paper, amber
+ *   data-theme="daylight"  homeowner app   — Airbnb-like: soft, photo-forward
+ *
+ * Tailwind reads these CSS variables through theme.extend (tailwind.config.js),
+ * so utilities like `bg-paper`, `text-ink`, `bg-primary` resolve per active
+ * theme. Status colors are shared across both surfaces.
+ * ========================================================================== */
+
+:root,
+[data-theme='site'] {
+  /* --- Status spine (shared; always paired with an icon/shape) --- */
+  --c-ok: #1e9e5a;
+  --c-warn: #e8a317;
+  --c-risk: #e5484d;
+  --c-info: #3b7dd8;
+
+  /* --- Site surface (contractor app — DEFAULT) --- */
+  --c-ink: #15171c;
+  --c-ink-2: #22262e;
+  --c-paper: #f7f5f0; /* warm, NOT clinical white */
+  --c-paper-2: #ffffff;
+  --c-line: #d9d4c8;
+  --c-primary: #f2a100; /* amber — THE primary action */
+  --c-primary-deep: #c77f00;
+  --c-text: #15171c;
+  --c-text-mute: #6b6f78;
+
+  /* App-level mapped roles (consumed by Tailwind utilities) */
+  --c-bg: var(--c-paper);
+  --c-card: var(--c-paper-2);
+  --c-accent: var(--c-primary);
+  --c-accent-warm: var(--c-primary-deep);
+  --c-on-primary: #15171c; /* dark ink reads best on amber */
+
+  /* --- Radii: Site = 8px cards / 12px sheets --- */
+  --radius-card: 8px;
+  --radius-sheet: 12px;
+  --radius-pill: 9999px;
+  --radius-control: 8px;
+
+  /* --- Elevation: flat, hairline + subtle shadow (not floaty) --- */
+  --shadow-card: 0 1px 2px rgba(21, 23, 28, 0.06), 0 1px 1px rgba(21, 23, 28, 0.04);
+  --shadow-sheet: 0 -8px 24px rgba(21, 23, 28, 0.12);
+  --shadow-pop: 0 6px 20px rgba(21, 23, 28, 0.14);
+
+  /* --- Type families --- */
+  --font-display: 'Anek Latin', 'Anek Devanagari', system-ui, sans-serif;
+  --font-body: 'Hind', 'Anek Devanagari', system-ui, sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+[data-theme='daylight'] {
+  /* Homeowner surface — Airbnb-like warmth. Status spine unchanged. */
+  --c-bg: #fbfaf7;
+  --c-card: #ffffff;
+  --c-accent: #2f8f6f;
+  --c-accent-warm: #e7b66a;
+  --c-text: #1e2230;
+  --c-text-mute: #5b6172;
+  --c-line: #ece7dd;
+  --c-on-primary: #ffffff;
+
+  /* Keep an ink token defined so shared components don't fall back to black. */
+  --c-ink: #1e2230;
+  --c-ink-2: #2b3144;
+  --c-paper: #fbfaf7;
+  --c-paper-2: #ffffff;
+  --c-primary: #2f8f6f;
+  --c-primary-deep: #25785c;
+
+  /* Daylight = softer, larger radius (16px) and a touch more lift. */
+  --radius-card: 16px;
+  --radius-sheet: 20px;
+  --radius-control: 12px;
+  --shadow-card: 0 2px 8px rgba(30, 34, 48, 0.06), 0 1px 2px rgba(30, 34, 48, 0.04);
+  --shadow-pop: 0 10px 30px rgba(30, 34, 48, 0.12);
+}
+
+/* Global base — type spine + warm canvas. Applied to the app root, never the
+ * raw <body> (so the gallery can show both themes side by side). */
+.cstk-root {
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 24px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular figures for the mono numeral face — amounts/timestamps line up. */
+.cstk-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Reduced-motion: collapse the EvidenceCard reveal + any transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .cstk-animate {
+    transition: none !important;
+    animation: none !important;
+  }
+}
