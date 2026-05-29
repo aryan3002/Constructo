@@ -1,0 +1,15 @@
+# Secrets / local config
+.env
+
+# Persisted WhatsApp auth state (device credentials — NEVER commit)
+auth/
+
+# Downloaded media files
+media/
+
+# Dependencies & build output
+node_modules/
+dist/
+
+# Logs
+*.log
