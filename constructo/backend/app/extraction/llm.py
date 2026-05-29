@@ -227,15 +227,75 @@ class OpenAILLMClient:
         return json.loads(content)
 
 
+class AzureOpenAILLMClient:
+    """Azure OpenAI structured completion client.
+
+    Azure differs from plain OpenAI: you call a *deployment name* (chosen when
+    you deploy a model in the Azure portal), against a resource endpoint, with
+    an explicit api_version. Network calls only happen when ``complete`` is
+    awaited, so importing this module is always safe.
+    """
+
+    def __init__(
+        self, *, api_key: str, endpoint: str, deployment: str, api_version: str
+    ) -> None:
+        self.api_key = api_key
+        self.endpoint = endpoint
+        self.deployment = deployment  # used as the `model` arg on Azure
+        self.api_version = api_version
+
+    async def complete(self, system: str, user: str, json_schema: dict) -> dict:
+        try:
+            from openai import AsyncAzureOpenAI
+        except ImportError as exc:  # pragma: no cover - exercised only with the dep installed
+            raise RuntimeError(
+                "openai package not installed; install it or use FakeLLMClient"
+            ) from exc
+
+        client = AsyncAzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=self.endpoint,
+            api_version=self.api_version,
+        )
+        schema_hint = json.dumps(json_schema)
+        resp = await client.chat.completions.create(
+            model=self.deployment,  # Azure: this is the deployment name
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": f"{system}\n\nReturn JSON matching: {schema_hint}"},
+                {"role": "user", "content": user},
+            ],
+        )
+        content = resp.choices[0].message.content or "{}"
+        return json.loads(content)
+
+
 def get_llm_client() -> LLMClient:
     """Return an :class:`LLMClient` selected by environment.
 
-    Reads ``LLM_PROVIDER`` (default ``"openai"``) and the matching API key
-    (``OPENAI_API_KEY``). If no key is present, returns a :class:`FakeLLMClient`
+    Reads ``LLM_PROVIDER`` (default ``"openai"``):
+      - ``openai``: needs ``OPENAI_API_KEY`` (+ optional ``LLM_MODEL``).
+      - ``azure``: needs ``AZURE_OPENAI_API_KEY``, ``AZURE_OPENAI_ENDPOINT``,
+        ``AZURE_OPENAI_DEPLOYMENT`` (the chat model deployment name), and
+        ``AZURE_OPENAI_API_VERSION``.
+
+    If the required credentials are missing, returns a :class:`FakeLLMClient`
     so the pipeline degrades gracefully in dev/test without credentials.
     """
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
-    if provider == "openai":
+    if provider == "azure":
+        key = os.environ.get("AZURE_OPENAI_API_KEY")
+        endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+        deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+        api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        if key and endpoint and deployment:
+            return AzureOpenAILLMClient(
+                api_key=key,
+                endpoint=endpoint,
+                deployment=deployment,
+                api_version=api_version,
+            )
+    elif provider == "openai":
         key = os.environ.get("OPENAI_API_KEY")
         if key:
             model = os.environ.get("LLM_MODEL", "gpt-4o-mini")
