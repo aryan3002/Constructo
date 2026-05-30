@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     brief_hour: int = 7  # local hour (brief_timezone) to run the nightly brief
     brief_timezone: str = "Asia/Kolkata"
 
+    # SLA escalation sweep (app.approvals.sla.run_sla_sweep). Runs every
+    # ``sla_sweep_minutes`` when the scheduler is enabled — frequent so overdue
+    # homeowner questions escalate promptly.
+    sla_sweep_minutes: int = 20
+    # Permit expiry/renewal/staleness sweep (app.permits.alerts.run_permit_sweep).
+    # Runs once daily at ``permit_sweep_hour`` (local to brief_timezone).
+    permit_sweep_hour: int = 6
+
     # WhatsApp send transport. One of: "dry_run" | "url" | "cloud_api".
     whatsapp_send_mode: str = "dry_run"
     whatsapp_send_url: str | None = None  # used by "url" mode

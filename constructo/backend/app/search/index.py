@@ -144,3 +144,27 @@ async def index_all_unindexed(
             total += 1
         await session.flush()
     return total
+
+
+async def _backfill_main() -> int:
+    """Backfill entrypoint: index every unindexed event, committing the result.
+
+    Uses :data:`app.db.SessionLocal` and the env-selected embeddings client
+    (FakeEmbeddings when no provider creds are configured, so it never hits the
+    network in dev/tests). Returns the count indexed.
+    """
+    from app.db import SessionLocal
+
+    async with SessionLocal() as session:
+        count = await index_all_unindexed(session)
+        await session.commit()
+    return count
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
+    import asyncio
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+    indexed = asyncio.run(_backfill_main())
+    print(f"indexed {indexed} event(s)")

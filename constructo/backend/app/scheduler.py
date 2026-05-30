@@ -28,6 +28,38 @@ async def _run_nightly_job() -> None:
         logger.exception("nightly brief job failed")
 
 
+async def _run_sla_sweep_job() -> None:
+    """Escalate overdue decisions. Owns its session; never crashes the loop.
+
+    ``run_sla_sweep`` takes a session and sweeps all tenants when no
+    ``company_id`` is given.
+    """
+    from app.approvals.sla import run_sla_sweep
+    from app.db import SessionLocal
+
+    try:
+        async with SessionLocal() as session:
+            escalated = await run_sla_sweep(session)
+        logger.info("sla sweep job complete: %d escalated", len(escalated))
+    except Exception:
+        logger.exception("sla sweep job failed")
+
+
+async def _run_permit_sweep_job() -> None:
+    """Raise permit expiry/renewal/staleness alerts. Never crashes the loop.
+
+    ``run_permit_sweep`` manages its own sessions via a session factory
+    (defaults to ``app.db.SessionLocal``).
+    """
+    from app.permits.alerts import run_permit_sweep
+
+    try:
+        created = await run_permit_sweep()
+        logger.info("permit sweep job complete: %d alert(s)", len(created))
+    except Exception:
+        logger.exception("permit sweep job failed")
+
+
 def start_scheduler():
     """Create and start the AsyncIO scheduler if enabled. Returns it (or None)."""
     global _scheduler
@@ -39,6 +71,7 @@ def start_scheduler():
 
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
 
     scheduler = AsyncIOScheduler(timezone=settings.brief_timezone)
     scheduler.add_job(
@@ -47,11 +80,31 @@ def start_scheduler():
         id="nightly_brief",
         replace_existing=True,
     )
+    # SLA escalation: frequent interval so overdue questions escalate promptly.
+    scheduler.add_job(
+        _run_sla_sweep_job,
+        IntervalTrigger(minutes=settings.sla_sweep_minutes),
+        id="sla_sweep",
+        replace_existing=True,
+    )
+    # Permit alerts: once daily.
+    scheduler.add_job(
+        _run_permit_sweep_job,
+        CronTrigger(
+            hour=settings.permit_sweep_hour, minute=0, timezone=settings.brief_timezone
+        ),
+        id="permit_sweep",
+        replace_existing=True,
+    )
     scheduler.start()
     _scheduler = scheduler
     logger.info(
-        "scheduler started: nightly brief at %02d:00 %s",
+        "scheduler started: nightly brief at %02d:00 %s; sla sweep every %dm; "
+        "permit sweep at %02d:00 %s",
         settings.brief_hour,
+        settings.brief_timezone,
+        settings.sla_sweep_minutes,
+        settings.permit_sweep_hour,
         settings.brief_timezone,
     )
     return scheduler
