@@ -19,6 +19,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.contracts.events import MediaType, RawMessage
 from app.db import SessionLocal
 from app.extraction.extract import extract
@@ -124,7 +125,30 @@ async def handle_ingested(
         # this stays network-free in dev/tests.
         await _index_events(session, ids)
 
+        # Hand the inbound message to the bot (Nivaan) for a Guest-Rule
+        # reaction/reply. Best-effort: a bot failure must NEVER fail ingestion.
+        await _bot_handle(session, raw_message_id, llm=llm)
+
         return ids
+
+
+async def _bot_handle(
+    session: AsyncSession, raw_message_id: UUID, *, llm: LLMClient | None = None
+) -> None:
+    """Best-effort: let the bot react/reply to the inbound message. Never raises.
+
+    Gated by ``settings.bot_enabled``. The bot's sender is dry-run by default, so
+    this is network-free in dev/tests; intent uses the same (Fake) LLM as
+    extraction when one is injected.
+    """
+    if not settings.bot_enabled:
+        return
+    try:
+        from app.bot.handle import handle_inbound
+
+        await handle_inbound(session, raw_message_id, llm=llm)
+    except Exception:
+        logger.exception("handle_ingested: bot handling failed for %s", raw_message_id)
 
 
 async def _index_events(session: AsyncSession, event_ids: list[UUID]) -> None:

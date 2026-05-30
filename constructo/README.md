@@ -130,6 +130,29 @@ You can also run it once, on demand: `uv run python -m app.brief.schedule`.
 > **expires every 24h** — use a permanent **System User** token for a real pilot.
 > Pilot `phone_number_id`: `1094260843779305`.
 
+## 5f. WhatsApp bot "Nivaan" (the live loop)
+
+The bot is wired into the running system (W3):
+
+- **Inbound → bot.** After a message is ingested and extracted, the worker calls
+  `app.bot.handle.handle_inbound` (best-effort — a bot failure never fails ingestion).
+  Routine site updates get a quiet ✅ reaction; direct questions get an evidence-bearing
+  answer; replies to the morning brief settle the matching decision (the one-ledger handoff).
+  Gated by `BOT_ENABLED` (default true).
+- **Brief → WhatsApp.** When `ENABLE_SCHEDULER=true`, the nightly job now delivers the
+  brief over WhatsApp per company via `app.bot.brief_delivery.deliver_brief` — it sends the
+  brief with numbered, tappable actions and persists the number→decision map into
+  `owner_briefs.payload.reply_map` (no new table). The owner replies "1" / "approve" /
+  "hold 1" / "show proof 2" and the bot acts on the right decision, idempotently.
+- **Transport.** `BOT_SEND_VIA` selects `dry_run` (default, no network) | `bridge` (the Node
+  Baileys bridge — can post to groups and react; **pilot setting**) | `cloud_api`. For the
+  bridge, set `BRIDGE_URL` (default `http://localhost:8088`) and a `BRIDGE_KEY` that matches
+  the bridge's. The Node bridge exposes `POST /send` + `GET /health` (see
+  `whatsapp-bridge/`); start it with the same `BRIDGE_KEY`.
+
+Thin test/trigger endpoints (bearer-auth'd): `POST /api/v1/bot/handle {raw_message_id}`,
+`/api/v1/bot/deliver-brief {company_id?, date?}`, `/api/v1/bot/reply {chat_jid, text}`.
+
 ## 5e. Site events read endpoint
 
 `GET /api/v1/sites/{site_id}/events?date=YYYY-MM-DD&limit=&cursor=` returns

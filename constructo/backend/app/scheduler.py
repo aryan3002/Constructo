@@ -18,12 +18,36 @@ _scheduler = None
 
 
 async def _run_nightly_job() -> None:
-    # Imported lazily so module import stays cheap and side-effect free.
-    from app.brief.schedule import run_nightly
+    """Build + DELIVER the morning brief over WhatsApp for every company.
 
+    Uses the bot's ``deliver_brief`` (build_brief + send to the owner + persist
+    the number→decision ``reply_map`` into ``owner_briefs.payload``) so the owner
+    can reply "1"/"approve"/"hold" right in WhatsApp. Per-company errors are
+    isolated; never crashes the loop. (Outbound transport honours BOT_SEND_VIA;
+    dry-run by default.) Imported lazily so module import stays side-effect free.
+    """
+    from sqlalchemy import select
+
+    from app.bot.brief_delivery import deliver_brief
+    from app.brief.schedule import _yesterday
+    from app.db import SessionLocal
+    from app.models import Company
+
+    target = _yesterday()
     try:
-        ids = await run_nightly()
-        logger.info("nightly brief job complete: %d brief(s)", len(ids))
+        async with SessionLocal() as session:
+            company_ids = list((await session.execute(select(Company.id))).scalars().all())
+        delivered = 0
+        for company_id in company_ids:
+            try:
+                async with SessionLocal() as session:
+                    await deliver_brief(session, company_id, target)
+                delivered += 1
+            except Exception:
+                logger.exception("nightly brief delivery failed for company %s", company_id)
+        logger.info(
+            "nightly brief job complete: delivered %d/%d brief(s)", delivered, len(company_ids)
+        )
     except Exception:
         logger.exception("nightly brief job failed")
 

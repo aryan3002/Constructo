@@ -186,6 +186,54 @@ path, a `file://` URI, or a bare filename (resolved against `MEDIA_DIR`).
 
 ---
 
+## 11. The live WhatsApp bot loop — "Nivaan"
+
+This runs the full conversational loop: a message in a WhatsApp group → a ✅
+reaction, a question → an answer, the 7am brief → tap a number to act.
+
+### Run the linked stack
+1. **Bridge (Node, sends + receives)** — in `whatsapp-bridge/.env` set a shared
+   `BRIDGE_KEY` and `BRIDGE_PORT=8088`, then:
+   ```bash
+   cd whatsapp-bridge && npm install && npm run dev   # scan the QR once to link WhatsApp
+   # GET http://localhost:8088/health -> {"ok":true,"connected":true}
+   ```
+2. **Backend with the bot ON** — in `backend/.env`:
+   ```bash
+   EXTRACTION_SYNC=true
+   BOT_ENABLED=true
+   BOT_SEND_VIA=bridge
+   BRIDGE_URL=http://localhost:8088
+   BRIDGE_KEY=<same as the bridge>
+   ENABLE_SCHEDULER=true        # so the 7am brief is delivered over WhatsApp
+   ```
+   ```bash
+   cd backend && uv run uvicorn app.main:app --port 8000
+   ```
+3. Make sure the test WhatsApp group is mapped to a seeded site
+   (`whatsapp_groups.external_group_id` = the group's JID; the seed maps
+   `sunrise-site-a`).
+
+### Click-through script
+1. **Capture →** In the group, type a Hindi update: *"Aaj 32 mazdoor aaye"*. Nivaan reacts **✅** (silent, Guest Rule) and the attendance becomes a SiteEvent.
+2. **Query →** Ask in the group: *"cement deliveries dikhao?"* Nivaan replies with the matching deliveries, each carrying its evidence (what · site · date). Money questions come back as a **DM**, never in the group.
+3. **The 7am brief →** Trigger it now without waiting for the scheduler:
+   ```bash
+   curl -s -X POST localhost:8000/api/v1/bot/deliver-brief \
+     -H "Authorization: Bearer $OWNER" -H 'Content-Type: application/json' \
+     -d '{"company_id":"<sunrise company id>"}'
+   ```
+   The owner gets a DM: the brief plus numbered actions ("1. Approve ACC invoice…").
+4. **Reply to act →** The owner replies **`hold 1`** (or `approve`, `show proof 2`).
+   Nivaan settles the **same decision** the web Approvals inbox shows — one ledger,
+   either surface — and confirms. Re-replying is idempotent.
+
+> No live WhatsApp? Set `BOT_SEND_VIA=dry_run` (the default) — every step logs the
+> outbound message instead of sending, and you can drive inbound via
+> `POST /api/v1/bot/handle {raw_message_id}` and `POST /api/v1/bot/reply {chat_jid,text}`.
+
+---
+
 ## Reset the demo
 Re-running the seed is idempotent. For a clean slate:
 ```bash

@@ -58,5 +58,15 @@ class Settings(BaseSettings):
     whatsapp_token: str | None = None  # Bearer token for "cloud_api" mode
     whatsapp_phone_number_id: str | None = None  # Cloud API phone number id
 
+    # ---- WhatsApp bot ("Nivaan") -------------------------------------------
+    # When true, after extraction the bot reacts/replies to inbound messages
+    # (the Guest Rule) and the nightly job delivers the brief over WhatsApp. The
+    # bot is best-effort and NEVER fails ingestion. The outbound transport and
+    # bridge link are read from the environment by app.bot.sender:
+    #   BOT_SEND_VIA = bridge | cloud_api | dry_run  (default dry_run -> no network)
+    #   BRIDGE_URL   = http://localhost:8088         (the W1 Node bridge)
+    #   BRIDGE_KEY   = shared secret (must match the bridge's BRIDGE_KEY)
+    bot_enabled: bool = True
+
 
 settings = Settings()
