@@ -18,6 +18,8 @@ ROLE_LANDING: dict[UserRole, str] = {
     UserRole.accountant: "reconcile",
     UserRole.labor_contractor: "attendance",
     UserRole.procurement: "orders",
+    # Homeowner app lands on the calm "am I okay?" home (Daylight).
+    UserRole.homeowner: "home",
 }
 
 # Roles that get a near-zero-friction, free-seat onboarding (single coachmark,

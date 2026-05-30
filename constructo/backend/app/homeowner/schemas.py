@@ -1,0 +1,291 @@
+"""Pydantic request/response schemas for the homeowner-facing API (H0).
+
+Homeowner reads return ONLY curated/published data — never raw ops. Money is
+returned as plain numbers (rupees); the mobile client formats lakh/crore.
+"""
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from app.models import (
+    ComponentStatus,
+    HomeownerRequestStatus,
+    HomeownerSubRole,
+    MemberStatus,
+    MilestoneStatus,
+    ReferenceSource,
+    UpdateType,
+)
+
+# ---- onboarding / membership ----------------------------------------------
+
+
+class JoinIn(BaseModel):
+    join_code: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
+    otp: str = Field(min_length=1)
+
+
+class TokenOut(BaseModel):
+    token: str
+    site_id: UUID
+    sub_role: HomeownerSubRole
+
+
+class MemberCreateIn(BaseModel):
+    """Contractor mints a member (and a join code) for a homeowner to redeem."""
+
+    site_id: UUID
+    sub_role: HomeownerSubRole = HomeownerSubRole.primary_owner
+    phone: str | None = None
+    notif_prefs: dict = Field(default_factory=dict)
+
+
+class MemberPrefsIn(BaseModel):
+    notif_prefs: dict
+
+
+class MemberOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    user_id: UUID | None
+    sub_role: HomeownerSubRole
+    notif_prefs: dict
+    phone: str | None
+    join_code: str
+    status: MemberStatus
+    created_at: datetime
+    # A deep link the contractor shares; the app reads the code from it.
+    invite_link: str
+
+
+# ---- feed reads ------------------------------------------------------------
+
+
+class MilestoneOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    name: str
+    status: MilestoneStatus
+    started_on: date | None
+    expected_on: date | None
+    completed_on: date | None
+    order: int
+
+
+class PhotoOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    image_url: str
+    caption: str | None
+    room_tag: str | None
+    milestone_id: UUID | None
+    is_starred: bool
+    published_at: datetime
+
+
+class UpdateOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    type: UpdateType
+    title: str
+    body: str | None
+    published_at: datetime
+
+
+class WeeklySummaryOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    week_start: date
+    text: str
+    published_at: datetime
+
+
+class ChangeOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    description: str
+    cost_delta: float | None
+    schedule_delta_days: int | None
+    reason: str | None
+    approved_by: UUID | None
+    created_at: datetime
+
+
+class ChangesOut(BaseModel):
+    """Changes log with running totals (rupees / days)."""
+
+    items: list[ChangeOut]
+    total_cost_delta: float
+    total_schedule_delta_days: int
+
+
+class ComponentOut(BaseModel):
+    id: UUID
+    name: str
+    kind: str | None
+    status: ComponentStatus
+
+
+class SpaceOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    parent_id: UUID | None
+    name: str
+    kind: str
+    order: int
+    components: list[ComponentOut] = Field(default_factory=list)
+    # Fraction of components done (0..1), or None when a space has no components.
+    progress: float | None = None
+
+
+class PropertyOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    display_name: str
+    type: str | None
+    status: str | None
+    started_on: date | None
+    expected_handover_on: date | None
+    spaces: list[SpaceOut] = Field(default_factory=list)
+
+
+class AttentionItem(BaseModel):
+    """A pending decision surfaced on the home dashboard (one at a time)."""
+
+    id: UUID
+    title: str
+    detail: str | None
+    kind: str
+    created_at: datetime
+
+
+class SpendSummary(BaseModel):
+    total_change_cost_delta: float
+    change_count: int
+
+
+class HomeOut(BaseModel):
+    """The daily 'am I okay?' dashboard payload.
+
+    The status card uses a TIME-BAR (started_on → expected_handover_on), not a
+    percentage. Conditional sections are empty when there's nothing to show.
+    """
+
+    property: PropertyOut | None
+    milestone_now: MilestoneOut | None
+    milestone_next: MilestoneOut | None
+    needs_attention: list[AttentionItem]
+    recent_activity: list[UpdateOut]
+    spend_summary: SpendSummary | None
+
+
+# ---- design ----------------------------------------------------------------
+
+
+class DesignProfileOut(BaseModel):
+    id: UUID | None
+    site_id: UUID
+    profile: dict
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class DesignProfilePutIn(BaseModel):
+    """Generate (or regenerate) the AI design profile from intake.
+
+    ``profile`` lets the homeowner save a confirmed/adjusted profile directly;
+    if omitted, the server AI-drafts one from current selections + references.
+    """
+
+    site_id: UUID | None = None
+    profile: dict | None = None
+
+
+class ReferenceCreateIn(BaseModel):
+    site_id: UUID | None = None
+    image_url: str = Field(min_length=1)
+    room_tag: str | None = None
+    source: ReferenceSource = ReferenceSource.upload
+
+
+class ReferenceOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    image_url: str
+    room_tag: str | None
+    source: ReferenceSource
+    created_at: datetime
+
+
+class SelectionCreateIn(BaseModel):
+    site_id: UUID | None = None
+    space_id: UUID | None = None
+    item: str = Field(min_length=1)
+    choice: str = Field(min_length=1)
+    status: str = "proposed"
+
+
+class SelectionOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    space_id: UUID | None
+    item: str
+    choice: str
+    status: str
+    created_at: datetime
+
+
+class ConsistencyCheckIn(BaseModel):
+    site_id: UUID | None = None
+    item: str = Field(min_length=1)
+    choice: str = Field(min_length=1)
+
+
+class ConsistencyCheckOut(BaseModel):
+    fits: bool
+    feedback: str
+
+
+# ---- requests & decisions --------------------------------------------------
+
+
+class RequestCreateIn(BaseModel):
+    site_id: UUID | None = None
+    title: str = Field(min_length=1)
+    detail: str | None = None
+
+
+class RequestStatusPatchIn(BaseModel):
+    status: HomeownerRequestStatus
+
+
+class RequestOut(BaseModel):
+    id: UUID
+    site_id: UUID
+    raised_by: UUID | None
+    title: str
+    detail: str | None
+    status: HomeownerRequestStatus
+    sla_due_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DecisionRespondIn(BaseModel):
+    action: Literal["approve", "comment", "request_change"]
+    note: str | None = None
+
+
+class HomeownerDecisionOut(BaseModel):
+    id: UUID
+    site_id: UUID | None
+    kind: str
+    title: str
+    detail: str | None
+    state: str
+    created_at: datetime
