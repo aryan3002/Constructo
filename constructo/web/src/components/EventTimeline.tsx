@@ -1,11 +1,22 @@
 import { useState } from 'react'
 import type { SiteEvent } from '../api/types'
 import {
-  EVENT_TYPE_CLASSES,
   EVENT_TYPE_LABEL,
   formatConfidence,
   formatDateTime,
 } from '../lib/format'
+import { Body, Mono, Small, StatusPill, type Status } from '../ui'
+
+/** Map a raw event type to a status-spine colour for its badge. */
+const EVENT_TYPE_STATUS: Record<string, Status> = {
+  material_delivery: 'ok',
+  attendance: 'info',
+  progress_update: 'info',
+  payment_request: 'warn',
+  approval: 'ok',
+  issue: 'risk',
+  unknown: 'info',
+}
 
 function EvidenceButton({ event }: { event: SiteEvent }) {
   const [open, setOpen] = useState(false)
@@ -15,19 +26,17 @@ function EvidenceButton({ event }: { event: SiteEvent }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-xs font-medium text-brand-600 hover:underline disabled:cursor-default disabled:text-slate-400 disabled:no-underline"
+        className="min-h-tap font-body text-small font-semibold text-primary-deep cstk-animate hover:underline disabled:cursor-default disabled:text-text-mute disabled:no-underline"
         disabled={count === 0}
         aria-expanded={open}
       >
-        {count === 0
-          ? 'No evidence'
-          : `Evidence (${count}) ${open ? '▲' : '▼'}`}
+        {count === 0 ? 'No evidence' : `Evidence (${count}) ${open ? '▲' : '▼'}`}
       </button>
       {open && count > 0 && (
-        <ul className="mt-1 space-y-1 rounded-md bg-slate-50 p-2 text-xs text-slate-600">
+        <ul className="mt-1 space-y-1 rounded-control border border-line bg-paper p-2">
           {event.source_message_ids.map((id) => (
-            <li key={id} className="font-mono">
-              msg: {id}
+            <li key={id}>
+              <Mono className="text-micro text-text-mute">msg: {id}</Mono>
             </li>
           ))}
         </ul>
@@ -36,6 +45,11 @@ function EvidenceButton({ event }: { event: SiteEvent }) {
   )
 }
 
+/**
+ * EventTimeline — a site's day of captured events on the Blueprint kit. Each row
+ * is a --paper card with a status-spine type badge, a confidence indicator, and
+ * a one-tap evidence reveal (the soul of the product).
+ */
 export function EventTimeline({ events }: { events: SiteEvent[] }) {
   return (
     <ol className="space-y-3" data-testid="event-timeline">
@@ -43,38 +57,32 @@ export function EventTimeline({ events }: { events: SiteEvent[] }) {
         <li
           key={event.id}
           data-testid="event-item"
-          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          className="rounded-card border border-line bg-card p-4 shadow-card"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              data-testid="event-badge"
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                EVENT_TYPE_CLASSES[event.event_type] ?? EVENT_TYPE_CLASSES.unknown
-              }`}
-            >
-              {EVENT_TYPE_LABEL[event.event_type] ?? event.event_type}
+            <span data-testid="event-badge">
+              <StatusPill
+                status={EVENT_TYPE_STATUS[event.event_type] ?? 'info'}
+                size="sm"
+                label={EVENT_TYPE_LABEL[event.event_type] ?? event.event_type}
+              />
             </span>
             {event.needs_clarification && (
-              <span
-                data-testid="needs-clarification"
-                className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800"
-                title="This event needs human clarification"
-              >
-                Needs clarification
+              <span data-testid="needs-clarification">
+                <StatusPill status="warn" size="sm" label="Needs clarification" />
               </span>
             )}
-            <span
-              className="ml-auto text-xs text-slate-500"
-              data-testid="event-confidence"
-            >
-              Confidence {formatConfidence(event.confidence)}
+            <span className="ml-auto" data-testid="event-confidence">
+              <Small className="!text-text-mute">
+                Confidence {formatConfidence(event.confidence)}
+              </Small>
             </span>
           </div>
 
-          <p className="mt-2 text-sm text-slate-800">{event.summary}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <Body className="mt-2 !text-small">{event.summary}</Body>
+          <Small className="mt-1 block !text-text-mute">
             {formatDateTime(event.created_at)} · {event.occurred_on}
-          </p>
+          </Small>
 
           <EvidenceButton event={event} />
         </li>

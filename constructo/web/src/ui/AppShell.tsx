@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useT, type TranslationKey } from '../i18n'
 import {
   DotsIcon,
   GridIcon,
@@ -8,43 +9,94 @@ import {
 } from './icons'
 import { SiteSwitcher, type SiteSummary } from './SiteSwitcher'
 
-export type Role = 'owner' | 'pm' | 'supervisor' | 'contractor'
+/**
+ * Every backend role gets a role-shaped tab bar. Mirrors the six roles the auth
+ * surface issues (owner | pm | supervisor | accountant | procurement |
+ * labor_contractor). `contractor` is kept as a legacy alias of `labor_contractor`
+ * so older callers (and tests) keep working.
+ */
+export type Role =
+  | 'owner'
+  | 'pm'
+  | 'supervisor'
+  | 'accountant'
+  | 'procurement'
+  | 'labor_contractor'
+  | 'contractor'
 
 export interface TabDef {
   to: string
+  /** i18n key for the label (resolved by AppShell / useRoleTabs). */
+  labelKey: TranslationKey
+  /** Resolved label — defaults to the English string for provider-less render. */
   label: string
   icon: ReactNode
   /** Match the route exactly (for the index tab). */
   end?: boolean
 }
 
+const CheckIcon = <span className="text-[1.15em]">✓</span>
+const CameraIcon = <span className="text-[1.05em]">📷</span>
+const CashIcon = <span className="text-[1.05em]">₹</span>
+const BoxIcon = <span className="text-[1.05em]">📦</span>
+
 /**
- * Role-shaped tab bars. Owner gets the full command set; other roles are
- * stubbed for now (they reuse owner-ish tabs but can diverge later).
+ * Role-shaped tab bars, one per IA lane (see 07-Design / Information Architecture).
+ * The `label` here is the English default so the bar renders correctly even
+ * without a LanguageProvider (e.g. in unit tests); `useRoleTabs` localizes them.
  */
 export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
-    { to: '/', label: 'Brief', icon: <GridIcon />, end: true },
-    { to: '/sites', label: 'Sites', icon: <ListIcon /> },
-    { to: '/approvals', label: 'Approvals', icon: <span className="text-[1.15em]">✓</span> },
-    { to: '/search', label: 'Search', icon: <SearchIcon /> },
-    { to: '/more', label: 'More', icon: <DotsIcon /> },
+    { to: '/', labelKey: 'nav.brief', label: 'Brief', icon: <GridIcon />, end: true },
+    { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: CheckIcon },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
   pm: [
-    { to: '/', label: 'Today', icon: <GridIcon />, end: true },
-    { to: '/sites', label: 'Sites', icon: <ListIcon /> },
-    { to: '/search', label: 'Search', icon: <SearchIcon /> },
-    { to: '/more', label: 'More', icon: <DotsIcon /> },
+    { to: '/', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
+    { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: CheckIcon },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
   supervisor: [
-    { to: '/', label: 'Today', icon: <GridIcon />, end: true },
-    { to: '/sites', label: 'My Site', icon: <ListIcon /> },
-    { to: '/more', label: 'More', icon: <DotsIcon /> },
+    { to: '/supervisor/capture', labelKey: 'nav.capture', label: 'Capture', icon: CameraIcon, end: true },
+    { to: '/sites', labelKey: 'nav.my_sites', label: 'My Sites', icon: <ListIcon /> },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
+  accountant: [
+    { to: '/reconcile', labelKey: 'nav.reconcile', label: 'Reconcile', icon: <GridIcon />, end: true },
+    { to: '/payments', labelKey: 'nav.bills', label: 'Bills', icon: CashIcon },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
+  ],
+  procurement: [
+    { to: '/reconcile', labelKey: 'nav.orders', label: 'Orders', icon: BoxIcon, end: true },
+    { to: '/permits', labelKey: 'nav.permits', label: 'Permits', icon: <ListIcon /> },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
+  ],
+  labor_contractor: [
+    { to: '/mukadam/attendance', labelKey: 'nav.attendance', label: 'Attendance', icon: <GridIcon />, end: true },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
+  ],
+  // Legacy alias — same lane as labor_contractor.
   contractor: [
-    { to: '/', label: 'Today', icon: <GridIcon />, end: true },
-    { to: '/more', label: 'More', icon: <DotsIcon /> },
+    { to: '/mukadam/attendance', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
+}
+
+/**
+ * Localized tab set for a role. Production callers use this so the bar honours
+ * the active language; the raw ROLE_TABS keep their English default labels for
+ * provider-less rendering.
+ */
+export function useRoleTabs(role: Role): TabDef[] {
+  const t = useT()
+  return ROLE_TABS[role].map((tab) => ({ ...tab, label: t(tab.labelKey) }))
 }
 
 export interface AppShellProps {

@@ -47,4 +47,24 @@ describe('AppShell', () => {
     renderShell()
     expect(screen.queryByRole('button', { name: /All Sites/ })).not.toBeInTheDocument()
   })
+
+  it('defines a tab set for every backend role with a sensible primary lane', () => {
+    const primaryHome: Record<string, string> = {
+      owner: '/',
+      pm: '/',
+      supervisor: '/supervisor/capture',
+      accountant: '/reconcile',
+      procurement: '/reconcile',
+      labor_contractor: '/mukadam/attendance',
+    }
+    for (const [role, home] of Object.entries(primaryHome)) {
+      const tabs = ROLE_TABS[role as keyof typeof ROLE_TABS]
+      expect(tabs.length).toBeGreaterThanOrEqual(2)
+      // The index (end) tab is the role's home.
+      const indexTab = tabs.find((t) => t.end)
+      expect(indexTab?.to).toBe(home)
+      // Every role can always reach the "More" hub.
+      expect(tabs.some((t) => t.to === '/more')).toBe(true)
+    }
+  })
 })

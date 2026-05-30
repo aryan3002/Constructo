@@ -1,9 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
-import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
+import { More } from './pages/More'
 // === payments/permits ===
 import { Payments } from './pages/payments/Payments'
 import { Permits } from './pages/permits/Permits'
@@ -14,6 +13,7 @@ import { Login } from './pages/auth/Login'
 import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
 import { Join } from './pages/auth/Join'
 import { InvitePage } from './pages/auth/InvitePage'
+import { RoleLanding } from './pages/auth/RoleLanding'
 import { Settings } from './pages/settings/Settings'
 // === brief/owner ===
 import { OwnerHome } from './pages/owner/OwnerHome'
@@ -27,107 +27,79 @@ import { ApprovalInbox } from './pages/approvals/Inbox'
 // === search ===
 import { Search } from './pages/search/Search'
 
+/** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
+function Guarded({ children }: { children: React.ReactNode }) {
+  return <RequireAuth>{children}</RequireAuth>
+}
+
+/**
+ * The full route map. Every page brings its own AppShell (role tab bar +
+ * SiteSwitcher) or ThemeSurface, so there is no shared generic-Tailwind Layout
+ * anymore. `/` is a role-aware landing redirect (the IA "where do I land" map);
+ * each role lands on its correct home and can reach every screen it owns.
+ *
+ * Route map:
+ *   /login, /join/:token, /welcome, /invite, /components  — auth + gallery
+ *   /                       -> RoleLanding (redirects by role)
+ *   /owner                  -> Owner/PM brief
+ *   /supervisor/capture     -> Supervisor capture
+ *   /mukadam/attendance     -> Mukadam attendance + my payments
+ *   /reconcile              -> Accountant/Procurement reconcile
+ *   /approvals              -> Approval inbox
+ *   /search                 -> Ledger search
+ *   /payments, /permits     -> Money + permits
+ *   /sites, /sites/:id      -> Sites list + detail
+ *   /groups                 -> WhatsApp group mapping
+ *   /more                   -> Per-role overflow hub (+ Settings, Sign out)
+ *   /settings               -> Profile / language / display
+ */
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       {/* === auth/settings (feature: auth) === */}
       <Route path="/join/:token" element={<Join />} />
-      <Route
-        path="/welcome"
-        element={
-          <RequireAuth>
-            <OwnerFirstRun />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <RequireAuth>
-            <Settings />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/invite"
-        element={
-          <RequireAuth>
-            <InvitePage />
-          </RequireAuth>
-        }
-      />
+      <Route path="/welcome" element={<Guarded><OwnerFirstRun /></Guarded>} />
+      <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
+      <Route path="/invite" element={<Guarded><InvitePage /></Guarded>} />
+
       {/* Public design-system gallery — view the full kit in both themes. */}
       <Route path="/components" element={<Components />} />
-      {/* Dashboard brings its own AppShell (context header + role tab bar). */}
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        }
-      />
-      {/* phaseB brief/owner — Owner Home (brings its own AppShell). */}
-      <Route
-        path="/owner"
-        element={
-          <RequireAuth>
-            <OwnerHome />
-          </RequireAuth>
-        }
-      />
+
+      {/* Role-aware landing redirect (the "where do I land" map). */}
+      <Route path="/" element={<Guarded><RoleLanding /></Guarded>} />
+
+      {/* Owner / PM brief. */}
+      <Route path="/owner" element={<Guarded><OwnerHome /></Guarded>} />
+
       {/* Field-role screens (capture feature) bring their own AppShell. */}
-      <Route
-        path="/supervisor/capture"
-        element={
-          <RequireAuth>
-            <SupervisorCapture />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/mukadam/attendance"
-        element={
-          <RequireAuth>
-            <MukadamAttendance />
-          </RequireAuth>
-        }
-      />
-      {/* Approval Inbox brings its own Site-themed surface (full screen). */}
-      <Route
-        path="/approvals"
-        element={
-          <RequireAuth>
-            <ApprovalInbox />
-          </RequireAuth>
-        }
-      />
-      {/* Search brings its own ThemeProvider chrome (like the Dashboard). */}
-      <Route
-        path="/search"
-        element={
-          <RequireAuth>
-            <Search />
-          </RequireAuth>
-        }
-      />
-      {/* The remaining pages keep the existing Layout chrome for now. */}
-      <Route
-        element={
-          <RequireAuth>
-            <Layout />
-          </RequireAuth>
-        }
-      >
-        <Route path="/sites" element={<Sites />} />
-        <Route path="/sites/:id" element={<SiteDetail />} />
-        <Route path="/reconcile" element={<ReconcilePage />} />
-        <Route path="/groups" element={<Groups />} />
-        <Route path="/payments" element={<Payments />} />
-        <Route path="/permits" element={<Permits />} />
-        <Route path="/permits/site/:siteId" element={<Permits />} />
-      </Route>
+      <Route path="/supervisor/capture" element={<Guarded><SupervisorCapture /></Guarded>} />
+      <Route path="/mukadam/attendance" element={<Guarded><MukadamAttendance /></Guarded>} />
+
+      {/* Accountant / Procurement. */}
+      <Route path="/reconcile" element={<Guarded><ReconcilePage /></Guarded>} />
+
+      {/* Approval Inbox (Site-themed full screen). */}
+      <Route path="/approvals" element={<Guarded><ApprovalInbox /></Guarded>} />
+
+      {/* Search (own ThemeProvider chrome). */}
+      <Route path="/search" element={<Guarded><Search /></Guarded>} />
+
+      {/* Money + permits. */}
+      <Route path="/payments" element={<Guarded><Payments /></Guarded>} />
+      <Route path="/permits" element={<Guarded><Permits /></Guarded>} />
+      <Route path="/permits/site/:siteId" element={<Guarded><Permits /></Guarded>} />
+
+      {/* Sites list + detail. */}
+      <Route path="/sites" element={<Guarded><Sites /></Guarded>} />
+      <Route path="/sites/:id" element={<Guarded><SiteDetail /></Guarded>} />
+
+      {/* WhatsApp group mapping. */}
+      <Route path="/groups" element={<Guarded><Groups /></Guarded>} />
+
+      {/* Per-role overflow hub. */}
+      <Route path="/more" element={<Guarded><More /></Guarded>} />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

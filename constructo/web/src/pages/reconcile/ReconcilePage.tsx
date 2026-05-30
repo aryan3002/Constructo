@@ -1,9 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
+import { authApi, type Role } from '../../api/auth'
 import { reconcileApi, type ReconcileItem } from '../../api/reconcile'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
-import { H1, H2, Mono, Small, StatusPill } from '../../ui'
+import {
+  AppShell,
+  H1,
+  H2,
+  Mono,
+  Small,
+  StatusPill,
+  useRoleTabs,
+  type Role as ShellRole,
+} from '../../ui'
 import { useT } from '../../i18n'
 import { ReconcileDetail } from './ReconcileDetail'
 import { ReconcileRow } from './ReconcileRow'
@@ -25,6 +35,10 @@ function useReconcile(siteId: string | null) {
 export function ReconcilePage() {
   const t = useT()
   const sites = useSites()
+  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
+  // Reconcile is home for accountant + procurement; default to accountant tabs.
+  const role: Role = me.data?.role === 'procurement' ? 'procurement' : 'accountant'
+  const tabs = useRoleTabs(role as ShellRole)
   const [siteId, setSiteId] = useState<string | null>(null)
   const [onlyExceptions, setOnlyExceptions] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -51,7 +65,8 @@ export function ReconcilePage() {
   const exceptionCount = (summary?.needs_approval ?? 0) + (summary?.mismatch ?? 0)
 
   return (
-    <div className="space-y-5">
+    <AppShell role={role as ShellRole} tabs={tabs}>
+      <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <H1>{t('reconcile.title')}</H1>
@@ -197,6 +212,7 @@ export function ReconcilePage() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </AppShell>
   )
 }

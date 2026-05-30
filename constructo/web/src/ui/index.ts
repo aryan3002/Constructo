@@ -41,7 +41,7 @@ export type { TimelineItemProps } from './TimelineItem'
 export { SiteSwitcher } from './SiteSwitcher'
 export type { SiteSummary, SiteSwitcherProps } from './SiteSwitcher'
 
-export { AppShell, ROLE_TABS } from './AppShell'
+export { AppShell, ROLE_TABS, useRoleTabs } from './AppShell'
 export type { AppShellProps, Role, TabDef } from './AppShell'
 
 export * as Icons from './icons'
