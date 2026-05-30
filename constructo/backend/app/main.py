@@ -19,6 +19,7 @@ from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
 from app.auth.router import users_router
+from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.common.errors import install_error_handlers
 from app.config import settings
@@ -81,3 +82,4 @@ app.include_router(search_router)  # phaseB search
 app.include_router(payments_router)  # phaseB payments
 app.include_router(permits_router)  # phaseB permits
 app.include_router(admin_router)  # phaseC admin/ops triggers
+app.include_router(bot_router)  # W2 WhatsApp bot brain (Nivaan)
