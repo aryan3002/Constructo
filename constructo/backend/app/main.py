@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
+from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
 from app.auth.router import users_router
@@ -23,6 +24,7 @@ from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
+from app.notifications.router import router as notifications_router
 from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.sites.router import router as sites_router
@@ -69,3 +71,5 @@ app.include_router(brief_router)
 app.include_router(dashboard_router)  # phaseB brief/owner
 app.include_router(attendance_router)  # phaseB capture/attendance
 app.include_router(reconcile_router)  # phaseB reconcile
+app.include_router(approvals_router)  # phaseB approvals
+app.include_router(notifications_router)  # phaseB notifications

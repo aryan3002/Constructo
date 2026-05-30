@@ -4,7 +4,6 @@ import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
-import { ReconcilePage } from './pages/reconcile/ReconcilePage'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
 // === auth/settings (feature: auth) ===
@@ -18,6 +17,10 @@ import { OwnerHome } from './pages/owner/OwnerHome'
 // === capture/attendance ===
 import { SupervisorCapture } from './pages/supervisor/SupervisorCapture'
 import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
+// === reconcile ===
+import { ReconcilePage } from './pages/reconcile/ReconcilePage'
+// === approvals ===
+import { ApprovalInbox } from './pages/approvals/Inbox'
 
 export function App() {
   return (
@@ -83,6 +86,15 @@ export function App() {
         element={
           <RequireAuth>
             <MukadamAttendance />
+          </RequireAuth>
+        }
+      />
+      {/* Approval Inbox brings its own Site-themed surface (full screen). */}
+      <Route
+        path="/approvals"
+        element={
+          <RequireAuth>
+            <ApprovalInbox />
           </RequireAuth>
         }
       />
