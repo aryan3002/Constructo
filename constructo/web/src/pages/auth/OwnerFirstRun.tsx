@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/auth'
 import { useMe } from './useMe'
-import { ApiError } from '../../api/client'
+import { ApiError, api } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
 import { MessageIcon } from '../../ui/icons'
@@ -36,6 +36,28 @@ export function OwnerFirstRun() {
   const [siteType, setSiteType] = useState<string>('residential')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // If this owner already has a site (returning on a new device, or the demo
+  // seed), they're not actually new — skip first-run and go to their app rather
+  // than prompting them to re-name a company they already have.
+  useEffect(() => {
+    if (!me || me.role !== 'owner') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const sites = await api.listSites()
+        if (!cancelled && sites.items.length > 0) {
+          markOnboarded(me.id)
+          navigate('/', { replace: true })
+        }
+      } catch {
+        /* keep first-run if we can't check */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [me, navigate])
 
   const stepIndex = STEPS.indexOf(step)
 

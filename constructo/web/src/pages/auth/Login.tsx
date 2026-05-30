@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi } from '../../api/auth'
-import { ApiError } from '../../api/client'
+import { ApiError, api } from '../../api/client'
 import { useT } from '../../i18n'
 import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
 import { AuthCard, TextField } from './fields'
@@ -29,6 +29,27 @@ function hasOnboarded(userId: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * An owner is "set up" if they completed first-run on this device (local flag)
+ * OR the backend already has a site for them. The backend check keeps a real,
+ * data-backed owner (e.g. signing in on a new device, or the demo seed owner)
+ * out of the first-run flow instead of pushing them to /welcome to re-name a
+ * company they already have.
+ */
+async function ownerIsSetUp(userId: string): Promise<boolean> {
+  if (hasOnboarded(userId)) return true
+  try {
+    const sites = await api.listSites()
+    if (sites.items.length > 0) {
+      markOnboarded(userId) // remember so we skip the backend check next time
+      return true
+    }
+  } catch {
+    /* can't tell -> fall through to first-run (safe default) */
+  }
+  return false
 }
 
 export function Login() {
@@ -72,10 +93,11 @@ export function Login() {
         navigate(next, { replace: true })
         return
       }
-      // A brand-new owner hasn't named their company yet -> first-run flow.
-      // Other roles (and returning owners) go straight to their app.
+      // A brand-new owner with no site yet -> first-run flow. Other roles, and
+      // owners who already have a company/site (returning or seeded), go
+      // straight to their app.
       const me = await authApi.me()
-      if (me.role === 'owner' && !hasOnboarded(me.id)) {
+      if (me.role === 'owner' && !(await ownerIsSetUp(me.id))) {
         navigate('/welcome', { replace: true })
       } else {
         navigate('/', { replace: true })
