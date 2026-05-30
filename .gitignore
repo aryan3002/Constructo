@@ -17,3 +17,7 @@ venv/
 /constructo-extraction
 /constructo-sites
 /constructo-*/
+
+# Local editor/agent config
+.claude/
+**/.claude/
