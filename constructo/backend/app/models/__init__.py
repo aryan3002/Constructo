@@ -3,6 +3,35 @@
 from app.models.company import Company
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.event_embedding import EventEmbedding
+from app.models.homeowner_design import (
+    DesignProfile,
+    DesignReference,
+    DesignSelection,
+    ReferenceSource,
+)
+from app.models.homeowner_feed import (
+    Change,
+    Milestone,
+    MilestoneStatus,
+    PublishedPhoto,
+    Update,
+    UpdateType,
+    WeeklySummary,
+)
+from app.models.homeowner_member import (
+    HomeownerMember,
+    HomeownerRequest,
+    HomeownerRequestStatus,
+    HomeownerSubRole,
+    MemberStatus,
+)
+from app.models.homeowner_property import (
+    Component,
+    ComponentStatus,
+    Property,
+    Space,
+    SpaceKind,
+)
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
@@ -14,22 +43,43 @@ from app.models.user import User, UserRole
 from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
+    "Change",
     "Company",
+    "Component",
+    "ComponentStatus",
     "Decision",
     "DecisionKind",
     "DecisionState",
+    "DesignProfile",
+    "DesignReference",
+    "DesignSelection",
     "EventEmbedding",
+    "HomeownerMember",
+    "HomeownerRequest",
+    "HomeownerRequestStatus",
+    "HomeownerSubRole",
+    "MemberStatus",
+    "Milestone",
+    "MilestoneStatus",
     "OwnerBrief",
     "Payment",
     "PaymentDirection",
     "PaymentStatus",
     "Permit",
     "PermitStatus",
+    "Property",
+    "PublishedPhoto",
     "RawMessageModel",
+    "ReferenceSource",
     "Site",
     "SiteBaseline",
     "SiteEventModel",
+    "Space",
+    "SpaceKind",
+    "Update",
+    "UpdateType",
     "User",
     "UserRole",
+    "WeeklySummary",
     "WhatsappGroup",
 ]

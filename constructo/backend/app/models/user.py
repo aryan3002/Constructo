@@ -17,6 +17,10 @@ class UserRole(StrEnum):
     accountant = "accountant"
     procurement = "procurement"
     labor_contractor = "labor_contractor"
+    # Homeowner-facing app role (H0). Branches the mobile nav to the Daylight
+    # theme; never granted company-wide site visibility (scoped via
+    # homeowner_members instead).
+    homeowner = "homeowner"
 
 
 class User(Base):
