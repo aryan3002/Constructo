@@ -33,19 +33,35 @@ from app.db import SessionLocal
 from app.invites.models import Invite, InviteStatus
 from app.models import (
     Company,
+    Component,
+    ComponentStatus,
     Decision,
     DecisionKind,
     DecisionState,
+    HomeownerMember,
+    HomeownerRequest,
+    HomeownerRequestStatus,
+    HomeownerSubRole,
+    MemberStatus,
+    Milestone,
+    MilestoneStatus,
     Payment,
     PaymentDirection,
     PaymentStatus,
     Permit,
     PermitStatus,
+    Property,
+    PublishedPhoto,
     Site,
     SiteBaseline,
     SiteEventModel,
+    Space,
+    SpaceKind,
+    Update,
+    UpdateType,
     User,
     UserRole,
+    WeeklySummary,
     WhatsappGroup,
 )
 from app.search.index import index_all_unindexed
@@ -383,6 +399,111 @@ async def seed() -> dict[str, int]:
         )
         counts["decisions"] = 2
 
+        # --- Homeowner-facing "published slice" on Site A (H0/H3) -----------
+        # The contractor has published a property, skeleton, milestones, photos,
+        # an update + weekly summary, and there's an open homeowner request. A
+        # member invite (join code SUNRISE-HOME) lets the mobile app log in.
+        await _upsert(
+            session,
+            Property,
+            _id("property", "a"),
+            company_id=company.id,
+            site_id=site_a,
+            display_name="Sharma Residence",
+            type="villa",
+            status="building",
+            started_on=TODAY - timedelta(days=120),
+            expected_handover_on=TODAY + timedelta(days=150),
+        )
+        # Skeleton: a floor with two rooms + a few components.
+        floor = await _upsert(
+            session, Space, _id("space", "ground"),
+            site_id=site_a, parent_id=None, name="Ground Floor", kind=SpaceKind.floor, order=0,
+        )
+        await session.flush()
+        living = await _upsert(
+            session, Space, _id("space", "living"),
+            site_id=site_a, parent_id=floor.id, name="Living Room", kind=SpaceKind.room, order=0,
+        )
+        kitchen = await _upsert(
+            session, Space, _id("space", "kitchen"),
+            site_id=site_a, parent_id=floor.id, name="Kitchen", kind=SpaceKind.room, order=1,
+        )
+        await session.flush()
+        for ckey, space_id, name, status in [
+            ("living-floor", living.id, "Flooring", ComponentStatus.done),
+            ("living-paint", living.id, "Painting", ComponentStatus.in_progress),
+            ("kitchen-cab", kitchen.id, "Cabinets", ComponentStatus.not_started),
+        ]:
+            await _upsert(
+                session, Component, _id("component", ckey),
+                space_id=space_id, name=name, kind=None, status=status,
+            )
+        # Milestones: one done, one now, two upcoming.
+        ms_struct = None
+        for mkey, name, status, order in [
+            ("foundation", "Foundation", MilestoneStatus.done, 0),
+            ("structure", "Structure & slabs", MilestoneStatus.now, 1),
+            ("interiors", "Interiors & finishes", MilestoneStatus.upcoming, 2),
+            ("handover", "Handover", MilestoneStatus.upcoming, 3),
+        ]:
+            done = status == MilestoneStatus.done
+            now_ms = status == MilestoneStatus.now
+            m = await _upsert(
+                session, Milestone, _id("milestone", mkey),
+                site_id=site_a, name=name, status=status, order=order,
+                completed_on=(TODAY - timedelta(days=60)) if done else None,
+                expected_on=(TODAY + timedelta(days=30)) if now_ms else None,
+            )
+            if mkey == "structure":
+                ms_struct = m
+        await session.flush()
+        # Published photos (curated; one starred, one tied to the current milestone).
+        for pkey, url, caption, room, starred, mid in [
+            ("slab", "https://picsum.photos/seed/cstk-slab/800/600",
+             "First-floor slab poured — curing now.", "Living Room", True,
+             ms_struct.id if ms_struct else None),
+            ("brick", "https://picsum.photos/seed/cstk-brick/800/600",
+             "Brickwork going up on the ground floor.", None, False, None),
+        ]:
+            await _upsert(
+                session, PublishedPhoto, _id("photo", pkey),
+                site_id=site_a, image_url=url, caption=caption, room_tag=room,
+                milestone_id=mid, is_starred=starred, published_by=owner.id,
+            )
+        # A timeline update + the flagship weekly summary.
+        await _upsert(
+            session, Update, _id("update", "slab"),
+            site_id=site_a, type=UpdateType.progress, title="First-floor slab poured",
+            body="The slab for the first floor was poured today and is curing.",
+            published_by=owner.id,
+        )
+        await _upsert(
+            session, WeeklySummary, _id("weekly", "w1"),
+            site_id=site_a, week_start=TODAY - timedelta(days=TODAY.weekday()),
+            text=(
+                "This week the team finished the first-floor slab and started "
+                "brickwork on the ground floor. Everything is on schedule — "
+                "nothing needs your attention right now."
+            ),
+            published_by=owner.id,
+        )
+        # An open homeowner request (so the inbox + nudge sweep have something).
+        await _upsert(
+            session, HomeownerRequest, _id("hrequest", "socket"),
+            site_id=site_a, raised_by=None, title="Add a power socket in the study",
+            detail="Could we add one more socket near the study window?",
+            status=HomeownerRequestStatus.sent, sla_due_at=NOW + timedelta(days=2),
+        )
+        # A member invite: redeem join code SUNRISE-HOME in the app (any phone + OTP 000000).
+        await _upsert(
+            session, HomeownerMember, _id("member", "primary"),
+            site_id=site_a, user_id=None, sub_role=HomeownerSubRole.primary_owner,
+            notif_prefs={}, phone="+919800000010", join_code="SUNRISE-HOME",
+            status=MemberStatus.invited,
+        )
+        counts["homeowner_published"] = 1
+
         await session.commit()
 
         # --- Index events so search works immediately (FakeEmbeddings offline)
@@ -411,6 +532,11 @@ def main() -> None:
         "   - Building Plan Approval expires in 15 days -> /api/v1/admin/run-permit-sweep flags it."
     )
     print('   - Events are indexed -> try POST /api/v1/search {"q": "cement"}.')
+    print(
+        "   - Homeowner app: open the mobile app -> 'I have a join code' -> "
+        "SUNRISE-HOME + any phone + OTP 000000 -> the calm Daylight home for "
+        "the Sharma Residence (Site A)."
+    )
 
 
 if __name__ == "__main__":

@@ -61,6 +61,18 @@ async def run_nightly_now(
     return {"briefs": [str(i) for i in ids], "count": len(ids)}
 
 
+@router.post("/run-request-nudge-sweep")
+async def run_request_nudge_sweep_now(
+    user: User = Depends(_require_owner),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, object]:
+    """Nudge every overdue, still-open homeowner request now (one nudge each)."""
+    from app.homeowner.nudge import run_request_nudge_sweep
+
+    nudged = await run_request_nudge_sweep(session, now=datetime.now(UTC))
+    return {"nudged": [str(i) for i in nudged], "count": len(nudged)}
+
+
 @router.post("/reindex")
 async def reindex_now(
     user: User = Depends(_require_owner),

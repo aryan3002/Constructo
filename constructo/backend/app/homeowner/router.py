@@ -797,6 +797,14 @@ async def update_request_status(
     req.status = body.status
     await session.commit()
     await session.refresh(req)
+    # Best-effort push: tell the homeowner their request moved (never fails here).
+    from app.push.sender import notify_site_homeowners
+
+    await notify_site_homeowners(
+        session, req.site_id, "Update on your request",
+        f"\"{req.title}\" is now {body.status.value.replace('_', ' ')}.",
+        data={"type": "request", "request_id": str(req.id), "status": body.status.value},
+    )
     return _request_out(req)
 
 
