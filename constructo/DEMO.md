@@ -234,6 +234,64 @@ reaction, a question → an answer, the 7am brief → tap a number to act.
 
 ---
 
+## Homeowner mobile app (H0–H3)
+
+The homeowner experience is a separate **Expo app** at `constructo/mobile/` that
+consumes the H0 "published slice" of the backend.
+
+### Run it
+```bash
+# 1) Backend up + seeded (sections 1–3 above). The seed publishes a property,
+#    skeleton, milestones, photos, an update, a weekly summary, a pending
+#    decision and an open request on Site A, and mints a homeowner join code.
+cd mobile
+npm install                        # .npmrc pins legacy-peer-deps (SDK 56 tree)
+cp .env.example .env               # set EXPO_PUBLIC_API_BASE to reach the backend
+#   Android emulator -> http://10.0.2.2:8000 ; iOS sim -> http://localhost:8000 ;
+#   physical device  -> http://<your-LAN-ip>:8000
+npx expo start                     # press 'a' (Android) / 'i' (iOS) / 'w' (web)
+```
+
+### Homeowner click-through
+1. **Join →** On the welcome screen tap **"I have a join code"**, enter
+   **`SUNRISE-HOME`** + any phone + OTP **`000000`**. You land on the calm
+   Daylight home for the **Sharma Residence** (Site A).
+2. **Home →** a time-bar project status, the current milestone, recent activity,
+   and — when something needs you — a one-at-a-time decision card.
+3. **Photos / Updates / Design →** curated photos (by date/room/milestone), the
+   timeline + flagship weekly summary + milestones/changes/property, and the
+   AI-drafted design profile.
+4. **Publisher → feed (the loop) →** as the contractor, publish an update and
+   watch it appear in the app:
+   ```bash
+   OWNER=$(curl -s -X POST localhost:8000/api/v1/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"phone":"+919800000001","otp":"000000"}' | jq -r .token)
+   SITE=<Site A id>   # from GET /api/v1/sites
+   curl -s -X POST localhost:8000/api/v1/publish/update \
+     -H "Authorization: Bearer $OWNER" -H 'Content-Type: application/json' \
+     -d "{\"site_id\":\"$SITE\",\"type\":\"progress\",\"title\":\"Plastering started\"}"
+   ```
+   Refresh Updates in the app → the new card is there. With `PUSH_SEND_MODE=expo`
+   and a real device token, this also fires an Expo push.
+5. **Decisions / Requests →** approve the pending decision or flag an issue; the
+   one-nudge sweep escalates overdue requests
+   (`POST /api/v1/admin/run-request-nudge-sweep`).
+
+### Build an installable APK
+```bash
+cd mobile
+npm install -g eas-cli
+eas login
+eas build:configure                        # writes the EAS projectId into app.json (once)
+eas build -p android --profile preview      # builds an APK (eas.json `preview` profile)
+```
+The `preview` profile produces an internal-distribution **APK**; set its
+`EXPO_PUBLIC_API_BASE` (in `eas.json`) to a reachable backend before sharing the
+build. `npm run typecheck` and `npm test` gate the JS before a build.
+
+---
+
 ## Reset the demo
 Re-running the seed is idempotent. For a clean slate:
 ```bash

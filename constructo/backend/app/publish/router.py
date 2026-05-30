@@ -65,6 +65,7 @@ from app.publish.schemas import (
     SpaceCreateIn,
     SpaceUpdateIn,
 )
+from app.push.sender import notify_site_homeowners
 
 router = APIRouter(prefix="/api/v1/publish", tags=["publish"])
 
@@ -146,6 +147,11 @@ async def publish_update(
     session.add(update)
     await session.commit()
     await session.refresh(update)
+    # Best-effort push to the homeowner(s) on this site (never fails the publish).
+    await notify_site_homeowners(
+        session, body.site_id, "New project update", update.title,
+        data={"type": "update", "update_type": str(update.type)},
+    )
     return _update_out(update)
 
 

@@ -84,6 +84,20 @@ async def _run_permit_sweep_job() -> None:
         logger.exception("permit sweep job failed")
 
 
+async def _run_request_nudge_sweep_job() -> None:
+    """Nudge overdue, still-open homeowner requests (one nudge each). Owns its
+    session; never crashes the loop."""
+    from app.db import SessionLocal
+    from app.homeowner.nudge import run_request_nudge_sweep
+
+    try:
+        async with SessionLocal() as session:
+            nudged = await run_request_nudge_sweep(session)
+        logger.info("request nudge sweep job complete: %d nudged", len(nudged))
+    except Exception:
+        logger.exception("request nudge sweep job failed")
+
+
 def start_scheduler():
     """Create and start the AsyncIO scheduler if enabled. Returns it (or None)."""
     global _scheduler
@@ -120,16 +134,24 @@ def start_scheduler():
         id="permit_sweep",
         replace_existing=True,
     )
+    # Homeowner request one-nudge sweep: frequent interval.
+    scheduler.add_job(
+        _run_request_nudge_sweep_job,
+        IntervalTrigger(minutes=settings.request_nudge_sweep_minutes),
+        id="request_nudge_sweep",
+        replace_existing=True,
+    )
     scheduler.start()
     _scheduler = scheduler
     logger.info(
         "scheduler started: nightly brief at %02d:00 %s; sla sweep every %dm; "
-        "permit sweep at %02d:00 %s",
+        "permit sweep at %02d:00 %s; request nudge sweep every %dm",
         settings.brief_hour,
         settings.brief_timezone,
         settings.sla_sweep_minutes,
         settings.permit_sweep_hour,
         settings.brief_timezone,
+        settings.request_nudge_sweep_minutes,
     )
     return scheduler
 

@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # Permit expiry/renewal/staleness sweep (app.permits.alerts.run_permit_sweep).
     # Runs once daily at ``permit_sweep_hour`` (local to brief_timezone).
     permit_sweep_hour: int = 6
+    # Homeowner-request one-nudge sweep (app.homeowner.nudge.run_request_nudge_sweep).
+    # Runs every ``request_nudge_sweep_minutes`` when the scheduler is enabled.
+    request_nudge_sweep_minutes: int = 30
 
     # WhatsApp send transport. One of: "dry_run" | "url" | "cloud_api".
     whatsapp_send_mode: str = "dry_run"
