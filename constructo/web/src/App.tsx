@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
+import { ApprovalInbox } from './pages/approvals/Inbox'
 import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
@@ -20,6 +21,15 @@ export function App() {
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      {/* Approval Inbox brings its own Site-themed surface (full screen). */}
+      <Route
+        path="/approvals"
+        element={
+          <RequireAuth>
+            <ApprovalInbox />
           </RequireAuth>
         }
       />
