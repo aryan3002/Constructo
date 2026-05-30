@@ -10,6 +10,10 @@ export interface BridgeConfig {
   authDir: string;
   /** When true, log payloads instead of POSTing them. */
   dryRun: boolean;
+  /** Port the outbound HTTP server (POST /send, GET /health) listens on. */
+  bridgePort: number;
+  /** Shared secret required as the `X-Bridge-Key` header on POST /send. */
+  bridgeKey: string;
 }
 
 /** Parse a truthy env flag and/or the --dry-run CLI argument. */
@@ -27,5 +31,7 @@ export function loadConfig(): BridgeConfig {
     mediaDir: process.env.MEDIA_DIR ?? "./media",
     authDir: process.env.AUTH_DIR ?? "./auth",
     dryRun: resolveDryRun(),
+    bridgePort: Number.parseInt(process.env.BRIDGE_PORT ?? "8088", 10) || 8088,
+    bridgeKey: process.env.BRIDGE_KEY ?? "",
   };
 }
