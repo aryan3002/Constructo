@@ -111,7 +111,31 @@ Copy `.env.example` to `.env` and adjust. All config is environment-driven
 | `INGEST_API_KEY` | _(empty)_               | Shared secret sent as `X-Ingest-Key`. Must match the backend's value.   |
 | `MEDIA_DIR`      | `./media`               | Where downloaded media files are written.                               |
 | `AUTH_DIR`       | `./auth`                | Where Baileys persists device credentials. **Never commit this.**       |
-| `DRY_RUN`        | `false`                 | When `true`/`1`/`yes` (or `--dry-run`), logs payloads instead of POSTing.|
+| `DRY_RUN`        | `false`                 | When `true`/`1`/`yes` (or `--dry-run`), logs payloads instead of POSTing/sending.|
+| `BRIDGE_PORT`    | `8088`                  | Port the outbound HTTP server (`POST /send`, `GET /health`) listens on. |
+| `BRIDGE_KEY`     | _(empty)_               | Shared secret required as `X-Bridge-Key` on `POST /send`. Wrong/missing → 401. |
+
+---
+
+## Outbound (`POST /send`)
+
+The bridge also runs a small `node:http` server so the backend can SEND
+WhatsApp messages back over the same linked socket.
+
+| Method & path | Auth                         | Body / Response |
+| ------------- | ---------------------------- | --------------- |
+| `POST /send`  | `X-Bridge-Key: <BRIDGE_KEY>` | Req: `{ to, type: "text"\|"reaction", text?, react_to_message_id?, reply_to_message_id? }` → Res: `{ ok, message_id }` |
+| `GET /health` | none                         | `{ ok: true, connected: <bool> }` (`connected` = live Baileys socket present) |
+
+- **text** → `sock.sendMessage(to, { text })`; `reply_to_message_id` adds a
+  quoted reply.
+- **reaction** → `sock.sendMessage(to, { react: { text, key } })`; `text`
+  defaults to `✅`, `react_to_message_id` is required.
+- In `DRY_RUN`, `/send` LOGS the outbound message and returns
+  `message_id: "dry-run:<ts>"` instead of touching WhatsApp.
+- The inbound listener and `/send` share **one** socket via
+  `socket-registry.ts`; when disconnected, `/health` reports
+  `connected:false` and `/send` returns `502`.
 
 ---
 
@@ -162,13 +186,18 @@ npm start       # node dist/index.js
 ```
 whatsapp-bridge/
 ├── src/
-│   ├── index.ts          # entry: connect, QR, reconnect, event loop, media download
-│   ├── config.ts         # env-driven config (dotenv) + DRY_RUN resolution
-│   ├── mapping.ts        # PURE toRawMessage(msg) -> RawMessagePayload | null  (unit-tested)
-│   ├── poster.ts         # postRawMessage(payload, opts) with dry-run support
-│   ├── types.ts          # RawMessagePayload, MediaType, PosterOptions
-│   ├── mapping.test.ts   # fixtures: text / image+caption / voice / document / video / null cases
-│   └── poster.test.ts    # dry-run skips fetch; normal mode asserts URL + X-Ingest-Key
+│   ├── index.ts            # entry: connect, QR, reconnect, event loop, media download; starts /send server
+│   ├── config.ts           # env-driven config (dotenv) + DRY_RUN / BRIDGE_PORT / BRIDGE_KEY
+│   ├── mapping.ts          # PURE toRawMessage(msg) -> RawMessagePayload | null  (unit-tested)
+│   ├── poster.ts           # postRawMessage(payload, opts) with dry-run support
+│   ├── sender.ts           # PURE buildSendPlan(req) + send(req, {socket, dryRun}) -> {ok, message_id}
+│   ├── server.ts           # node:http server: POST /send (X-Bridge-Key auth), GET /health
+│   ├── socket-registry.ts  # shares the ONE live Baileys socket between listener and /send
+│   ├── types.ts            # RawMessagePayload, MediaType, PosterOptions, SendRequest, SendResult, HealthResult
+│   ├── mapping.test.ts     # fixtures: text / image+caption / voice / document / video / null cases
+│   ├── poster.test.ts      # dry-run skips fetch; normal mode asserts URL + X-Ingest-Key
+│   ├── sender.test.ts      # request -> Baileys payload mapping (text + reaction); dry-run; no-socket
+│   └── server.test.ts      # auth 401; /health; dry-run logs-not-sends; text+reaction; bad input
 ├── .env.example
 ├── .gitignore            # ignores auth/ media/ node_modules/ dist/ .env
 ├── package.json

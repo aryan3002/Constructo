@@ -42,3 +42,40 @@ export interface PosterOptions {
   /** When true, log the payload instead of POSTing. */
   dryRun?: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/* Outbound /send contract (W2's Python sender posts to this verbatim) */
+/* ------------------------------------------------------------------ */
+
+/** Kind of outbound message. */
+export type SendType = "text" | "reaction";
+
+/**
+ * Body of `POST /send`. Mirrors the shared bridge contract EXACTLY:
+ *   { to, type: "text"|"reaction", text?, react_to_message_id?, reply_to_message_id? }
+ */
+export interface SendRequest {
+  /** Destination JID (group "…@g.us" or user "…@s.whatsapp.net"). */
+  to: string;
+  type: SendType;
+  /** Message body (type=text) or reaction emoji (type=reaction; defaults to ✅). */
+  text?: string;
+  /** Message id to react to. Required when type=reaction. */
+  react_to_message_id?: string;
+  /** Message id to quote/reply to. Optional; applies to type=text. */
+  reply_to_message_id?: string;
+}
+
+/** Response body of `POST /send`. */
+export interface SendResult {
+  ok: boolean;
+  /** WhatsApp message id of the sent message (or "dry-run:<ts>" in dry-run). */
+  message_id: string;
+}
+
+/** Response body of `GET /health`. */
+export interface HealthResult {
+  ok: boolean;
+  /** True when a live Baileys socket is present. */
+  connected: boolean;
+}

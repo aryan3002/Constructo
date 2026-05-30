@@ -30,6 +30,8 @@ import qrcode from "qrcode-terminal";
 import { loadConfig } from "./config.js";
 import { messageHasMedia, toRawMessage, type WAMessage } from "./mapping.js";
 import { postRawMessage } from "./poster.js";
+import { startServer } from "./server.js";
+import { getSocket, setSocket } from "./socket-registry.js";
 import type { RawMessagePayload } from "./types.js";
 
 const log = pino({
@@ -126,20 +128,12 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   }
 }
 
-async function start(): Promise<void> {
-  log.warn(
-    "PILOT ONLY: Baileys is against WhatsApp ToS and may get the number banned. Not production infra.",
-  );
-
-  await mkdir(config.mediaDir, { recursive: true });
-  await mkdir(config.authDir, { recursive: true });
-
-  if (!config.dryRun && !config.ingestApiKey) {
-    log.warn(
-      "INGEST_API_KEY is empty; ingest POSTs will be rejected by the backend (401). Set it in .env or use DRY_RUN=true.",
-    );
-  }
-
+/**
+ * Create (or recreate, on reconnect) the live Baileys socket and register it
+ * in the shared socket-registry so the outbound HTTP server can reuse it.
+ * Exactly one socket is live at a time.
+ */
+async function connect(): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
 
   const sock = makeWASocket({
@@ -160,10 +154,14 @@ async function start(): Promise<void> {
     }
 
     if (connection === "open") {
-      log.info("WhatsApp connection open. Listening for GROUP messages.");
+      // Publish the live socket so POST /send can use it.
+      setSocket(sock);
+      log.info("WhatsApp connection open. Listening for GROUP messages; /send is live.");
     }
 
     if (connection === "close") {
+      // Clear the registry so /health reports disconnected and /send 502s.
+      if (getSocket() === sock) setSocket(null);
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       log.warn(
@@ -174,7 +172,7 @@ async function start(): Promise<void> {
       );
       if (!loggedOut) {
         // Recreate the socket. Existing creds in ./auth are reused.
-        void start();
+        void connect();
       }
     }
   });
@@ -191,6 +189,39 @@ async function start(): Promise<void> {
       }
     }
   });
+}
+
+async function start(): Promise<void> {
+  log.warn(
+    "PILOT ONLY: Baileys is against WhatsApp ToS and may get the number banned. Not production infra.",
+  );
+
+  await mkdir(config.mediaDir, { recursive: true });
+  await mkdir(config.authDir, { recursive: true });
+
+  if (!config.dryRun && !config.ingestApiKey) {
+    log.warn(
+      "INGEST_API_KEY is empty; ingest POSTs will be rejected by the backend (401). Set it in .env or use DRY_RUN=true.",
+    );
+  }
+  if (!config.bridgeKey) {
+    log.warn(
+      "BRIDGE_KEY is empty; every POST /send will be rejected (401). Set it in .env to match the backend's WhatsApp sender.",
+    );
+  }
+
+  // Start the outbound HTTP server once. It reads the shared socket registry,
+  // so it serves correctly across reconnects without restarting.
+  startServer(
+    {
+      bridgeKey: config.bridgeKey,
+      dryRun: config.dryRun,
+      getSocket,
+    },
+    config.bridgePort,
+  );
+
+  await connect();
 }
 
 start().catch((err) => {
