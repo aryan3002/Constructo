@@ -5,6 +5,7 @@ import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
 import { Login } from './pages/Login'
+import { Search } from './pages/search/Search'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
 
@@ -20,6 +21,15 @@ export function App() {
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      {/* Search brings its own ThemeProvider chrome (like the Dashboard). */}
+      <Route
+        path="/search"
+        element={
+          <RequireAuth>
+            <Search />
           </RequireAuth>
         }
       />

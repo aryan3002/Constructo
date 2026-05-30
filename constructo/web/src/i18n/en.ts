@@ -33,6 +33,32 @@ export const en = {
   'language.label': 'Language',
   'language.en': 'English',
   'language.hi': 'हिन्दी',
+
+  // === search ===
+  'search.title': 'Search the ledger',
+  'search.subtitle': 'Ask in plain words — every answer shows its proof.',
+  'search.input.label': 'Search site events',
+  'search.input.placeholder': 'e.g. cement deliveries Site A this week',
+  'search.submit': 'Search',
+  'search.searching': 'Searching…',
+  'search.understood': 'Understood as',
+  'search.filter.type': 'Type',
+  'search.filter.from': 'From {date}',
+  'search.filter.to': 'To {date}',
+  'search.filter.site': 'Site: {name}',
+  'search.results.count': '{count} results',
+  'search.results.one': '1 result',
+  'search.score': 'Match {pct}%',
+  'search.viewEvidence': 'View evidence',
+  'search.evidenceTitle': 'Source messages',
+  'search.evidence.message': 'WhatsApp message',
+  'search.evidence.none': 'No source messages on this event',
+  'search.needsClarification': 'Needs clarification',
+  'search.empty.title': 'Search your site ledger',
+  'search.empty.hint': 'Try “cement deliveries this week” or “which sites had issues”.',
+  'search.notSure.title': 'Not sure about that one',
+  'search.notSure.hint': "I couldn't find a confident match in your sites. Try rewording, or widen the dates.",
+  'search.error': 'Search failed. Please try again.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

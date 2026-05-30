@@ -20,6 +20,7 @@ from app.common.errors import install_error_handlers
 from app.config import settings
 from app.ingestion.router import router as ingest_router
 from app.scheduler import shutdown_scheduler, start_scheduler
+from app.search.router import router as search_router
 from app.sites.router import router as sites_router
 
 
@@ -59,3 +60,4 @@ app.include_router(auth_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(brief_router)
+app.include_router(search_router)
