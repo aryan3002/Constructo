@@ -1,228 +1,195 @@
-# Constructo — End-to-End Demo (Wave 2)
+# Constructo — End-to-End Demo (Phase C)
 
-This walks through the full loop locally:
+A fully seeded, navigable demo: the **WhatsApp → structured ledger → owner brief**
+loop, plus the role apps (capture, attendance, reconcile, approvals, search,
+payments, permits) on the Blueprint design system.
 
-> WhatsApp message → `POST /api/v1/ingest` → Redis queue → extraction worker →
-> `site_events` → owner morning brief → WhatsApp send → web dashboard.
+> WhatsApp message → `POST /api/v1/ingest` → (queue or inline) extraction →
+> `site_events` → **auto-indexed for search** → owner brief, reconciliation,
+> approvals, payment/permit tracking → role-specific web screens.
 
-Two ways to drive it:
-
-- **Quick path (no worker, no Redis dependency):** set `EXTRACTION_SYNC=true` and extraction
-  runs inline on ingest. Best for a fast scripted demo.
-- **Realistic path:** run the RQ worker so ingest enqueues and the worker drains the queue.
+Two ways to drive extraction:
+- **Quick (scripted demo):** `EXTRACTION_SYNC=true` → extraction runs inline on ingest. No worker/Redis needed.
+- **Realistic:** run the RQ worker so ingest enqueues and the worker drains it.
 
 ---
 
 ## 0. Prerequisites
+- [uv](https://docs.astral.sh/uv/), Docker, Node 20+.
+- Commands assume repo root `constructo/` unless a `cd` says otherwise.
 
-- [uv](https://docs.astral.sh/uv/), Docker, Node 18+ (only if you run the WhatsApp bridge).
-- All commands below assume repo root `constructo/` unless a `cd` says otherwise.
-
-## 1. Start infrastructure (Postgres + Redis)
-
+## 1. Infrastructure (Postgres + Redis)
 ```bash
 docker compose up -d
-docker compose ps        # postgres on :5433, redis on :6379, both healthy
+docker compose ps        # postgres :5433, redis :6379, both healthy
 ```
 
-## 2. Configure env
-
+## 2. Backend env
 ```bash
 cp .env.example backend/.env
-# Ensure the DB name is constructo_wave2:
-#   DATABASE_URL=postgresql+asyncpg://constructo:constructo@localhost:5433/constructo_wave2
-```
-
-Create the Wave 2 database (once):
-
-```bash
+# In backend/.env set a demo DB name and turn on inline extraction:
+#   DATABASE_URL=postgresql+asyncpg://constructo:constructo@localhost:5433/constructo_demo
+#   EXTRACTION_SYNC=true        # inline extract+index on ingest (no worker needed)
+#   ENABLE_SCHEDULER=false      # we trigger sweeps manually for the demo (see §7)
 docker exec constructo-postgres-1 psql -U constructo -d constructo \
-  -c "CREATE DATABASE constructo_wave2"
+  -c "CREATE DATABASE constructo_demo"
 ```
 
-## 3. Install deps + migrate
-
+## 3. Install + migrate
 ```bash
 cd backend
 uv sync
 uv run alembic upgrade head
 ```
 
-## 4. Run the API
-
+## 4. Seed the demo company  ⭐
 ```bash
 cd backend
-uv run uvicorn app.main:app --reload --port 8000
-# health: curl -s localhost:8000/healthz  -> {"status":"ok"}
+uv run python -m scripts.seed_demo
 ```
+Creates **Sunrise Builders**: an owner + one user of every role, 3 sites with
+baselines, a Hindi/Hinglish spread of events (incl. an invoice that **mismatches**
+a delivery), payments, two permits (one near expiry), and two decisions (one
+**overdue**). Events are indexed so search works immediately. **Idempotent** —
+safe to re-run.
 
-## 5. Run the extraction worker (realistic path)
+It prints the login table:
 
-In a second terminal:
+| Role | Phone | Lands on |
+|------|-------|----------|
+| owner | `+919800000001` | Brief (`/owner`) |
+| pm | `+919800000002` | Today (`/owner`) |
+| supervisor | `+919800000003` | Capture (`/supervisor/capture`) |
+| accountant | `+919800000004` | Reconcile (`/reconcile`) |
+| procurement | `+919800000005` | Orders/Permits (`/reconcile`) |
+| mukadam (labor_contractor) | `+919800000006` | Attendance (`/mukadam/attendance`) |
 
+**OTP for every login is `000000`** (dev stub).
+
+## 5. Run the stack
+**API** (terminal 1):
 ```bash
-cd backend
-uv run python -m app.queue_worker
+cd backend && uv run uvicorn app.main:app --reload --port 8000
+# curl -s localhost:8000/healthz -> {"status":"ok"}
 ```
-
-> Skip this if you set `EXTRACTION_SYNC=true` in `backend/.env` — extraction then runs inline
-> on ingest, no worker needed.
-
-## 6. Seed a company, site, and WhatsApp-group mapping
-
-The extraction worker resolves a message's site by matching `(external_group_id, source)`
-against a `whatsapp_groups` row. Seed via the API:
-
+**Worker** (terminal 2 — only if `EXTRACTION_SYNC=false`):
 ```bash
-# Login (OTP stub: any phone + otp "000000"; user auto-created as owner)
-TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"phone":"+919999999999","otp":"000000"}' \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
-
-# Create a site
-SITE=$(curl -s -X POST localhost:8000/api/v1/sites \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"Tower A","type":"residential"}' \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
-echo "site=$SITE"
-
-# Map a WhatsApp group to that site
-curl -s -X POST localhost:8000/api/v1/whatsapp-groups \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"external_group_id\":\"120363-site-a@g.us\",\"source\":\"baileys\",\"site_id\":\"$SITE\",\"label\":\"Tower A crew\"}"
+cd backend && uv run python -m app.queue_worker
 ```
+**Scheduler** — off by default. To run the SLA + permit sweeps on a timer in the
+API process, set `ENABLE_SCHEDULER=true` in `backend/.env` and restart the API.
+For the demo we trigger them manually (§7).
 
-## 7. Send a sample ingest (a Hindi attendance message)
+**Web** (terminal 3):
+```bash
+cd web && npm install
+printf 'VITE_API_BASE=http://localhost:8000\nVITE_USE_MOCKS=false\n' > .env.local
+npm run dev      # http://localhost:5173
+```
+> The role screens read live data, so point the web app at the running API
+> (`VITE_USE_MOCKS=false`). Log in with a seeded phone + OTP `000000`; the app
+> redirects each role to its home via `GET /api/v1/auth/me/landing`.
 
+---
+
+## 6. The wired loop (ingest → extract → index → search)
+Ingest a Hindi message into the seeded Site A group (`sunrise-site-a`):
 ```bash
 curl -s -X POST localhost:8000/api/v1/ingest \
   -H 'Content-Type: application/json' -H 'X-Ingest-Key: dev-ingest-key' \
   -d '{
-    "source":"baileys",
-    "external_group_id":"120363-site-a@g.us",
-    "sender_id":"919999999999",
-    "sender_name":"Site Supervisor",
-    "media_type":"text",
-    "text":"Aaj 24 mazdoor aaye site par",
-    "sent_at":"2026-05-28T08:30:00"
+    "source":"baileys","external_group_id":"sunrise-site-a",
+    "sender_id":"919800000003","sender_name":"Vikram",
+    "media_type":"text","text":"Aaj 28 mazdoor aaye site par",
+    "sent_at":"2026-05-29T08:30:00"
   }'
 ```
-
-The worker (or inline mode) extracts an `attendance` event (`headcount: 24`) for Tower A.
-Verify:
-
+Extraction creates an `attendance` event **and the Phase C hook indexes it**. Find
+it via search (owner token):
 ```bash
-curl -s "localhost:8000/api/v1/sites/$SITE/events?date=2026-05-28" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+OWNER=$(curl -s -X POST localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"phone":"+919800000001","otp":"000000"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+
+curl -s -X POST localhost:8000/api/v1/search -H "Authorization: Bearer $OWNER" \
+  -H 'Content-Type: application/json' -d '{"q":"cement delivery"}' | python3 -m json.tool
 ```
 
-## 8. Trigger a brief
-
-Run the nightly brief builder on demand for the demo date:
-
+## 7. Background sweeps (owner-only admin triggers)
+The seed leaves one **overdue** homeowner decision and one **near-expiry** permit.
+Trigger the sweeps manually (in production the scheduler runs these):
 ```bash
-cd backend
-uv run python -c "
-import asyncio
-from datetime import date
-from app.brief.schedule import run_nightly
-print(asyncio.run(run_nightly(brief_date=date(2026,5,28))))
-"
+# Escalate overdue homeowner questions:
+curl -s -X POST localhost:8000/api/v1/admin/run-sla-sweep   -H "Authorization: Bearer $OWNER"
+# Raise expiry/renewal alerts (creates alert decisions):
+curl -s -X POST localhost:8000/api/v1/admin/run-permit-sweep -H "Authorization: Bearer $OWNER"
+# Backfill the search index (e.g. after bulk imports):
+curl -s -X POST localhost:8000/api/v1/admin/reindex          -H "Authorization: Bearer $OWNER"
 ```
 
-This builds one `owner_briefs` row per company for that date. The brief leads with risks,
-then a per-site activity summary (attendance/deliveries/issues).
+---
 
-To deliver it over WhatsApp, set the send mode (see §10) and call `send_brief`.
+## 8. Five-minute role-by-role click-through (web)
+All logins use OTP `000000`. Each role lands on its home automatically.
 
-## 9. View it in the web dashboard
+1. **(0:00) Owner — the Brief.** Log in `+919800000001`. The Brief leads with
+   *"N things need you today"* — Site B shows a **labor-shortfall risk** (22 present
+   vs a 40 baseline). Tap a risk → **EvidenceCard "show proof"** reveals the
+   underlying events. The ACC invoice risk → **Hold** (creates a decision) or
+   **Approve** inline. Below: the Cash / Labor / Material / Progress pulse grid.
+2. **(1:30) Accountant — Reconcile.** Log in `+919800000004` → lands on Reconcile.
+   The ACC row is flagged **needs approval** (invoice 120 bags vs 100 delivered,
+   ~₹12,000 at risk). Open it → both sides side-by-side → **Hold payment** routes a
+   decision to the owner.
+3. **(2:30) Owner — Approvals.** Back as owner → `/approvals`: the held payment +
+   the seeded approval are in the inbox. Approve / Reject / Assign. (Run the SLA
+   sweep in §7 first to see the overdue homeowner question flip to **escalated**.)
+4. **(3:15) Supervisor — Capture.** Log in `+919800000003` → Capture home: big
+   📷 / 🎙 hold-to-talk CaptureBar + recent captures timeline. (Type a line or use
+   the ingest curl in §6 to see a new capture appear.)
+5. **(3:45) Mukadam — Attendance.** Log in `+919800000006` → today's attendance
+   capture + *"proof = faster payment"* and their own payment status.
+6. **(4:15) Procurement — Permits.** Log in `+919800000005` → permits checklist:
+   the Building Plan Approval shows **expiring soon** (after the permit sweep in §7),
+   the Fire NOC shows **stale review**.
+7. **(4:40) Search.** As any role → `/search`: ask *"cement deliveries"* or *"labor
+   below plan"* — every result carries evidence; off-topic queries say *"not sure"*
+   rather than hallucinate.
+8. **(5:00) Close.** Language toggle (en/हिन्दी) in **Settings** flips the whole UI
+   and persists to the user record.
 
-```bash
-cd web
-npm install
-npm run dev        # Vite dev server, typically http://localhost:5173
-```
+---
 
-Point the web app at the API and turn mocks off (`web/.env`):
-
-```
-VITE_API_BASE=http://localhost:8000
-VITE_USE_MOCKS=false
-```
-
-Open a site and the event timeline loads from `GET /api/v1/sites/{id}/events`. With the API
-up and mocks off, it uses live data. (If the events endpoint ever 404s, the client falls back
-to mock data gracefully — but in Wave 2 the endpoint is live.)
-
-## 10. WhatsApp send setup (real delivery)
-
+## 9. WhatsApp send (real delivery, optional)
 `app.brief.send.send_brief` picks transport from `WHATSAPP_SEND_MODE`:
 
 | Mode | Behavior |
 |------|----------|
-| `dry_run` (default) | logs, returns `False`, no network |
+| `dry_run` (default) | logs, no network |
 | `url` | `POST {to_phone, text}` to `WHATSAPP_SEND_URL` |
 | `cloud_api` | `POST` to the WhatsApp Cloud API |
 
-For `cloud_api`, in `backend/.env`:
+For `cloud_api` set `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` in `backend/.env`.
+> ⚠️ Free-form text only delivers inside the 24h customer-service window; outside it
+> Meta requires a pre-approved template. The Meta test token expires every 24h — use a
+> permanent System User token for a real pilot.
 
+## 10. (Optional) WhatsApp bridge (Baileys) in dry-run
 ```bash
-WHATSAPP_SEND_MODE=cloud_api
-WHATSAPP_TOKEN=EAAG...                    # Bearer token
-WHATSAPP_PHONE_NUMBER_ID=1094260843779305 # pilot phone_number_id
-```
-
-It posts to `https://graph.facebook.com/v21.0/<PHONE_NUMBER_ID>/messages` with
-`Authorization: Bearer <token>` and body
-`{"messaging_product":"whatsapp","to":<to_phone>,"type":"text","text":{"body":<text>}}`.
-
-> ⚠️ **24-hour window.** Free-form text only delivers if the recipient (the owner / your test
-> number) messaged your WhatsApp number within the last 24h. Outside that window Meta requires
-> a **pre-approved template** — a plain text send will be rejected. For the demo, message the
-> test number from the owner's phone first.
->
-> ⚠️ **Token expiry.** The Meta-provided test token expires every 24h. For a real pilot,
-> create a permanent **System User** token.
-
-## 11. (Optional) Run the WhatsApp bridge in dry-run
-
-The Node bridge (Baileys) forwards real WhatsApp group messages to `/api/v1/ingest` and saves
-media under a shared `MEDIA_DIR`:
-
-```bash
-cd whatsapp-bridge
-npm install
-# Both the bridge and the backend must point MEDIA_DIR at the SAME absolute folder so
-# extraction's OCR/STT can read what the bridge downloaded, e.g.:
-#   export MEDIA_DIR=/abs/path/to/constructo/media
+cd whatsapp-bridge && npm install
 MEDIA_DIR=/abs/path/to/constructo/media \
 BACKEND_URL=http://localhost:8000 INGEST_API_KEY=dev-ingest-key \
-npm run dev -- --dry-run    # logs payloads instead of needing a live WA session
+npm run dev -- --dry-run
 ```
-
-The backend tolerates `media_url` as an absolute path, a `file://` URI, or a bare filename
-(resolved against `MEDIA_DIR`).
+The bridge and backend must point `MEDIA_DIR` at the same absolute folder so
+extraction's OCR/STT can read downloaded media. `media_url` may be an absolute
+path, a `file://` URI, or a bare filename (resolved against `MEDIA_DIR`).
 
 ---
 
-## 5-minute design-partner demo script
-
-1. **(0:00) The problem.** "Site updates live in WhatsApp groups — attendance, deliveries,
-   problems — in Hindi/Hinglish. Owners can't read 200 messages a day. Constructo turns that
-   chatter into a single morning brief."
-2. **(0:30) Ingest a real message.** Run the curl in §7 with a Hindi line
-   (`Aaj 24 mazdoor aaye`). "This is exactly what a supervisor types."
-3. **(1:00) It became structured data.** Run the events curl in §7 — show the `attendance`
-   event with `headcount: 24`, the right site, the right date. "No forms. The AI extracted it."
-4. **(2:00) Show a mixed feed.** Ingest a delivery (`50 bori cement aa gaya`) and an issue
-   (`pani ki tanki leak ho rahi hai`). Re-fetch events — three event types, auto-classified.
-5. **(3:00) The morning brief.** Run §8. Read the generated brief aloud — risks first, then a
-   one-line activity summary per site. "This is what lands on the owner's WhatsApp at 7am."
-6. **(4:00) Delivery.** Show `cloud_api` mode config (§10) and the 24h-window caveat. If a test
-   number is warmed up, send live; otherwise show the dry-run log + the exact Cloud API request.
-7. **(4:30) The dashboard.** Open the web app (§9) — the same events on a timeline, with
-   low-confidence items flagged for clarification. "Owners get the brief; site teams get the
-   board."
-8. **(5:00) Close.** "From WhatsApp noise to a structured daily brief, in the language crews
-   already use — no app to learn."
+## Reset the demo
+Re-running the seed is idempotent. For a clean slate:
+```bash
+docker exec constructo-postgres-1 psql -U constructo -d constructo \
+  -c "DROP DATABASE IF EXISTS constructo_demo" -c "CREATE DATABASE constructo_demo"
+cd backend && uv run alembic upgrade head && uv run python -m scripts.seed_demo
+```
