@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Constructo",
+    "slug": "constructo",
+    "scheme": "constructo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.constructo.app"
+    },
+    "android": {
+      "package": "ai.constructo.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#f7f5f0",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#f2a100"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Constructo uses your photos so you can share progress and flag issues."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Constructo uses your camera so you can capture site photos."
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
