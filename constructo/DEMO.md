@@ -278,6 +278,32 @@ npx expo start                     # press 'a' (Android) / 'i' (iOS) / 'w' (web)
    one-nudge sweep escalates overdue requests
    (`POST /api/v1/admin/run-request-nudge-sweep`).
 
+### Contractor branches (H4 Tier 1: Owner / Supervisor / Mukadam)
+
+The SAME app role-branches to the **Blueprint** theme for contractor roles. Log
+in with phone + OTP `000000` as a seeded user — the gate lands each role on its
+home. To switch roles, **Sign out** (in More / Help) and log in as another phone.
+
+| Role | Phone | Lands on | Hero |
+|------|-------|----------|------|
+| Owner | `+919800000001` | `/(contractor)/owner/brief` | the 7am Brief — ≤3 exceptions, proof on tap, inline Approve/Hold/Assign |
+| Supervisor | `+919800000003` | `/(contractor)/supervisor/capture` | CaptureBar (photo + hold-to-talk) → offline outbox + sync status |
+| Mukadam | `+919800000006` | `/(contractor)/mukadam/attendance` | one-tap attendance (voice/photo), read-only "My Pay" |
+
+- **Owner →** Brief leads with cross-site risks (severity-sorted), each an
+  EvidenceCard with inline decision chips; below, a 2×2 Cash/Labor/Material/
+  Progress pulse + site roll-up. Tabs: Brief / Sites / Approvals / Search / More.
+- **Supervisor →** Capture enqueues photo/voice to the offline outbox (replays on
+  reconnect — see the sync banner); My Sites shows assigned sites + event feeds.
+- **Mukadam →** extra-large, Hindi-first, voice-out (🔊); attendance is queued
+  offline; My Pay is read-only with "proof = faster payment" framing.
+
+> **Backend gaps the H4 agents flagged** (no backend built — follow-ups): there is
+> no app-authenticated **capture endpoint** (ingest is bridge/WhatsApp-only), so
+> Supervisor/Mukadam captures enqueue against an assumed shape and replay once it
+> exists; no **drawings** endpoint; no **supervisor-asks** endpoint (approximated
+> via approvals); Owner brief chips create decisions via `/dashboard/decisions`.
+
 ### Build an installable APK
 ```bash
 cd mobile
