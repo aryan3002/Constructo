@@ -181,6 +181,55 @@ npm start       # node dist/index.js
 
 ---
 
+## Lockfile note (why `npm ci` kept breaking on CI)
+
+**Do not regenerate `package-lock.json` with a plain `npm install` on macOS.**
+
+The lockfile must retain the cross-platform optional-dependency nodes
+`node_modules/@emnapi/core` and `node_modules/@emnapi/runtime`. These are a
+**wasm fallback** pulled in transitively (via `@rolldown/binding-wasm32-wasi`,
+itself reached through the dependency tree of `@whiskeysockets/baileys`). The
+`@emnapi/*` nodes carry no `os`/`cpu` restriction, but their parent wasm32
+binding is kept for **all** platforms — and npm, when run on **macOS/arm64**,
+prunes the `@emnapi/*` child nodes out of the lockfile. That leaves a dangling
+reference, so the GitHub Actions `bridge` job (`npm ci` on Linux) fails with:
+
+```
+npm error `npm ci` can only install packages when your package.json and
+package-lock.json are in sync.
+Missing: @emnapi/runtime@1.10.0 from lock file
+Missing: @emnapi/core@1.10.0 from lock file
+```
+
+This had to be hand-fixed twice before. The lockfile committed here is the
+**complete, cross-platform** version (it records the darwin / linux / win32
+bindings *and* the `@emnapi/*` wasm-fallback nodes).
+
+### If you ever need to regenerate the lockfile
+
+Target `linux/x64` so the `@emnapi/*` nodes are retained — this still records
+every platform's bindings and produces a lockfile byte-identical to the
+committed one:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install --package-lock-only --os=linux --cpu=x64
+npm install            # restore node_modules for local dev
+```
+
+Then verify before committing:
+
+```bash
+npm ci && npm run typecheck && npm test
+grep -c '"node_modules/@emnapi' package-lock.json   # must print 3
+```
+
+A plain `npm install` on macOS prunes those nodes (it leaves fewer than `3` —
+in practice `1`), which is the broken state that fails CI. See [`.npmrc`](.npmrc)
+for the same warning at the point of use.
+
+---
+
 ## Project structure
 
 ```
