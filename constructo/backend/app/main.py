@@ -18,6 +18,7 @@ from app.auth.router import router as auth_router
 from app.brief.router import router as brief_router
 from app.common.errors import install_error_handlers
 from app.config import settings
+from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
 from app.ingestion.router import router as ingest_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.sites.router import router as sites_router
@@ -59,3 +60,4 @@ app.include_router(auth_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(brief_router)
+app.include_router(dashboard_router)  # phaseB brief/owner
