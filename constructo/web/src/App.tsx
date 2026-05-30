@@ -5,8 +5,10 @@ import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
 import { Login } from './pages/Login'
+import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
+import { SupervisorCapture } from './pages/supervisor/SupervisorCapture'
 
 export function App() {
   return (
@@ -20,6 +22,23 @@ export function App() {
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      {/* Field-role screens (capture feature) bring their own AppShell. */}
+      <Route
+        path="/supervisor/capture"
+        element={
+          <RequireAuth>
+            <SupervisorCapture />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/mukadam/attendance"
+        element={
+          <RequireAuth>
+            <MukadamAttendance />
           </RequireAuth>
         }
       />
