@@ -1,0 +1,105 @@
+"""Auth profile + language + landing endpoints (network-free)."""
+from app.auth.landing import landing_for
+from app.models import UserRole
+
+
+async def _login(client, phone: str) -> str:
+    resp = await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+    assert resp.status_code == 200
+    return resp.json()["token"]
+
+
+async def test_request_otp_returns_sent(client):
+    resp = await client.post("/api/v1/auth/request-otp", json={"phone": "+15551110000"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sent"] is True
+    assert body["dev_otp"] == "000000"
+
+
+async def test_me_includes_language(client):
+    token = await _login(client, "+15551110001")
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    # New owners default to "en" (server_default on user.language).
+    assert me.json()["language"] in ("en", None)
+
+
+async def test_patch_users_me_sets_language(client):
+    token = await _login(client, "+15551110002")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.patch("/api/v1/users/me", json={"language": "hi"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["language"] == "hi"
+
+    # Persisted: a fresh /me reflects it.
+    me = await client.get("/api/v1/auth/me", headers=headers)
+    assert me.json()["language"] == "hi"
+
+
+async def test_patch_users_me_sets_name(client):
+    token = await _login(client, "+15551110003")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.patch("/api/v1/users/me", json={"name": "Asha"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Asha"
+
+
+async def test_patch_users_me_rejects_unknown_language(client):
+    token = await _login(client, "+15551110004")
+    headers = {"Authorization": f"Bearer {token}"}
+    # Literal type means FastAPI validation rejects it as 422.
+    resp = await client.patch("/api/v1/users/me", json={"language": "fr"}, headers=headers)
+    assert resp.status_code == 422
+
+
+async def test_patch_users_me_requires_auth(client):
+    resp = await client.patch("/api/v1/users/me", json={"language": "hi"})
+    assert resp.status_code == 401
+
+
+async def test_landing_map_for_roles():
+    assert landing_for(UserRole.owner) == "brief"
+    assert landing_for(UserRole.pm) == "brief"
+    assert landing_for(UserRole.supervisor) == "capture"
+    assert landing_for(UserRole.accountant) == "reconcile"
+    assert landing_for(UserRole.labor_contractor) == "attendance"
+    assert landing_for(UserRole.procurement) == "orders"
+
+
+async def test_me_landing_endpoint(client):
+    token = await _login(client, "+15551110005")
+    resp = await client.get(
+        "/api/v1/auth/me/landing", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # A fresh login is an owner -> brief.
+    assert body["role"] == "owner"
+    assert body["landing"] == "brief"
+
+
+async def test_owner_can_rename_company(client):
+    token = await _login(client, "+15551110006")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.patch(
+        "/api/v1/auth/company", json={"name": "Verma Builders"}, headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Verma Builders"
+
+
+async def test_rename_company_requires_owner(client, factory, db_session):
+    company = await factory.company()
+    supervisor = await factory.user(company=company, role=UserRole.supervisor)
+    await db_session.commit()
+    from app.auth.jwt import create_access_token
+
+    headers = {
+        "Authorization": f"Bearer {create_access_token(str(supervisor.id), supervisor.role.value)}"
+    }
+    resp = await client.patch(
+        "/api/v1/auth/company", json={"name": "Nope"}, headers=headers
+    )
+    assert resp.status_code == 403

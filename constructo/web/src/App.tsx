@@ -4,14 +4,45 @@ import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
-import { Login } from './pages/Login'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
+// === auth/settings (feature: auth) ===
+import { Login } from './pages/auth/Login'
+import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
+import { Join } from './pages/auth/Join'
+import { InvitePage } from './pages/auth/InvitePage'
+import { Settings } from './pages/settings/Settings'
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* === auth/settings (feature: auth) === */}
+      <Route path="/join/:token" element={<Join />} />
+      <Route
+        path="/welcome"
+        element={
+          <RequireAuth>
+            <OwnerFirstRun />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Settings />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/invite"
+        element={
+          <RequireAuth>
+            <InvitePage />
+          </RequireAuth>
+        }
+      />
       {/* Public design-system gallery — view the full kit in both themes. */}
       <Route path="/components" element={<Components />} />
       {/* Dashboard brings its own AppShell (context header + role tab bar). */}

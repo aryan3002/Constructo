@@ -15,10 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
 from app.auth.router import router as auth_router
+from app.auth.router import users_router
 from app.brief.router import router as brief_router
 from app.common.errors import install_error_handlers
 from app.config import settings
 from app.ingestion.router import router as ingest_router
+from app.invites.router import router as invites_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.sites.router import router as sites_router
 
@@ -56,6 +58,8 @@ async def healthz() -> dict[str, str]:
 
 
 app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(invites_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(brief_router)

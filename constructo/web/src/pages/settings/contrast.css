@@ -1,0 +1,17 @@
+/* Sunlight / high-contrast mode. Toggled via data-contrast="high" on the root
+ * (see useDisplayPrefs.useHighContrast). Deepens text + lines and darkens the
+ * canvas so bright outdoor screens stay legible. Lives in the auth feature's
+ * owned scope (the shared theme.css is frozen). Status colors are untouched so
+ * the learned color+icon spine is preserved. */
+[data-contrast='high'] {
+  --c-text: #000000;
+  --c-text-mute: #2a2d34;
+  --c-line: #6b6f78;
+  --c-bg: #efece4;
+  --c-primary-deep: #8a5800;
+}
+
+[data-contrast='high'] .cstk-root,
+[data-contrast='high'] body {
+  font-weight: 500;
+}
