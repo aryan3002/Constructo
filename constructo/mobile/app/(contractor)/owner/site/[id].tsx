@@ -1,0 +1,123 @@
+/**
+ * Site detail (off-tab, nested under owner/). A lightweight single-site view:
+ * the site header (name · type · status) and its recent events rendered as a
+ * TimelineItem feed (GET /sites/{id}/events). This is the "single-site scope"
+ * altitude from Owner.md §6.2 — the owner sometimes does want the activity
+ * stream once they're inside one site.
+ */
+import { View } from 'react-native'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { useQuery } from '@tanstack/react-query'
+
+import { useT } from '../../../../src/i18n/I18nProvider'
+import { useTheme } from '../../../../src/theme/ThemeProvider'
+import { SPACE } from '../../../../src/theme/tokens'
+import { owner, type SiteEvent, type SiteEventType } from '../../../../src/api/owner'
+import { Body, Button, Card, H1, Screen, Small, StatusPill, TimelineItem } from '../../../../src/ui'
+import { ErrorBlock, LoadingBlock, formatWhen } from '../_components'
+
+const STR = {
+  en: {
+    timeline: 'Timeline',
+    back: '‹ Back',
+    noEvents: 'No events yet on this site. They appear here as the WhatsApp group posts.',
+    errorLine: 'We could not load this site just now.',
+    tryAgain: 'Try again',
+    active: 'Active',
+  },
+  hi: {
+    timeline: 'टाइमलाइन',
+    back: '‹ वापस',
+    noEvents: 'इस साइट पर अभी कोई घटना नहीं। WhatsApp ग्रुप के पोस्ट करते ही यहाँ दिखेंगी।',
+    errorLine: 'अभी यह साइट लोड नहीं हो सकी।',
+    tryAgain: 'फिर कोशिश करें',
+    active: 'सक्रिय',
+  },
+} as const
+
+const EVENT_LABEL: Record<SiteEventType, string> = {
+  attendance: 'Attendance',
+  material_delivery: 'Material',
+  progress_update: 'Progress',
+  issue: 'Issue',
+  invoice_received: 'Invoice',
+  drawing_shared: 'Drawing',
+  approval: 'Approval',
+  payment_request: 'Payment',
+  unknown: 'Update',
+}
+
+const EVENT_TINT: Partial<Record<SiteEventType, 'risk' | 'warn' | 'info'>> = {
+  issue: 'risk',
+  payment_request: 'warn',
+  invoice_received: 'info',
+}
+
+export default function SiteDetail() {
+  const { lang } = useT()
+  const { theme } = useTheme()
+  const router = useRouter()
+  const t = STR[lang]
+  const { id } = useLocalSearchParams<{ id: string }>()
+  const siteId = String(id ?? '')
+
+  const siteQ = useQuery({ queryKey: ['owner', 'site', siteId], queryFn: () => owner.site(siteId), enabled: !!siteId })
+  const eventsQ = useQuery({ queryKey: ['owner', 'site', siteId, 'events'], queryFn: () => owner.siteEvents(siteId), enabled: !!siteId })
+
+  if (siteQ.isLoading) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
+        <LoadingBlock />
+      </Screen>
+    )
+  }
+  if (siteQ.error || !siteQ.data) {
+    return (
+      <Screen>
+        <Button title={t.back} variant="ghost" onPress={() => router.back()} />
+        <ErrorBlock message={t.errorLine} retryLabel={t.tryAgain} onRetry={() => void siteQ.refetch()} />
+      </Screen>
+    )
+  }
+
+  const site = siteQ.data
+  const events: SiteEvent[] = eventsQ.data?.items ?? []
+
+  return (
+    <Screen>
+      <Button title={t.back} variant="ghost" onPress={() => router.back()} style={{ marginLeft: -SPACE.lg }} />
+      <View style={{ gap: SPACE.sm }}>
+        <H1>{site.name}</H1>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
+          <StatusPill status={site.status === 'active' ? 'ok' : 'info'} size="sm" label={site.status || t.active} />
+          <Small muted>{[site.type, site.location].filter(Boolean).join(' · ')}</Small>
+        </View>
+      </View>
+
+      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>{t.timeline.toUpperCase()}</Small>
+
+      {eventsQ.isLoading ? (
+        <LoadingBlock />
+      ) : events.length === 0 ? (
+        <Card><Body muted>{t.noEvents}</Body></Card>
+      ) : (
+        <Card>
+          {events.map((e, i) => {
+            const tintKey = EVENT_TINT[e.event_type]
+            return (
+              <TimelineItem
+                key={e.id}
+                typeLabel={EVENT_LABEL[e.event_type] ?? e.event_type}
+                summary={e.summary}
+                occurredOn={formatWhen(e.occurred_on)}
+                tint={tintKey ? theme.colors[tintKey] : undefined}
+                isLast={i === events.length - 1}
+              />
+            )
+          })}
+        </Card>
+      )}
+    </Screen>
+  )
+}
