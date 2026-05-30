@@ -5,6 +5,7 @@ import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
 import { Login } from './pages/Login'
+import { ReconcilePage } from './pages/reconcile/ReconcilePage'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
 
@@ -33,6 +34,7 @@ export function App() {
       >
         <Route path="/sites" element={<Sites />} />
         <Route path="/sites/:id" element={<SiteDetail />} />
+        <Route path="/reconcile" element={<ReconcilePage />} />
         <Route path="/groups" element={<Groups />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
