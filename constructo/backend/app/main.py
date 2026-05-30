@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
+from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
 from app.auth.router import users_router
 from app.brief.router import router as brief_router
@@ -65,3 +66,4 @@ app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(brief_router)
 app.include_router(dashboard_router)  # phaseB brief/owner
+app.include_router(attendance_router)  # phaseB capture/attendance

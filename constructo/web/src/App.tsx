@@ -4,7 +4,6 @@ import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
-import { OwnerHome } from './pages/owner/OwnerHome'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
 // === auth/settings (feature: auth) ===
@@ -13,6 +12,11 @@ import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
 import { Join } from './pages/auth/Join'
 import { InvitePage } from './pages/auth/InvitePage'
 import { Settings } from './pages/settings/Settings'
+// === brief/owner ===
+import { OwnerHome } from './pages/owner/OwnerHome'
+// === capture/attendance ===
+import { SupervisorCapture } from './pages/supervisor/SupervisorCapture'
+import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
 
 export function App() {
   return (
@@ -61,6 +65,23 @@ export function App() {
         element={
           <RequireAuth>
             <OwnerHome />
+          </RequireAuth>
+        }
+      />
+      {/* Field-role screens (capture feature) bring their own AppShell. */}
+      <Route
+        path="/supervisor/capture"
+        element={
+          <RequireAuth>
+            <SupervisorCapture />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/mukadam/attendance"
+        element={
+          <RequireAuth>
+            <MukadamAttendance />
           </RequireAuth>
         }
       />
