@@ -21,6 +21,8 @@ import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
 import { ReconcilePage } from './pages/reconcile/ReconcilePage'
 // === approvals ===
 import { ApprovalInbox } from './pages/approvals/Inbox'
+// === search ===
+import { Search } from './pages/search/Search'
 
 export function App() {
   return (
@@ -95,6 +97,15 @@ export function App() {
         element={
           <RequireAuth>
             <ApprovalInbox />
+          </RequireAuth>
+        }
+      />
+      {/* Search brings its own ThemeProvider chrome (like the Dashboard). */}
+      <Route
+        path="/search"
+        element={
+          <RequireAuth>
+            <Search />
           </RequireAuth>
         }
       />

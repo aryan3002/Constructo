@@ -27,6 +27,7 @@ from app.invites.router import router as invites_router
 from app.notifications.router import router as notifications_router
 from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
+from app.search.router import router as search_router
 from app.sites.router import router as sites_router
 
 
@@ -73,3 +74,4 @@ app.include_router(attendance_router)  # phaseB capture/attendance
 app.include_router(reconcile_router)  # phaseB reconcile
 app.include_router(approvals_router)  # phaseB approvals
 app.include_router(notifications_router)  # phaseB notifications
+app.include_router(search_router)  # phaseB search
