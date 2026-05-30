@@ -4,6 +4,9 @@ import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
 import { Dashboard } from './pages/Dashboard'
 import { Groups } from './pages/Groups'
+// === payments/permits ===
+import { Payments } from './pages/payments/Payments'
+import { Permits } from './pages/permits/Permits'
 import { SiteDetail } from './pages/SiteDetail'
 import { Sites } from './pages/Sites'
 // === auth/settings (feature: auth) ===
@@ -121,6 +124,9 @@ export function App() {
         <Route path="/sites/:id" element={<SiteDetail />} />
         <Route path="/reconcile" element={<ReconcilePage />} />
         <Route path="/groups" element={<Groups />} />
+        <Route path="/payments" element={<Payments />} />
+        <Route path="/permits" element={<Permits />} />
+        <Route path="/permits/site/:siteId" element={<Permits />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
