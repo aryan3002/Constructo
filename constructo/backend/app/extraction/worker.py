@@ -116,4 +116,32 @@ async def handle_ingested(
             ids.append(ev.id)
 
         await session.commit()
+
+        # Make the new events searchable. Indexing failures must NEVER fail
+        # ingestion (the events are already committed), so each event is indexed
+        # best-effort and errors are logged and swallowed. The embeddings client
+        # falls back to FakeEmbeddings when no provider creds are present, so
+        # this stays network-free in dev/tests.
+        await _index_events(session, ids)
+
         return ids
+
+
+async def _index_events(session: AsyncSession, event_ids: list[UUID]) -> None:
+    """Best-effort: embed and index each new SiteEvent. Never raises."""
+    if not event_ids:
+        return
+    from app.search.index import index_event
+
+    indexed = 0
+    for event_id in event_ids:
+        try:
+            await index_event(session, event_id)
+            indexed += 1
+        except Exception:
+            logger.exception("handle_ingested: failed to index event %s", event_id)
+    if indexed:
+        try:
+            await session.commit()
+        except Exception:
+            logger.exception("handle_ingested: failed to commit indexed events")

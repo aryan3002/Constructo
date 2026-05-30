@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
+from app.admin.router import router as admin_router
 from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
@@ -79,3 +80,4 @@ app.include_router(notifications_router)  # phaseB notifications
 app.include_router(search_router)  # phaseB search
 app.include_router(payments_router)  # phaseB payments
 app.include_router(permits_router)  # phaseB permits
+app.include_router(admin_router)  # phaseC admin/ops triggers
