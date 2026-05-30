@@ -11,10 +11,30 @@ export const en = {
 
   // Navigation (bottom tabs / shell)
   'nav.brief': 'Brief',
+  'nav.today': 'Today',
   'nav.sites': 'Sites',
+  'nav.my_sites': 'My Sites',
+  'nav.my_site': 'My Site',
+  'nav.capture': 'Capture',
+  'nav.attendance': 'Attendance',
+  'nav.my_payments': 'My Payments',
+  'nav.reconcile': 'Reconcile',
+  'nav.bills': 'Bills',
+  'nav.exports': 'Exports',
+  'nav.orders': 'Orders',
   'nav.approvals': 'Approvals',
   'nav.search': 'Search',
+  'nav.payments': 'Payments',
+  'nav.permits': 'Permits',
+  'nav.groups': 'WhatsApp Groups',
+  'nav.settings': 'Settings',
   'nav.more': 'More',
+
+  // "More" hub (overflow menu of secondary destinations)
+  'more.title': 'More',
+  'more.subtitle': 'Everything else, one tap away.',
+  'more.section.work': 'Work',
+  'more.section.account': 'Account',
 
   // Common actions
   'action.approve': 'Approve',
@@ -28,6 +48,45 @@ export const en = {
   'common.loading': 'Loading…',
   'common.error': 'Something went wrong',
   'common.all_sites': 'All Sites ({count})',
+  'common.back': 'Back',
+
+  // Sites list + detail (retrofitted from legacy pages)
+  'sites.title': 'Sites',
+  'sites.subtitle': 'Every site you run, status-first.',
+  'sites.loading': 'Loading sites…',
+  'sites.error': 'Could not load sites.',
+  'sites.empty.title': 'No sites yet',
+  'sites.empty.hint': 'Sites appear here once added.',
+  'sites.status.active': 'Active',
+  'sites.status.paused': 'Paused',
+  'sites.status.completed': 'Completed',
+  'site.back': 'Back to sites',
+  'site.loading': 'Loading site…',
+  'site.error': 'Could not load this site.',
+  'site.timeline.title': 'Event timeline',
+  'site.timeline.loading': 'Loading events…',
+  'site.timeline.error': 'Could not load events.',
+  'site.timeline.empty.title': 'No events for today',
+  'site.timeline.empty.hint': 'Events from site WhatsApp groups show up here.',
+  'site.mock_badge': 'Mock events',
+
+  // WhatsApp groups mapping (retrofitted)
+  'groups.title': 'WhatsApp Groups',
+  'groups.subtitle':
+    'Map a WhatsApp group to a site so its messages flow into the timeline.',
+  'groups.field.label': 'Label',
+  'groups.field.label_placeholder': 'Green Valley — Site Updates',
+  'groups.field.external_id': 'External group ID',
+  'groups.field.external_id_placeholder': '1203630000000000@g.us',
+  'groups.field.site': 'Site',
+  'groups.field.site_placeholder': 'Select a site…',
+  'groups.field.source': 'Source',
+  'groups.action.map': 'Map group',
+  'groups.action.mapping': 'Saving…',
+  'groups.mapped.title': 'Mapped groups',
+  'groups.mapped.empty.title': 'No groups mapped yet',
+  'groups.mapped.empty.hint': 'Add one using the form.',
+  'groups.success': 'Group mapped.',
 
   // Language switcher
   'language.label': 'Language',

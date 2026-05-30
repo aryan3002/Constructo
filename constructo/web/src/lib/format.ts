@@ -16,13 +16,6 @@ export function sortBySeverity<T extends { severity: RiskSeverity }>(
   )
 }
 
-// Tailwind classes per severity. high=red, med=amber, low=gray.
-export const SEVERITY_CLASSES: Record<RiskSeverity, string> = {
-  high: 'bg-red-100 text-red-800 border-red-300',
-  med: 'bg-amber-100 text-amber-800 border-amber-300',
-  low: 'bg-gray-100 text-gray-700 border-gray-300',
-}
-
 export const SEVERITY_LABEL: Record<RiskSeverity, string> = {
   high: 'High',
   med: 'Medium',
@@ -39,18 +32,6 @@ export const EVENT_TYPE_LABEL: Record<SiteEventType, string> = {
   approval: 'Approval',
   payment_request: 'Payment',
   unknown: 'Unknown',
-}
-
-export const EVENT_TYPE_CLASSES: Record<SiteEventType, string> = {
-  attendance: 'bg-blue-100 text-blue-800',
-  material_delivery: 'bg-emerald-100 text-emerald-800',
-  progress_update: 'bg-indigo-100 text-indigo-800',
-  issue: 'bg-red-100 text-red-800',
-  invoice_received: 'bg-purple-100 text-purple-800',
-  drawing_shared: 'bg-cyan-100 text-cyan-800',
-  approval: 'bg-green-100 text-green-800',
-  payment_request: 'bg-amber-100 text-amber-800',
-  unknown: 'bg-gray-100 text-gray-700',
 }
 
 export function formatDate(iso: string): string {
