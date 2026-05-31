@@ -1,349 +1,416 @@
 /**
- * Homeowner Home (H2) — the daily "am I okay?" Daylight dashboard.
+ * Homeowner Home — the "Architectural Precision" dashboard (Stitch design).
  *
- * A calm, glance-first summary built from `homeowner.home()`: a time-bar for
- * overall progress, the current/next milestone, the single most important thing
- * needing the owner's response (with inline approve/comment/request-change),
- * recent activity as a timeline, an optional spend roll-up, and one decisive
- * "Flag an issue" action. Every section is conditional — an empty section
- * vanishes rather than rendering a hollow card.
+ * A full-bleed hero photo with the property name + reassuring headline, an
+ * overlapping progress-ring card, a deep-teal "Next up" card, a horizontal
+ * "Latest from site" gallery, an approved-changes summary, and the "Ask your
+ * builder" CTA. All wired to real homeowner data; sections hide when empty.
  */
-import { useState } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Link, useRouter } from 'expo-router'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useQuery } from '@tanstack/react-query'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { homeowner } from '../../src/api/client'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
-import { homeowner } from '../../src/api/client'
-import type { AttentionItem } from '../../src/api/types'
+import { AP, SPACE, TAP } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
   Button,
-  CalmCard,
   Card,
   Display,
   H2,
-  Mono,
+  Micro,
+  ProgressRing,
   Screen,
   Small,
-  StatusPill,
-  TimelineItem,
 } from '../../src/ui'
 
-// ---- local strings (bilingual; Hindi in Devanagari) ----
 const STR = {
   en: {
     settings: 'Settings',
-    greeting: 'Your home, today',
-    fallbackName: 'Your home',
+    morning: 'Good morning',
+    afternoon: 'Good afternoon',
+    evening: 'Good evening',
+    headline: 'Your home is taking shape.',
     onTrack: 'On track',
-    onTrackBody: 'Everything is moving along. We will surface anything that needs you here.',
-    projectStatus: 'Project status',
-    started: 'Started',
-    handover: 'Handover',
-    progressLine: (pct: number) => `About ${pct}% of the way to handover`,
-    notStarted: 'Work has not started yet',
-    handedOver: 'Handover complete — congratulations!',
-    now: 'Now',
-    next: 'Next',
-    expectedBy: 'Expected by',
-    attention: 'Needs your attention',
-    approve: 'Approve',
-    comment: 'Comment',
-    requestChange: 'Request change',
-    moreItems: (n: number) => `+${n} more in Requests`,
-    recent: 'Recent activity',
-    spend: 'Spend so far',
-    changes: (n: number) => `${n} change${n === 1 ? '' : 's'} approved`,
-    flag: 'Flag an issue',
+    fallbackName: 'Your home',
+    inProgress: 'In progress',
+    progressBody: 'Here’s where your build stands today.',
+    nextUp: 'NEXT UP',
+    latest: 'Latest from site',
+    viewGallery: 'VIEW GALLERY',
+    approvedChanges: 'APPROVED CHANGES',
+    changeLine: '{n} change(s) recorded so far',
+    reviewChanges: 'Review changes',
+    haveQ: 'Have questions?',
+    askBody: 'Your site manager is available to discuss progress.',
+    askBuilder: 'Ask your builder',
+    needs: 'Needs your attention',
+    review: 'Review',
+    errorLine: 'Couldn’t load your home.',
     tryAgain: 'Try again',
-    errorLine: 'We could not load your home just now.',
-    sent: 'Thanks — your response was sent.',
   },
   hi: {
     settings: 'सेटिंग्स',
-    greeting: 'आपका घर, आज',
+    morning: 'सुप्रभात',
+    afternoon: 'नमस्ते',
+    evening: 'शुभ संध्या',
+    headline: 'आपका घर आकार ले रहा है।',
+    onTrack: 'सब ठीक चल रहा है',
     fallbackName: 'आपका घर',
-    onTrack: 'सब ठीक है',
-    onTrackBody: 'सब कुछ ठीक चल रहा है। जिस चीज़ में आपकी ज़रूरत होगी, वह यहाँ दिखेगी।',
-    projectStatus: 'परियोजना की स्थिति',
-    started: 'शुरू',
-    handover: 'हैंडओवर',
-    progressLine: (pct: number) => `हैंडओवर तक लगभग ${pct}% पूरा`,
-    notStarted: 'काम अभी शुरू नहीं हुआ है',
-    handedOver: 'हैंडओवर पूरा — बधाई हो!',
-    now: 'अभी',
-    next: 'आगे',
-    expectedBy: 'अपेक्षित',
-    attention: 'आपके ध्यान की ज़रूरत',
-    approve: 'मंज़ूर करें',
-    comment: 'टिप्पणी',
-    requestChange: 'बदलाव माँगें',
-    moreItems: (n: number) => `+${n} और अनुरोध में`,
-    recent: 'हाल की गतिविधि',
-    spend: 'अब तक का खर्च',
-    changes: (n: number) => `${n} बदलाव मंज़ूर`,
-    flag: 'समस्या दर्ज करें',
+    inProgress: 'चल रहा है',
+    progressBody: 'आज आपके निर्माण की स्थिति यह है।',
+    nextUp: 'आगे',
+    latest: 'साइट से ताज़ा',
+    viewGallery: 'गैलरी देखें',
+    approvedChanges: 'मंज़ूर बदलाव',
+    changeLine: 'अब तक {n} बदलाव दर्ज',
+    reviewChanges: 'बदलाव देखें',
+    haveQ: 'कोई सवाल?',
+    askBody: 'आपके साइट मैनेजर प्रगति पर बात करने के लिए उपलब्ध हैं।',
+    askBuilder: 'बिल्डर से पूछें',
+    needs: 'आपके ध्यान की ज़रूरत',
+    review: 'देखें',
+    errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
-    errorLine: 'अभी आपका घर लोड नहीं हो सका।',
-    sent: 'धन्यवाद — आपका उत्तर भेज दिया गया।',
   },
 } as const
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** ISO date/datetime → "12 Jan 2026" (empty string when unparseable). */
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+function greetingFor(g: { morning: string; afternoon: string; evening: string }): string {
+  const h = new Date().getHours()
+  if (h < 12) return g.morning
+  if (h < 17) return g.afternoon
+  return g.evening
 }
 
-/** Indian-style rupee formatting: ₹X.X Cr / ₹X.X L / ₹12,000. */
-function formatRupees(n: number): string {
-  const sign = n < 0 ? '-' : ''
-  const abs = Math.abs(n)
-  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(1)} Cr`
-  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)} L`
-  // Indian digit grouping (e.g. 1,23,456).
-  const s = String(Math.round(abs))
-  const last3 = s.slice(-3)
-  const rest = s.slice(0, -3)
-  const grouped = rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3 : last3
-  return `${sign}₹${grouped}`
-}
-
-/** Elapsed fraction (0..1) of started → handover vs today, or null if unknown. */
+/** Elapsed fraction of the build (started → handover), clamped 0..1. */
 function elapsedFraction(start: string | null, end: string | null): number | null {
   if (!start || !end) return null
   const s = new Date(start).getTime()
   const e = new Date(end).getTime()
-  if (Number.isNaN(s) || Number.isNaN(e) || e <= s) return null
-  const now = Date.now()
-  return Math.max(0, Math.min(1, (now - s) / (e - s)))
+  if (!(e > s)) return null
+  const frac = (Date.now() - s) / (e - s)
+  return Math.max(0, Math.min(1, frac))
+}
+
+function formatRupees(n: number): string {
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)} Cr`
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`
+  return `₹${Math.round(n).toLocaleString('en-IN')}`
+}
+
+function monthYear(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
 export default function Home() {
   const { lang } = useT()
   const { theme } = useTheme()
+  const c = theme.colors
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const t = STR[lang]
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['home'],
-    queryFn: () => homeowner.home(),
-  })
+  const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
+  const photosQ = useQuery({ queryKey: ['home', 'photos'], queryFn: () => homeowner.photos() })
 
-  const [sentBanner, setSentBanner] = useState(false)
-  const respond = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'comment' | 'request_change' }) =>
-      homeowner.respondDecision(id, action),
-    onSuccess: () => {
-      setSentBanner(true)
-      void refetch()
-    },
-  })
-
-  if (isLoading) {
+  if (homeQ.isLoading) {
     return (
       <Screen>
         <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center' }}>
-          <ActivityIndicator color={theme.colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       </Screen>
     )
   }
-
-  if (error || !data) {
+  if (homeQ.error || !homeQ.data) {
     return (
       <Screen>
         <View style={{ gap: SPACE.md, paddingVertical: SPACE.xl }}>
-          <Small color={theme.colors.risk}>{t.errorLine}</Small>
-          <Button title={t.tryAgain} variant="secondary" onPress={() => void refetch()} />
+          <Small color={c.risk}>{t.errorLine}</Small>
+          <Button title={t.tryAgain} variant="secondary" onPress={() => void homeQ.refetch()} />
         </View>
       </Screen>
     )
   }
 
   const { property, milestone_now, milestone_next, needs_attention, recent_activity, spend_summary } =
-    data
+    homeQ.data
+  const photos = photosQ.data?.items ?? []
+  const heroUri = photos[0]?.image_url
 
-  const frac = elapsedFraction(property?.started_on ?? null, property?.expected_handover_on ?? null)
-  const hasTimeline = property != null && frac != null
-  const pct = frac != null ? Math.round(frac * 100) : 0
-  const firstAttention: AttentionItem | undefined = needs_attention[0]
-  const moreAttention = Math.max(0, needs_attention.length - 1)
+  const timeFrac = elapsedFraction(
+    property?.started_on ?? null,
+    property?.expected_handover_on ?? null,
+  )
+  const frac = timeFrac ?? 0
+  const pct = Math.round(frac * 100)
+  const handover = monthYear(property?.expected_handover_on ?? null)
+  const firstAttention = needs_attention[0]
+  const progressBody =
+    milestone_now?.name ? recent_activity[0]?.body ?? t.progressBody : t.progressBody
 
   return (
-    <Screen>
-      {/* 1 — Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
-        <View style={{ gap: SPACE.xs, flex: 1 }}>
-          <Small muted>{t.greeting}</Small>
-          <Display>{property?.display_name ?? t.fallbackName}</Display>
-        </View>
-        <Link href="/(homeowner)/settings" asChild>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.settings}
-            hitSlop={8}
-            style={{ minHeight: 48, justifyContent: 'center' }}
-          >
-            <Small color={theme.colors.accentDeep}>{t.settings} ⚙︎</Small>
-          </Pressable>
-        </Link>
-      </View>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: c.bg }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xl }}
+    >
+      {/* ---- Hero ---- */}
+      <View style={{ height: 360 }}>
+        {heroUri ? (
+          <Image source={{ uri: heroUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: c.accent }]} />
+        )}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.78)']}
+          style={StyleSheet.absoluteFill}
+        />
 
-      {/* Confirmation banner after a decision response */}
-      {sentBanner ? (
-        <Small color={theme.colors.ok}>{t.sent}</Small>
-      ) : null}
-
-      {/* 2 — Project status (time-bar, or calm fallback) */}
-      {hasTimeline ? (
-        <Card>
-          <Small muted style={{ letterSpacing: 1, marginBottom: SPACE.xs }}>
-            {t.projectStatus.toUpperCase()}
+        {/* Top bar overlay */}
+        <View
+          style={{
+            position: 'absolute',
+            top: insets.top + 6,
+            left: SPACE.lg,
+            right: SPACE.lg,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Small color="#ffffff" style={{ letterSpacing: 3, fontWeight: '700' }}>
+            CONSTRUCTO
           </Small>
+          <Link href="/(homeowner)/settings" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.settings}
+              hitSlop={10}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.18)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Body color="#ffffff">⚙︎</Body>
+            </Pressable>
+          </Link>
+        </View>
+
+        {/* Hero text */}
+        <View style={{ position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: 40 }}>
+          <Small color="rgba(255,255,255,0.92)">{greetingFor(t)}</Small>
+          {property?.display_name ? (
+            <Micro color="rgba(255,255,255,0.82)" style={{ letterSpacing: 2, marginTop: 2 }}>
+              {property.display_name.toUpperCase()}
+            </Micro>
+          ) : null}
+          <Display color="#ffffff" style={{ marginTop: SPACE.sm }}>
+            {t.headline}
+          </Display>
           <View
             style={{
-              height: 10,
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.sm,
+              marginTop: SPACE.md,
               borderRadius: 9999,
-              backgroundColor: theme.colors.line,
-              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.3)',
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              paddingHorizontal: SPACE.md,
+              paddingVertical: 6,
             }}
           >
-            <View
-              style={{
-                width: `${pct}%`,
-                height: '100%',
-                borderRadius: 9999,
-                backgroundColor: theme.colors.accent,
-              }}
-            />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: AP.chip }} />
+            <Micro color="#ffffff">
+              {t.onTrack}
+              {handover ? ` · ${handover}` : ''}
+            </Micro>
           </View>
-          <Body style={{ marginTop: SPACE.md }}>
-            {pct <= 0 ? t.notStarted : pct >= 100 ? t.handedOver : t.progressLine(pct)}
-          </Body>
-          <Mono muted style={{ marginTop: SPACE.xs }}>
-            {t.started} {formatDate(property!.started_on)} · {t.handover}{' '}
-            {formatDate(property!.expected_handover_on)}
-          </Mono>
-        </Card>
-      ) : (
-        <CalmCard
-          eyebrow={t.projectStatus}
-          title={t.onTrack}
-          body={t.onTrackBody}
-          status="ok"
-          trailing={<StatusPill status="ok" size="sm" />}
-        />
-      )}
-
-      {/* 3 — Milestones */}
-      {milestone_now || milestone_next ? (
-        <Card>
-          {milestone_now ? (
-            <View style={{ gap: SPACE.xs }}>
-              <StatusPill status="info" size="sm" label={t.now} />
-              <H2>{milestone_now.name}</H2>
-              {milestone_now.expected_on ? (
-                <Small muted>
-                  {t.expectedBy} {formatDate(milestone_now.expected_on)}
-                </Small>
-              ) : null}
-            </View>
-          ) : null}
-          {milestone_next ? (
-            <Small
-              muted
-              style={{ marginTop: milestone_now ? SPACE.md : 0 }}
-            >
-              {t.next}: {milestone_next.name}
-              {milestone_next.expected_on ? ` · ${formatDate(milestone_next.expected_on)}` : ''}
-            </Small>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {/* 4 — Needs your attention (one at a time) */}
-      {firstAttention ? (
-        <View style={{ gap: SPACE.sm }}>
-          <CalmCard
-            eyebrow={t.attention}
-            title={firstAttention.title}
-            body={firstAttention.detail ?? undefined}
-            status="warn"
-          >
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-              <Button
-                title={t.approve}
-                size="md"
-                loading={respond.isPending}
-                disabled={respond.isPending}
-                onPress={() => respond.mutate({ id: firstAttention.id, action: 'approve' })}
-              />
-              <Button
-                title={t.comment}
-                variant="secondary"
-                size="md"
-                disabled={respond.isPending}
-                onPress={() => respond.mutate({ id: firstAttention.id, action: 'comment' })}
-              />
-              <Button
-                title={t.requestChange}
-                variant="ghost"
-                size="md"
-                disabled={respond.isPending}
-                onPress={() => respond.mutate({ id: firstAttention.id, action: 'request_change' })}
-              />
-            </View>
-          </CalmCard>
-          {moreAttention > 0 ? (
-            <Link href="/requests" asChild>
-              <BodyStrong color={theme.colors.accentDeep}>{t.moreItems(moreAttention)}</BodyStrong>
-            </Link>
-          ) : null}
         </View>
-      ) : null}
+      </View>
 
-      {/* 5 — Recent activity */}
-      {recent_activity.length > 0 ? (
-        <Card>
-          <Small muted style={{ letterSpacing: 1, marginBottom: SPACE.md }}>
-            {t.recent.toUpperCase()}
-          </Small>
-          {recent_activity.map((u, i) => (
-            <TimelineItem
-              key={u.id}
-              typeLabel={u.type.replace(/_/g, ' ')}
-              summary={u.title}
-              occurredOn={formatDate(u.published_at)}
-              isLast={i === recent_activity.length - 1}
+      {/* ---- Overlapping content ---- */}
+      <View style={{ paddingHorizontal: SPACE.lg, gap: SPACE.md, marginTop: -28 }}>
+        {/* Progress card */}
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.lg }}>
+          <ProgressRing progress={frac} size={104} stroke={9} color={c.accent} trackColor={AP.ringTrack}>
+            <H2 color={c.accent}>{pct}%</H2>
+          </ProgressRing>
+          <View style={{ flex: 1, gap: SPACE.xs }}>
+            <H2>{milestone_now?.name ?? t.inProgress}</H2>
+            <Body muted numberOfLines={4}>
+              {progressBody}
+            </Body>
+          </View>
+        </Card>
+
+        {/* Needs your attention (calm, one at a time) */}
+        {firstAttention ? (
+          <Link href="/requests" asChild>
+            <Pressable>
+              <Card style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
+                <Micro muted style={{ letterSpacing: 1 }}>
+                  {t.needs.toUpperCase()}
+                </Micro>
+                <BodyStrong style={{ marginTop: SPACE.xs }}>{firstAttention.title}</BodyStrong>
+                <Small color={c.accent} style={{ marginTop: SPACE.sm }}>
+                  {t.review} →
+                </Small>
+              </Card>
+            </Pressable>
+          </Link>
+        ) : null}
+
+        {/* Next up (deep teal) */}
+        {milestone_next ? (
+          <Pressable onPress={() => router.push('/(homeowner)/updates')}>
+            <View
+              style={[
+                { backgroundColor: c.accent, borderRadius: theme.radii.card, padding: SPACE.lg },
+                theme.shadowCard,
+              ]}
+            >
+              <Micro color={AP.onDarkMuted} style={{ letterSpacing: 2 }}>
+                {t.nextUp}
+              </Micro>
+              <H2 color={AP.onDark} style={{ marginTop: SPACE.sm }}>
+                {milestone_next.name}
+              </H2>
+              {milestone_next.expected_on ? (
+                <Body color="rgba(255,255,255,0.82)" style={{ marginTop: SPACE.xs }}>
+                  {monthYear(milestone_next.expected_on)}
+                </Body>
+              ) : null}
+              <Body color={AP.onDark} style={{ textAlign: 'right', marginTop: SPACE.sm }}>
+                →
+              </Body>
+            </View>
+          </Pressable>
+        ) : null}
+
+        {/* Latest from site */}
+        {photos.length > 0 ? (
+          <View style={{ gap: SPACE.sm }}>
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <H2>{t.latest}</H2>
+              <Link href="/(homeowner)/photos" asChild>
+                <Pressable hitSlop={8}>
+                  <Micro color={c.accent} style={{ letterSpacing: 1 }}>
+                    {t.viewGallery}
+                  </Micro>
+                </Pressable>
+              </Link>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: SPACE.sm }}
+            >
+              {photos.slice(0, 8).map((p) => (
+                <View
+                  key={p.id}
+                  style={{ width: 168, height: 168, borderRadius: 12, overflow: 'hidden' }}
+                >
+                  <Image source={{ uri: p.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  {p.caption ? (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        left: 8,
+                        bottom: 8,
+                        right: 8,
+                        backgroundColor: 'rgba(0,0,0,0.45)',
+                        borderRadius: 6,
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <Micro color="#ffffff" numberOfLines={1}>
+                        {p.caption}
+                      </Micro>
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* Approved changes summary */}
+        {spend_summary && spend_summary.change_count > 0 ? (
+          <Card>
+            <Micro muted style={{ letterSpacing: 1 }}>
+              {t.approvedChanges}
+            </Micro>
+            <Display color={c.accent} style={{ marginTop: SPACE.xs }}>
+              {formatRupees(spend_summary.total_change_cost_delta)}
+            </Display>
+            <Small muted style={{ marginTop: 2 }}>
+              {t.changeLine.replace('{n}', String(spend_summary.change_count))}
+            </Small>
+            <Button
+              title={t.reviewChanges}
+              variant="secondary"
+              block
+              style={{ marginTop: SPACE.md }}
+              onPress={() => router.push('/(homeowner)/updates')}
             />
-          ))}
-        </Card>
-      ) : null}
+          </Card>
+        ) : null}
 
-      {/* 6 — Spend summary */}
-      {spend_summary ? (
-        <Card>
-          <Small muted style={{ letterSpacing: 1, marginBottom: SPACE.xs }}>
-            {t.spend.toUpperCase()}
-          </Small>
-          <Display>{formatRupees(spend_summary.total_change_cost_delta)}</Display>
-          <Small muted style={{ marginTop: SPACE.xs }}>
-            {t.changes(spend_summary.change_count)}
-          </Small>
-        </Card>
-      ) : null}
-
-      {/* 7 — Flag an issue */}
-      <Button title={t.flag} block size="lg" onPress={() => router.push('/requests')} />
-    </Screen>
+        {/* Ask your builder */}
+        <View
+          style={{
+            backgroundColor: AP.surfaceLow,
+            borderRadius: theme.radii.card,
+            borderWidth: 1,
+            borderColor: c.line,
+            padding: SPACE.lg,
+            alignItems: 'center',
+            gap: SPACE.sm,
+          }}
+        >
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: AP.chip,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Body color={AP.onChip} style={{ fontSize: 22 }}>
+              💬
+            </Body>
+          </View>
+          <H2>{t.haveQ}</H2>
+          <Body muted style={{ textAlign: 'center' }}>
+            {t.askBody}
+          </Body>
+          <Button
+            title={t.askBuilder}
+            block
+            style={{ marginTop: SPACE.xs, minHeight: TAP }}
+            onPress={() => router.push('/ask')}
+          />
+        </View>
+      </View>
+    </ScrollView>
   )
 }

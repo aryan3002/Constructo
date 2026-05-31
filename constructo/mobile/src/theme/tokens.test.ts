@@ -17,9 +17,10 @@ describe('design tokens', () => {
     expect(THEMES.blueprint.radii.card).toBe(8)
   })
 
-  it('keeps the amber/green primaries from the web tokens', () => {
+  it('keeps the brand primaries (Blueprint amber, Daylight teal-green)', () => {
     expect(THEMES.blueprint.colors.accent).toBe('#f2a100')
-    expect(THEMES.daylight.colors.accent).toBe('#2f8f6f')
+    // Daylight uses the "Architectural Precision" deep teal-green primary.
+    expect(THEMES.daylight.colors.accent).toBe('#214b49')
   })
 
   it('maps backend severity onto the status spine', () => {

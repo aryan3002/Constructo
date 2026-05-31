@@ -84,19 +84,38 @@ const BLUEPRINT_COLORS: ThemeColors = {
   ...STATUS,
 }
 
+// Daylight = the homeowner surface, refined to the "Architectural Precision"
+// system (warm cream + desaturated teal-green, quiet-luxury). Values ported
+// from the Stitch DESIGN.md.
 const DAYLIGHT_COLORS: ThemeColors = {
-  bg: '#fbfaf7',
-  card: '#ffffff',
-  paper: '#ffffff',
-  line: '#ece7dd',
-  accent: '#2f8f6f',
-  accentDeep: '#25785c',
-  accentWarm: '#e7b66a',
+  bg: '#fcf9f3', // warm cream base
+  card: '#ffffff', // surface-container-lowest
+  paper: '#f6f3ed', // surface-container-low (inset surfaces)
+  line: '#e6e2da', // tertiary-fixed (card stroke)
+  accent: '#214b49', // primary (deep teal-green)
+  accentDeep: '#3a6361', // primary-container (pressed/hover)
+  accentWarm: '#cfe8e3', // secondary-container (soft chips)
   onAccent: '#ffffff',
-  text: '#1e2230',
-  textMute: '#5b6172',
+  text: '#1c1c18', // on-surface
+  textMute: '#404848', // on-surface-variant
   ...STATUS,
 }
+
+/**
+ * "Architectural Precision" extras used by the Daylight (homeowner) Stitch
+ * screens — kept here so screens read colors from one place rather than
+ * hardcoding hexes. (Only the homeowner surface uses these.)
+ */
+export const AP = {
+  surfaceLow: '#f6f3ed', // surface-container-low
+  surfaceContainer: '#f0eee8', // surface-container
+  onDark: '#ffffff', // text on the deep-teal cards
+  onDarkMuted: '#b2ddda', // on-primary-container (eyebrows on teal)
+  chip: '#cfe8e3', // secondary-container (soft chip bg)
+  onChip: '#526965', // on-secondary-container
+  outline: '#717978',
+  ringTrack: '#e5e2dc', // surface-variant (progress-ring track)
+} as const
 
 export const THEMES: Record<ThemeName, Theme> = {
   blueprint: {
@@ -115,13 +134,14 @@ export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     name: 'daylight',
     colors: DAYLIGHT_COLORS,
-    // Daylight = softer, larger radius (16px) and a touch more lift.
-    radii: { card: 16, sheet: 20, pill: 9999, control: 12 },
+    // Architectural Precision: cards 16px, hero/sheets 24px, controls 10px.
+    radii: { card: 16, sheet: 24, pill: 9999, control: 10 },
+    // Soft, teal-tinted ambient shadow — surfaces sit just above the cream base.
     shadowCard: {
-      shadowColor: '#1e2230',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
+      shadowColor: '#4d635f',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
       elevation: 2,
     },
   },

@@ -212,15 +212,43 @@ function TimelineTab() {
           {items.map((u, i) => {
             const meta = updateMeta(u.type, lang)
             const tint = meta.status === 'mute' ? theme.colors.textMute : STATUS[meta.status]
+            const isLast = i === items.length - 1
             return (
-              <TimelineItem
-                key={u.id}
-                typeLabel={meta.label}
-                summary={u.title}
-                occurredOn={formatDate(u.published_at, lang)}
-                tint={tint}
-                isLast={i === items.length - 1}
-              />
+              // Architectural Precision left-rail: teal date + status dot + title.
+              <View key={u.id} style={{ flexDirection: 'row', gap: SPACE.md }}>
+                <View style={{ width: 14, alignItems: 'center' }}>
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: tint,
+                      marginTop: 6,
+                    }}
+                  />
+                  {!isLast ? (
+                    <View
+                      style={{
+                        flex: 1,
+                        width: 2,
+                        backgroundColor: theme.colors.line,
+                        marginTop: 4,
+                      }}
+                    />
+                  ) : null}
+                </View>
+                <View style={{ flex: 1, paddingBottom: isLast ? 0 : SPACE.lg }}>
+                  <Small color={theme.colors.accent} style={{ letterSpacing: 1 }}>
+                    {formatDate(u.published_at, lang).toUpperCase()}
+                  </Small>
+                  <BodyStrong style={{ marginTop: 2 }}>{u.title}</BodyStrong>
+                  {u.body ? (
+                    <Small muted style={{ marginTop: 4 }}>
+                      {u.body}
+                    </Small>
+                  ) : null}
+                </View>
+              </View>
             )
           })}
         </Card>
