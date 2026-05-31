@@ -9,7 +9,7 @@
  * vanishes rather than rendering a hollow card.
  */
 import { useState } from 'react'
-import { ActivityIndicator, View } from 'react-native'
+import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Link, useRouter } from 'expo-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
@@ -36,6 +36,7 @@ import {
 // ---- local strings (bilingual; Hindi in Devanagari) ----
 const STR = {
   en: {
+    settings: 'Settings',
     greeting: 'Your home, today',
     fallbackName: 'Your home',
     onTrack: 'On track',
@@ -63,6 +64,7 @@ const STR = {
     sent: 'Thanks — your response was sent.',
   },
   hi: {
+    settings: 'सेटिंग्स',
     greeting: 'आपका घर, आज',
     fallbackName: 'आपका घर',
     onTrack: 'सब ठीक है',
@@ -179,9 +181,21 @@ export default function Home() {
   return (
     <Screen>
       {/* 1 — Header */}
-      <View style={{ gap: SPACE.xs }}>
-        <Small muted>{t.greeting}</Small>
-        <Display>{property?.display_name ?? t.fallbackName}</Display>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
+        <View style={{ gap: SPACE.xs, flex: 1 }}>
+          <Small muted>{t.greeting}</Small>
+          <Display>{property?.display_name ?? t.fallbackName}</Display>
+        </View>
+        <Link href="/(homeowner)/settings" asChild>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.settings}
+            hitSlop={8}
+            style={{ minHeight: 48, justifyContent: 'center' }}
+          >
+            <Small color={theme.colors.accentDeep}>{t.settings} ⚙︎</Small>
+          </Pressable>
+        </Link>
       </View>
 
       {/* Confirmation banner after a decision response */}

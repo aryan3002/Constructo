@@ -12,13 +12,16 @@
  */
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
+import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import {
   Body,
   BodyStrong,
+  Button,
   Card,
   Display,
   H2,
@@ -51,6 +54,7 @@ const STR = {
     drawings: 'DRAWINGS',
     drawingsPlaceholder: 'Drawing lookup is coming.',
     drawingsBody: 'Ask your PM to share a drawing — it’ll be findable here, read-only.',
+    signOut: 'Sign out',
   },
   hi: {
     title: 'मेरी साइट',
@@ -64,6 +68,7 @@ const STR = {
     drawings: 'ड्रॉइंग',
     drawingsPlaceholder: 'ड्रॉइंग खोज जल्द आ रही है।',
     drawingsBody: 'PM से ड्रॉइंग शेयर करने को कहो — यहाँ सिर्फ़ देखने को मिलेगी।',
+    signOut: 'साइन आउट',
   },
 } as const
 
@@ -98,7 +103,14 @@ export default function MySites() {
   const { theme } = useTheme()
   const c = theme.colors
   const str = STR[lang]
+  const router = useRouter()
+  const { signOut } = useAuth()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  async function onSignOut() {
+    await signOut()
+    router.replace('/')
+  }
 
   const sitesQ = useQuery({
     queryKey: ['supervisor', 'sites'],
@@ -159,6 +171,15 @@ export default function MySites() {
           {active ? <SiteDetail siteId={active} /> : null}
         </>
       ) : null}
+
+      {/* Sign out — lets a tester switch roles (and a real supervisor log out). */}
+      <Button
+        title={str.signOut}
+        variant="secondary"
+        block
+        onPress={() => void onSignOut()}
+        style={{ marginTop: SPACE.lg }}
+      />
     </Screen>
   )
 }
