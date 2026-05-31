@@ -234,6 +234,69 @@ reaction, a question → an answer, the 7am brief → tap a number to act.
 
 ---
 
+## RUN THE APP (device test) ⭐
+
+The fastest path to the unified Expo app running on a phone/emulator against the
+backend, with non-empty data for every role. Run these in order.
+
+```bash
+# 1. Infra
+cd ~/Developer/contructionAI/constructo
+docker compose up -d                       # postgres :5433, redis :6379
+
+# 2. Backend env + schema + seed
+cd backend
+[ -f .env ] || cp ../.env.example .env     # never overwrite an existing .env
+uv sync
+uv run alembic upgrade head
+uv run python -m scripts.seed_demo         # idempotent; prints the test logins
+
+# 3. Run the API bound to ALL interfaces (so a device can reach it), extraction inline
+EXTRACTION_SYNC=true uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+#   (EXTRACTION_SYNC=true runs extraction in-process — no separate worker needed.
+#    For the realistic path instead: `uv run rq worker extraction` in another shell.)
+
+# 4. Point the app at THIS machine (a phone can't reach localhost). New shell:
+cd ~/Developer/contructionAI/constructo/mobile
+npm install
+[ -f .env ] || cp .env.example .env
+#   Edit .env → EXPO_PUBLIC_API_BASE:
+#     Android emulator : http://10.0.2.2:8000   (or `adb reverse tcp:8000 tcp:8000` → localhost)
+#     iOS simulator    : http://localhost:8000
+#     Real device      : http://<LAN-IP>:8000   (macOS: `ipconfig getifaddr en0`)
+npx expo start                             # scan the QR with Expo Go, or press a/i
+```
+
+### Per-role login walkthrough (phone + OTP `000000`)
+
+| Role | How to sign in | You should see |
+|------|----------------|----------------|
+| **Homeowner** | "I have a join code" → `SUNRISE-HOME` + any phone + `000000` | Daylight home for the Sharma Residence: time-bar status, current milestone, a pending decision, photos, the weekly summary |
+| **Owner** | `+919800000001` + `000000` | Blueprint Brief with risks (Site B labor shortfall, ACC invoice mismatch) + inline Approve/Hold/Assign; Sites/Approvals/Search |
+| **Supervisor** | `+919800000003` + `000000` | Capture screen; My Sites = Sunrise Heights + Sunrise Meadows with recent events |
+| **Mukadam** | `+919800000006` + `000000` | Big attendance screen; My Pay shows ₹45,000 (read-only); 🔊 voice-out works |
+
+Switch roles by signing out (More / Help tab) and logging in as another phone.
+
+### Try the capture loop (the real end-to-end)
+
+1. Sign in as the **Supervisor** (`+919800000003`).
+2. On **Capture**, pick a tag (e.g. *Progress*), tap **📷**, take/choose a photo.
+3. You get *"Queued — will sync"*; the **SyncStatus** bar shows it draining.
+4. It POSTs `multipart` to **`/api/v1/capture`** → a `RawMessage(source="app")` →
+   the real extraction pipeline → a **SiteEvent** on that site.
+5. Confirm it landed: as the supervisor open **My Sites → Sunrise Heights** (pull
+   to refresh) — your capture appears in the event feed. Or check the API:
+   ```bash
+   OWNER=$(curl -s -X POST localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' \
+     -d '{"phone":"+919800000001","otp":"000000"}' | jq -r .token)
+   SITE=<Sunrise Heights id>   # GET /api/v1/sites
+   curl -s "localhost:8000/api/v1/sites/$SITE/events" -H "Authorization: Bearer $OWNER" | jq '.items[0]'
+   ```
+   (Offline? The capture stays queued and syncs automatically when you reconnect.)
+
+---
+
 ## Homeowner mobile app (H0–H3)
 
 The homeowner experience is a separate **Expo app** at `constructo/mobile/` that

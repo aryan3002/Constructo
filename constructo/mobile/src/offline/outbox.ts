@@ -9,6 +9,8 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
+import type { CapturePayload } from '../api/capture'
+
 const STORAGE_KEY = 'constructo.outbox'
 
 export interface OutboxItem {
@@ -19,6 +21,12 @@ export interface OutboxItem {
   path: string
   method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
+  /**
+   * When present, this item is a multipart field capture replayed via
+   * `submitCapture` (POST /api/v1/capture) instead of the JSON `request` path.
+   * The media uri is a local file uri captured on-device.
+   */
+  capture?: CapturePayload
 }
 
 async function readAll(): Promise<OutboxItem[]> {

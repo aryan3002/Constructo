@@ -11,7 +11,7 @@
  * Hindi/Devanagari is the first-class default for this role. Icon + WORD on
  * every action; targets ≥56px.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Pressable, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 
@@ -20,17 +20,10 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, STATUS } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Card, Display, H2, Mono, Screen, Small, SyncStatus } from '../../../src/ui'
 import { enqueue } from '../../../src/offline/outbox'
-import {
-  captureAttendancePath,
-  type AttendanceCaptureBody,
-} from '../../../src/api/mukadam'
-import { VoiceOutButton, MUKADAM_TAP } from './_voice'
-
-// TODO(site): the mukadam is scoped to ONE site server-side; there is no site
-// switcher. Until an app endpoint returns the bound site, the queued capture
-// carries this placeholder site_id (the WhatsApp path resolves site by the
-// caller's phone identity anyway).
-const SITE_ID = 'me'
+import { useOutbox } from '../../../src/offline/useOutbox'
+import { captureSites, type CaptureMedia } from '../../../src/api/capture'
+import type { Site } from '../../../src/api/types'
+import { VoiceOutButton, MUKADAM_TAP, tapFeedback } from './_voice'
 
 const STR = {
   en: {
@@ -54,6 +47,7 @@ const STR = {
     permTitle: 'Camera needed',
     permBody: 'Allow the camera to take a crew photo.',
     ok: 'OK',
+    noSite: 'No site assigned yet — ask your supervisor.',
   },
   hi: {
     today: 'आज',
@@ -76,6 +70,7 @@ const STR = {
     permTitle: 'कैमरा चाहिए',
     permBody: 'फ़ोटो लेने के लिए कैमरा चालू करने दें।',
     ok: 'ठीक है',
+    noSite: 'अभी कोई साइट असाइन नहीं — supervisor से पूछो।',
   },
 } as const
 
@@ -92,11 +87,21 @@ export default function Attendance() {
   const { theme } = useTheme()
   const c = theme.colors
   const str = STR[lang]
+  const { online, flush } = useOutbox()
 
   const [count, setCount] = useState(0)
   const [photoUri, setPhotoUri] = useState<string | undefined>()
   const [voiceUri, setVoiceUri] = useState<string | undefined>()
   const [marked, setMarked] = useState(false)
+  const [sites, setSites] = useState<Site[]>([])
+
+  // The mukadam is scoped to one site server-side; resolve it for a real capture.
+  useEffect(() => {
+    captureSites()
+      .then(setSites)
+      .catch(() => setSites([]))
+  }, [])
+  const site = sites[0]
 
   const dateStr = todayLabel(lang)
 
@@ -126,28 +131,25 @@ export default function Attendance() {
   }
 
   async function markPresent() {
-    const source: AttendanceCaptureBody['source'] = photoUri
-      ? 'photo'
-      : voiceUri
-        ? 'voice'
-        : 'manual'
-    const body: AttendanceCaptureBody = {
-      site_id: SITE_ID,
-      source,
-      headcount: count,
-      photo_uri: photoUri,
-      voice_uri: voiceUri,
-      occurred_on: new Date().toISOString().slice(0, 10),
-      client_capture_id: `att_${Date.now()}`,
+    if (!site) {
+      Alert.alert('•', str.noSite, [{ text: str.ok }])
+      return
     }
-    // Capture NEVER blocks on network: enqueue + optimistic confirm. The sync
-    // engine (useOutbox) replays it once the backend endpoint exists.
+    // The headcount rides in the text so extraction reads it; an optional crew
+    // photo is the proof. Capture NEVER blocks on network: enqueue + optimistic
+    // confirm, then nudge a drain. useOutbox replays it via POST /api/v1/capture.
+    const text = lang === 'hi' ? `${count} मज़दूर आए` : `${count} workers present today`
+    const media: CaptureMedia | null = photoUri
+      ? { uri: photoUri, name: `crew_${Date.now()}.jpg`, mime: 'image/jpeg' }
+      : null
     await enqueue({
       label: lang === 'hi' ? 'हाज़िरी' : 'Attendance',
       method: 'POST',
-      path: captureAttendancePath(SITE_ID),
-      body,
+      path: '/api/v1/capture',
+      capture: { site_id: site.id, type: 'attendance', text, media },
     })
+    if (online) void flush()
+    tapFeedback()
     setMarked(true)
   }
 
@@ -165,7 +167,7 @@ export default function Attendance() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: STATUS.ok }} />
-            <BodyStrong>{str.siteFallback}</BodyStrong>
+            <BodyStrong>{site?.name ?? str.siteFallback}</BodyStrong>
           </View>
           <Mono muted>{`${str.today} · ${dateStr}`}</Mono>
         </View>
