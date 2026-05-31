@@ -3,31 +3,27 @@
  * a photo or voice note out of a gloved supervisor's hands in seconds, even
  * offline. Photo/voice come BEFORE any form (a form is a failure for this role).
  *
- * Flow: pick a "what is this?" tag → tap 📷 (camera/library) or hold 🎙 →
- * ENQUEUE a capture into the offline outbox → optimistic "queued, will sync"
- * with the SyncStatus bar visible at top. The pending outbox items render below.
+ * Flow: pick a "what is this?" tag → tap 📷 (camera/library) or 🎙 → ENQUEUE a
+ * capture into the offline outbox → optimistic "queued, will sync" with the
+ * SyncStatus bar at top. The outbox replays via `submitCapture` → the REAL
+ * POST /api/v1/capture, which stores the media and runs extraction (creating a
+ * SiteEvent on the chosen site).
  *
- * BACKEND GAP: there is no app-authenticated capture endpoint yet (ingest uses
- * an X-Ingest-Key for the WhatsApp bridge, not the app). So we enqueue against
- * the assumed CAPTURE_PATH/CaptureBody shape; the outbox replays once it exists.
- * The queue + optimistic UI IS the deliverable; the offline foundation is real.
+ * Voice note: there is no on-device audio recorder/STT wired yet, so 🎙 enqueues
+ * a short TEXT capture (still a real event) — swap for a recorded file later.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, View } from 'react-native'
+import { Alert, Pressable, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 
+import { captureSites, type CaptureMedia } from '../../../src/api/capture'
+import type { CaptureKind } from '../../../src/api/supervisor'
+import type { Site } from '../../../src/api/types'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { useAuth } from '../../../src/auth/AuthContext'
-import { useTheme } from '../../../src/theme/ThemeProvider'
 import { Display, Screen, Small, SyncStatus, Card } from '../../../src/ui'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { enqueue, list, type OutboxItem } from '../../../src/offline/outbox'
-import {
-  CAPTURE_PATH,
-  type CaptureBody,
-  type CaptureKind,
-} from '../../../src/api/supervisor'
 import {
   CaptureBar,
   CalmEmpty,
@@ -37,6 +33,8 @@ import {
   SiteChip,
   SPACE,
 } from './_components'
+
+const CAPTURE_PATH = '/api/v1/capture'
 
 const STR = {
   en: {
@@ -53,10 +51,12 @@ const STR = {
     emptyBody: 'First photo files itself — tap the big button above.',
     queuedToast: 'Queued — will sync when online.',
     voiceNote: 'Voice note',
+    voiceText: 'Voice note (transcription pending)',
     photoLabel: 'Photo',
     permTitle: 'Camera needed',
     permBody: 'Allow camera/photos to send a site photo.',
     noSite: 'No site assigned yet — ask your PM.',
+    tapSite: 'tap to switch site',
   },
   hi: {
     promise: 'एक बार भेजो। हम फ़ाइल कर देंगे।',
@@ -72,35 +72,38 @@ const STR = {
     emptyBody: 'पहली फ़ोटो खुद फ़ाइल हो जाती है — ऊपर बड़ा बटन दबाओ।',
     queuedToast: 'कतार में — ऑनलाइन होते ही भेज देंगे।',
     voiceNote: 'आवाज़ नोट',
+    voiceText: 'आवाज़ नोट (लिखाई बाकी)',
     photoLabel: 'फ़ोटो',
     permTitle: 'कैमरा चाहिए',
     permBody: 'साइट फ़ोटो भेजने के लिए कैमरा/फ़ोटो की अनुमति दें।',
     noSite: 'अभी कोई साइट असाइन नहीं हुई — PM से पूछो।',
+    tapSite: 'साइट बदलने के लिए दबाएँ',
   },
 } as const
 
-let captureSeq = 0
-function newCaptureId(): string {
-  captureSeq += 1
-  return `cap_${Date.now()}_${captureSeq}`
+function mediaFromAsset(a: ImagePicker.ImagePickerAsset): CaptureMedia {
+  const name = a.fileName ?? a.uri.split('/').pop() ?? `photo_${Date.now()}.jpg`
+  return { uri: a.uri, name, mime: a.mimeType ?? 'image/jpeg' }
 }
 
 export default function Capture() {
   const { lang } = useT()
-  const { me } = useAuth()
-  const { theme } = useTheme()
   const { online, pending, flush } = useOutbox()
   const str = STR[lang]
 
   const [kind, setKind] = useState<CaptureKind>('progress')
   const [busy, setBusy] = useState(false)
   const [queued, setQueued] = useState<OutboxItem[]>([])
+  const [sites, setSites] = useState<Site[]>([])
+  const [siteIdx, setSiteIdx] = useState(0)
 
-  // The supervisor is scoped to an assigned site. We don't have a site_id on
-  // `me` here, so we use the company-scoped placeholder until a capture targets
-  // a chosen site (My Sites tab). For the capture promise we tag with company.
-  const siteId = me?.company_id ?? 'site'
-  const siteName = me?.name ? `${me.name}'s site` : 'My site'
+  // Resolve the supervisor's assigned site(s) for a real capture target.
+  useEffect(() => {
+    captureSites()
+      .then(setSites)
+      .catch(() => setSites([]))
+  }, [])
+  const site = sites[siteIdx]
 
   const refresh = useCallback(async () => {
     setQueued(await list())
@@ -111,32 +114,28 @@ export default function Capture() {
       void refresh()
     }, [refresh]),
   )
-
-  // Keep the pending strip fresh as the outbox drains.
   useEffect(() => {
     void refresh()
   }, [pending, refresh])
 
   const enqueueCapture = useCallback(
-    async (media: CaptureBody['media'], extras: Partial<CaptureBody> = {}) => {
-      const body: CaptureBody = {
-        type: kind,
-        site_id: siteId,
-        media,
-        created_at: new Date().toISOString(),
-        client_capture_id: newCaptureId(),
-        ...extras,
+    async (media: CaptureMedia | null, text?: string) => {
+      if (!site) {
+        Alert.alert('•', str.noSite)
+        return
       }
-      const label = `${str.kinds[kind]} · ${
-        media[0]?.kind === 'voice' ? str.voiceNote : str.photoLabel
-      }`
-      await enqueue({ label, path: CAPTURE_PATH, method: 'POST', body })
+      const label = `${str.kinds[kind]} · ${media ? str.photoLabel : str.voiceNote}`
+      await enqueue({
+        label,
+        path: CAPTURE_PATH,
+        method: 'POST',
+        capture: { site_id: site.id, type: kind, text: text ?? null, media },
+      })
       await refresh()
-      // Optimistic confirmation; if online, nudge a drain immediately.
-      if (online) void flush()
+      if (online) void flush() // optimistic: nudge a drain immediately
       Alert.alert('✓', str.queuedToast)
     },
-    [kind, siteId, str, refresh, online, flush],
+    [kind, site, str, refresh, online, flush],
   )
 
   const onPhoto = useCallback(async () => {
@@ -147,7 +146,6 @@ export default function Capture() {
       if (perm.granted) {
         result = await ImagePicker.launchCameraAsync({ quality: 0.7 })
       } else {
-        // Fall back to the library if the camera is denied.
         const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
         if (!lib.granted) {
           Alert.alert(str.permTitle, str.permBody)
@@ -156,46 +154,37 @@ export default function Capture() {
         result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 })
       }
       if (result.canceled || result.assets.length === 0) return
-      await enqueueCapture(
-        result.assets.map((a) => ({ kind: 'photo' as const, uri: a.uri })),
-      )
+      await enqueueCapture(mediaFromAsset(result.assets[0]))
     } finally {
       setBusy(false)
     }
   }, [enqueueCapture, str])
 
   const onVoice = useCallback(async () => {
-    // TODO(backend/client): no audio recorder + STT endpoint yet. We still
-    // enqueue a voice-note capture with a placeholder local uri so the outbox
-    // and "today you've sent" flow are exercised end-to-end. Replace the uri
-    // with a real recorded file once an audio client + transcription land.
-    const uri = `voice://pending/${newCaptureId()}.m4a`
-    await enqueueCapture([{ kind: 'voice', uri }], { transcript: undefined })
-  }, [enqueueCapture])
+    // No recorder/STT yet → enqueue a short TEXT capture so the loop is real.
+    await enqueueCapture(null, `[${str.kinds[kind]}] ${str.voiceText}`)
+  }, [enqueueCapture, kind, str])
 
-  // Map an outbox item back to its display glyph/label from the enqueued body.
   const captureItems = queued.filter((i) => i.path === CAPTURE_PATH)
 
   return (
     <Screen>
-      {/* Sticky-ish sync indicator at the very top — the trust surface. */}
       <View style={{ marginHorizontal: -SPACE.lg, marginTop: -SPACE.md }}>
         <SyncStatus />
       </View>
 
       <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <SiteChip name={siteName} online={online} />
+        <Pressable
+          onPress={sites.length > 1 ? () => setSiteIdx((i) => (i + 1) % sites.length) : undefined}
+        >
+          <SiteChip name={site?.name ?? str.noSite} online={online} />
+        </Pressable>
       </View>
 
       <Display>{str.promise}</Display>
 
-      {/* Tag first (one tap), then the giant capture buttons. */}
       <Small muted>{str.tagPrompt}</Small>
       <KindChipRow value={kind} labels={str.kinds} onChange={setKind} />
 
@@ -208,7 +197,6 @@ export default function Capture() {
         onVoice={() => void onVoice()}
       />
 
-      {/* "Today you've sent" — a confirmation log, NOT a feed. */}
       <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>
         {str.sentTitle}
       </Small>
@@ -217,9 +205,9 @@ export default function Capture() {
       ) : (
         <Card padded={false} style={{ paddingHorizontal: SPACE.lg }}>
           {captureItems.map((item, i) => {
-            const body = item.body as CaptureBody | undefined
-            const isVoice = body?.media?.[0]?.kind === 'voice'
-            const k = (body?.type ?? 'progress') as CaptureKind
+            const cap = item.capture
+            const isVoice = !cap?.media
+            const k = (cap?.type ?? 'progress') as CaptureKind
             const glyph = isVoice ? '🎙' : KIND_GLYPH[k]
             const time = new Date(item.createdAt).toLocaleTimeString([], {
               hour: '2-digit',
@@ -231,8 +219,6 @@ export default function Capture() {
                 glyph={glyph}
                 label={item.label}
                 meta={time}
-                // Queued items are, by definition, not yet filed (they leave the
-                // outbox on a successful sync). So everything here is "filing…".
                 filed={false}
                 filedLabel={str.filed}
                 queuedLabel={str.queued}

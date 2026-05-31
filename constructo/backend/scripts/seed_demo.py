@@ -29,6 +29,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from app.brief.generate import build_brief
 from app.db import SessionLocal
 from app.invites.models import Invite, InviteStatus
 from app.models import (
@@ -278,6 +279,25 @@ async def seed() -> dict[str, int]:
                 summary="paani ki supply band, concrete ka kaam ruka",
                 fields={"category": "water", "blocking": True},
             ),
+            # Site A: TODAY's mukadam attendance — captured from the APP (the
+            # /capture loop). Shows up as the Mukadam's "today's attendance".
+            dict(
+                key="att-a-today",
+                site_id=site_a,
+                event_type="attendance",
+                occurred_on=TODAY,
+                summary="Aaj 30 mazdoor present",
+                fields={"headcount": 30, "raw_phrase": "30 mazdoor", "capture_source": "app"},
+            ),
+            # Site A: TODAY's supervisor app-capture — a fresh "recent capture".
+            dict(
+                key="cap-progress-today",
+                site_id=site_a,
+                event_type="progress_update",
+                occurred_on=TODAY,
+                summary="Plastering shuru ho gaya pehli manzil pe",
+                fields={"description": "plastering started", "capture_source": "app"},
+            ),
         ]
         for ev in events:
             await _upsert(
@@ -333,7 +353,27 @@ async def seed() -> dict[str, int]:
             source_event_id=_id("event", "delivery-a"),
             created_by=owner.id,
         )
-        counts["payments"] = 2
+        # A labour payment recorded against the mukadam — so the Mukadam app's
+        # read-only "My Pay" (GET /me/payments, matched by counterparty name)
+        # shows a row. counterparty_name MUST equal the mukadam user's name.
+        await _upsert(
+            session,
+            Payment,
+            _id("payment", "mukadam-labor"),
+            company_id=company.id,
+            site_id=site_a,
+            direction=PaymentDirection.contractor_to_supplier,
+            counterparty_name=users["labor_contractor"].name,
+            amount=Decimal("45000.00"),
+            currency="INR",
+            paid_on=TODAY - timedelta(days=2),
+            method="upi",
+            reference_no="UPI-LAB-5521",
+            status=PaymentStatus.confirmed,
+            notes="Weekly labour payment",
+            created_by=owner.id,
+        )
+        counts["payments"] = 3
 
         # --- Permits (one near expiry, one stale review) -------------------
         await _upsert(
@@ -505,6 +545,15 @@ async def seed() -> dict[str, int]:
         counts["homeowner_published"] = 1
 
         await session.commit()
+
+        # --- Owner Brief: build it for yesterday (the morning-brief day) AND
+        # today, so the Owner app's GET /briefs?date=today returns a populated
+        # Brief (≥1 risk: Site B labor shortfall + the ACC invoice mismatch)
+        # immediately on open, without the app having to POST /briefs/run.
+        for brief_day in (BRIEF_DAY, TODAY):
+            await build_brief(session, company.id, brief_day, llm=None)
+        await session.commit()
+        counts["briefs"] = 2
 
         # --- Index events so search works immediately (FakeEmbeddings offline)
         indexed = await index_all_unindexed(session)

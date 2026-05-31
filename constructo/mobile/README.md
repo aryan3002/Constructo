@@ -19,20 +19,23 @@ navigation, and the offline / push / i18n scaffolding — not the feature screen
 ```bash
 cd constructo/mobile
 npm install                      # .npmrc pins legacy-peer-deps for the SDK 56 tree
-cp .env.example .env             # set EXPO_PUBLIC_API_BASE (NEVER overwrite an existing .env)
+[ -f .env ] || cp .env.example .env   # set EXPO_PUBLIC_API_BASE — never overwrite an existing .env
 npx expo start                   # press 'a' for Android, 'i' for iOS, 'w' for web
 ```
 
-Point the app at the backend with `EXPO_PUBLIC_API_BASE`:
+**A phone/emulator cannot reach `localhost`** — that's the device. Point the app
+at the backend with `EXPO_PUBLIC_API_BASE` (restart `expo start` after changing it):
 
-| Where the app runs | `EXPO_PUBLIC_API_BASE` |
-|--------------------|------------------------|
-| Android emulator   | `http://10.0.2.2:8000` |
-| iOS simulator      | `http://localhost:8000` |
-| Physical device    | `http://<your-LAN-ip>:8000` |
-| Deployed backend   | `https://api.yourhost.com` |
+| Where the app runs | `EXPO_PUBLIC_API_BASE` | Notes |
+|--------------------|------------------------|-------|
+| Android emulator   | `http://10.0.2.2:8000` | host loopback; or `adb reverse tcp:8000 tcp:8000` then use `localhost:8000` |
+| iOS simulator      | `http://localhost:8000` | shares the host network |
+| Physical device (Expo Go, same Wi-Fi) | `http://<LAN-IP>:8000` | find it: macOS `ipconfig getifaddr en0`, Linux `hostname -I`, Windows `ipconfig` |
+| No shared LAN      | use `npx expo start --tunnel` | + LAN IP / a deployed backend |
+| Deployed backend   | `https://api.yourhost.com` | |
 
-Start the backend first: `cd ../backend && uv run uvicorn app.main:app --reload`.
+Start the backend bound to all interfaces so the device can reach it:
+`cd ../backend && [ -f .env ] || cp ../.env.example .env && EXTRACTION_SYNC=true uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`.
 
 ### Sign in
 

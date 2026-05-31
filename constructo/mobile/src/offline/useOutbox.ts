@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import NetInfo from '@react-native-community/netinfo'
 
 import { request } from '../api/client'
+import { submitCapture } from '../api/capture'
 import { list, remove, type OutboxItem } from './outbox'
 
 export type SyncState = 'idle' | 'syncing' | 'offline'
@@ -38,10 +39,15 @@ export function useOutbox(): OutboxStatus {
     setState('syncing')
     for (const item of items) {
       try {
-        await request(item.path, {
-          method: item.method,
-          body: item.body != null ? JSON.stringify(item.body) : undefined,
-        })
+        if (item.capture) {
+          // Multipart field capture → the real /capture extraction loop.
+          await submitCapture(item.capture)
+        } else {
+          await request(item.path, {
+            method: item.method,
+            body: item.body != null ? JSON.stringify(item.body) : undefined,
+          })
+        }
         await remove(item.id)
       } catch {
         // Leave it queued; stop the drain so we retry the whole tail next time.

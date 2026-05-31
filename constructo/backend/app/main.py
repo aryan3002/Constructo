@@ -21,6 +21,7 @@ from app.auth.router import router as auth_router
 from app.auth.router import users_router
 from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
+from app.capture.router import router as capture_router
 from app.common.errors import install_error_handlers
 from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
@@ -58,6 +59,17 @@ install_error_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # Also allow localhost + private-LAN origins on any port so `expo start --web`
+    # works when the phone/dev machine hits the backend over its LAN IP. (Native
+    # Expo Go / emulator fetches are not subject to CORS at all.)
+    allow_origin_regex=(
+        r"https?://("
+        r"localhost|127\.0\.0\.1|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,3 +99,4 @@ app.include_router(admin_router)  # phaseC admin/ops triggers
 app.include_router(bot_router)  # W2 WhatsApp bot brain (Nivaan)
 app.include_router(homeowner_router)  # H0 homeowner-facing app API
 app.include_router(publish_router)  # H0 contractor-side publisher controls
+app.include_router(capture_router)  # app-authenticated field capture → extraction

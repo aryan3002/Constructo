@@ -26,12 +26,49 @@ from app.extraction.extract import extract
 from app.extraction.llm import LLMClient
 from app.extraction.ocr import OCRClient
 from app.extraction.stt import STTClient
-from app.models import RawMessageModel, SiteEventModel, WhatsappGroup
+from app.models import RawMessageModel, Site, SiteEventModel, WhatsappGroup
 
 logger = logging.getLogger(__name__)
 
 # A zero-arg callable returning an async-session context manager (e.g. SessionLocal).
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+# App captures (source="app") carry their site directly in external_group_id as
+# "app:{site_id}" — there is no WhatsApp group to map them through.
+APP_SOURCE = "app"
+APP_GROUP_PREFIX = "app:"
+
+
+async def _resolve_site_id(session: AsyncSession, raw_row: RawMessageModel) -> UUID | None:
+    """Resolve the site a raw message belongs to.
+
+    Two paths:
+      * App captures (``source="app"``) carry ``external_group_id="app:{site_id}"``
+        — parse + validate the site directly (no group mapping exists).
+      * WhatsApp messages resolve via the ``whatsapp_groups`` (external_group_id,
+        source) mapping, as before.
+    Returns ``None`` (caller skips, never invents site data) when unresolved.
+    """
+    if raw_row.source == APP_SOURCE:
+        if not raw_row.external_group_id.startswith(APP_GROUP_PREFIX):
+            return None
+        try:
+            site_id = UUID(raw_row.external_group_id[len(APP_GROUP_PREFIX) :])
+        except ValueError:
+            return None
+        return site_id if await session.get(Site, site_id) is not None else None
+
+    group = (
+        await session.execute(
+            select(WhatsappGroup).where(
+                WhatsappGroup.external_group_id == raw_row.external_group_id,
+                WhatsappGroup.source == raw_row.source,
+            )
+        )
+    ).scalar_one_or_none()
+    if group is None or group.site_id is None:
+        return None
+    return group.site_id
 
 
 def _to_contract(row: RawMessageModel) -> RawMessage:
@@ -78,16 +115,8 @@ async def handle_ingested(
             logger.warning("handle_ingested: raw_message %s not found", raw_message_id)
             return []
 
-        group = (
-            await session.execute(
-                select(WhatsappGroup).where(
-                    WhatsappGroup.external_group_id == raw_row.external_group_id,
-                    WhatsappGroup.source == raw_row.source,
-                )
-            )
-        ).scalar_one_or_none()
-
-        if group is None or group.site_id is None:
+        site_id = await _resolve_site_id(session, raw_row)
+        if site_id is None:
             logger.info(
                 "handle_ingested: no site mapping for group=%s source=%s; skipping",
                 raw_row.external_group_id,
@@ -96,7 +125,7 @@ async def handle_ingested(
             return []
 
         raw = _to_contract(raw_row)
-        events = await extract(raw, group.site_id, llm=llm, stt=stt, ocr=ocr)
+        events = await extract(raw, site_id, llm=llm, stt=stt, ocr=ocr)
 
         ids: list[UUID] = []
         for ev in events:
