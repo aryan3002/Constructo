@@ -20,7 +20,6 @@ import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, severityToStatus, type Status } from '../../../src/theme/tokens'
-import { todayIso } from '../../../src/api/config'
 import { owner, type BriefSite, type OwnerBrief, type Risk } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, Card, Display, Mono, Small } from '../../../src/ui'
 import {
@@ -104,19 +103,30 @@ export default function Brief() {
   const router = useRouter()
   const qc = useQueryClient()
   const t = STR[lang]
-  const date = todayIso()
 
   // resolved decisions (local optimistic state keyed by risk index).
   const [resolved, setResolved] = useState<Record<string, string>>({})
 
   const briefQ = useQuery<OwnerBrief | null>({
-    queryKey: ['owner', 'brief', date],
+    queryKey: ['owner', 'brief'],
     queryFn: async () => {
-      const page = await owner.briefs(date)
-      if (page.items.length > 0) return page.items[0]
-      // Fallback: ask the backend to generate today's brief.
+      // The morning brief recaps the PREVIOUS day, so "today" is often empty.
+      // Pick the most recent brief that actually carries risks (else the most
+      // recent by date) — robust to timezone + an empty same-day brief. The
+      // /briefs list isn't date-ordered, so we sort client-side.
+      const byDateDesc = (a: OwnerBrief, b: OwnerBrief) =>
+        (b.brief_date ?? '').localeCompare(a.brief_date ?? '')
+      const hasRisk = (b: OwnerBrief) =>
+        (b.payload?.sites ?? []).some((s) => (s.top_risks?.length ?? 0) > 0)
+      const briefs = (await owner.briefs()).items
+      if (briefs.length > 0) {
+        const withRisks = briefs.filter(hasRisk).sort(byDateDesc)
+        const chosen = withRisks[0] ?? [...briefs].sort(byDateDesc)[0]
+        if (chosen) return chosen
+      }
+      // Nothing yet — ask the backend to generate the brief (defaults to yesterday).
       try {
-        const run = await owner.runBrief({ date })
+        const run = await owner.runBrief({})
         return {
           id: run.brief_id,
           company_id: '',
