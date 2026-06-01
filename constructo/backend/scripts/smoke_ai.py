@@ -23,8 +23,8 @@ def line(title: str) -> None:
 
 async def main() -> None:
     from app.extraction.llm import get_llm_client
-    from app.search.embeddings import get_embeddings_client
     from app.homeowner.ai import draft_caption, draft_weekly_summary
+    from app.search.embeddings import get_embeddings_client
 
     line("PROVIDER SELECTION")
     llm = get_llm_client()
@@ -36,7 +36,8 @@ async def main() -> None:
     line("1) RAW LLM COMPLETE (proves gpt-4o-mini responds)")
     try:
         out = await llm.complete(
-            "You translate construction jargon to one plain Hindi-English sentence a homeowner understands.",
+            "You translate construction jargon to one plain Hindi-English "
+            "sentence a homeowner understands.",
             "Site note: slab shuttering done, deshuttering after 14 days curing.",
             {"type": "object", "properties": {"caption": {"type": "string"}}},
         )
@@ -46,7 +47,9 @@ async def main() -> None:
 
     line("2) HOMEOWNER draft_caption()")
     try:
-        cap = await draft_caption(llm, summary="kitchen wall second coat of plaster done", room_tag="Kitchen")
+        cap = await draft_caption(
+            llm, summary="kitchen wall second coat of plaster done", room_tag="Kitchen"
+        )
         print("OK  ->", cap)
     except Exception as e:  # noqa: BLE001
         print(f"FAIL [{type(e).__name__}] {e}")
@@ -56,7 +59,11 @@ async def main() -> None:
         wk = await draft_weekly_summary(
             llm,
             week_start=date(2026, 5, 26),
-            update_titles=["Master bedroom flooring done", "Kitchen tiling 60%", "Waterproofing passed water test"],
+            update_titles=[
+                "Master bedroom flooring done",
+                "Kitchen tiling 60%",
+                "Waterproofing passed water test",
+            ],
         )
         print("OK  ->", wk)
     except Exception as e:  # noqa: BLE001
@@ -68,8 +75,11 @@ async def main() -> None:
         dim = len(vecs[0])
         print(f"OK  -> {len(vecs)} vectors, dim={dim}")
         if dim != 1536:
-            print(f"  ⚠ dim={dim} but your pgvector column is vector(1536). "
-                  f"Either deploy text-embedding-3-small, or pass dimensions=1536 in embeddings.py.")
+            print(
+                f"  ⚠ dim={dim} but your pgvector column is vector(1536). "
+                "Either deploy text-embedding-3-small, or pass "
+                "dimensions=1536 in embeddings.py."
+            )
     except Exception as e:  # noqa: BLE001
         print(f"FAIL [{type(e).__name__}] {e}")
 
