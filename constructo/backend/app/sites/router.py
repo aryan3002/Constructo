@@ -6,7 +6,7 @@ assigned to via the SiteAssignment table. Visibility for reads is enforced
 through `effective_visible_site_ids`, which extends the frozen
 `app.auth.scoping.visible_site_ids` with assignment lookups.
 """
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -19,13 +19,23 @@ from app.auth.scoping import visible_site_ids
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
-from app.models import Company, Site, SiteEventModel, User, UserRole, WhatsappGroup
+from app.models import (
+    Company,
+    Site,
+    SiteBaseline,
+    SiteEventModel,
+    User,
+    UserRole,
+    WhatsappGroup,
+)
 from app.sites.models import SiteAssignment
 from app.sites.schemas import (
     CompanyCreate,
     CompanyOut,
     OkOut,
     SiteAssignIn,
+    SiteBaselineIn,
+    SiteBaselineOut,
     SiteCreate,
     SiteEventOut,
     SiteOut,
@@ -194,6 +204,90 @@ async def assign_site(
         session.add(SiteAssignment(site_id=site_id, user_id=body.user_id))
         await session.commit()
     return OkOut()
+
+
+# ---- site baseline ---------------------------------------------------------
+
+
+@router.put("/sites/{site_id}/baseline", response_model=SiteBaselineOut)
+async def set_site_baseline(
+    site_id: UUID,
+    body: SiteBaselineIn,
+    user: User = Depends(require_role(UserRole.owner, UserRole.pm)),
+    session: AsyncSession = Depends(get_session),
+) -> SiteBaselineOut:
+    """Set (or clear) a site's expected daily headcount.
+
+    owner/pm only (mirrors the publish/site-config auth). The baseline is what
+    lets the labor-shortfall risk fire deterministically against an explicit
+    expectation; clearing it (``expected_daily_headcount=null``) reverts to the
+    auto-learn / day-over-day fallbacks. Upserts the single per-site row.
+    """
+    site = await session.get(Site, site_id)
+    if site is None or site.company_id != user.company_id:
+        raise AppError(404, "not_found", "Site not found")
+
+    baseline = (
+        await session.execute(
+            select(SiteBaseline).where(SiteBaseline.site_id == site_id)
+        )
+    ).scalar_one_or_none()
+
+    if baseline is None:
+        baseline = SiteBaseline(site_id=site_id)
+        session.add(baseline)
+
+    baseline.expected_daily_headcount = body.expected_daily_headcount
+    if body.notes is not None:
+        baseline.notes = body.notes
+    baseline.updated_by = user.id
+
+    await session.commit()
+    await session.refresh(baseline)
+
+    return SiteBaselineOut(
+        site_id=baseline.site_id,
+        expected_daily_headcount=baseline.expected_daily_headcount,
+        notes=baseline.notes,
+        updated_at=baseline.updated_at,
+    )
+
+
+@router.get("/sites/{site_id}/baseline", response_model=SiteBaselineOut)
+async def get_site_baseline(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SiteBaselineOut:
+    """Read a site's current baseline (any role with the site in scope)."""
+    visible = await effective_visible_site_ids(session, user)
+    if site_id not in visible:
+        site = await session.get(Site, site_id)
+        if site is None:
+            raise AppError(404, "not_found", "Site not found")
+        raise AppError(403, "forbidden", "Site not in scope")
+
+    baseline = (
+        await session.execute(
+            select(SiteBaseline).where(SiteBaseline.site_id == site_id)
+        )
+    ).scalar_one_or_none()
+
+    if baseline is None:
+        # No baseline set yet -> report an empty (null) baseline, not a 404.
+        return SiteBaselineOut(
+            site_id=site_id,
+            expected_daily_headcount=None,
+            notes=None,
+            updated_at=datetime.now(UTC),
+        )
+
+    return SiteBaselineOut(
+        site_id=baseline.site_id,
+        expected_daily_headcount=baseline.expected_daily_headcount,
+        notes=baseline.notes,
+        updated_at=baseline.updated_at,
+    )
 
 
 # ---- site events (read) ----------------------------------------------------

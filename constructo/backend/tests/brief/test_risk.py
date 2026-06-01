@@ -70,6 +70,74 @@ def test_no_labor_shortfall_without_baseline_or_prev():
     assert _by_kind(risks, "labor_shortfall") == []
 
 
+# ---- learned (auto-learn) baseline -----------------------------------------
+
+
+def _history(headcounts: list[int]) -> list:
+    """One attendance event per distinct prior day with the given headcount."""
+    from datetime import date, timedelta
+
+    base = date(2026, 5, 1)
+    return [
+        _event(
+            EventType.attendance,
+            fields={"headcount": hc},
+            occurred_on=base + timedelta(days=i),
+        )
+        for i, hc in enumerate(headcounts)
+    ]
+
+
+def test_learned_baseline_fires_shortfall_with_evidence():
+    # Site has history (median ~20) but NO explicit baseline; an 18-day is ~10%
+    # short, so a labor-shortfall risk fires off the learned baseline.
+    today = _event(EventType.attendance, fields={"headcount": 18})
+    history = _history([20, 20, 21, 19, 20])
+    risks = detect_risks([today], site_id=SITE, history_events=history)
+    shortfalls = _by_kind(risks, "labor_shortfall")
+    assert len(shortfalls) == 1
+    r = shortfalls[0]
+    assert r["evidence_event_ids"] == [today.id]
+    # learned baseline messaging uses a "~" qualifier (it's an estimate)
+    assert "~20" in r["message"]
+    assert "10% short" in r["message"]
+
+
+def test_learned_baseline_no_shortfall_when_at_expectation():
+    today = _event(EventType.attendance, fields={"headcount": 20})
+    history = _history([20, 20, 21, 19, 20])
+    risks = detect_risks([today], site_id=SITE, history_events=history)
+    assert _by_kind(risks, "labor_shortfall") == []
+
+
+def test_brand_new_site_no_history_abstains():
+    # No baseline, no prev_events, and too little history to learn one -> abstain
+    # honestly (no risk, no crash).
+    today = _event(EventType.attendance, fields={"headcount": 5})
+    history = _history([20])  # only one day -> below the minimum
+    risks = detect_risks([today], site_id=SITE, history_events=history)
+    assert _by_kind(risks, "labor_shortfall") == []
+
+
+def test_truly_empty_history_abstains():
+    today = _event(EventType.attendance, fields={"headcount": 5})
+    risks = detect_risks([today], site_id=SITE, history_events=[])
+    assert _by_kind(risks, "labor_shortfall") == []
+
+
+def test_explicit_baseline_takes_precedence_over_history():
+    # An explicit baseline of 30 (with today=20) fires even though the learned
+    # median (~20) would not — explicit wins.
+    today = _event(EventType.attendance, fields={"headcount": 20})
+    history = _history([20, 20, 20, 20])
+    risks = detect_risks(
+        [today], site_id=SITE, expected_headcount=30, history_events=history
+    )
+    shortfalls = _by_kind(risks, "labor_shortfall")
+    assert len(shortfalls) == 1
+    assert "~" not in shortfalls[0]["message"]  # explicit, no estimate qualifier
+
+
 def test_no_labor_shortfall_on_small_day_over_day_drop():
     today = _event(EventType.attendance, fields={"headcount": 18})
     yesterday = _event(

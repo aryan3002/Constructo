@@ -47,6 +47,27 @@ class SiteOut(BaseModel):
     status: str | None
 
 
+# ---- site baseline ---------------------------------------------------------
+
+
+class SiteBaselineIn(BaseModel):
+    """Set the per-site expected daily headcount so labor-shortfall can fire.
+
+    ``expected_daily_headcount`` must be a positive integer; pass ``None`` to
+    clear it (reverting the site to the auto-learn / day-over-day fallbacks).
+    """
+
+    expected_daily_headcount: int | None = Field(default=None, ge=1)
+    notes: str | None = None
+
+
+class SiteBaselineOut(BaseModel):
+    site_id: UUID
+    expected_daily_headcount: int | None
+    notes: str | None
+    updated_at: datetime
+
+
 # ---- users -----------------------------------------------------------------
 
 

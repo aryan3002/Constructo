@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     enable_scheduler: bool = False
     brief_hour: int = 7  # local hour (brief_timezone) to run the nightly brief
     brief_timezone: str = "Asia/Kolkata"
+    # Trailing window (days, excluding the brief day) used to auto-learn an
+    # expected daily headcount when a site has no explicit SiteBaseline. A site
+    # with too little history in this window abstains rather than fabricate one.
+    brief_baseline_history_days: int = 14
 
     # SLA escalation sweep (app.approvals.sla.run_sla_sweep). Runs every
     # ``sla_sweep_minutes`` when the scheduler is enabled — frequent so overdue

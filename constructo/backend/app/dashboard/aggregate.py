@@ -168,16 +168,23 @@ def build_site_card(
     baseline: SiteBaseline | None,
     *,
     prev_event_rows: list[SiteEventModel] | None = None,
+    history_event_rows: list[SiteEventModel] | None = None,
     max_risks: int = MAX_TOP_RISKS,
 ) -> dict:
     """Aggregate one site into a command-card payload.
 
     Wires ``baseline.expected_daily_headcount`` into risk detection so the
-    labor-shortfall risk fires against the per-site baseline.
+    labor-shortfall risk fires against the per-site baseline. When no explicit
+    baseline is set, ``history_event_rows`` (a trailing window of prior days)
+    lets risk detection auto-learn an expected headcount so a site with history
+    still surfaces a real shortfall.
     """
     events = [_to_contract(r) for r in event_rows]
     prev_events = (
         [_to_contract(r) for r in prev_event_rows] if prev_event_rows else None
+    )
+    history_events = (
+        [_to_contract(r) for r in history_event_rows] if history_event_rows else None
     )
     expected = baseline.expected_daily_headcount if baseline else None
 
@@ -186,6 +193,7 @@ def build_site_card(
         site_id=site.id,
         expected_headcount=expected,
         prev_events=prev_events,
+        history_events=history_events,
     )
     ranked = [_jsonable_risk(r) for r in rank_risks(risks, max_risks)]
     overflow = max(len(risks) - len(ranked), 0)
@@ -213,6 +221,7 @@ def build_home(
     baselines_by_site: dict[UUID, SiteBaseline],
     *,
     prev_events_by_site: dict[UUID, list[SiteEventModel]] | None = None,
+    history_events_by_site: dict[UUID, list[SiteEventModel]] | None = None,
 ) -> dict:
     """Assemble the whole Owner Home payload.
 
@@ -221,6 +230,7 @@ def build_home(
     (sites with more/severe risks first, then by name).
     """
     prev_events_by_site = prev_events_by_site or {}
+    history_events_by_site = history_events_by_site or {}
     cards: list[dict] = []
     for site in sites:
         card = build_site_card(
@@ -228,6 +238,7 @@ def build_home(
             events_by_site.get(site.id, []),
             baselines_by_site.get(site.id),
             prev_event_rows=prev_events_by_site.get(site.id),
+            history_event_rows=history_events_by_site.get(site.id),
         )
         cards.append(card)
 
