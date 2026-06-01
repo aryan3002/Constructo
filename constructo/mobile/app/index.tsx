@@ -3,6 +3,9 @@
  *   loading          → a calm splash
  *   guest            → /(auth)/login
  *   homeowner        → /(homeowner)/home          (Daylight)
+ *                      NOTE: For new joins, join.tsx routes directly to welcome
+ *                      (bypassing this gate entirely). This gate only handles
+ *                      returning sessions (app restart / re-open).
  *   owner            → /(contractor)/owner/brief  (Blueprint, H4)
  *   supervisor       → /(contractor)/supervisor/capture
  *   labor_contractor → /(contractor)/mukadam/attendance
@@ -31,6 +34,8 @@ export default function Index() {
     )
   }
   if (status === 'guest') return <Redirect href="/(auth)/login" />
+  // Homeowners always land on home for returning sessions. New joins are routed
+  // to (homeowner)/welcome directly from join.tsx (not through this gate).
   if (role === 'homeowner') return <Redirect href="/(homeowner)/home" />
   // H4 Tier-1 contractor branches (Owner / Supervisor / Mukadam).
   if (role === 'owner') return <Redirect href="/(contractor)/owner/brief" />

@@ -17,6 +17,8 @@ import type {
   HomeownerJoinResponse,
   HomeownerMember,
   HomeownerRequest,
+  HouseholdInviteRequest,
+  MemberManageRequest,
   Me,
   Milestone,
   Paginated,
@@ -112,4 +114,26 @@ export const homeowner = {
     }),
   capabilities: (siteId?: string) =>
     request<Capabilities>(`/api/v1/homeowner/me/capabilities${qs({ site_id: siteId })}`),
+
+  /** Invite a household member (Primary/Co-owner only). POST /homeowner/members/invite */
+  inviteMember: (body: HouseholdInviteRequest) =>
+    request<HomeownerMember>('/api/v1/homeowner/members/invite', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Fetch the household roster for the caller's site. GET /homeowner/members/roster */
+  roster: (siteId?: string) =>
+    request<HomeownerMember[]>(`/api/v1/homeowner/members/roster${qs({ site_id: siteId })}`),
+
+  /** Manage a member — update role, can_design, design_space_id. PATCH /homeowner/members/{id}/manage */
+  manageMember: (id: string, body: MemberManageRequest) =>
+    request<HomeownerMember>(`/api/v1/homeowner/members/${id}/manage`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  /** Remove a household member. DELETE /homeowner/members/{id} */
+  removeMember: (id: string) =>
+    request<void>(`/api/v1/homeowner/members/${id}`, { method: 'DELETE' }),
 }

@@ -54,6 +54,9 @@ function HomeownerTabs() {
         options={{ title: t('nav.design'), tabBarIcon: icon('🎨') }}
       />
       <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
+      {/* Onboarding screens — no tab bar entry */}
+      <Tabs.Screen name="welcome" options={{ href: null }} />
+      <Tabs.Screen name="household" options={{ href: null }} />
     </Tabs>
   )
 }

@@ -98,6 +98,20 @@ async def _run_request_nudge_sweep_job() -> None:
         logger.exception("request nudge sweep job failed")
 
 
+async def _run_quiet_period_sweep_job() -> None:
+    """Detect quiet sites and raise one quiet card (or contractor nudge) each.
+    Owns its session; never crashes the loop. Mirrors the request-nudge job."""
+    from app.db import SessionLocal
+    from app.homeowner.quiet import run_quiet_period_sweep
+
+    try:
+        async with SessionLocal() as session:
+            acted = await run_quiet_period_sweep(session)
+        logger.info("quiet-period sweep job complete: %d site(s) acted on", len(acted))
+    except Exception:
+        logger.exception("quiet-period sweep job failed")
+
+
 def start_scheduler():
     """Create and start the AsyncIO scheduler if enabled. Returns it (or None)."""
     global _scheduler
@@ -141,17 +155,31 @@ def start_scheduler():
         id="request_nudge_sweep",
         replace_existing=True,
     )
+    # Quiet-period detection: once daily at quiet_sweep_hour (local to
+    # brief_timezone), before the 07:00 brief so the morning push window carries
+    # coherent state. Mirrors the permit sweep's CronTrigger shape.
+    scheduler.add_job(
+        _run_quiet_period_sweep_job,
+        CronTrigger(
+            hour=settings.quiet_sweep_hour, minute=0, timezone=settings.brief_timezone
+        ),
+        id="quiet_period_sweep",
+        replace_existing=True,
+    )
     scheduler.start()
     _scheduler = scheduler
     logger.info(
         "scheduler started: nightly brief at %02d:00 %s; sla sweep every %dm; "
-        "permit sweep at %02d:00 %s; request nudge sweep every %dm",
+        "permit sweep at %02d:00 %s; request nudge sweep every %dm; "
+        "quiet sweep at %02d:00 %s",
         settings.brief_hour,
         settings.brief_timezone,
         settings.sla_sweep_minutes,
         settings.permit_sweep_hour,
         settings.brief_timezone,
         settings.request_nudge_sweep_minutes,
+        settings.quiet_sweep_hour,
+        settings.brief_timezone,
     )
     return scheduler
 

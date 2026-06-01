@@ -39,6 +39,7 @@ from app.homeowner.authority import (
     can_manage_members,
     capabilities_for,
 )
+from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
 from app.homeowner.schemas import (
     CapabilitiesOut,
     ChangeOut,
@@ -54,12 +55,14 @@ from app.homeowner.schemas import (
     HomeownerMemberInviteIn,
     HomeownerMemberManageIn,
     JoinIn,
+    JoinOut,
     MemberCreateIn,
     MemberOut,
     MemberPrefsIn,
     MilestoneOut,
     PhotoOut,
     PropertyOut,
+    QuietPeriodOut,
     ReferenceCreateIn,
     ReferenceOut,
     RequestCreateIn,
@@ -69,13 +72,13 @@ from app.homeowner.schemas import (
     SelectionOut,
     SpaceOut,
     SpendSummary,
-    TokenOut,
     UpdateOut,
     WeeklySummaryOut,
 )
 from app.homeowner.scoping import homeowner_site_ids, member_sub_role, resolve_site
 from app.models import (
     Change,
+    Company,
     Component,
     ComponentStatus,
     Decision,
@@ -91,6 +94,8 @@ from app.models import (
     MilestoneStatus,
     Property,
     PublishedPhoto,
+    QuietPeriod,
+    QuietStatus,
     Site,
     Space,
     Update,
@@ -176,12 +181,14 @@ async def _can_access_site(session: AsyncSession, user: User, site_id: UUID) -> 
 # ---- onboarding / membership ----------------------------------------------
 
 
-@router.post("/join", response_model=TokenOut)
-async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
+@router.post("/join", response_model=JoinOut)
+async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> JoinOut:
     """Redeem a join code → materialise the homeowner user and a token.
 
     Public (no bearer): the homeowner proves identity with the join code + phone
     + OTP. Binds the invited member to the (new or existing) homeowner user.
+    Returns onboarding-friendly names (property display name + company name) so
+    the app can greet the homeowner with their build, not a bare token.
     """
     if body.otp != STUB_OTP:
         raise AppError(401, "invalid_otp", "Invalid OTP")
@@ -194,14 +201,15 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> To
     if member is None:
         raise AppError(404, "invalid_code", "Unknown join code")
 
+    site = await session.get(Site, member.site_id)
+    if site is None:
+        raise AppError(404, "not_found", "Property no longer exists")
+
     # Find-or-create the homeowner user by phone.
     user = (
         await session.execute(select(User).where(User.phone == body.phone))
     ).scalar_one_or_none()
     if user is None:
-        site = await session.get(Site, member.site_id)
-        if site is None:
-            raise AppError(404, "not_found", "Property no longer exists")
         user = User(company_id=site.company_id, phone=body.phone, role=UserRole.homeowner)
         session.add(user)
         await session.flush()
@@ -212,8 +220,20 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> To
         member.phone = body.phone
     await session.commit()
 
+    # Onboarding enrichment: the property's display name + the building company.
+    prop = (
+        await session.execute(select(Property).where(Property.site_id == member.site_id))
+    ).scalar_one_or_none()
+    company = await session.get(Company, site.company_id)
+
     token = create_access_token(str(user.id), user.role.value)
-    return TokenOut(token=token, site_id=member.site_id, sub_role=member.sub_role)
+    return JoinOut(
+        token=token,
+        site_id=member.site_id,
+        sub_role=member.sub_role,
+        display_name=prop.display_name if prop is not None else None,
+        company_name=company.name if company is not None else None,
+    )
 
 
 @router.post("/members", response_model=MemberOut, status_code=201)
@@ -656,14 +676,22 @@ async def home(
         )
     ).scalars().all()
 
+    # Exclude quiet updates whose window is not yet contractor-confirmed — a
+    # draft quiet card must never surface on the homeowner dashboard.
+    visible_quiet = await visible_quiet_update_ids(session, sid)
     recent = (
         await session.execute(
             select(Update)
-            .where(Update.site_id == sid)
+            .where(
+                Update.site_id == sid,
+                _quiet_visible_filter(visible_quiet),
+            )
             .order_by(Update.published_at.desc())
             .limit(5)
         )
     ).scalars().all()
+
+    quiet_window = await current_confirmed_quiet(session, sid)
 
     changes = (
         await session.execute(select(Change).where(Change.site_id == sid))
@@ -689,6 +717,7 @@ async def home(
         ],
         recent_activity=[_update_out(u) for u in recent],
         spend_summary=spend,
+        quiet=_quiet_out(quiet_window) if quiet_window else None,
     )
 
 
@@ -732,6 +761,30 @@ def _update_out(u: Update) -> UpdateOut:
     return UpdateOut(
         id=u.id, site_id=u.site_id, type=u.type, title=u.title, body=u.body,
         published_at=u.published_at,
+    )
+
+
+def _quiet_visible_filter(visible_quiet_ids: set[UUID]):
+    """SQL predicate keeping all non-quiet updates plus only the quiet updates
+    whose window is contractor-confirmed (the gate, enforced at the query layer).
+    """
+    from app.models import UpdateType
+
+    if visible_quiet_ids:
+        return (Update.type != UpdateType.quiet) | (Update.id.in_(visible_quiet_ids))
+    return Update.type != UpdateType.quiet
+
+
+def _quiet_out(q: QuietPeriod) -> QuietPeriodOut:
+    return QuietPeriodOut(
+        id=q.id,
+        site_id=q.site_id,
+        status=str(q.status),
+        gap_days=q.gap_days,
+        reason=q.published_text or q.draft_text or q.phase_reason,
+        last_signal_at=q.last_signal_at,
+        next_expected_at=q.next_expected_at,
+        detected_at=q.detected_at,
     )
 
 
@@ -793,8 +846,11 @@ async def updates(
 ) -> Page[UpdateOut]:
     """The Project Updates timeline (newest first)."""
     sid = await resolve_site(session, user, site_id)
+    visible_quiet = await visible_quiet_update_ids(session, sid)
     stmt = (
-        select(Update).where(Update.site_id == sid).order_by(Update.published_at.desc(), Update.id)
+        select(Update)
+        .where(Update.site_id == sid, _quiet_visible_filter(visible_quiet))
+        .order_by(Update.published_at.desc(), Update.id)
     )
     items, next_cursor = await _paginate(session, stmt, cursor, limit, Update.id, _update_out)
     return Page[UpdateOut](items=items, next_cursor=next_cursor)
@@ -901,6 +957,32 @@ async def milestones(
         )
     ).scalars().all()
     return [_milestone_out(m) for m in rows]
+
+
+@router.get("/quiet-periods", response_model=list[QuietPeriodOut])
+async def quiet_periods(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> list[QuietPeriodOut]:
+    """Contractor-confirmed quiet cards for a property (most recent first).
+
+    Only confirmed/published windows are returned — a draft pending contractor
+    confirm never reaches the homeowner. These drive the calm "nothing new to
+    see — here's why" empty states on Home / Photos / Updates.
+    """
+    sid = await resolve_site(session, user, site_id)
+    rows = (
+        await session.execute(
+            select(QuietPeriod)
+            .where(
+                QuietPeriod.site_id == sid,
+                QuietPeriod.status.in_((QuietStatus.confirmed, QuietStatus.published)),
+            )
+            .order_by(QuietPeriod.detected_at.desc())
+        )
+    ).scalars().all()
+    return [_quiet_out(q) for q in rows]
 
 
 @router.get("/property", response_model=PropertyOut)

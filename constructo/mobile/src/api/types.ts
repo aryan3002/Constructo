@@ -65,12 +65,20 @@ export interface HomeownerJoinResponse {
   token: string
   site_id: string
   sub_role: HomeownerSubRole
+  /** Optional — present once the backend ships JoinOut. */
+  display_name?: string
+  /** Optional — present once the backend ships JoinOut. */
+  company_name?: string
 }
+
+/** Extended join response shape — alias for clarity in new screens. */
+export type JoinOut = HomeownerJoinResponse
 
 export interface HomeownerMember {
   id: string
   site_id: string
   user_id: string | null
+  display_name: string | null
   sub_role: HomeownerSubRole
   notif_prefs: Record<string, unknown>
   phone: string | null
@@ -78,6 +86,34 @@ export interface HomeownerMember {
   status: 'invited' | 'active'
   created_at: string
   invite_link: string
+  /** Design scope — {} = no say, {all:true} = full, {space_id:'...'} = one room */
+  can_design?: boolean
+  design_space_id?: string | null
+}
+
+/** Body sent when inviting a household member (Primary/Co-owner only). */
+export interface HouseholdInviteRequest {
+  display_name: string
+  phone: string
+  sub_role: 'co_owner' | 'family' | 'advisor'
+  site_id?: string
+}
+
+/** Body sent to PATCH /members/{id}/manage */
+export interface MemberManageRequest {
+  sub_role?: HomeownerSubRole
+  can_design?: boolean
+  design_space_id?: string | null
+}
+
+/** Extended capabilities returned from GET /me/capabilities */
+export interface Capabilities {
+  sub_role: HomeownerSubRole
+  can_approve: boolean
+  can_comment: boolean
+  can_manage_members?: boolean
+  can_design?: boolean
+  design_space_id?: string | null
 }
 
 // ---- H0: feed reads ----
@@ -262,8 +298,3 @@ export interface HomeownerDecision {
   created_at: string
 }
 
-export interface Capabilities {
-  sub_role: HomeownerSubRole
-  can_approve: boolean
-  can_comment: boolean
-}
