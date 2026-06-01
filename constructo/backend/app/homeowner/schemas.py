@@ -36,6 +36,18 @@ class TokenOut(BaseModel):
     sub_role: HomeownerSubRole
 
 
+class JoinOut(TokenOut):
+    """Onboarding enrichment over :class:`TokenOut`.
+
+    Carries the friendly names the just-joined homeowner sees first: their
+    property's display name and the building company's name. Both are nullable
+    so a sparsely-seeded property never breaks redemption.
+    """
+
+    display_name: str | None = None
+    company_name: str | None = None
+
+
 class MemberCreateIn(BaseModel):
     """Contractor mints a member (and a join code) for a homeowner to redeem."""
 
@@ -208,6 +220,24 @@ class SpendSummary(BaseModel):
     change_count: int
 
 
+class QuietPeriodOut(BaseModel):
+    """A contractor-confirmed quiet card ("nothing visible today, here's why").
+
+    Always the calm, sourced reason — never an alarm. Only confirmed/published
+    windows are ever serialised here; drafts pending contractor confirm are
+    filtered out at the query layer.
+    """
+
+    id: UUID
+    site_id: UUID
+    status: str
+    gap_days: int
+    reason: str | None
+    last_signal_at: datetime | None
+    next_expected_at: datetime | None
+    detected_at: datetime
+
+
 class HomeOut(BaseModel):
     """The daily 'am I okay?' dashboard payload.
 
@@ -221,6 +251,9 @@ class HomeOut(BaseModel):
     needs_attention: list[AttentionItem]
     recent_activity: list[UpdateOut]
     spend_summary: SpendSummary | None
+    # The current confirmed quiet card, or null. Lets Home/Updates/Photos render
+    # a calm empty state ("nothing new to see — here's why") instead of silence.
+    quiet: QuietPeriodOut | None = None
 
 
 # ---- design ----------------------------------------------------------------
