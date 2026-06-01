@@ -20,6 +20,7 @@ from app.approvals.schemas import (
     DecisionCreate,
     DecisionOut,
     DecisionResolveIn,
+    DecisionRespondIn,
     SlaSweepOut,
 )
 from app.approvals.service import apply_action, assign
@@ -90,6 +91,7 @@ async def list_decisions(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     state: DecisionState | None = Query(None),
+    for_: str | None = Query(None, alias="for"),
     limit: int = Query(DEFAULT_LIMIT),
     cursor: str | None = Query(None),
 ) -> Page[DecisionOut]:
@@ -98,6 +100,9 @@ async def list_decisions(
     Optionally filter by ``state`` (the inbox defaults to the open ones).
     Company-wide sites and the caller's assigned sites are both included;
     decisions with no site are always visible within the company.
+
+    ``for=me`` narrows to the asks **assigned to the caller** — the supervisor/PM
+    "things pointed at me" feed (C3). The mobile ``/asks?for=me`` read maps here.
     """
     visible = set(await effective_visible_site_ids(session, user))
     page_size = _parse_limit(limit)
@@ -106,6 +111,8 @@ async def list_decisions(
     stmt = select(Decision).where(Decision.company_id == user.company_id)
     if state is not None:
         stmt = stmt.where(Decision.state == state)
+    if for_ == "me":
+        stmt = stmt.where(Decision.assigned_to == user.id)
     # Order by created_at then id for a stable cursor.
     stmt = stmt.order_by(Decision.created_at.desc(), Decision.id)
 
@@ -217,6 +224,39 @@ async def reject_decision(
     return await _action(
         decision_id, DecisionAction.reject, (body or DecisionResolveIn()).note, user, session
     )
+
+
+# Contractor/assignee respond verbs → state-machine actions. ``confirm`` is the
+# field "yes, done/acknowledged" affordance and resolves the ask (idempotent).
+_RESPOND_ACTION: dict[str, DecisionAction] = {
+    "confirm": DecisionAction.resolve,
+    "acknowledge": DecisionAction.acknowledge,
+    "reject": DecisionAction.reject,
+}
+
+
+@router.post("/{decision_id}/respond", response_model=DecisionOut)
+async def respond_to_decision(
+    decision_id: UUID,
+    body: DecisionRespondIn | None = None,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DecisionOut:
+    """Contractor-side respond to an ask/decision (C3 — stops the outbox 404).
+
+    Mirrors the homeowner ``respond_to_decision`` pattern for the assignee side:
+    a supervisor/PM answers a Decision through the EXISTING idempotent
+    ``apply_action``. Scoped to decisions the caller can see (company + visible
+    sites); a Decision assigned to someone else but on a visible site is still
+    answerable (a supervisor confirming on behalf of the field), matching the
+    inbox's existing site-scoped action model. The state machine rejects illegal
+    transitions (409) and is idempotent so the offline outbox can replay safely.
+    """
+    body = body or DecisionRespondIn()
+    decision = await _get_in_scope(session, user, decision_id)
+    action = _RESPOND_ACTION[body.action]
+    updated = await apply_action(session, decision, action, note=body.note)
+    return _out(updated)
 
 
 @router.post("/{decision_id}/assign", response_model=DecisionOut)

@@ -23,7 +23,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import HomeownerMember, MemberStatus
+from app.models import HomeownerMember, MemberStatus, PushToken
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,55 @@ async def _push_tokens_for_site(session: AsyncSession, site_id: UUID) -> list[st
         if isinstance(token, str) and token:
             tokens.append(token)
     return tokens
+
+
+async def push_tokens_for_user(session: AsyncSession, user_id: UUID) -> list[str]:
+    """Every device token a user has registered via ``POST /me/push-token`` (C-F).
+
+    This is the contractor path (a plain ``users`` row with no homeowner_member).
+    Homeowners may also have a token in ``homeowner_members.notif_prefs`` — that
+    path is unchanged and resolved separately by ``_push_tokens_for_site``.
+    """
+    rows = (
+        await session.execute(
+            select(PushToken.token).where(PushToken.user_id == user_id)
+        )
+    ).scalars().all()
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for token in rows:
+        if isinstance(token, str) and token and token not in seen:
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
+
+async def notify_user(
+    session: AsyncSession,
+    user_id: UUID,
+    title: str,
+    body: str,
+    *,
+    data: dict | None = None,
+) -> list[str]:
+    """Push ``title``/``body`` to every device a user has registered (C-F).
+
+    Best-effort: returns the tokens targeted (empty if none / on error). Never
+    raises — mirrors :func:`notify_site_homeowners`.
+    """
+    try:
+        tokens = await push_tokens_for_user(session, user_id)
+        if not tokens:
+            return []
+        messages = [
+            {"to": token, "title": title, "body": body, **({"data": data} if data else {})}
+            for token in tokens
+        ]
+        await send_expo_push(messages)
+        return tokens
+    except Exception:
+        logger.exception("notify_user failed for user %s", user_id)
+        return []
 
 
 async def notify_site_homeowners(

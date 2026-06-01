@@ -36,6 +36,7 @@ from app.models.homeowner_quiet import QuietPeriod, QuietStatus
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
+from app.models.push_token import PushToken
 from app.models.raw_message import RawMessageModel
 from app.models.site import Site
 from app.models.site_baseline import SiteBaseline
@@ -71,6 +72,7 @@ __all__ = [
     "PermitStatus",
     "Property",
     "PublishedPhoto",
+    "PushToken",
     "QuietPeriod",
     "QuietStatus",
     "RawMessageModel",

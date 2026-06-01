@@ -18,7 +18,7 @@ from app.auth.jwt import create_access_token
 from app.auth.landing import landing_for
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import Company, User, UserRole
+from app.models import Company, PushToken, User, UserRole
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -178,3 +178,43 @@ async def update_me(
     await session.commit()
     await session.refresh(user)
     return _me_out(user)
+
+
+# POST /api/v1/me/push-token — register THIS device's Expo push token (C-F).
+# Contractors are plain users rows with no homeowner_member, so they had nowhere
+# to store a token; this upserts it into push_tokens. Authenticated; idempotent
+# (re-registering the same token just bumps updated_at). The homeowner path still
+# uses notif_prefs and is untouched — homeowners may use either harmlessly.
+me_router = APIRouter(prefix="/api/v1/me", tags=["auth"])
+
+
+class PushTokenIn(BaseModel):
+    token: str = Field(min_length=1)
+    platform: Literal["ios", "android", "web"] | None = None
+
+
+class PushTokenOut(BaseModel):
+    ok: bool = True
+
+
+@me_router.post("/push-token", response_model=PushTokenOut)
+async def register_push_token(
+    body: PushTokenIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PushTokenOut:
+    existing = (
+        await session.execute(
+            select(PushToken).where(
+                PushToken.user_id == user.id, PushToken.token == body.token
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        session.add(
+            PushToken(user_id=user.id, token=body.token, platform=body.platform)
+        )
+    elif body.platform is not None:
+        existing.platform = body.platform
+    await session.commit()
+    return PushTokenOut()

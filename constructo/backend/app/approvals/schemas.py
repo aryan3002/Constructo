@@ -1,5 +1,6 @@
 """Pydantic request/response schemas for the approvals & notifications API."""
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,22 @@ class DecisionResolveIn(BaseModel):
     """Body for resolve/reject/acknowledge. ``note`` is the resolution reason."""
 
     note: str | None = None
+
+
+class DecisionRespondIn(BaseModel):
+    """Body for the contractor/assignee respond endpoint (C3).
+
+    Mirrors the homeowner ``respond`` shape but for the supervisor/PM side. The
+    field client confirms an ask with ``confirm`` (== resolve); ``acknowledge``
+    and ``reject`` are also accepted. ``client_response_id`` is an optional
+    idempotency key the offline outbox attaches so a replay never conflicts (the
+    underlying ``apply_action`` is already idempotent, so it is accepted and
+    ignored server-side rather than persisted).
+    """
+
+    action: Literal["confirm", "acknowledge", "reject"] = "confirm"
+    note: str | None = None
+    client_response_id: str | None = None
 
 
 class DecisionAssignIn(BaseModel):
