@@ -27,7 +27,7 @@ import * as MediaLibrary from 'expo-media-library'
 import { useQuery } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
-import type { Photo } from '../../src/api/types'
+import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../src/theme/tokens'
@@ -35,6 +35,7 @@ import {
   Body,
   BodyStrong,
   Button,
+  CalmCard,
   Card,
   Display,
   H2,
@@ -65,6 +66,8 @@ const STR = {
     milestoneHeader: 'Milestone',
     loading: 'Loading photos…',
     empty: 'No photos yet — your builder will share progress here.',
+    quietTitle: 'Quiet on site right now',
+    quietNextPrefix: 'Next photos expected around',
     error: 'Could not load photos. Pull to refresh in a moment.',
     retry: 'Try again',
     caption: 'No caption',
@@ -108,6 +111,8 @@ const STR = {
     milestoneHeader: 'चरण',
     loading: 'फ़ोटो लोड हो रही हैं…',
     empty: 'अभी कोई फ़ोटो नहीं — आपका बिल्डर यहाँ प्रगति साझा करेगा।',
+    quietTitle: 'अभी साइट पर शांति है',
+    quietNextPrefix: 'अगली फ़ोटो लगभग',
     error: 'फ़ोटो लोड नहीं हो सकीं। थोड़ी देर में फिर कोशिश करें।',
     retry: 'फिर कोशिश करें',
     caption: 'कोई कैप्शन नहीं',
@@ -142,6 +147,14 @@ const STR = {
     saveErrorBody: 'कृपया फिर कोशिश करें।',
   },
 } as const
+
+/** Short date — "6 Jun" — for quiet-card next-expected display. */
+function shortDate(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
 
 interface Group {
   key: string
@@ -233,6 +246,14 @@ export default function Photos() {
     queryKey: ['photos', view],
     queryFn: () => homeowner.photos(undefined, view),
   })
+
+  const quietQ = useQuery({
+    queryKey: ['homeowner', 'quietPeriods'],
+    queryFn: () => homeowner.quietPeriods(),
+  })
+  // Most-recent confirmed quiet period — the endpoint orders detected_at DESC,
+  // so the newest is the first element.
+  const activeQuiet: QuietPeriod | null = quietQ.data?.[0] ?? null
 
   const visible = useMemo(
     () => (query.data?.items ?? []).filter((p) => !hidden.has(p.id)),
@@ -362,13 +383,29 @@ export default function Photos() {
           </View>
         </Card>
       ) : visible.length === 0 ? (
-        <Card>
-          <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
-            <Body muted style={{ textAlign: 'center' }}>
-              {s.empty}
-            </Body>
-          </View>
-        </Card>
+        activeQuiet ? (
+          (() => {
+            const nextDate = shortDate(activeQuiet.next_expected_at)
+            const bodyParts: string[] = []
+            if (activeQuiet.reason) bodyParts.push(activeQuiet.reason)
+            if (nextDate) bodyParts.push(`${s.quietNextPrefix} ${nextDate}.`)
+            return (
+              <CalmCard
+                status="info"
+                title={s.quietTitle}
+                body={bodyParts.join(' ') || undefined}
+              />
+            )
+          })()
+        ) : (
+          <Card>
+            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
+              <Body muted style={{ textAlign: 'center' }}>
+                {s.empty}
+              </Body>
+            </View>
+          </Card>
+        )
       ) : (
         <View style={{ gap: SPACE.lg }}>
           {groups.map((group) => (

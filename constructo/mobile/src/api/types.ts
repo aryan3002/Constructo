@@ -229,6 +229,25 @@ export interface SpendSummary {
   change_count: number
 }
 
+/** A contractor-confirmed quiet card — "nothing visible today, here's why".
+ *
+ * Field names mirror QuietPeriodOut from backend/app/homeowner/schemas.py.
+ * Only confirmed/published quiet windows are ever returned; drafts are
+ * filtered server-side. The `reason` text is already in the user's language
+ * when the backend translation pipeline is active (H6.T).
+ */
+export interface QuietPeriod {
+  id: string
+  site_id: string
+  status: string
+  gap_days: number
+  /** Backend-translated reason text (render as-is; never hardcode English). */
+  reason: string | null
+  last_signal_at: string | null
+  next_expected_at: string | null
+  detected_at: string
+}
+
 export interface Home {
   property: Property | null
   milestone_now: Milestone | null
@@ -236,6 +255,8 @@ export interface Home {
   needs_attention: AttentionItem[]
   recent_activity: Update[]
   spend_summary: SpendSummary | null
+  /** Present when the site is in a confirmed quiet period. Null otherwise. */
+  quiet: QuietPeriod | null
 }
 
 // ---- H0: design ----

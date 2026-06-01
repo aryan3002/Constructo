@@ -24,6 +24,7 @@ import type {
   Paginated,
   Photo,
   Property,
+  QuietPeriod,
   Update,
   WeeklySummary,
 } from './types'
@@ -136,4 +137,12 @@ export const homeowner = {
   /** Remove a household member. DELETE /homeowner/members/{id} */
   removeMember: (id: string) =>
     request<void>(`/api/v1/homeowner/members/${id}`, { method: 'DELETE' }),
+
+  /** Confirmed quiet periods for the site. GET /homeowner/quiet-periods
+   *
+   * Returns only contractor-confirmed windows (drafts are filtered server-
+   * side). The most-recent item is the active quiet period when present.
+   */
+  quietPeriods: (siteId?: string) =>
+    request<QuietPeriod[]>(`/api/v1/homeowner/quiet-periods${qs({ site_id: siteId })}`),
 }
