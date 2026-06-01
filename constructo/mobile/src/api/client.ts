@@ -8,6 +8,7 @@ import { getToken } from '../store/secure'
 import type {
   Capabilities,
   ChangesLog,
+  DesignConflict,
   DesignProfile,
   DesignReference,
   DesignSelection,
@@ -94,8 +95,25 @@ export const homeowner = {
     request<DesignProfile>(`/api/v1/homeowner/design/profile${qs({ site_id: siteId })}`),
   selections: (siteId?: string) =>
     request<DesignSelection[]>(`/api/v1/homeowner/design/selections${qs({ site_id: siteId })}`),
+  /** Attributed inspiration references for a site (survives reload — proposal C). */
+  designReferences: (siteId?: string) =>
+    request<DesignReference[]>(`/api/v1/homeowner/design/references${qs({ site_id: siteId })}`),
   references: (body: { image_url: string; room_tag?: string; source?: string; site_id?: string }) =>
     request<DesignReference>('/api/v1/homeowner/design/references', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Open "decide together" conflict cards (human-resolved — never AI-picked). */
+  designConflicts: (siteId?: string) =>
+    request<DesignConflict[]>(`/api/v1/homeowner/design/conflicts${qs({ site_id: siteId })}`),
+  /** A human picks one choice to settle a conflict (no AI adjudication). */
+  resolveDesignConflict: (body: {
+    item: string
+    choice: string
+    space_id?: string
+    site_id?: string
+  }) =>
+    request<DesignSelection>('/api/v1/homeowner/design/conflicts/resolve', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

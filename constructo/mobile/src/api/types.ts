@@ -276,7 +276,33 @@ export interface DesignReference {
   image_url: string
   room_tag: string | null
   source: ReferenceSource
+  /** Who added this reference (proposal C — attribution); null for legacy rows. */
+  actor_member_id?: string | null
   created_at: string
+}
+
+/** A member who contributed to the household design profile (proposal C). */
+export interface DesignContributor {
+  member_id: string | null
+  sub_role: string
+  name: string
+  authoritative: boolean
+}
+
+/** One member's diverging choice inside a "decide together" conflict. */
+export interface DesignConflictOption {
+  choice: string
+  member_id: string | null
+  sub_role: string
+  by: string
+}
+
+/** A calm conflict card: two authoritative members diverge on (item, room). */
+export interface DesignConflict {
+  item: string
+  room: string | null
+  options: DesignConflictOption[]
+  resolve_roles: string[]
 }
 
 export interface DesignSelection {
