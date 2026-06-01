@@ -13,7 +13,37 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import AppError
-from app.models import HomeownerMember, MemberStatus, User
+from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, User
+
+# Most-privileged first — when a user holds several member rows on one site we
+# resolve to the highest authority they carry.
+_SUB_ROLE_RANK = {
+    HomeownerSubRole.primary_owner: 3,
+    HomeownerSubRole.co_owner: 2,
+    HomeownerSubRole.advisor: 1,
+    HomeownerSubRole.family: 0,
+}
+
+
+async def member_sub_role(
+    session: AsyncSession, user: User, site_id: UUID
+) -> HomeownerSubRole | None:
+    """The caller's sub-role on ``site_id`` (highest if several), or None.
+
+    None means the user holds no active membership on that site — the caller
+    should already have enforced scope before trusting any capability decision.
+    """
+    rows = await session.execute(
+        select(HomeownerMember.sub_role).where(
+            HomeownerMember.user_id == user.id,
+            HomeownerMember.site_id == site_id,
+            HomeownerMember.status == MemberStatus.active,
+        )
+    )
+    roles = list(rows.scalars().all())
+    if not roles:
+        return None
+    return max(roles, key=lambda r: _SUB_ROLE_RANK.get(r, 0))
 
 
 async def homeowner_site_ids(session: AsyncSession, user: User) -> list[UUID]:

@@ -13,7 +13,7 @@ from enum import StrEnum
 from secrets import token_urlsafe
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -72,6 +72,31 @@ class HomeownerMember(Base):
         SAEnum(MemberStatus, name="homeowner_member_status"),
         nullable=False,
         server_default=MemberStatus.invited.value,
+    )
+    # --- multi-member management (proposal A) -------------------------------
+    # Who minted this member. NULL = contractor-minted (the existing path);
+    # non-null = owner-minted. The single discriminator between mint sources.
+    invited_by_member_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("homeowner_members.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Owner-set label ("Papa", "Neha — designer"); falls back to User.name/phone.
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Per-member design-participation flag. Owners/co-owners are effectively
+    # always-true (see authority.can_design); this column gates family/narrowed.
+    can_design: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    # Optional single-room scope. NULL + can_design=true = whole-house say;
+    # non-null = that space only. Mirrors DesignSelection.space_id's FK target.
+    design_space_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("spaces.id", ondelete="SET NULL"), nullable=True
+    )
+    # When the owner sent the invite (distinct from created_at for contractor
+    # seed rows); powers "invited, not joined" + re-send throttle.
+    invited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
