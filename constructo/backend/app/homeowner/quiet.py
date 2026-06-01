@@ -297,6 +297,50 @@ async def run_quiet_period_sweep(
     return acted
 
 
+async def confirm_quiet_period(
+    session: AsyncSession,
+    quiet_period: QuietPeriod,
+    *,
+    confirmed_by: UUID,
+    now: datetime | None = None,
+) -> QuietPeriod:
+    """Contractor gate: transition a ``suggested`` window to ``published`` and
+    make its linked quiet ``Update`` homeowner-visible.
+
+    This is the human-in-the-loop step the sweep deliberately stops short of: the
+    AI-drafted reason sits as a DRAFT (``suggested``) until a contractor confirms,
+    and only then does ``visible_quiet_update_ids`` admit it to the feed. We
+    promote straight to ``published`` (the homeowner read path gates on
+    ``confirmed``/``published`` alike) and copy the confirmed draft into
+    ``published_text`` so the homeowner-facing copy is fixed at confirm time.
+
+    Idempotent: confirming an already confirmed/published window is a no-op that
+    returns the row unchanged. Only a ``suggested``/``open`` window may be
+    confirmed; anything else (closed/dismissed) is rejected.
+    """
+    moment = _aware(now) if now is not None else datetime.now(UTC)
+    if quiet_period.status in (QuietStatus.confirmed, QuietStatus.published):
+        return quiet_period  # already through the gate — idempotent
+    if quiet_period.status not in (QuietStatus.suggested, QuietStatus.open):
+        from app.common.errors import AppError
+
+        raise AppError(
+            409,
+            "not_confirmable",
+            "This quiet period can no longer be confirmed.",
+        )
+
+    quiet_period.status = QuietStatus.published
+    quiet_period.confirmed_by = confirmed_by
+    quiet_period.confirmed_at = moment
+    if quiet_period.published_text is None:
+        quiet_period.published_text = quiet_period.draft_text or quiet_period.phase_reason
+
+    await session.commit()
+    await session.refresh(quiet_period)
+    return quiet_period
+
+
 async def visible_quiet_update_ids(
     session: AsyncSession, site_id: UUID
 ) -> set[UUID]:

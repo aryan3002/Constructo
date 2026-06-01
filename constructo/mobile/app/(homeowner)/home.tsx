@@ -5,6 +5,9 @@
  * overlapping progress-ring card, a deep-teal "Next up" card, a horizontal
  * "Latest from site" gallery, an approved-changes summary, and the "Ask your
  * builder" CTA. All wired to real homeowner data; sections hide when empty.
+ *
+ * H6: renders a quiet card when home.quiet is present (contractor-confirmed
+ * quiet period — explains silence calmly instead of leaving the feed blank).
  */
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Link } from 'expo-router'
@@ -30,6 +33,7 @@ import {
   SettleBar,
   Small,
 } from '../../src/ui'
+import type { QuietPeriod } from '../../src/api/types'
 
 const STR = {
   en: {
@@ -39,30 +43,27 @@ const STR = {
     evening: 'Good evening',
     headline: 'Your home is taking shape.',
     onTrack: 'On track',
-    fallbackName: 'Your home',
     inProgress: 'In progress',
     started: 'Started',
     handover: 'Handover',
-    progressBody: 'Here’s where your build stands today.',
+    progressBody: "Here's where your build stands today.",
     nextUp: 'NEXT UP',
     latest: 'Latest from site',
-    viewGallery: 'VIEW GALLERY',
     approvedChanges: 'APPROVED CHANGES',
     changeLine: '{n} change(s) recorded so far',
-    reviewChanges: 'Review changes',
-    haveQ: 'Have questions?',
-    askBody: 'Your site manager is available to discuss progress.',
     askBuilder: 'Ask your builder',
     needs: 'Needs your attention',
     review: 'Review',
     allCalm: 'All calm tonight.',
-    allCalmBody: "Rahul’s team is on it.",
+    allCalmBodyFallback: 'Your site team is on it.',
     latestCount: '{n} photos',
     thisWeek: 'this week',
     askShort: 'ASK',
     askVoice: '🎙 Ask by voice',
-    errorLine: 'Couldn’t load your home.',
+    errorLine: "Couldn't load your home.",
     tryAgain: 'Try again',
+    quietTitle: 'Quiet on site right now',
+    quietNextPrefix: 'Next update expected around',
   },
   hi: {
     settings: 'सेटिंग्स',
@@ -71,30 +72,27 @@ const STR = {
     evening: 'शुभ संध्या',
     headline: 'आपका घर आकार ले रहा है।',
     onTrack: 'सब ठीक चल रहा है',
-    fallbackName: 'आपका घर',
     inProgress: 'चल रहा है',
     started: 'शुरू',
     handover: 'कब्ज़ा',
     progressBody: 'आज आपके निर्माण की स्थिति यह है।',
     nextUp: 'आगे',
     latest: 'साइट से ताज़ा',
-    viewGallery: 'गैलरी देखें',
     approvedChanges: 'मंज़ूर बदलाव',
     changeLine: 'अब तक {n} बदलाव दर्ज',
-    reviewChanges: 'बदलाव देखें',
-    haveQ: 'कोई सवाल?',
-    askBody: 'आपके साइट मैनेजर प्रगति पर बात करने के लिए उपलब्ध हैं।',
     askBuilder: 'बिल्डर से पूछें',
     needs: 'आपके ध्यान की ज़रूरत',
     review: 'देखें',
     allCalm: 'आज सब शांत है।',
-    allCalmBody: 'राहुल की टीम काम पर है।',
+    allCalmBodyFallback: 'आपकी साइट टीम काम पर है।',
     latestCount: '{n} फ़ोटो',
     thisWeek: 'इस हफ़्ते',
     askShort: 'सवाल?',
     askVoice: '🎙 बोलकर पूछें',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
+    quietTitle: 'अभी साइट पर शांति है',
+    quietNextPrefix: 'अगला अपडेट लगभग',
   },
 } as const
 
@@ -130,6 +128,41 @@ function fractionAt(start: string | null, end: string | null, target: string | n
 function dayMonth(iso: string | null): string | null {
   if (!iso) return null
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+/** "6 Jun" — calm short date for quiet-card next-expected display. */
+function shortDate(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * QuietCard — a calm CalmCard explaining a confirmed quiet period.
+ *
+ * The `reason` text comes from the backend already in the user's language
+ * (once H6.T translation is live). We render it as-is — never hardcode
+ * English for dynamic backend strings. Static chrome (title, next-prefix)
+ * uses the STR table.
+ */
+function QuietCard({ quiet, lang }: { quiet: QuietPeriod; lang: 'en' | 'hi' }) {
+  const t = STR[lang]
+  const nextDate = shortDate(quiet.next_expected_at)
+
+  // Body: backend reason (already translated) + optional next-expected date.
+  const bodyParts: string[] = []
+  if (quiet.reason) bodyParts.push(quiet.reason)
+  if (nextDate) bodyParts.push(`${t.quietNextPrefix} ${nextDate}.`)
+  const body = bodyParts.join(' ') || undefined
+
+  return (
+    <CalmCard
+      status="info"
+      title={t.quietTitle}
+      body={body}
+    />
+  )
 }
 
 function formatRupees(n: number): string {
@@ -174,7 +207,7 @@ export default function Home() {
     )
   }
 
-  const { property, milestone_now, milestone_next, needs_attention, recent_activity, spend_summary } =
+  const { property, milestone_now, milestone_next, needs_attention, recent_activity, spend_summary, quiet } =
     homeQ.data
   const photos = photosQ.data?.items ?? []
   const heroUri = photos[0]?.image_url
@@ -303,7 +336,7 @@ export default function Home() {
           </Body>
         </Card>
 
-        {/* Needs your attention (calm, one at a time) — or "all calm" empty state */}
+        {/* Needs your attention (calm, one at a time) — or quiet / "all calm" empty state */}
         {firstAttention ? (
           <Link href="/requests" asChild>
             <Pressable>
@@ -318,11 +351,14 @@ export default function Home() {
               </Card>
             </Pressable>
           </Link>
+        ) : quiet ? (
+          <QuietCard quiet={quiet} lang={lang} />
         ) : (
+          // HomeOut does not carry company_name — use generic "your site team" fallback.
           <CalmCard
             status="ok"
             title={t.allCalm}
-            body={t.allCalmBody}
+            body={t.allCalmBodyFallback}
           />
         )}
 

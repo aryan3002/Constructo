@@ -14,7 +14,7 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { homeowner } from '../../src/api/client'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE, STATUS } from '../../src/theme/tokens'
-import type { Change } from '../../src/api/types'
+import type { Change, QuietPeriod } from '../../src/api/types'
 import {
   Body,
   BodyStrong,
@@ -52,7 +52,9 @@ const STR = {
     errMilestones: 'Could not load milestones.',
     errChanges: 'Could not load changes.',
     errProperty: 'Could not load your property.',
-    emptyTimeline: 'No updates yet. Your site is quiet for now.',
+    emptyTimeline: "No updates yet — we'll explain quiet stretches so you're never left wondering.",
+    quietTitle: 'Quiet on site right now',
+    quietNextPrefix: 'Next update expected around',
     emptyMilestones: 'No milestones planned yet.',
     emptyChanges: 'No changes logged yet — costs and dates are holding steady.',
     emptyProperty: 'No spaces added yet.',
@@ -87,7 +89,9 @@ const STR = {
     errMilestones: 'पड़ाव लोड नहीं हो सके।',
     errChanges: 'बदलाव लोड नहीं हो सके।',
     errProperty: 'आपकी संपत्ति लोड नहीं हो सकी।',
-    emptyTimeline: 'अभी कोई अपडेट नहीं। फ़िलहाल साइट शांत है।',
+    emptyTimeline: 'अभी कोई अपडेट नहीं — हम शांत दौर समझाएँगे ताकि आप कभी अनजान न रहें।',
+    quietTitle: 'अभी साइट पर शांति है',
+    quietNextPrefix: 'अगला अपडेट लगभग',
     emptyMilestones: 'अभी कोई पड़ाव तय नहीं है।',
     emptyChanges: 'अभी कोई बदलाव दर्ज नहीं — लागत और तारीखें स्थिर हैं।',
     emptyProperty: 'अभी कोई स्थान नहीं जोड़ा गया।',
@@ -202,6 +206,26 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   )
 }
 
+/** Short date — "6 Jun" — for quiet-card next-expected display. */
+function shortDate(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+/** Quiet-period card used as the empty-state for the Timeline tab.
+ * The `reason` text comes from the backend already in the user's language. */
+function QuietEmptyCard({ quiet, lang }: { quiet: QuietPeriod; lang: 'en' | 'hi' }) {
+  const str = STR[lang]
+  const nextDate = shortDate(quiet.next_expected_at)
+  const bodyParts: string[] = []
+  if (quiet.reason) bodyParts.push(quiet.reason)
+  if (nextDate) bodyParts.push(`${str.quietNextPrefix} ${nextDate}.`)
+  const body = bodyParts.join(' ') || undefined
+  return <CalmCard status="info" title={str.quietTitle} body={body} />
+}
+
 // ---- Timeline ----
 function TimelineTab() {
   const { lang } = useT()
@@ -216,6 +240,10 @@ function TimelineTab() {
     queryKey: ['homeowner', 'updates'],
     queryFn: () => homeowner.updates(),
   })
+  const quietQ = useQuery({
+    queryKey: ['homeowner', 'quietPeriods'],
+    queryFn: () => homeowner.quietPeriods(),
+  })
 
   if (updatesQ.isLoading || summaryQ.isLoading) return <Loading />
   if (updatesQ.isError) {
@@ -224,6 +252,8 @@ function TimelineTab() {
 
   const latest = summaryQ.data?.[0]
   const items = updatesQ.data?.items ?? []
+  // Most-recent quiet period — the endpoint orders detected_at DESC, so newest is first.
+  const activeQuiet: QuietPeriod | null = quietQ.data?.[0] ?? null
 
   return (
     <View style={{ gap: SPACE.md }}>
@@ -238,7 +268,11 @@ function TimelineTab() {
       ) : null}
 
       {items.length === 0 ? (
+        activeQuiet ? (
+          <QuietEmptyCard quiet={activeQuiet} lang={lang} />
+        ) : (
         <Empty message={str.emptyTimeline} />
+        )
       ) : (
         <Card>
           {items.map((u, i) => {

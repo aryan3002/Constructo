@@ -130,6 +130,10 @@ class PhotoOut(BaseModel):
     milestone_id: UUID | None
     is_starred: bool
     published_at: datetime
+    # Honest-AI review gate (Slice V): an AI-drafted caption is returned here for
+    # the CONTRACTOR to review — it is NEVER auto-written into ``caption`` (the
+    # homeowner-visible field). The homeowner feed never serialises this field.
+    draft_caption: str | None = None
 
 
 class UpdateOut(BaseModel):

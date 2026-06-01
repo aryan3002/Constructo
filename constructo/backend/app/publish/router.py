@@ -22,10 +22,12 @@ from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.homeowner.ai import draft_caption, draft_weekly_summary, get_llm
+from app.homeowner.quiet import confirm_quiet_period
 from app.homeowner.router import (
     _member_out,
     _milestone_out,
     _photo_out,
+    _quiet_out,
     _update_out,
 )
 from app.homeowner.schemas import (
@@ -34,6 +36,7 @@ from app.homeowner.schemas import (
     MemberOut,
     MilestoneOut,
     PhotoOut,
+    QuietPeriodOut,
     SpaceOut,
     UpdateOut,
     WeeklySummaryOut,
@@ -45,6 +48,7 @@ from app.models import (
     Milestone,
     Property,
     PublishedPhoto,
+    QuietPeriod,
     SiteEventModel,
     Space,
     Update,
@@ -103,25 +107,39 @@ async def publish_photo(
 ) -> PhotoOut:
     """Curate a photo into the homeowner feed (optionally promoted from an event).
 
-    Caption: if the contractor supplied one, use it verbatim; otherwise AI-draft
-    a homeowner-friendly caption from the event summary (or supplied context).
+    Honest-AI caption gate (Slice V / red-team): a CONTRACTOR-supplied caption is
+    a reviewed, grounded fact → it is published verbatim and the homeowner sees
+    it. An AI-drafted caption (from the real image via ``complete_vision`` when an
+    image is present, else from the event summary) is a DRAFT pending review — it
+    is returned in ``draft_caption`` for the contractor to confirm/edit and is
+    NEVER written into ``caption`` (the homeowner-visible field). So raw,
+    ungrounded model output can never reach the homeowner without a human review.
+
+    To publish an AI draft the contractor re-POSTs it back as ``caption`` (the
+    verbatim path), which makes it a reviewed, homeowner-visible fact.
     """
     await _assert_site(session, user, body.site_id)
 
-    caption = body.caption
+    caption = body.caption  # contractor-reviewed → homeowner-visible
+    draft = None  # AI suggestion → contractor reviews, never auto-published
     if caption is None:
         summary = body.event_summary
         if summary is None and body.source_event_id is not None:
             event = await session.get(SiteEventModel, body.source_event_id)
             summary = event.summary if event is not None else None
-        if summary:
-            caption = await draft_caption(llm, summary=summary, room_tag=body.room_tag)
+        if summary or body.image_url:
+            draft = await draft_caption(
+                llm,
+                summary=summary or "",
+                image_url=body.image_url,
+                room_tag=body.room_tag,
+            )
 
     photo = PublishedPhoto(
         site_id=body.site_id,
         source_event_id=body.source_event_id,
         image_url=body.image_url,
-        caption=caption,
+        caption=caption,  # None until a human reviews the draft
         room_tag=body.room_tag,
         milestone_id=body.milestone_id,
         is_starred=body.is_starred,
@@ -130,7 +148,8 @@ async def publish_photo(
     session.add(photo)
     await session.commit()
     await session.refresh(photo)
-    return _photo_out(photo)
+    out = _photo_out(photo)
+    return out.model_copy(update={"draft_caption": draft})
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)
@@ -189,6 +208,32 @@ async def publish_weekly_summary(
         id=summary.id, site_id=summary.site_id, week_start=summary.week_start,
         text=summary.text, published_at=summary.published_at,
     )
+
+
+# ---- quiet periods (contractor confirm gate) -------------------------------
+
+
+@router.post("/quiet-periods/{quiet_period_id}/confirm", response_model=QuietPeriodOut)
+async def confirm_quiet(
+    quiet_period_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> QuietPeriodOut:
+    """Contractor gate: confirm an AI-suggested quiet window so the homeowner
+    sees the calm "nothing new to see — here's why" card.
+
+    The quiet-period sweep drafts an ``Update(type=quiet)`` + a ``QuietPeriod``
+    in ``suggested`` and stops — raw AI never crosses the contractor│homeowner
+    line. This endpoint is that crossing: it transitions the window to
+    ``published`` and (via the homeowner read path's confirmed/published gate)
+    makes the linked Update homeowner-visible. Idempotent.
+    """
+    qp = await session.get(QuietPeriod, quiet_period_id)
+    if qp is None:
+        raise AppError(404, "not_found", "Quiet period not found")
+    await _assert_site(session, user, qp.site_id)
+    qp = await confirm_quiet_period(session, qp, confirmed_by=user.id)
+    return _quiet_out(qp)
 
 
 # ---- property skeleton CRUD ------------------------------------------------

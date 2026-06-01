@@ -22,14 +22,34 @@ from datetime import date
 from app.extraction.llm import LLMClient, get_llm_client
 
 # Module-level default language. The real per-call value is threaded from
-# ``users.language`` at the call sites in H6·5; until then every helper accepts
-# the kwarg (keyword-only, default below) without changing behavior.
+# ``users.language`` at the call sites; ``en`` keeps the prompt unchanged.
 DEFAULT_LANGUAGE = "en"
+
+# Human-readable names for the languages we author drafts in. Used to weave the
+# target language into the system prompt so the model drafts directly in the
+# reader's language (Slice T). Unknown codes fall back to English (no-op).
+_LANGUAGE_NAMES = {"en": "English", "hi": "Hindi"}
 
 
 def get_llm() -> LLMClient:
     """FastAPI dependency: the env-selected LLM client (fake without creds)."""
     return get_llm_client()
+
+
+def _language_directive(language: str) -> str:
+    """A system-prompt clause asking the model to write in ``language``.
+
+    Empty for the source language (``en``) so English prompts are unchanged. The
+    numbers/dates/rupees rule is restated here because drafting directly in the
+    reader's language must still preserve every numeral byte-for-byte.
+    """
+    if not language or language == DEFAULT_LANGUAGE:
+        return ""
+    name = _LANGUAGE_NAMES.get(language, language)
+    return (
+        f" Write in {name}. Keep every number, date, and rupee amount exactly as "
+        "given — do not change, round, or localise any digit."
+    )
 
 
 def _first_str(result: dict, *keys: str) -> str | None:
@@ -50,25 +70,35 @@ async def draft_caption(
 ) -> str:
     """Draft a warm, plain-language photo caption from an ops summary.
 
-    The contractor edits this before publishing. Never adds facts beyond
-    ``summary``/``room_tag``.
+    The contractor edits this before publishing — the caption is ALWAYS a draft,
+    never auto-published to the homeowner. Never adds facts beyond
+    ``summary``/``room_tag`` (or what the image grounds).
 
-    ``image_url`` and ``language`` are frozen in H6.1 (keyword-only, defaulted)
-    so callers can pass them today; the body is otherwise unchanged. H6·6 swaps
-    the inner ``llm.complete`` for ``llm.complete_vision(..., image_url, ...)``
-    when an image is present, and H6·5 weaves ``language`` into the prompt.
+    When ``image_url`` is set the caption is drafted from the REAL photo via
+    :meth:`LLMClient.complete_vision` (Slice V); otherwise from the text note
+    alone. ``language`` (Slice T) is woven into the prompt so a non-English reader
+    gets a draft in her language, with numbers/dates/rupees preserved verbatim.
     """
     where = f" (room: {room_tag})" if room_tag else ""
     system = (
         "You write short, warm, jargon-free photo captions for a homeowner "
         "watching their house being built. One sentence. No site jargon, no "
         "headcounts, no vendor names. Only describe what the provided note says."
+        + _language_directive(language)
     )
-    result = await llm.complete(
-        system,
-        f"Site note{where}: {summary}",
-        {"type": "object", "properties": {"caption": {"type": "string"}}},
-    )
+    if image_url:
+        result = await llm.complete_vision(
+            system,
+            f"Site note{where}: {summary}",
+            image_url,
+            {"type": "object", "properties": {"caption": {"type": "string"}}},
+        )
+    else:
+        result = await llm.complete(
+            system,
+            f"Site note{where}: {summary}",
+            {"type": "object", "properties": {"caption": {"type": "string"}}},
+        )
     return _first_str(result, "caption", "summary") or summary.strip()
 
 
@@ -89,6 +119,7 @@ async def draft_weekly_summary(
         "You write a calm, reassuring weekly construction update for a homeowner. "
         "2-4 sentences, plain language, honest about slow weeks. Summarise ONLY "
         "the provided items; do not invent progress."
+        + _language_directive(language)
     )
     result = await llm.complete(
         system,
@@ -126,6 +157,7 @@ async def draft_quiet_reason(
         "why there is nothing new to see on site today. Rephrase ONLY the given "
         "construction phase reason into one reassuring sentence. Do not invent a "
         "different reason, a date, or any progress."
+        + _language_directive(language)
     )
     result = await llm.complete(
         system,
@@ -157,6 +189,7 @@ async def generate_design_profile(
         "reference tags, write a short design profile: a one-paragraph 'profile' "
         "describing their taste, and a 'tone' of 3-5 keywords. Do not invent "
         "specific products they did not choose."
+        + _language_directive(language)
     )
     result = await llm.complete(
         system,
