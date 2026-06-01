@@ -18,6 +18,7 @@ import {
 
 import { authApi } from '../api/auth'
 import { ApiError, homeowner } from '../api/client'
+import { registerDevicePushToken } from '../push/register'
 import type { Capabilities, HomeownerSubRole, Me, Role } from '../api/types'
 import { clearToken, getToken } from '../store/secure'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -68,6 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await authApi.me()
       setMe(profile)
       setStatus('authed')
+      // Register this device's push token against the user row (C-F). For a
+      // contractor (no homeowner_member) this is the ONLY token storage path;
+      // homeowners also have their notif_prefs path. Fire-and-forget, idempotent.
+      if (profile.role !== 'homeowner') void registerDevicePushToken()
       // Restore persisted sub_role + site_id if they exist.
       const [persistedSubRole, persistedSiteId, persistedOnboarded] = await Promise.all([
         AsyncStorage.getItem(SUB_ROLE_KEY),

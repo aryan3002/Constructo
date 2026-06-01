@@ -125,4 +125,17 @@ export const supervisorApi = {
   approvals(): Promise<Paginated<Approval>> {
     return request<Paginated<Approval>>('/api/v1/approvals')
   },
+
+  /**
+   * Asks pointed AT ME — the supervisor/PM "things waiting on you" feed (C3).
+   * Maps to `GET /api/v1/approvals?for=me`, which narrows the ledger to
+   * decisions assigned to the caller. Same `Approval` shape as the feed above.
+   */
+  asksForMe(): Promise<Paginated<Approval>> {
+    return request<Paginated<Approval>>('/api/v1/approvals?for=me')
+  },
 }
+
+/** Path the offline outbox replays a supervisor respond against (C3). */
+export const ASK_RESPOND_PATH = (id: string): string =>
+  `/api/v1/approvals/${encodeURIComponent(id)}/respond`
