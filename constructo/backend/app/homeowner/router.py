@@ -40,6 +40,7 @@ from app.homeowner.authority import (
     capabilities_for,
 )
 from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
+from app.homeowner.render import get_translation, render_text
 from app.homeowner.schemas import (
     CapabilitiesOut,
     ChangeOut,
@@ -76,6 +77,7 @@ from app.homeowner.schemas import (
     WeeklySummaryOut,
 )
 from app.homeowner.scoping import homeowner_site_ids, member_sub_role, resolve_site
+from app.homeowner.translation import TranslationClient
 from app.models import (
     Change,
     Company,
@@ -641,6 +643,7 @@ async def _property_out(session: AsyncSession, site_id: UUID) -> PropertyOut | N
 async def home(
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
+    translation: TranslationClient = Depends(get_translation),
     site_id: UUID | None = Query(None),
 ) -> HomeOut:
     """The daily 'am I okay?' dashboard. Conditional sections are empty when bare."""
@@ -701,6 +704,16 @@ async def home(
         total = sum(float(c.cost_delta) for c in changes if c.cost_delta is not None)
         spend = SpendSummary(total_change_cost_delta=total, change_count=len(changes))
 
+    recent_activity = [
+        await _render_update(session, translation, user.language, _update_out(u))
+        for u in recent
+    ]
+    quiet_out = None
+    if quiet_window:
+        quiet_out = await _render_quiet(
+            session, translation, user.language, _quiet_out(quiet_window)
+        )
+
     return HomeOut(
         property=prop,
         milestone_now=_milestone_out(milestone_now) if milestone_now else None,
@@ -715,9 +728,9 @@ async def home(
             }
             for d in attention_rows
         ],
-        recent_activity=[_update_out(u) for u in recent],
+        recent_activity=recent_activity,
         spend_summary=spend,
-        quiet=_quiet_out(quiet_window) if quiet_window else None,
+        quiet=quiet_out,
     )
 
 
@@ -788,6 +801,57 @@ def _quiet_out(q: QuietPeriod) -> QuietPeriodOut:
     )
 
 
+# ---- read-path translation (Slice T): render published text in the reader's
+# language. The contractor's SOURCE stays English; the homeowner reads HERS. The
+# numeric guard inside ``render_text`` keeps digits/dates/rupees byte-identical.
+
+
+async def _render_photo(
+    session: AsyncSession, client: TranslationClient, lang: str | None, p: PhotoOut
+) -> PhotoOut:
+    caption = await render_text(
+        session, client, canonical=p.caption, lang=lang,
+        source_table="published_photos", source_id=p.id, source_field="caption",
+    )
+    return p if caption == p.caption else p.model_copy(update={"caption": caption})
+
+
+async def _render_update(
+    session: AsyncSession, client: TranslationClient, lang: str | None, u: UpdateOut
+) -> UpdateOut:
+    title = await render_text(
+        session, client, canonical=u.title, lang=lang,
+        source_table="updates", source_id=u.id, source_field="title",
+    )
+    body = await render_text(
+        session, client, canonical=u.body, lang=lang,
+        source_table="updates", source_id=u.id, source_field="body",
+    )
+    if title == u.title and body == u.body:
+        return u
+    return u.model_copy(update={"title": title, "body": body})
+
+
+async def _render_weekly(
+    session: AsyncSession, client: TranslationClient, lang: str | None, w: WeeklySummaryOut
+) -> WeeklySummaryOut:
+    text = await render_text(
+        session, client, canonical=w.text, lang=lang,
+        source_table="weekly_summaries", source_id=w.id, source_field="text",
+    )
+    return w if text == w.text else w.model_copy(update={"text": text})
+
+
+async def _render_quiet(
+    session: AsyncSession, client: TranslationClient, lang: str | None, q: QuietPeriodOut
+) -> QuietPeriodOut:
+    reason = await render_text(
+        session, client, canonical=q.reason, lang=lang,
+        source_table="quiet_periods", source_id=q.id, source_field="reason",
+    )
+    return q if reason == q.reason else q.model_copy(update={"reason": reason})
+
+
 async def _paginate(
     session: AsyncSession,
     stmt,
@@ -814,6 +878,7 @@ async def _paginate(
 async def photos(
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
+    translation: TranslationClient = Depends(get_translation),
     site_id: UUID | None = Query(None),
     view: str = Query("all"),
     limit: int = Query(DEFAULT_LIMIT),
@@ -833,6 +898,7 @@ async def photos(
     items, next_cursor = await _paginate(
         session, stmt, cursor, limit, PublishedPhoto.id, _photo_out
     )
+    items = [await _render_photo(session, translation, user.language, p) for p in items]
     return Page[PhotoOut](items=items, next_cursor=next_cursor)
 
 
@@ -840,6 +906,7 @@ async def photos(
 async def updates(
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
+    translation: TranslationClient = Depends(get_translation),
     site_id: UUID | None = Query(None),
     limit: int = Query(DEFAULT_LIMIT),
     cursor: str | None = Query(None),
@@ -853,6 +920,7 @@ async def updates(
         .order_by(Update.published_at.desc(), Update.id)
     )
     items, next_cursor = await _paginate(session, stmt, cursor, limit, Update.id, _update_out)
+    items = [await _render_update(session, translation, user.language, u) for u in items]
     return Page[UpdateOut](items=items, next_cursor=next_cursor)
 
 
@@ -860,6 +928,7 @@ async def updates(
 async def weekly_summary(
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
+    translation: TranslationClient = Depends(get_translation),
     site_id: UUID | None = Query(None),
 ) -> list[WeeklySummaryOut]:
     """Weekly digest cards, most recent week first."""
@@ -871,13 +940,14 @@ async def weekly_summary(
             .order_by(WeeklySummary.week_start.desc())
         )
     ).scalars().all()
-    return [
+    outs = [
         WeeklySummaryOut(
             id=w.id, site_id=w.site_id, week_start=w.week_start, text=w.text,
             published_at=w.published_at,
         )
         for w in rows
     ]
+    return [await _render_weekly(session, translation, user.language, w) for w in outs]
 
 
 @router.get("/changes", response_model=ChangesOut)
@@ -963,6 +1033,7 @@ async def milestones(
 async def quiet_periods(
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
+    translation: TranslationClient = Depends(get_translation),
     site_id: UUID | None = Query(None),
 ) -> list[QuietPeriodOut]:
     """Contractor-confirmed quiet cards for a property (most recent first).
@@ -982,7 +1053,9 @@ async def quiet_periods(
             .order_by(QuietPeriod.detected_at.desc())
         )
     ).scalars().all()
-    return [_quiet_out(q) for q in rows]
+    return [
+        await _render_quiet(session, translation, user.language, _quiet_out(q)) for q in rows
+    ]
 
 
 @router.get("/property", response_model=PropertyOut)

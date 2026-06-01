@@ -6,6 +6,8 @@ from .conftest import auth
 
 async def test_publish_photo_appears_in_homeowner_feed(client, ctx, fake_llm):
     # Caption omitted → AI-drafted from the supplied event summary (no network).
+    # Honest-AI gate: the draft is returned for the CONTRACTOR (draft_caption),
+    # NOT auto-published — the homeowner-visible caption stays null until reviewed.
     pub = await client.post(
         "/api/v1/publish/photo",
         json={
@@ -18,16 +20,31 @@ async def test_publish_photo_appears_in_homeowner_feed(client, ctx, fake_llm):
     )
     assert pub.status_code == 201, pub.text
     photo = pub.json()
-    assert photo["caption"] is not None
-    assert "Slab concrete poured" in photo["caption"]  # drafted from the summary, no invention
+    assert photo["caption"] is None  # not auto-published — pending contractor review
+    assert photo["draft_caption"] is not None
+    assert "Slab concrete poured" in photo["draft_caption"]  # drafted, no invention
 
-    # The homeowner sees it.
+    # The homeowner sees the photo (room tag) but NOT the unreviewed AI caption.
     feed = await client.get("/api/v1/homeowner/photos", headers=auth(ctx.homeowner))
     assert feed.status_code == 200, feed.text
     items = feed.json()["items"]
     assert len(items) == 1
     assert items[0]["id"] == photo["id"]
     assert items[0]["room_tag"] == "kitchen"
+    assert items[0]["caption"] is None  # the draft never crossed the gate
+
+    # Contractor reviews + re-publishes the draft verbatim → now homeowner-visible.
+    reviewed = await client.post(
+        "/api/v1/publish/photo",
+        json={
+            "site_id": str(ctx.site.id),
+            "image_url": "http://cdn/slab.jpg",
+            "room_tag": "kitchen",
+            "caption": photo["draft_caption"],
+        },
+        headers=auth(ctx.owner),
+    )
+    assert reviewed.json()["caption"] == photo["draft_caption"]
 
 
 async def test_publish_explicit_caption_used_verbatim(client, ctx, fake_llm):

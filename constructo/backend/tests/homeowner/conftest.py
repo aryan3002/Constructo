@@ -12,6 +12,8 @@ import pytest_asyncio
 from app.auth.jwt import create_access_token
 from app.extraction.llm import FakeLLMClient
 from app.homeowner.ai import get_llm
+from app.homeowner.render import get_translation
+from app.homeowner.translation import FakeTranslationClient
 from app.main import app
 from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, UserRole
 
@@ -28,6 +30,18 @@ def fake_llm():
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)
+
+
+@pytest_asyncio.fixture
+def fake_translation():
+    """Register a network-free FakeTranslationClient for the read-path render seam.
+
+    Returns the single instance so a test can inspect ``.calls`` to prove a
+    second read is a cache HIT (no second provider call)."""
+    fake = FakeTranslationClient()
+    app.dependency_overrides[get_translation] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_translation, None)
 
 
 @pytest_asyncio.fixture
