@@ -7,7 +7,7 @@
  * builder" CTA. All wired to real homeowner data; sections hide when empty.
  */
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { Link, useRouter } from 'expo-router'
+import { Link } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,17 +15,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { homeowner } from '../../src/api/client'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE, TAP } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
   Button,
+  CalmCard,
   Card,
   Display,
   H2,
+  HomeWidget,
   Micro,
-  ProgressRing,
   Screen,
+  SettleBar,
   Small,
 } from '../../src/ui'
 
@@ -39,6 +41,8 @@ const STR = {
     onTrack: 'On track',
     fallbackName: 'Your home',
     inProgress: 'In progress',
+    started: 'Started',
+    handover: 'Handover',
     progressBody: 'Here’s where your build stands today.',
     nextUp: 'NEXT UP',
     latest: 'Latest from site',
@@ -51,6 +55,12 @@ const STR = {
     askBuilder: 'Ask your builder',
     needs: 'Needs your attention',
     review: 'Review',
+    allCalm: 'All calm tonight.',
+    allCalmBody: "Rahul’s team is on it.",
+    latestCount: '{n} photos',
+    thisWeek: 'this week',
+    askShort: 'ASK',
+    askVoice: '🎙 Ask by voice',
     errorLine: 'Couldn’t load your home.',
     tryAgain: 'Try again',
   },
@@ -63,6 +73,8 @@ const STR = {
     onTrack: 'सब ठीक चल रहा है',
     fallbackName: 'आपका घर',
     inProgress: 'चल रहा है',
+    started: 'शुरू',
+    handover: 'कब्ज़ा',
     progressBody: 'आज आपके निर्माण की स्थिति यह है।',
     nextUp: 'आगे',
     latest: 'साइट से ताज़ा',
@@ -75,6 +87,12 @@ const STR = {
     askBuilder: 'बिल्डर से पूछें',
     needs: 'आपके ध्यान की ज़रूरत',
     review: 'देखें',
+    allCalm: 'आज सब शांत है।',
+    allCalmBody: 'राहुल की टीम काम पर है।',
+    latestCount: '{n} फ़ोटो',
+    thisWeek: 'इस हफ़्ते',
+    askShort: 'सवाल?',
+    askVoice: '🎙 बोलकर पूछें',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
   },
@@ -97,6 +115,23 @@ function elapsedFraction(start: string | null, end: string | null): number | nul
   return Math.max(0, Math.min(1, frac))
 }
 
+/** Where a target date falls on the (start → end) timeline, clamped 0..1.
+ *  Drives the next-milestone tick on the SettleBar. */
+function fractionAt(start: string | null, end: string | null, target: string | null): number | null {
+  if (!start || !end || !target) return null
+  const s = new Date(start).getTime()
+  const e = new Date(end).getTime()
+  const t = new Date(target).getTime()
+  if (!(e > s)) return null
+  return Math.max(0, Math.min(1, (t - s) / (e - s)))
+}
+
+/** "14 Jan" — a calm day+month with no year (the bar already implies the span). */
+function dayMonth(iso: string | null): string | null {
+  if (!iso) return null
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
 function formatRupees(n: number): string {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)} Cr`
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`
@@ -113,7 +148,6 @@ export default function Home() {
   const { lang } = useT()
   const { theme } = useTheme()
   const c = theme.colors
-  const router = useRouter()
   const insets = useSafeAreaInsets()
   const t = STR[lang]
 
@@ -145,13 +179,19 @@ export default function Home() {
   const photos = photosQ.data?.items ?? []
   const heroUri = photos[0]?.image_url
 
-  const timeFrac = elapsedFraction(
-    property?.started_on ?? null,
-    property?.expected_handover_on ?? null,
-  )
+  const startOn = property?.started_on ?? null
+  const handoverOn = property?.expected_handover_on ?? null
+  const timeFrac = elapsedFraction(startOn, handoverOn)
   const frac = timeFrac ?? 0
-  const pct = Math.round(frac * 100)
-  const handover = monthYear(property?.expected_handover_on ?? null)
+  const handover = monthYear(handoverOn)
+  // Honest time-bar labels (no completion number — Hard Rule #4).
+  const hasTimeline = timeFrac !== null
+  const startLabel = `${t.started} ${dayMonth(startOn) ?? ''}`.trim()
+  const handoverMonth = handoverOn
+    ? new Date(handoverOn).toLocaleDateString('en-GB', { month: 'short' })
+    : null
+  const endLabel = handoverMonth ? `${t.handover} ~${handoverMonth}` : t.handover
+  const tickFrac = fractionAt(startOn, handoverOn, milestone_next?.expected_on ?? null)
   const firstAttention = needs_attention[0]
   const progressBody =
     milestone_now?.name ? recent_activity[0]?.body ?? t.progressBody : t.progressBody
@@ -244,20 +284,26 @@ export default function Home() {
 
       {/* ---- Overlapping content ---- */}
       <View style={{ paddingHorizontal: SPACE.lg, gap: SPACE.md, marginTop: -28 }}>
-        {/* Progress card */}
-        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.lg }}>
-          <ProgressRing progress={frac} size={104} stroke={9} color={c.accent} trackColor={AP.ringTrack}>
-            <H2 color={c.accent}>{pct}%</H2>
-          </ProgressRing>
-          <View style={{ flex: 1, gap: SPACE.xs }}>
-            <H2>{milestone_now?.name ?? t.inProgress}</H2>
-            <Body muted numberOfLines={4}>
-              {progressBody}
-            </Body>
-          </View>
+        {/* Status card — honest TIME-BAR (never a %), warm sentence below. */}
+        <Card style={{ gap: SPACE.md }}>
+          <H2>{milestone_now?.name ?? t.inProgress}</H2>
+          {hasTimeline ? (
+            <SettleBar
+              fraction={frac}
+              startLabel={startLabel}
+              endLabel={endLabel}
+              tickFraction={tickFrac}
+              color={c.accent}
+              trackColor={AP.ringTrack}
+              labelColor={c.textMute}
+            />
+          ) : null}
+          <Body muted numberOfLines={4}>
+            {progressBody}
+          </Body>
         </Card>
 
-        {/* Needs your attention (calm, one at a time) */}
+        {/* Needs your attention (calm, one at a time) — or "all calm" empty state */}
         {firstAttention ? (
           <Link href="/requests" asChild>
             <Pressable>
@@ -272,142 +318,58 @@ export default function Home() {
               </Card>
             </Pressable>
           </Link>
-        ) : null}
+        ) : (
+          <CalmCard
+            status="ok"
+            title={t.allCalm}
+            body={t.allCalmBody}
+          />
+        )}
 
-        {/* Next up (deep teal) */}
-        {milestone_next ? (
-          <Pressable onPress={() => router.push('/(homeowner)/updates')}>
-            <View
-              style={[
-                { backgroundColor: c.accent, borderRadius: theme.radii.card, padding: SPACE.lg },
-                theme.shadowCard,
-              ]}
-            >
-              <Micro color={AP.onDarkMuted} style={{ letterSpacing: 2 }}>
-                {t.nextUp}
-              </Micro>
-              <H2 color={AP.onDark} style={{ marginTop: SPACE.sm }}>
-                {milestone_next.name}
-              </H2>
-              {milestone_next.expected_on ? (
-                <Body color="rgba(255,255,255,0.82)" style={{ marginTop: SPACE.xs }}>
-                  {monthYear(milestone_next.expected_on)}
-                </Body>
-              ) : null}
-              <Body color={AP.onDark} style={{ textAlign: 'right', marginTop: SPACE.sm }}>
-                →
-              </Body>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {/* Latest from site */}
-        {photos.length > 0 ? (
-          <View style={{ gap: SPACE.sm }}>
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-            >
-              <H2>{t.latest}</H2>
-              <Link href="/(homeowner)/photos" asChild>
-                <Pressable hitSlop={8}>
-                  <Micro color={c.accent} style={{ letterSpacing: 1 }}>
-                    {t.viewGallery}
-                  </Micro>
-                </Pressable>
-              </Link>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: SPACE.sm }}
-            >
-              {photos.slice(0, 8).map((p) => (
-                <View
-                  key={p.id}
-                  style={{ width: 168, height: 168, borderRadius: 12, overflow: 'hidden' }}
-                >
-                  <Image source={{ uri: p.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  {p.caption ? (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        left: 8,
-                        bottom: 8,
-                        right: 8,
-                        backgroundColor: 'rgba(0,0,0,0.45)',
-                        borderRadius: 6,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                      }}
-                    >
-                      <Micro color="#ffffff" numberOfLines={1}>
-                        {p.caption}
-                      </Micro>
-                    </View>
-                  ) : null}
-                </View>
-              ))}
-            </ScrollView>
+        {/* ---- Widget Row 1: Next Up + Latest Photos ---- */}
+        {(milestone_next || photos.length > 0) ? (
+          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+            {milestone_next ? (
+              <HomeWidget
+                eyebrow={t.nextUp}
+                primary={milestone_next.name}
+                secondary={milestone_next.expected_on ? `~${monthYear(milestone_next.expected_on) ?? ''}` : undefined}
+                bgColor={c.accent}
+                href="/(homeowner)/updates"
+                accessibilityLabel={`${t.nextUp}: ${milestone_next.name}`}
+              />
+            ) : null}
+            {photos.length > 0 ? (
+              <HomeWidget
+                eyebrow={t.latest}
+                primary={t.latestCount.replace('{n}', String(photos.length))}
+                secondary={t.thisWeek}
+                bgImageUri={photos[0]?.image_url}
+                href="/(homeowner)/photos"
+                accessibilityLabel={`${photos.length} site photos — view gallery`}
+              />
+            ) : null}
           </View>
         ) : null}
 
-        {/* Approved changes summary */}
-        {spend_summary && spend_summary.change_count > 0 ? (
-          <Card>
-            <Micro muted style={{ letterSpacing: 1 }}>
-              {t.approvedChanges}
-            </Micro>
-            <Display color={c.accent} style={{ marginTop: SPACE.xs }}>
-              {formatRupees(spend_summary.total_change_cost_delta)}
-            </Display>
-            <Small muted style={{ marginTop: 2 }}>
-              {t.changeLine.replace('{n}', String(spend_summary.change_count))}
-            </Small>
-            <Button
-              title={t.reviewChanges}
-              variant="secondary"
-              block
-              style={{ marginTop: SPACE.md }}
-              onPress={() => router.push('/(homeowner)/updates')}
+        {/* ---- Widget Row 2: Approved Changes + Ask Builder ---- */}
+        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+          {spend_summary && spend_summary.change_count > 0 ? (
+            <HomeWidget
+              eyebrow={t.approvedChanges}
+              primary={formatRupees(spend_summary.total_change_cost_delta)}
+              secondary={t.changeLine.replace('{n}', String(spend_summary.change_count))}
+              href="/(homeowner)/updates"
+              accessibilityLabel={`${spend_summary.change_count} approved changes totalling ${formatRupees(spend_summary.total_change_cost_delta)}`}
             />
-          </Card>
-        ) : null}
-
-        {/* Ask your builder */}
-        <View
-          style={{
-            backgroundColor: AP.surfaceLow,
-            borderRadius: theme.radii.card,
-            borderWidth: 1,
-            borderColor: c.line,
-            padding: SPACE.lg,
-            alignItems: 'center',
-            gap: SPACE.sm,
-          }}
-        >
-          <View
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: AP.chip,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Body color={AP.onChip} style={{ fontSize: 22 }}>
-              💬
-            </Body>
-          </View>
-          <H2>{t.haveQ}</H2>
-          <Body muted style={{ textAlign: 'center' }}>
-            {t.askBody}
-          </Body>
-          <Button
-            title={t.askBuilder}
-            block
-            style={{ marginTop: SPACE.xs, minHeight: TAP }}
-            onPress={() => router.push('/ask')}
+          ) : null}
+          {/* Ask Builder — always present as anchor */}
+          <HomeWidget
+            eyebrow={t.askShort}
+            primary={t.askBuilder}
+            secondary={t.askVoice}
+            href="/ask"
+            accessibilityLabel={t.askBuilder}
           />
         </View>
       </View>

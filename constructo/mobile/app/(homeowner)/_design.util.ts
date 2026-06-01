@@ -15,6 +15,7 @@ export interface DesignStrings {
   plansTitle: string
   plansEmpty: string
   approveDrawing: string
+  approveDrawingComingSoon: string
   inspirationTitle: string
   inspirationEmpty: string
   addInspiration: string
@@ -44,6 +45,7 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     plansTitle: 'Plans',
     plansEmpty: 'Your approved drawings will appear here.',
     approveDrawing: 'Approve drawing',
+    approveDrawingComingSoon: 'Drawing approval coming soon',
     inspirationTitle: 'Inspiration',
     inspirationEmpty: 'Add photos that capture the look you love.',
     addInspiration: 'Add inspiration',
@@ -71,6 +73,7 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     plansTitle: 'नक्शे',
     plansEmpty: 'आपके स्वीकृत नक्शे यहाँ दिखाई देंगे।',
     approveDrawing: 'नक्शा स्वीकृत करें',
+    approveDrawingComingSoon: 'ड्रॉइंग अप्रूवल जल्द आ रहा है',
     inspirationTitle: 'प्रेरणा',
     inspirationEmpty: 'वे तस्वीरें जोड़ें जो आपकी पसंद का रूप दर्शाती हैं।',
     addInspiration: 'प्रेरणा जोड़ें',
