@@ -23,6 +23,7 @@ from app.config import settings
 from app.contracts.events import EventType, MediaType, RawMessage, SiteEvent
 from app.extraction.classify import classify
 from app.extraction.llm import LLMClient, get_llm_client
+from app.extraction.numeral_repair import repair_numerals
 from app.extraction.ocr import OCRClient
 from app.extraction.ocr import ocr as run_ocr
 from app.extraction.stt import STTClient
@@ -131,7 +132,13 @@ async def _resolve_text(
     """Turn whatever media the message carries into plain text for the pipeline."""
     media_ref = _normalize_media_ref(raw.media_url)
     if raw.media_type is MediaType.voice and media_ref:
-        return await run_transcribe(media_ref, client=stt)
+        # Hindi-first STT (the supervisor speaks Hindi/Hinglish); the lang_hint
+        # is provider-neutral so Azure Whisper today and Sarvam later both honour
+        # it. A mis-heard numeral at a money/quantity moment is a real loss, so a
+        # deterministic numeral-repair pass normalises spoken number words to
+        # digits BEFORE classification/extraction (CA6).
+        transcript = await run_transcribe(media_ref, lang_hint="hi", client=stt)
+        return repair_numerals(transcript)
 
     needs_ocr = raw.media_type is MediaType.document or (
         raw.media_type is MediaType.image and _looks_like_document(raw)

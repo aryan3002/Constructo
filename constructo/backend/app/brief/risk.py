@@ -17,6 +17,8 @@ The detectors lead with exceptions, never invent data, and every risk carries
 """
 from __future__ import annotations
 
+from collections import defaultdict
+from statistics import median
 from uuid import UUID
 
 from app.contracts.events import EventType, SiteEvent
@@ -28,6 +30,16 @@ LOW_CONFIDENCE_THRESHOLD = 0.6
 # A day-over-day attendance drop of this fraction or more is flagged when no
 # explicit per-site baseline is available.
 DAY_OVER_DAY_DROP_FRACTION = 0.3
+
+# Auto-learned baseline: minimum number of distinct prior days with a recorded
+# headcount required before we trust a learned baseline. Below this a brand-new
+# (or barely-used) site ABSTAINS rather than fabricate an expectation (CA3).
+MIN_HISTORY_DAYS_FOR_LEARNED_BASELINE = 3
+
+# A learned baseline only fires labor-shortfall when today's headcount is at or
+# below this fraction of the learned median (i.e. ~10%+ short). Tighter than the
+# explicit-baseline path because a learned number is itself an estimate.
+LEARNED_SHORTFALL_RATIO = 0.9
 
 
 def _headcount(event: SiteEvent) -> int | None:
@@ -58,6 +70,43 @@ def _total_headcount(events: list[SiteEvent]) -> tuple[int | None, list[UUID]]:
     return total, evidence
 
 
+def _daily_totals(events: list[SiteEvent]) -> dict:
+    """Sum numeric attendance headcounts per ``occurred_on`` day.
+
+    Returns ``{date: total}`` for every day that had at least one numeric
+    attendance headcount. Days with no numeric headcount are omitted.
+    """
+    per_day: dict = defaultdict(int)
+    seen: set = set()
+    for ev in events:
+        if ev.event_type is not EventType.attendance:
+            continue
+        hc = _headcount(ev)
+        if hc is None:
+            continue
+        per_day[ev.occurred_on] += hc
+        seen.add(ev.occurred_on)
+    return {day: per_day[day] for day in seen}
+
+
+def _learn_expected_headcount(history_events: list[SiteEvent] | None) -> int | None:
+    """Derive an expected daily headcount from trailing history (deterministic).
+
+    Uses the median of per-day total headcounts across the supplied history. A
+    site with fewer than ``MIN_HISTORY_DAYS_FOR_LEARNED_BASELINE`` distinct
+    recorded days returns ``None`` so a brand-new site abstains honestly rather
+    than inventing a baseline (CA3). Median (not mean) is used so a single
+    unusual day cannot skew the learned expectation.
+    """
+    if not history_events:
+        return None
+    totals = _daily_totals(history_events)
+    positive = [t for t in totals.values() if t > 0]
+    if len(positive) < MIN_HISTORY_DAYS_FOR_LEARNED_BASELINE:
+        return None
+    return int(round(median(positive)))
+
+
 def _vendor(event: SiteEvent) -> str | None:
     vendor = (event.fields or {}).get("vendor")
     if isinstance(vendor, str) and vendor.strip():
@@ -65,11 +114,42 @@ def _vendor(event: SiteEvent) -> str | None:
     return None
 
 
+def _shortfall_risk(
+    site_id: UUID,
+    today_total: int,
+    expected: int,
+    evidence: list[UUID],
+    *,
+    learned: bool,
+) -> dict:
+    ratio = today_total / expected
+    if ratio <= 0.5:
+        severity = "high"
+    elif ratio <= 0.8:
+        severity = "medium"
+    else:
+        severity = "low"
+    short_pct = round((1 - ratio) * 100)
+    qualifier = "~" if learned else ""
+    message = (
+        f"Attendance {today_total} of {qualifier}{expected} "
+        f"— {short_pct}% short"
+    )
+    return {
+        "site_id": site_id,
+        "kind": "labor_shortfall",
+        "severity": severity,
+        "message": message,
+        "evidence_event_ids": evidence,
+    }
+
+
 def _labor_shortfall(
     events: list[SiteEvent],
     site_id: UUID,
     expected_headcount: int | None,
     prev_events: list[SiteEvent] | None,
+    history_events: list[SiteEvent] | None,
 ) -> list[dict]:
     today_total, evidence = _total_headcount(events)
     if today_total is None or not evidence:
@@ -79,26 +159,25 @@ def _labor_shortfall(
     if expected_headcount is not None and expected_headcount > 0:
         if today_total >= expected_headcount:
             return []
-        ratio = today_total / expected_headcount
-        if ratio <= 0.5:
-            severity = "high"
-        elif ratio <= 0.8:
-            severity = "medium"
-        else:
-            severity = "low"
         return [
-            {
-                "site_id": site_id,
-                "kind": "labor_shortfall",
-                "severity": severity,
-                "message": (
-                    f"Attendance {today_total} below expected {expected_headcount}"
-                ),
-                "evidence_event_ids": evidence,
-            }
+            _shortfall_risk(
+                site_id, today_total, expected_headcount, evidence, learned=False
+            )
         ]
 
-    # 2) No baseline: flag only a large day-over-day drop.
+    # 2) No explicit baseline, but enough trailing history to learn one. A
+    #    brand-new site with too little history returns None here and abstains.
+    learned_expected = _learn_expected_headcount(history_events)
+    if learned_expected is not None and learned_expected > 0:
+        if today_total / learned_expected <= LEARNED_SHORTFALL_RATIO:
+            return [
+                _shortfall_risk(
+                    site_id, today_total, learned_expected, evidence, learned=True
+                )
+            ]
+        return []
+
+    # 3) No baseline at all: flag only a large day-over-day drop.
     if prev_events:
         prev_total, _ = _total_headcount(prev_events)
         if prev_total and prev_total > 0:
@@ -197,6 +276,7 @@ def detect_risks(
     site_id: UUID,
     expected_headcount: int | None = None,
     prev_events: list[SiteEvent] | None = None,
+    history_events: list[SiteEvent] | None = None,
 ) -> list[dict]:
     """Detect all risks for one site's events on one day.
 
@@ -204,15 +284,27 @@ def detect_risks(
         events: the site's events for the brief day.
         site_id: the site these events belong to (stamped on every risk).
         expected_headcount: optional per-site attendance baseline. When given,
-            labor shortfall is flagged relative to it; otherwise only a large
-            day-over-day drop (vs ``prev_events``) is flagged.
+            labor shortfall is flagged relative to it.
         prev_events: optional prior-day events used for the day-over-day drop
-            heuristic when no baseline is available.
+            heuristic when no baseline (explicit or learned) is available.
+        history_events: optional trailing-window attendance events (excluding
+            today) from which an expected baseline is auto-learned when
+            ``expected_headcount`` is ``None``. A site with too little history
+            (< ``MIN_HISTORY_DAYS_FOR_LEARNED_BASELINE`` recorded days) abstains
+            rather than fabricate a baseline.
+
+    The labor-shortfall baseline precedence is: explicit ``expected_headcount``
+    → learned-from-``history_events`` → day-over-day drop vs ``prev_events`` →
+    abstain.
 
     Returns a list of risk dicts (see module docstring).
     """
     risks: list[dict] = []
-    risks.extend(_labor_shortfall(events, site_id, expected_headcount, prev_events))
+    risks.extend(
+        _labor_shortfall(
+            events, site_id, expected_headcount, prev_events, history_events
+        )
+    )
     risks.extend(_unverified_invoices(events, site_id))
     risks.extend(_pending_approvals(events, site_id))
     risks.extend(_data_quality(events, site_id))

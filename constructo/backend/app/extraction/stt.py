@@ -132,6 +132,12 @@ def get_stt_client() -> STTClient:
     hit the network).
     """
     provider = os.environ.get("STT_PROVIDER", "openai").lower()
+    # TODO(SarvamSTT): provider seam — founder will supply API; Azure STT is
+    # current. To add Sarvam later, implement the STTClient interface
+    # (``async def transcribe(self, audio_url, lang_hint="hi") -> str``) and add
+    # a ``if provider == "sarvam": return SarvamSTT(...)`` branch here. The
+    # post-ASR numeral-repair pass (app.extraction.numeral_repair) is
+    # provider-agnostic and already runs after whichever provider transcribes.
     if provider == "azure":
         key = os.environ.get("AZURE_OPENAI_API_KEY")
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")

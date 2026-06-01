@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brief.risk import detect_risks, rank_risks
+from app.config import settings
 from app.contracts.events import EventType, SiteEvent
 from app.extraction.llm import LLMClient, get_llm_client
-from app.models import OwnerBrief, Site, SiteEventModel
+from app.models import OwnerBrief, Site, SiteBaseline, SiteEventModel
 
 MAX_TOP_RISKS = 3
 
@@ -101,14 +102,21 @@ async def build_brief(
     site_by_id = {s.id: s for s in sites}
     site_ids = list(site_by_id.keys())
 
+    # Trailing window for auto-learning an expected headcount when a site has no
+    # explicit baseline. We load today's events plus this prior window in one
+    # query and split them below.
+    history_start = brief_date - timedelta(days=settings.brief_baseline_history_days)
+
     events_by_site: dict[UUID, list[SiteEvent]] = defaultdict(list)
+    history_by_site: dict[UUID, list[SiteEvent]] = defaultdict(list)
     if site_ids:
         rows = (
             (
                 await session.execute(
                     select(SiteEventModel).where(
                         SiteEventModel.site_id.in_(site_ids),
-                        SiteEventModel.occurred_on == brief_date,
+                        SiteEventModel.occurred_on >= history_start,
+                        SiteEventModel.occurred_on <= brief_date,
                     )
                 )
             )
@@ -116,13 +124,36 @@ async def build_brief(
             .all()
         )
         for row in rows:
-            events_by_site[row.site_id].append(_to_contract(row))
+            contract = _to_contract(row)
+            if row.occurred_on == brief_date:
+                events_by_site[row.site_id].append(contract)
+            else:
+                history_by_site[row.site_id].append(contract)
+
+    # Explicit per-site baselines (when set, they take precedence over learned).
+    baseline_by_site: dict[UUID, int | None] = {}
+    if site_ids:
+        brows = (
+            (
+                await session.execute(
+                    select(SiteBaseline).where(SiteBaseline.site_id.in_(site_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        baseline_by_site = {b.site_id: b.expected_daily_headcount for b in brows}
 
     site_payloads: list[dict] = []
     for site_id, events in events_by_site.items():
         if not events:
             continue
-        risks = detect_risks(events, site_id=site_id)
+        risks = detect_risks(
+            events,
+            site_id=site_id,
+            expected_headcount=baseline_by_site.get(site_id),
+            history_events=history_by_site.get(site_id),
+        )
         top = [_jsonable_risk(r) for r in rank_risks(risks, MAX_TOP_RISKS)]
         site = site_by_id[site_id]
         site_payloads.append(

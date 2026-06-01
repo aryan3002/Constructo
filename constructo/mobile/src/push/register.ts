@@ -47,6 +47,36 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 /**
+ * Register THIS device's push token against the caller's user row via
+ * `POST /api/v1/me/push-token` (C-F). Works for any authenticated user —
+ * crucially the contractor (a plain users row with no homeowner_member, so the
+ * notif_prefs path below does not apply). Idempotent + best-effort: re-posting
+ * the same token just bumps it server-side; failures are swallowed so a missing
+ * token never blocks the session.
+ *
+ * Fetches the Expo token if not supplied. Returns the token registered (or null).
+ */
+export async function registerDevicePushToken(
+  existingToken?: string | null,
+): Promise<string | null> {
+  try {
+    const token = existingToken ?? (await registerForPushNotificationsAsync())
+    if (!token) return null
+    await request('/api/v1/me/push-token', {
+      method: 'POST',
+      body: JSON.stringify({
+        token,
+        platform:
+          Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+      }),
+    })
+    return token
+  } catch {
+    return null // best-effort
+  }
+}
+
+/**
  * Persist the push token into the homeowner's first membership notif_prefs
  * (no migration needed). Best-effort; ignores failures.
  */

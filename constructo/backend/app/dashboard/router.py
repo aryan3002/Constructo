@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.auth.scoping import visible_site_ids
 from app.common.errors import AppError
+from app.config import settings
 from app.dashboard.aggregate import build_home
 from app.dashboard.schemas import (
     DecisionCreateIn,
@@ -60,6 +61,7 @@ async def get_home(
 ) -> HomeOut:
     brief_date = date or (dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1))
     prev_date = brief_date - dt.timedelta(days=1)
+    history_start = brief_date - dt.timedelta(days=settings.brief_baseline_history_days)
 
     visible = await visible_site_ids(session, user)
     if not visible:
@@ -74,13 +76,17 @@ async def get_home(
 
     events_by_site: dict[UUID, list[SiteEventModel]] = defaultdict(list)
     prev_events_by_site: dict[UUID, list[SiteEventModel]] = defaultdict(list)
+    # Trailing window (excluding the brief day) for auto-learning an expected
+    # headcount when a site has no explicit baseline.
+    history_events_by_site: dict[UUID, list[SiteEventModel]] = defaultdict(list)
     if site_ids:
         rows = (
             (
                 await session.execute(
                     select(SiteEventModel).where(
                         SiteEventModel.site_id.in_(site_ids),
-                        SiteEventModel.occurred_on.in_([brief_date, prev_date]),
+                        SiteEventModel.occurred_on >= history_start,
+                        SiteEventModel.occurred_on <= brief_date,
                     )
                 )
             )
@@ -91,7 +97,9 @@ async def get_home(
             if row.occurred_on == brief_date:
                 events_by_site[row.site_id].append(row)
             else:
-                prev_events_by_site[row.site_id].append(row)
+                history_events_by_site[row.site_id].append(row)
+                if row.occurred_on == prev_date:
+                    prev_events_by_site[row.site_id].append(row)
 
     baselines_by_site: dict[UUID, SiteBaseline] = {}
     if site_ids:
@@ -111,6 +119,7 @@ async def get_home(
         events_by_site,
         baselines_by_site,
         prev_events_by_site=prev_events_by_site,
+        history_events_by_site=history_events_by_site,
     )
     return HomeOut(brief_date=brief_date, **payload)
 

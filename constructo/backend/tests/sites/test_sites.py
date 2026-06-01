@@ -326,3 +326,108 @@ async def test_whatsapp_group_same_id_different_source_ok(client, owner):
     r2 = await client.post("/api/v1/whatsapp-groups", json=p2, headers=auth(owner))
     assert r1.status_code == 201
     assert r2.status_code == 201
+
+
+# ---- site baseline ---------------------------------------------------------
+
+
+async def test_owner_can_set_and_read_site_baseline(client, owner):
+    create = await client.post(
+        "/api/v1/sites", json={"name": "Base Site", "type": "t"}, headers=auth(owner)
+    )
+    site_id = create.json()["id"]
+
+    resp = await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 20, "notes": "G+3 slab crew"},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["site_id"] == site_id
+    assert body["expected_daily_headcount"] == 20
+    assert body["notes"] == "G+3 slab crew"
+
+    read = await client.get(f"/api/v1/sites/{site_id}/baseline", headers=auth(owner))
+    assert read.status_code == 200
+    assert read.json()["expected_daily_headcount"] == 20
+
+
+async def test_set_baseline_upserts_single_row(client, owner):
+    create = await client.post(
+        "/api/v1/sites", json={"name": "S", "type": "t"}, headers=auth(owner)
+    )
+    site_id = create.json()["id"]
+    await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 10},
+        headers=auth(owner),
+    )
+    second = await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 25},
+        headers=auth(owner),
+    )
+    assert second.status_code == 200
+    assert second.json()["expected_daily_headcount"] == 25
+
+
+async def test_pm_can_set_baseline(client, factory):
+    company = await factory.company()
+    pm = await factory.user(company=company, role=UserRole.pm)
+    create = await client.post(
+        "/api/v1/sites", json={"name": "S", "type": "t"}, headers=auth(pm)
+    )
+    site_id = create.json()["id"]
+    resp = await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 15},
+        headers=auth(pm),
+    )
+    assert resp.status_code == 200
+
+
+async def test_supervisor_cannot_set_baseline(client, factory, owner):
+    create = await client.post(
+        "/api/v1/sites", json={"name": "S", "type": "t"}, headers=auth(owner)
+    )
+    site_id = create.json()["id"]
+    sup = await factory.user(role=UserRole.supervisor)
+    resp = await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 15},
+        headers=auth(sup),
+    )
+    assert resp.status_code == 403
+
+
+async def test_set_baseline_rejects_nonpositive(client, owner):
+    create = await client.post(
+        "/api/v1/sites", json={"name": "S", "type": "t"}, headers=auth(owner)
+    )
+    site_id = create.json()["id"]
+    resp = await client.put(
+        f"/api/v1/sites/{site_id}/baseline",
+        json={"expected_daily_headcount": 0},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 422
+
+
+async def test_get_baseline_unset_returns_null(client, owner):
+    create = await client.post(
+        "/api/v1/sites", json={"name": "S", "type": "t"}, headers=auth(owner)
+    )
+    site_id = create.json()["id"]
+    resp = await client.get(f"/api/v1/sites/{site_id}/baseline", headers=auth(owner))
+    assert resp.status_code == 200
+    assert resp.json()["expected_daily_headcount"] is None
+
+
+async def test_set_baseline_on_missing_site_404(client, owner):
+    resp = await client.put(
+        f"/api/v1/sites/{uuid4()}/baseline",
+        json={"expected_daily_headcount": 15},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 404

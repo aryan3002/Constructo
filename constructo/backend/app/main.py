@@ -17,8 +17,8 @@ import app.models  # noqa: F401  register ORM models
 from app.admin.router import router as admin_router
 from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
+from app.auth.router import me_router, users_router
 from app.auth.router import router as auth_router
-from app.auth.router import users_router
 from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.capture.router import router as capture_router
@@ -83,6 +83,7 @@ async def healthz() -> dict[str, str]:
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(me_router)  # C-F /me/push-token
 app.include_router(invites_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)

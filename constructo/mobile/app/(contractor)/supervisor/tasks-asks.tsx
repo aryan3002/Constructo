@@ -3,15 +3,11 @@
  * something: PM/bot questions, confirmations, drawing requests. Each item is
  * one-tap-answerable.
  *
- * We read the generic approvals feed (GET /api/v1/approvals) and surface the
- * PENDING ones with a respond affordance. Responding ENQUEUES to the offline
- * outbox (optimistic, sync-tolerant) rather than blocking on network.
- *
- * ENDPOINT GAP: there is no supervisor-specific asks endpoint
- * (`GET /api/v1/asks?for=me`) yet, nor an app-auth "respond to an ask" write.
- * We approximate "asks pointed at me" by filtering approvals to pending; the
- * respond action enqueues a confirm against the assumed shape below. Swap to
- * the real asks/respond endpoints when they land.
+ * We read the asks-pointed-at-me feed (GET /api/v1/approvals?for=me) and surface
+ * the PENDING ones with a respond affordance. Responding ENQUEUES to the offline
+ * outbox (optimistic, sync-tolerant) rather than blocking on network; the outbox
+ * replays POST /api/v1/approvals/{id}/respond, which routes through the existing
+ * idempotent decision state machine (C3 — this is the real endpoint, not a stub).
  */
 import { useCallback, useState } from 'react'
 import { Alert, Pressable, View } from 'react-native'
@@ -32,7 +28,7 @@ import {
 } from '../../../src/ui'
 import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
-import { supervisorApi, type Approval } from '../../../src/api/supervisor'
+import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../src/api/supervisor'
 import { CalmEmpty, ErrorState, Loading, SPACE, TAP } from './_components'
 
 const STR = {
@@ -67,8 +63,8 @@ export default function TasksAsks() {
   const [responded, setResponded] = useState<Set<string>>(new Set())
 
   const q = useQuery({
-    queryKey: ['supervisor', 'approvals'],
-    queryFn: () => supervisorApi.approvals(),
+    queryKey: ['supervisor', 'asks', 'me'],
+    queryFn: () => supervisorApi.asksForMe(),
   })
 
   const pending: Approval[] = (q.data?.items ?? []).filter(
@@ -78,11 +74,12 @@ export default function TasksAsks() {
   const respond = useCallback(
     async (a: Approval) => {
       respSeq += 1
-      // ASSUMED shape — respond to an ask by confirming it. The outbox replays
-      // this once a real supervisor-respond endpoint exists.
+      // Respond to an ask by confirming it. The outbox replays this against the
+      // real supervisor-respond endpoint, which is idempotent (CA8) so a retry
+      // never double-settles the ledger row.
       await enqueue({
         label: `${str.respond}: ${a.title}`,
-        path: `/api/v1/approvals/${encodeURIComponent(a.id)}/respond`,
+        path: ASK_RESPOND_PATH(a.id),
         method: 'POST',
         body: { action: 'confirm', client_response_id: `resp_${Date.now()}_${respSeq}` },
       })
