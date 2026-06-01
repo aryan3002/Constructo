@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     # Runs every ``request_nudge_sweep_minutes`` when the scheduler is enabled.
     request_nudge_sweep_minutes: int = 30
 
+    # Quiet-period detection (H6 Slice Q). Fields only in H6.1 (no scheduler job
+    # — that lands in H6·3). A site with no homeowner-visible signal for
+    # ``quiet_threshold_days`` is "quiet"; ``quiet_cooldown_days`` spaces repeat
+    # detections; the daily sweep runs at ``quiet_sweep_hour`` (local to
+    # brief_timezone), mirroring ``permit_sweep_hour``.
+    quiet_threshold_days: int = 3
+    quiet_cooldown_days: int = 3
+    quiet_sweep_hour: int = 6
+
     # WhatsApp send transport. One of: "dry_run" | "url" | "cloud_api".
     whatsapp_send_mode: str = "dry_run"
     whatsapp_send_url: str | None = None  # used by "url" mode

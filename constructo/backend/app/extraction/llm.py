@@ -27,6 +27,17 @@ class LLMClient(Protocol):
 
     async def complete(self, system: str, user: str, json_schema: dict) -> dict: ...
 
+    async def complete_vision(
+        self, system: str, user: str, image_url: str | None, json_schema: dict
+    ) -> dict:
+        """Like :meth:`complete` but may *read* a photo at ``image_url``.
+
+        Returns TEXT (e.g. a caption / description) — it never generates an
+        image (README Hard Rule). H6.1 only freezes the method on the Protocol;
+        the real vision provider lands in H6.6.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Fake (tests / no-key fallback)
@@ -188,6 +199,19 @@ class FakeLLMClient:
             "confidence": confidence,
         }
 
+    async def complete_vision(
+        self, system: str, user: str, image_url: str | None, json_schema: dict
+    ) -> dict:
+        """Ignore the image, delegate to :meth:`complete` (network-free).
+
+        Records ``image_url`` in ``self.calls`` so a test can assert the URL was
+        *passed* without any network, then returns the same echo as ``complete``.
+        """
+        self.calls.append(
+            {"system": system, "user": user, "image_url": image_url, "json_schema": json_schema}
+        )
+        return await self.complete(system, user, json_schema)
+
 
 # ---------------------------------------------------------------------------
 # Real provider (OpenAI-compatible chat completions w/ JSON mode)
@@ -221,6 +245,38 @@ class OpenAILLMClient:
             messages=[
                 {"role": "system", "content": f"{system}\n\nReturn JSON matching: {schema_hint}"},
                 {"role": "user", "content": user},
+            ],
+        )
+        content = resp.choices[0].message.content or "{}"
+        return json.loads(content)
+
+    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+        self, system: str, user: str, image_url: str | None, json_schema: dict
+    ) -> dict:
+        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        if not image_url:
+            return await self.complete(system, user, json_schema)
+        try:
+            from openai import AsyncOpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai package not installed; install it or use FakeLLMClient"
+            ) from exc
+
+        client = AsyncOpenAI(api_key=self.api_key)
+        schema_hint = json.dumps(json_schema)
+        resp = await client.chat.completions.create(
+            model=self.model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": f"{system}\n\nReturn JSON matching: {schema_hint}"},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                },
             ],
         )
         content = resp.choices[0].message.content or "{}"
@@ -264,6 +320,42 @@ class AzureOpenAILLMClient:
             messages=[
                 {"role": "system", "content": f"{system}\n\nReturn JSON matching: {schema_hint}"},
                 {"role": "user", "content": user},
+            ],
+        )
+        content = resp.choices[0].message.content or "{}"
+        return json.loads(content)
+
+    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+        self, system: str, user: str, image_url: str | None, json_schema: dict
+    ) -> dict:
+        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        if not image_url:
+            return await self.complete(system, user, json_schema)
+        try:
+            from openai import AsyncAzureOpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai package not installed; install it or use FakeLLMClient"
+            ) from exc
+
+        client = AsyncAzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=self.endpoint,
+            api_version=self.api_version,
+        )
+        schema_hint = json.dumps(json_schema)
+        resp = await client.chat.completions.create(
+            model=self.deployment,  # Azure: this is the deployment name
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": f"{system}\n\nReturn JSON matching: {schema_hint}"},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                },
             ],
         )
         content = resp.choices[0].message.content or "{}"
