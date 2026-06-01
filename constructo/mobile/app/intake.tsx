@@ -1,25 +1,30 @@
 /**
- * Design Intake — a 3-step homeowner onboarding stepper.
+ * Design Intake — a 3-step homeowner onboarding stepper, plus an owners-only
+ * "who designs" sub-step at the end (Step 4).
  *
  *   1. Visual preference grid (pick ≥1 style → fire-and-forget selections)
  *   2. Upload reference photos (ImagePicker → homeowner.references)
  *   3. AI-drafted design profile (PUT empty body → review / adjust / confirm)
+ *   4. Who gets a design say (owners only) → writes via PATCH /members/{id}/manage
  *
  * This is a ROOT route (outside the homeowner tab group), so it self-provides
  * the Daylight theme and self-guards auth.
+ *
+ * Entry: welcome.tsx → household.tsx → this screen (or direct deep-link).
+ * Exit:  finish/skip → /(homeowner)/home (with L3 empty-state copy shown there).
  */
 import { useEffect, useState } from 'react'
-import { Image, Pressable, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, TextInput, View } from 'react-native'
 import { Redirect, useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { homeowner, request } from '../src/api/client'
-import type { DesignProfile } from '../src/api/types'
+import type { DesignProfile, HomeownerMember, HomeownerSubRole, Space } from '../src/api/types'
 import { useAuth } from '../src/auth/AuthContext'
 import { useT } from '../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../src/theme/tokens'
+import { AP, SPACE, TAP } from '../src/theme/tokens'
 import {
   Body,
   BodyStrong,
@@ -28,6 +33,7 @@ import {
   Card,
   Display,
   H2,
+  Micro,
   Screen,
   Small,
 } from '../src/ui'
@@ -42,7 +48,7 @@ import {
 const STR = {
   en: {
     skip: '✕ Skip for now',
-    step: 'Step {n} of 3',
+    step: 'Step {n} of {total}',
     // step 1
     s1Title: 'What feels like home?',
     s1Body: 'Pick the looks you love. There are no wrong answers — choose as many as you like.',
@@ -61,6 +67,15 @@ const STR = {
     adjust: 'Adjust',
     save: 'Save changes',
     voice: '🎙️ Describe it in your words',
+    // step 4 — owners only
+    s4Title: 'Who else gets a design say?',
+    s4Body: 'You can let other household members weigh in on design choices — for the whole home or just one room.',
+    noSay: 'No say',
+    fullSay: 'Full say',
+    oneRoom: 'One room',
+    pickRoom: 'Pick a room…',
+    saveSay: 'Save & finish',
+    savingSay: 'Saving…',
     // nav
     back: 'Back',
     continue: 'Continue',
@@ -69,7 +84,7 @@ const STR = {
   },
   hi: {
     skip: '✕ अभी छोड़ें',
-    step: 'चरण {n} / 3',
+    step: 'चरण {n} / {total}',
     s1Title: 'घर जैसा क्या लगता है?',
     s1Body: 'जो रूप आपको पसंद हों उन्हें चुनें। कोई गलत जवाब नहीं — जितने चाहें चुनें।',
     s2Title: 'अपनी प्रेरणा दिखाएँ',
@@ -85,6 +100,14 @@ const STR = {
     adjust: 'बदलें',
     save: 'बदलाव सहेजें',
     voice: '🎙️ अपने शब्दों में बताएँ',
+    s4Title: 'और किसे डिज़ाइन में राय देनी है?',
+    s4Body: 'आप अन्य सदस्यों को डिज़ाइन विकल्पों में भाग लेने दे सकते हैं — पूरे घर के लिए या सिर्फ़ एक कमरे के लिए।',
+    noSay: 'कोई राय नहीं',
+    fullSay: 'पूरी राय',
+    oneRoom: 'एक कमरा',
+    pickRoom: 'कमरा चुनें…',
+    saveSay: 'सेव करें और पूरा करें',
+    savingSay: 'सेव हो रहा है…',
     back: 'पीछे',
     continue: 'आगे बढ़ें',
     skipStep: 'छोड़ें',
@@ -92,8 +115,19 @@ const STR = {
   },
 } as const
 
-function fmt(tpl: string, n: number): string {
-  return tpl.replace('{n}', String(n))
+function fmt(tpl: string, vars: Record<string, string | number>): string {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`))
+}
+
+type DesignSay = 'none' | 'full' | 'room'
+interface MemberSay {
+  memberId: string
+  say: DesignSay
+  spaceId: string | null
+}
+
+function isOwnerRole(sr: HomeownerSubRole | null): boolean {
+  return sr === 'primary_owner' || sr === 'co_owner'
 }
 
 // ---- screen entry: self-provide theme + guard auth -----------------------
@@ -115,10 +149,14 @@ function IntakeGuard() {
 function IntakeFlow() {
   const router = useRouter()
   const { lang } = useT()
+  const { subRole, siteId, markOnboarded } = useAuth()
   const L: Lang = lang === 'hi' ? 'hi' : 'en'
   const tx = STR[L]
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const isOwner = isOwnerRole(subRole)
+  const totalSteps = isOwner ? 4 : 3
+
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
 
   // step 1 — style selections
   const [selected, setSelected] = useState<string[]>([])
@@ -129,6 +167,44 @@ function IntakeFlow() {
   // step 3 — profile editing
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+
+  // step 4 — design say per non-owner member
+  const [memberSays, setMemberSays] = useState<MemberSay[]>([])
+  const [savingSay, setSavingSay] = useState(false)
+  const [sayError, setSayError] = useState<string | null>(null)
+
+  // Roster for step 4 (owners-only)
+  const rosterQ = useQuery({
+    queryKey: ['household-roster', siteId],
+    queryFn: () => homeowner.roster(siteId ?? undefined),
+    enabled: isOwner && step === 4,
+  })
+
+  // Property spaces for room picker
+  const propertyQ = useQuery({
+    queryKey: ['property', siteId],
+    queryFn: () => homeowner.property(siteId ?? undefined),
+    enabled: isOwner && step === 4,
+  })
+
+  const nonOwnerMembers: HomeownerMember[] = (rosterQ.data ?? []).filter(
+    (m) => m.sub_role !== 'primary_owner' && m.sub_role !== 'co_owner',
+  )
+  const spaces: Space[] = propertyQ.data?.spaces ?? []
+
+  // Initialise memberSays when roster loads
+  useEffect(() => {
+    if (nonOwnerMembers.length > 0 && memberSays.length === 0) {
+      setMemberSays(
+        nonOwnerMembers.map((m) => ({
+          memberId: m.id,
+          say: m.can_design ? (m.design_space_id ? 'room' : 'full') : 'none',
+          spaceId: m.design_space_id ?? null,
+        })),
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosterQ.data])
 
   // PUT empty body → AI-drafted profile
   const profileMut = useMutation<DesignProfile>({
@@ -166,7 +242,6 @@ function IntakeFlow() {
   }
 
   function goToStep2() {
-    // Fire-and-forget a selection per pick — don't block the UI.
     for (const choice of selected) {
       void request('/api/v1/homeowner/design/selections', {
         method: 'POST',
@@ -185,14 +260,14 @@ function IntakeFlow() {
     if (res.canceled) return
     const uris = res.assets.map((a) => a.uri)
     setPhotos((prev) => [...prev, ...uris])
-    // Persist each reference (fire-and-forget; thumbnails are already shown).
     for (const image_url of uris) {
       void homeowner.references({ image_url, source: 'upload' }).catch(() => undefined)
     }
   }
 
-  function finish() {
-    router.replace('/(homeowner)/design')
+  async function finish() {
+    await markOnboarded()
+    router.replace('/(homeowner)/home')
   }
 
   function startAdjust() {
@@ -203,7 +278,49 @@ function IntakeFlow() {
   function saveAdjusted() {
     saveMut.mutate(
       { profile: draft, tone },
-      { onSuccess: () => finish() },
+      {
+        onSuccess: () => {
+          if (isOwner) {
+            setStep(4)
+          } else {
+            void finish()
+          }
+        },
+      },
+    )
+  }
+
+  function onStep3Done() {
+    if (isOwner) {
+      setStep(4)
+    } else {
+      void finish()
+    }
+  }
+
+  async function saveDesignSay() {
+    setSavingSay(true)
+    setSayError(null)
+    try {
+      await Promise.all(
+        memberSays.map((ms) =>
+          homeowner.manageMember(ms.memberId, {
+            can_design: ms.say !== 'none',
+            design_space_id: ms.say === 'room' ? (ms.spaceId ?? null) : null,
+          }),
+        ),
+      )
+      await finish()
+    } catch {
+      setSayError(L === 'hi' ? 'कुछ गड़बड़ हो गई' : 'Something went wrong. Please try again.')
+    } finally {
+      setSavingSay(false)
+    }
+  }
+
+  function updateMemberSay(memberId: string, say: DesignSay, spaceId: string | null = null) {
+    setMemberSays((prev) =>
+      prev.map((ms) => (ms.memberId === memberId ? { ...ms, say, spaceId } : ms)),
     )
   }
 
@@ -214,14 +331,14 @@ function IntakeFlow() {
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
-          onPress={() => router.replace('/(homeowner)/home')}
+          onPress={() => void finish()}
           style={{ minHeight: TAP, justifyContent: 'center' }}
         >
           <Small muted>{tx.skip}</Small>
         </Pressable>
       </View>
 
-      <ProgressBar step={step} label={fmt(tx.step, step)} />
+      <ProgressBar step={step} total={totalSteps} label={fmt(tx.step, { n: step, total: totalSteps })} />
 
       {step === 1 ? (
         <StepStyles
@@ -237,7 +354,7 @@ function IntakeFlow() {
         <StepReferences
           tx={tx}
           photos={photos}
-          onAdd={pickPhotos}
+          onAdd={() => void pickPhotos()}
           onBack={() => setStep(1)}
           onContinue={() => setStep(3)}
         />
@@ -254,10 +371,27 @@ function IntakeFlow() {
           setDraft={setDraft}
           saving={saveMut.isPending}
           onRetry={() => profileMut.mutate()}
-          onFeelsRight={finish}
+          onFeelsRight={onStep3Done}
           onAdjust={startAdjust}
           onSave={saveAdjusted}
           onBack={() => setStep(2)}
+        />
+      ) : null}
+
+      {step === 4 && isOwner ? (
+        <StepDesignSay
+          tx={tx}
+          L={L}
+          members={nonOwnerMembers}
+          spaces={spaces}
+          memberSays={memberSays}
+          loading={rosterQ.isLoading}
+          saving={savingSay}
+          error={sayError}
+          onUpdate={updateMemberSay}
+          onSave={() => void saveDesignSay()}
+          onSkip={() => void finish()}
+          onBack={() => setStep(3)}
         />
       ) : null}
     </Screen>
@@ -265,12 +399,12 @@ function IntakeFlow() {
 }
 
 // ---- progress indicator --------------------------------------------------
-function ProgressBar({ step, label }: { step: number; label: string }) {
+function ProgressBar({ step, total, label }: { step: number; total: number; label: string }) {
   const { theme } = useTheme()
   return (
     <View style={{ gap: SPACE.xs }}>
       <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-        {[1, 2, 3].map((i) => (
+        {Array.from({ length: total }, (_, i) => i + 1).map((i) => (
           <View
             key={i}
             style={{
@@ -388,7 +522,7 @@ function StepReferences({
 
       {photos.length > 0 ? (
         <View style={{ gap: SPACE.sm }}>
-          <Small muted>{fmt(tx.photosCount, photos.length)}</Small>
+          <Small muted>{fmt(tx.photosCount, { n: photos.length })}</Small>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
             {photos.map((uri, i) => (
               <Image
@@ -494,7 +628,7 @@ function StepProfile({
             )}
           </CalmCard>
 
-          {/* voice affordance stub — capture lands later */}
+          {/* voice affordance stub */}
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -516,6 +650,157 @@ function StepProfile({
         </>
       ) : null}
 
+      <Button title={tx.back} variant="ghost" onPress={onBack} />
+    </View>
+  )
+}
+
+// ---- step 4: who gets a design say (owners only) -------------------------
+function StepDesignSay({
+  tx,
+  L,
+  members,
+  spaces,
+  memberSays,
+  loading,
+  saving,
+  error,
+  onUpdate,
+  onSave,
+  onSkip,
+  onBack,
+}: {
+  tx: Tx
+  L: Lang
+  members: HomeownerMember[]
+  spaces: Space[]
+  memberSays: MemberSay[]
+  loading: boolean
+  saving: boolean
+  error: string | null
+  onUpdate: (id: string, say: DesignSay, spaceId?: string | null) => void
+  onSave: () => void
+  onSkip: () => void
+  onBack: () => void
+}) {
+  const { theme } = useTheme()
+
+  if (loading) {
+    return (
+      <View style={{ gap: SPACE.lg, paddingVertical: SPACE.xl, alignItems: 'center' }}>
+        <ActivityIndicator color={theme.colors.accent} />
+      </View>
+    )
+  }
+
+  return (
+    <View style={{ gap: SPACE.lg }}>
+      <View style={{ gap: SPACE.xs }}>
+        <Display>{tx.s4Title}</Display>
+        <Body muted>{tx.s4Body}</Body>
+      </View>
+
+      {members.length === 0 ? (
+        <Card>
+          <Body muted>
+            {L === 'hi'
+              ? 'अभी कोई अन्य सदस्य नहीं हैं। बाद में Settings → Members से जोड़ सकते हैं।'
+              : 'No other members yet. You can add them later from Settings → Members.'}
+          </Body>
+        </Card>
+      ) : (
+        members.map((m) => {
+          const ms = memberSays.find((x) => x.memberId === m.id)
+          const say: DesignSay = ms?.say ?? 'none'
+          const spaceId = ms?.spaceId ?? null
+
+          return (
+            <Card key={m.id} style={{ gap: SPACE.md }}>
+              <BodyStrong>{m.display_name ?? m.phone ?? '—'}</BodyStrong>
+              <Micro muted style={{ letterSpacing: 1 }}>
+                {m.sub_role === 'family'
+                  ? L === 'hi' ? 'परिवार' : 'FAMILY'
+                  : L === 'hi' ? 'सलाहकार' : 'ADVISOR'}
+              </Micro>
+
+              {/* Say chips */}
+              <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                {(['none', 'full', 'room'] as DesignSay[]).map((opt) => {
+                  const label =
+                    opt === 'none' ? tx.noSay : opt === 'full' ? tx.fullSay : tx.oneRoom
+                  const active = say === opt
+                  return (
+                    <Pressable
+                      key={opt}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => onUpdate(m.id, opt, opt === 'room' ? spaceId : null)}
+                      style={{
+                        borderRadius: theme.radii.pill,
+                        borderWidth: 1,
+                        borderColor: active ? theme.colors.accent : theme.colors.line,
+                        backgroundColor: active ? theme.colors.accentWarm : theme.colors.card,
+                        paddingHorizontal: SPACE.md,
+                        paddingVertical: SPACE.xs,
+                        minHeight: TAP,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Small style={{ color: active ? theme.colors.accent : theme.colors.text }}>
+                        {label}
+                      </Small>
+                    </Pressable>
+                  )
+                })}
+              </View>
+
+              {/* Room picker — shown when say === 'room' and spaces exist */}
+              {say === 'room' && spaces.length > 0 ? (
+                <View style={{ gap: SPACE.xs }}>
+                  <Small muted>{tx.pickRoom}</Small>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                    {spaces.map((sp) => {
+                      const active = spaceId === sp.id
+                      return (
+                        <Pressable
+                          key={sp.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          onPress={() => onUpdate(m.id, 'room', sp.id)}
+                          style={{
+                            borderRadius: theme.radii.pill,
+                            borderWidth: 1,
+                            borderColor: active ? theme.colors.accent : theme.colors.line,
+                            backgroundColor: active ? AP.chip : theme.colors.card,
+                            paddingHorizontal: SPACE.md,
+                            paddingVertical: 6,
+                          }}
+                        >
+                          <Small style={{ color: active ? theme.colors.accent : theme.colors.text }}>
+                            {sp.name}
+                          </Small>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                </View>
+              ) : null}
+            </Card>
+          )
+        })
+      )}
+
+      {error ? <Small color={theme.colors.risk}>{error}</Small> : null}
+
+      <Button
+        title={saving ? tx.savingSay : tx.saveSay}
+        block
+        size="lg"
+        loading={saving}
+        onPress={onSave}
+      />
+      <Button title={tx.skipStep} block variant="ghost" onPress={onSkip} />
       <Button title={tx.back} variant="ghost" onPress={onBack} />
     </View>
   )
