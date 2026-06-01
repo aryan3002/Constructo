@@ -114,13 +114,22 @@ class AzureOpenAIEmbeddings:
     """Azure OpenAI embeddings — calls a *deployment name*, not a model name."""
 
     def __init__(
-        self, *, api_key: str, endpoint: str, deployment: str, api_version: str
+        self,
+        *,
+        api_key: str,
+        endpoint: str,
+        deployment: str,
+        api_version: str,
+        dimensions: int | None = None,
     ) -> None:
         self.api_key = api_key
         self.endpoint = endpoint
         self.deployment = deployment
         self.api_version = api_version
         self.model = deployment
+        # When set, ask text-embedding-3-* to output this many dims (e.g. 1536 to
+        # match the pgvector(1536) schema even when the deployment is -large/3072).
+        self.dimensions = dimensions
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         try:
@@ -134,7 +143,10 @@ class AzureOpenAIEmbeddings:
             azure_endpoint=self.endpoint,
             api_version=self.api_version,
         )
-        resp = await client.embeddings.create(model=self.deployment, input=texts)
+        kwargs: dict = {"model": self.deployment, "input": texts}
+        if self.dimensions:
+            kwargs["dimensions"] = self.dimensions
+        resp = await client.embeddings.create(**kwargs)
         return [d.embedding for d in resp.data]
 
 
@@ -158,12 +170,15 @@ def get_embeddings_client() -> EmbeddingsClient:
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
         deployment = os.environ.get("AZURE_OPENAI_EMBED_DEPLOYMENT")
         api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        dims_raw = os.environ.get("AZURE_OPENAI_EMBED_DIMENSIONS")
+        dimensions = int(dims_raw) if dims_raw else None
         if key and endpoint and deployment:
             return AzureOpenAIEmbeddings(
                 api_key=key,
                 endpoint=endpoint,
                 deployment=deployment,
                 api_version=api_version,
+                dimensions=dimensions,
             )
     elif provider == "openai":
         key = os.environ.get("OPENAI_API_KEY")
