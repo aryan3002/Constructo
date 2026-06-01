@@ -167,33 +167,62 @@ async def draft_quiet_reason(
     return _first_str(result, "text", "summary") or phase.strip()
 
 
-async def generate_design_profile(
+async def generate_design_profile_v2(
     llm: LLMClient,
     *,
-    selection_pairs: list[tuple[str, str]],
-    reference_tags: list[str],
+    fingerprint: dict,
     language: str = DEFAULT_LANGUAGE,
 ) -> dict:
-    """Draft the homeowner's design profile (a text profile + tone) from intake.
+    """Draft the household's design profile from a deterministic fingerprint.
 
-    Returns a jsonb-ready dict. The homeowner confirms / adjusts it ("this feels
-    right / adjust"). Tolerant of the fake provider's default shape.
+    The fingerprint (from :mod:`app.homeowner.design_fingerprint`) is the trust
+    firewall: the LLM only *rephrases* the authoritative facts it carries — it can
+    never exceed them, and it NEVER resolves a conflict ([[05]] §5.5-5.6, Hard
+    Rule 5). Returns a jsonb-ready DRAFT the primary/owner confirms:
+    ``{profile, tone, per_room, contributors, conflicts, source}``.
 
-    ``language`` is frozen in H6.1 (accepted and ignored); H6·5 threads it into
-    the prompt.
+    ``selection_pairs`` are the BLENDED, non-conflicted authoritative choices;
+    conflicted ``(item, room)`` pairs are deliberately excluded (they live in
+    ``conflicts`` until a human picks one), so the prose never asserts a choice
+    the household has not actually agreed on.
     """
+    selection_pairs = [
+        (str(p[0]), str(p[1]))
+        for p in fingerprint.get("selection_pairs", [])
+        if isinstance(p, (list, tuple)) and len(p) == 2
+    ]
+    reference_tags = [t for t in fingerprint.get("reference_tags", []) if isinstance(t, str)]
+    conflicts = fingerprint.get("conflicts", []) or []
+
     picks = "; ".join(f"{item}={choice}" for item, choice in selection_pairs) or "(none yet)"
     refs = ", ".join(t for t in reference_tags if t) or "(no references)"
+    # Name open questions neutrally; the model must NOT pick a side.
+    open_qs = (
+        "; ".join(
+            f"{c.get('item', 'a choice')} in {c.get('room') or 'the home'}"
+            for c in conflicts
+        )
+        or "(none)"
+    )
+
+    conflict_rule = (
+        " When 'Open questions' lists an item the household has not agreed on, "
+        "state it in ONE warm sentence as a shared decision still to make and do "
+        "NOT pick a side."
+        if conflicts
+        else ""
+    )
     system = (
-        "You are an interior design assistant. From the homeowner's selections and "
-        "reference tags, write a short design profile: a one-paragraph 'profile' "
-        "describing their taste, and a 'tone' of 3-5 keywords. Do not invent "
-        "specific products they did not choose."
+        "You are an interior design assistant for a household. From the agreed "
+        "selections and reference tags ONLY, write a short design profile: a "
+        "one-paragraph 'profile' describing their shared taste, and a 'tone' of "
+        "3-5 keywords. Do not invent specific products they did not choose."
+        + conflict_rule
         + _language_directive(language)
     )
     result = await llm.complete(
         system,
-        f"Selections: {picks}\nReference tags: {refs}",
+        f"Agreed selections: {picks}\nReference tags: {refs}\nOpen questions: {open_qs}",
         {
             "type": "object",
             "properties": {
@@ -208,7 +237,38 @@ async def generate_design_profile(
     tone = result.get("tone")
     if not isinstance(tone, list):
         tone = reference_tags[:5]
-    return {"profile": text, "tone": tone, "source": {"selections": picks, "references": refs}}
+    return {
+        "profile": text,
+        "tone": tone,
+        "per_room": fingerprint.get("per_room", {}),
+        "contributors": fingerprint.get("contributors", []),
+        "conflicts": conflicts,
+        "source": {"selections": picks, "references": refs},
+    }
+
+
+async def generate_design_profile(
+    llm: LLMClient,
+    *,
+    selection_pairs: list[tuple[str, str]],
+    reference_tags: list[str],
+    language: str = DEFAULT_LANGUAGE,
+) -> dict:
+    """Backward-compatible wrapper around :func:`generate_design_profile_v2`.
+
+    Builds a minimal single-member fingerprint (no attribution, no conflicts) from
+    the raw pairs/tags so existing callers keep compiling. New multi-member
+    callers should build a real fingerprint via
+    :mod:`app.homeowner.design_fingerprint` and call ``generate_design_profile_v2``.
+    """
+    fingerprint = {
+        "selection_pairs": [list(p) for p in selection_pairs],
+        "reference_tags": list(reference_tags),
+        "per_room": {},
+        "contributors": [],
+        "conflicts": [],
+    }
+    return await generate_design_profile_v2(llm, fingerprint=fingerprint, language=language)
 
 
 async def consistency_check(

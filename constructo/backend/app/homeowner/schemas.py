@@ -295,7 +295,45 @@ class ReferenceOut(BaseModel):
     image_url: str
     room_tag: str | None
     source: ReferenceSource
+    # Who added this reference (proposal C — attribution); null for legacy rows.
+    actor_member_id: UUID | None = None
     created_at: datetime
+
+
+class DesignConflictOption(BaseModel):
+    """One member's diverging choice inside a "decide together" conflict."""
+
+    choice: str
+    member_id: UUID | None = None
+    sub_role: str
+    by: str
+
+
+class DesignConflictOut(BaseModel):
+    """A calm conflict card: two authoritative members diverge on (item, room).
+
+    Resolution is a HUMAN decision — the AI never picks a winner (Hard Rule 5).
+    ``room`` is the space id the divergence is scoped to, or null (whole-house).
+    """
+
+    item: str
+    room: UUID | None = None
+    options: list[DesignConflictOption]
+    resolve_roles: list[str]
+
+
+class DesignConflictResolveIn(BaseModel):
+    """A human picks one option to settle a conflict (no AI adjudication).
+
+    The chosen ``(item, room, choice)`` becomes an authoritative selection by the
+    resolver; the diverging selections are left intact (audit) but the resolved
+    choice now wins the (item, room) group on the next draft.
+    """
+
+    item: str = Field(min_length=1)
+    choice: str = Field(min_length=1)
+    space_id: UUID | None = None
+    site_id: UUID | None = None
 
 
 class SelectionCreateIn(BaseModel):
