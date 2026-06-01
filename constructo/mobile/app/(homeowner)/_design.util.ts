@@ -2,7 +2,12 @@
  * Local helpers for the Design Documents screen. Pure functions only — no React,
  * no side effects — so they're trivially testable and keep design.tsx lean.
  */
-import type { DesignProfile, DesignSelection } from '../../src/api/types'
+import type {
+  DesignConflict,
+  DesignContributor,
+  DesignProfile,
+  DesignSelection,
+} from '../../src/api/types'
 import type { Status } from '../../src/theme/tokens'
 
 /** Localised string bundle shape used by the Design screen. */
@@ -32,6 +37,13 @@ export interface DesignStrings {
   permissionDenied: string
   added: string
   adviceNote: string
+  contributorsTitle: string
+  conflictsTitle: string
+  conflictsBody: string
+  decideTogether: string
+  conflictResolved: string
+  authoritativeTag: string
+  advisoryTag: string
 }
 
 export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
@@ -62,6 +74,13 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     permissionDenied: 'Photo access is needed to add inspiration.',
     added: 'Added to your inspiration board.',
     adviceNote: 'This is friendly advice — it never blocks your choice.',
+    contributorsTitle: 'Who shaped this',
+    conflictsTitle: 'Decide together',
+    conflictsBody: 'A couple of choices differ. Pick one together when you’re ready.',
+    decideTogether: 'Pick one',
+    conflictResolved: 'Choice saved for your home.',
+    authoritativeTag: 'has a say',
+    advisoryTag: 'suggesting',
   },
   hi: {
     title: 'डिज़ाइन',
@@ -90,6 +109,13 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     permissionDenied: 'प्रेरणा जोड़ने के लिए फ़ोटो की अनुमति आवश्यक है।',
     added: 'आपके प्रेरणा बोर्ड में जोड़ा गया।',
     adviceNote: 'यह मित्रवत सलाह है — यह आपके चयन को कभी नहीं रोकती।',
+    contributorsTitle: 'किसने आकार दिया',
+    conflictsTitle: 'मिलकर तय करें',
+    conflictsBody: 'कुछ चुनाव अलग हैं। जब तैयार हों, तो मिलकर एक चुनें।',
+    decideTogether: 'एक चुनें',
+    conflictResolved: 'आपके घर के लिए चुनाव सहेजा गया।',
+    authoritativeTag: 'राय है',
+    advisoryTag: 'सुझाव दे रहे',
   },
 }
 
@@ -100,12 +126,43 @@ export function profileText(profile: DesignProfile | undefined): string {
   return typeof text === 'string' ? text.trim() : ''
 }
 
-/** Pull the tone keyword list out of the loose `profile` jsonb. */
+/**
+ * Pull the tone keyword list out of the loose `profile` jsonb.
+ *
+ * Reads the tone LIST (the v2 shape), and stays tolerant of a legacy single
+ * tone STRING by wrapping it — closes the known drift where a string tone
+ * rendered nothing.
+ */
 export function profileTone(profile: DesignProfile | undefined): string[] {
   const inner = profile?.profile as { tone?: unknown } | undefined
   const tone = inner?.tone
-  if (!Array.isArray(tone)) return []
-  return tone.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+  const list = Array.isArray(tone) ? tone : typeof tone === 'string' ? [tone] : []
+  return list.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+}
+
+/** Pull the household contributors roster out of the loose `profile` jsonb. */
+export function profileContributors(profile: DesignProfile | undefined): DesignContributor[] {
+  const inner = profile?.profile as { contributors?: unknown } | undefined
+  const list = inner?.contributors
+  if (!Array.isArray(list)) return []
+  return list.filter(
+    (c): c is DesignContributor =>
+      typeof c === 'object' && c !== null && typeof (c as DesignContributor).name === 'string',
+  )
+}
+
+/** Pull the "decide together" conflict cards out of the loose `profile` jsonb. */
+export function profileConflicts(profile: DesignProfile | undefined): DesignConflict[] {
+  const inner = profile?.profile as { conflicts?: unknown } | undefined
+  const list = inner?.conflicts
+  if (!Array.isArray(list)) return []
+  return list.filter(
+    (c): c is DesignConflict =>
+      typeof c === 'object' &&
+      c !== null &&
+      typeof (c as DesignConflict).item === 'string' &&
+      Array.isArray((c as DesignConflict).options),
+  )
 }
 
 /** True when the profile carries no usable content yet. */

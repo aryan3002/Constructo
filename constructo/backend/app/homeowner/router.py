@@ -32,12 +32,18 @@ from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.homeowner.ai import consistency_check, generate_design_profile, get_llm
+from app.homeowner.ai import consistency_check, generate_design_profile_v2, get_llm
 from app.homeowner.authority import (
     can_approve,
     can_design,
     can_manage_members,
     capabilities_for,
+)
+from app.homeowner.design_fingerprint import (
+    MemberInfo,
+    ReferenceInput,
+    SelectionInput,
+    build_fingerprint,
 )
 from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
 from app.homeowner.render import get_translation, render_text
@@ -49,6 +55,8 @@ from app.homeowner.schemas import (
     ConsistencyCheckIn,
     ConsistencyCheckOut,
     DecisionRespondIn,
+    DesignConflictOut,
+    DesignConflictResolveIn,
     DesignProfileOut,
     DesignProfilePutIn,
     HomeOut,
@@ -1115,6 +1123,88 @@ async def _gate_design_write(
             )
 
 
+async def _resolve_actor_member_id(
+    session: AsyncSession, user: User, site_id: UUID, target_space_id: UUID | None
+) -> UUID | None:
+    """The caller's member row id to stamp on a design write (attribution).
+
+    Prefers a row whose ``design_space_id`` matches ``target_space_id`` (so a
+    room-scoped grant is attributed to the right scope), else the highest-ranked
+    active row. Returns None only if the caller holds no active membership (the
+    write gate has already rejected that case).
+    """
+    rows = (
+        await session.execute(
+            select(HomeownerMember).where(
+                HomeownerMember.user_id == user.id,
+                HomeownerMember.site_id == site_id,
+                HomeownerMember.status == MemberStatus.active,
+            )
+        )
+    ).scalars().all()
+    if not rows:
+        return None
+    if target_space_id is not None:
+        scoped = next((r for r in rows if r.design_space_id == target_space_id), None)
+        if scoped is not None:
+            return scoped.id
+    return max(rows, key=lambda r: _MANAGE_RANK.get(r.sub_role, 0)).id
+
+
+async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
+    """Assemble the deterministic multi-member fingerprint for a site (the reducer).
+
+    Reads every selection/reference + the member roster, hands the attributed
+    rows to the pure :func:`build_fingerprint`, and returns its jsonb dict. No LLM
+    here — this is the trust firewall.
+    """
+    selections = (
+        await session.execute(
+            select(DesignSelection)
+            .where(DesignSelection.site_id == site_id)
+            .order_by(DesignSelection.created_at, DesignSelection.id)
+        )
+    ).scalars().all()
+    refs = (
+        await session.execute(
+            select(DesignReference)
+            .where(DesignReference.site_id == site_id)
+            .order_by(DesignReference.created_at, DesignReference.id)
+        )
+    ).scalars().all()
+    member_rows = (
+        await session.execute(
+            select(HomeownerMember).where(HomeownerMember.site_id == site_id)
+        )
+    ).scalars().all()
+    members = {
+        m.id: MemberInfo(
+            id=m.id,
+            sub_role=m.sub_role,
+            can_design=m.can_design,
+            design_space_id=m.design_space_id,
+            display_name=m.display_name,
+        )
+        for m in member_rows
+    }
+    fingerprint = build_fingerprint(
+        selections=[
+            SelectionInput(
+                item=s.item, choice=s.choice,
+                actor_member_id=s.actor_member_id, space_id=s.space_id,
+                status=s.status,
+            )
+            for s in selections
+        ],
+        references=[
+            ReferenceInput(actor_member_id=r.actor_member_id, room_tag=r.room_tag)
+            for r in refs
+        ],
+        members=members,
+    )
+    return fingerprint.as_dict()
+
+
 @router.get("/design/profile", response_model=DesignProfileOut)
 async def get_design_profile(
     user: User = Depends(require_homeowner),
@@ -1152,16 +1242,12 @@ async def put_design_profile(
     if body.profile is not None:
         profile_data = body.profile
     else:
-        selections = (
-            await session.execute(select(DesignSelection).where(DesignSelection.site_id == sid))
-        ).scalars().all()
-        refs = (
-            await session.execute(select(DesignReference).where(DesignReference.site_id == sid))
-        ).scalars().all()
-        profile_data = await generate_design_profile(
-            llm,
-            selection_pairs=[(s.item, s.choice) for s in selections],
-            reference_tags=[r.room_tag for r in refs if r.room_tag],
+        # Reduce all members' attributed inputs to one deterministic fingerprint
+        # (the trust firewall), then let the LLM rephrase ONLY those facts into a
+        # DRAFT the primary confirms — conflicts are surfaced, never resolved.
+        fingerprint = await _build_site_fingerprint(session, sid)
+        profile_data = await generate_design_profile_v2(
+            llm, fingerprint=fingerprint, language=user.language or "en"
         )
 
     row = (
@@ -1189,16 +1275,44 @@ async def add_reference(
     sid = await resolve_site(session, user, site_id=body.site_id)
     # References are not space-scoped; gate on the whole-house say (no room arg).
     await _gate_design_write(session, user, sid, None)
+    actor_member_id = await _resolve_actor_member_id(session, user, sid, None)
     ref = DesignReference(
-        site_id=sid, image_url=body.image_url, room_tag=body.room_tag, source=body.source
+        site_id=sid, image_url=body.image_url, room_tag=body.room_tag, source=body.source,
+        actor_member_id=actor_member_id,
     )
     session.add(ref)
     await session.commit()
     await session.refresh(ref)
+    return _reference_out(ref)
+
+
+def _reference_out(ref: DesignReference) -> ReferenceOut:
     return ReferenceOut(
         id=ref.id, site_id=ref.site_id, image_url=ref.image_url, room_tag=ref.room_tag,
-        source=ref.source, created_at=ref.created_at,
+        source=ref.source, actor_member_id=ref.actor_member_id, created_at=ref.created_at,
     )
+
+
+@router.get("/design/references", response_model=list[ReferenceOut])
+async def list_references(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> list[ReferenceOut]:
+    """Inspiration references for a site (attributed, oldest-first).
+
+    Mirrors :func:`list_selections` so attributed refs survive a reload — the
+    data-loss prerequisite (the mobile board was previously local-only state).
+    """
+    sid = await resolve_site(session, user, site_id)
+    rows = (
+        await session.execute(
+            select(DesignReference)
+            .where(DesignReference.site_id == sid)
+            .order_by(DesignReference.created_at)
+        )
+    ).scalars().all()
+    return [_reference_out(r) for r in rows]
 
 
 @router.get("/design/selections", response_model=list[SelectionOut])
@@ -1232,9 +1346,10 @@ async def add_selection(
 ) -> SelectionOut:
     sid = await resolve_site(session, user, site_id=body.site_id)
     await _gate_design_write(session, user, sid, body.space_id)
+    actor_member_id = await _resolve_actor_member_id(session, user, sid, body.space_id)
     sel = DesignSelection(
         site_id=sid, space_id=body.space_id, item=body.item, choice=body.choice,
-        status=body.status,
+        status=body.status, actor_member_id=actor_member_id,
     )
     session.add(sel)
     await session.commit()
@@ -1264,6 +1379,51 @@ async def design_consistency_check(
         llm, profile_text=profile_text, item=body.item, choice=body.choice
     )
     return ConsistencyCheckOut(fits=result["fits"], feedback=result["feedback"])
+
+
+@router.get("/design/conflicts", response_model=list[DesignConflictOut])
+async def list_design_conflicts(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> list[DesignConflictOut]:
+    """The household's open "decide together" cards (same item/room, diverging
+    authoritative choices). Surfaced for a HUMAN to resolve — never AI-picked.
+    """
+    sid = await resolve_site(session, user, site_id)
+    fingerprint = await _build_site_fingerprint(session, sid)
+    return [DesignConflictOut(**c) for c in fingerprint.get("conflicts", [])]
+
+
+@router.post("/design/conflicts/resolve", response_model=SelectionOut, status_code=201)
+async def resolve_design_conflict(
+    body: DesignConflictResolveIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> SelectionOut:
+    """A human picks one choice to settle a conflict — no AI adjudication.
+
+    Records the resolver's pick as a fresh authoritative selection (the resolver
+    must hold a design say in the target room); the diverging rows are left intact
+    for audit. The next profile draft groups by (item, room) and the resolved
+    choice — being the latest authoritative pick — wins.
+    """
+    sid = await resolve_site(session, user, site_id=body.site_id)
+    # Only an authoritative voice (owner/co-owner, or a granted member in scope)
+    # may resolve — mirrors the design write gate; family/advisor get DEGRADE copy.
+    await _gate_design_write(session, user, sid, body.space_id)
+    actor_member_id = await _resolve_actor_member_id(session, user, sid, body.space_id)
+    sel = DesignSelection(
+        site_id=sid, space_id=body.space_id, item=body.item, choice=body.choice,
+        status="selected", actor_member_id=actor_member_id,
+    )
+    session.add(sel)
+    await session.commit()
+    await session.refresh(sel)
+    return SelectionOut(
+        id=sel.id, site_id=sel.site_id, space_id=sel.space_id, item=sel.item, choice=sel.choice,
+        status=sel.status, created_at=sel.created_at,
+    )
 
 
 # ---- requests --------------------------------------------------------------

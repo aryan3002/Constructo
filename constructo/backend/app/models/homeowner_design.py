@@ -58,6 +58,14 @@ class DesignReference(Base):
         nullable=False,
         server_default=ReferenceSource.upload.value,
     )
+    # Who added this reference (proposal C — attribution). NULL = unattributed
+    # (legacy rows, or a write before member resolution); SET NULL on member
+    # removal so authored inspiration survives a member leaving the household.
+    actor_member_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("homeowner_members.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -80,6 +88,14 @@ class DesignSelection(Base):
     # Open-ended lifecycle (proposed / selected / approved); kept a string so the
     # homeowner flow can evolve without a migration.
     status: Mapped[str] = mapped_column(String, nullable=False, server_default="proposed")
+    # Who made this selection (proposal C — attribution). NULL = unattributed
+    # (legacy rows treated as the household/primary by the reducer); SET NULL on
+    # member removal so authored selections survive a member leaving.
+    actor_member_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("homeowner_members.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

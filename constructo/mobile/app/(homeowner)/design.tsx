@@ -12,7 +12,7 @@ import { Link } from 'expo-router'
 import { homeowner, request } from '../../src/api/client'
 import type {
   ConsistencyCheck,
-  DesignReference,
+  DesignConflict,
   DesignSelection,
 } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
@@ -34,6 +34,8 @@ import {
 import {
   DESIGN_STR,
   isProfileEmpty,
+  profileConflicts,
+  profileContributors,
   profileText,
   profileTone,
   selectionStatus,
@@ -55,8 +57,13 @@ export default function Design() {
     queryFn: () => homeowner.selections(),
   })
 
-  // Inspiration board — local-only since there is no GET for references yet.
-  const [refs, setRefs] = useState<DesignReference[]>([])
+  // Inspiration board — now backed by GET /design/references so attributed refs
+  // survive a reload (proposal C; previously local-only state that vanished).
+  const referencesQ = useQuery({
+    queryKey: ['design', 'references'],
+    queryFn: () => homeowner.designReferences(),
+  })
+  const refs = referencesQ.data ?? []
 
   // Per-selection consistency advice, keyed by selection id.
   const [advice, setAdvice] = useState<Record<string, ConsistencyCheck>>({})
@@ -68,9 +75,26 @@ export default function Design() {
 
   const addRefMut = useMutation({
     mutationFn: (image_url: string) => homeowner.references({ image_url, source: 'upload' }),
-    onSuccess: (ref) => {
-      setRefs((prev) => [ref, ...prev])
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'references'] })
       Alert.alert(STR.inspirationTitle, STR.added)
+    },
+    onError: (err: Error) => Alert.alert(STR.errorTitle, err.message),
+  })
+
+  // A human picks one option to settle a "decide together" card — the app NEVER
+  // auto-resolves a conflict (Hard Rule 5); this just records the human's pick.
+  const resolveMut = useMutation({
+    mutationFn: (vars: { conflict: DesignConflict; choice: string }) =>
+      homeowner.resolveDesignConflict({
+        item: vars.conflict.item,
+        choice: vars.choice,
+        space_id: vars.conflict.room ?? undefined,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'profile'] })
+      void qc.invalidateQueries({ queryKey: ['design', 'selections'] })
+      Alert.alert(STR.conflictsTitle, STR.conflictResolved)
     },
     onError: (err: Error) => Alert.alert(STR.errorTitle, err.message),
   })
@@ -129,6 +153,8 @@ export default function Design() {
   }
 
   const profile = profileQ.data
+  const contributors = profileContributors(profile)
+  const conflicts = profileConflicts(profile)
 
   return (
     <Screen>
@@ -187,6 +213,84 @@ export default function Design() {
           </View>
         </CalmCard>
       )}
+
+      {/* 1b. Contributors — who shaped this household profile ---------------- */}
+      {contributors.length > 0 ? (
+        <Card>
+          <View style={{ gap: SPACE.sm }}>
+            <H2>{STR.contributorsTitle}</H2>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+              {contributors.map((person) => (
+                <View
+                  key={person.member_id ?? person.name}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.xs,
+                    borderRadius: theme.radii.pill,
+                    borderWidth: 1,
+                    borderColor: c.line,
+                    backgroundColor: c.paper,
+                    paddingHorizontal: SPACE.md,
+                    paddingVertical: SPACE.xs,
+                  }}
+                >
+                  <BodyStrong>{person.name}</BodyStrong>
+                  <Micro muted>
+                    {person.authoritative ? STR.authoritativeTag : STR.advisoryTag}
+                  </Micro>
+                </View>
+              ))}
+            </View>
+          </View>
+        </Card>
+      ) : null}
+
+      {/* 1c. "Decide together" — diverging authoritative choices ------------- */}
+      {/* Calm, never a fight: the app surfaces both picks and a HUMAN chooses;
+          the AI never adjudicates a winner (Hard Rule 5). */}
+      {conflicts.length > 0 ? (
+        <CalmCard
+          status="warn"
+          eyebrow={STR.conflictsTitle.toUpperCase()}
+          title={STR.conflictsTitle}
+          body={STR.conflictsBody}
+        >
+          <View style={{ gap: SPACE.md }}>
+            {conflicts.map((conflict, ci) => (
+              <View
+                key={`${conflict.item}-${conflict.room ?? 'house'}-${ci}`}
+                style={{ gap: SPACE.sm }}
+              >
+                <BodyStrong>{conflict.item}</BodyStrong>
+                {conflict.options.map((opt, oi) => (
+                  <View
+                    key={`${opt.choice}-${oi}`}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: SPACE.sm,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Body>{opt.choice}</Body>
+                      <Small muted>{opt.by}</Small>
+                    </View>
+                    <Button
+                      title={STR.decideTogether}
+                      variant="secondary"
+                      size="md"
+                      loading={resolveMut.isPending}
+                      onPress={() => resolveMut.mutate({ conflict, choice: opt.choice })}
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </CalmCard>
+      ) : null}
 
       {/* 2. Plans & drawings ------------------------------------------------ */}
       <Card>
