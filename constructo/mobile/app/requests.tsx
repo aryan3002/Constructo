@@ -31,7 +31,7 @@ import { useAuth } from '../src/auth/AuthContext'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../src/theme/tokens'
 import { homeowner, ApiError } from '../src/api/client'
-import type { HomeownerRequest, HomeownerDecision } from '../src/api/types'
+import type { Capabilities, HomeownerRequest, HomeownerDecision } from '../src/api/types'
 import {
   Body,
   BodyStrong,
@@ -89,6 +89,7 @@ interface Strings {
   loadError: string
   retry: string
   raised: string
+  onlyOwnerApprove: string
 }
 
 const STR: Record<Lang, Strings> = {
@@ -123,6 +124,7 @@ const STR: Record<Lang, Strings> = {
     loadError: 'Could not load. Please retry.',
     retry: 'Retry',
     raised: 'Raised',
+    onlyOwnerApprove: 'Only a property owner can approve this. You can leave a comment.',
   },
   hi: {
     title: 'अनुरोध और निर्णय',
@@ -155,6 +157,7 @@ const STR: Record<Lang, Strings> = {
     loadError: 'लोड नहीं हो सका। कृपया पुनः प्रयास करें।',
     retry: 'पुनः प्रयास',
     raised: 'दर्ज किया',
+    onlyOwnerApprove: 'केवल संपत्ति के मालिक इसे मंज़ूर कर सकते हैं। आप एक टिप्पणी छोड़ सकते हैं।',
   },
 } as const
 
@@ -453,14 +456,22 @@ function RequestsTab({ t, lang }: { t: Strings; lang: Lang }) {
               variant="secondary"
               onPress={pickPhoto}
             />
-            {/* VOICE stub — no audio capture endpoint yet. */}
-            <Button
-              title={`🎤 ${t.voice}`}
-              variant="secondary"
-              onPress={() => {
-                // TODO: wire up voice capture once an audio attachment flow exists.
+            {/* Voice note — coming soon; non-interactive chip (no false affordance). */}
+            <View
+              style={{
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm,
+                borderRadius: 9999,
+                borderWidth: 1,
+                borderColor: theme.colors.line,
+                opacity: 0.5,
+                justifyContent: 'center',
               }}
-            />
+            >
+              <Small muted>
+                {`🎤 ${lang === 'hi' ? 'आवाज़ नोट — जल्द आ रहा है' : 'Voice note — coming soon'}`}
+              </Small>
+            </View>
           </View>
           {photoUri ? (
             <Image
@@ -542,6 +553,15 @@ function DecisionsTab({ t, lang }: { t: Strings; lang: Lang }) {
     queryFn: () => homeowner.decisions(),
   })
 
+  // Capabilities query — drives authority-aware Approve UX in DecisionCard.
+  // Fallback: can_approve=false, can_comment=true so the screen never crashes.
+  const capQ = useQuery<Capabilities>({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capQ.data?.can_approve ?? false
+  const canComment = capQ.data?.can_comment ?? true
+
   if (list.isLoading) return <ActivityIndicator color={theme.colors.accent} />
   if (list.isError)
     return <ErrorRetry message={t.loadError} retryLabel={t.retry} onRetry={() => list.refetch()} />
@@ -555,7 +575,7 @@ function DecisionsTab({ t, lang }: { t: Strings; lang: Lang }) {
   return (
     <View style={{ gap: SPACE.md }}>
       {pending.map((d) => (
-        <DecisionCard key={d.id} decision={d} t={t} />
+        <DecisionCard key={d.id} decision={d} t={t} canApprove={canApprove} canComment={canComment} />
       ))}
     </View>
   )
@@ -566,9 +586,13 @@ type DecisionAction = 'comment' | 'request_change'
 function DecisionCard({
   decision,
   t,
+  canApprove,
+  canComment,
 }: {
   decision: HomeownerDecision
   t: Strings
+  canApprove: boolean
+  canComment: boolean
 }) {
   const { theme } = useTheme()
   const qc = useQueryClient()
@@ -631,32 +655,53 @@ function DecisionCard({
       ) : (
         <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
           {error ? <Small color="#e5484d">{error}</Small> : null}
-          <Button
-            title={t.approve}
-            onPress={() => respond.mutate({ action: 'approve' })}
-            loading={respond.isPending}
-            block
-          />
-          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-            <Button
-              title={t.comment}
-              variant="secondary"
-              disabled={respond.isPending}
-              onPress={() => {
-                setError(null)
-                setNoteFor('comment')
-              }}
-            />
-            <Button
-              title={t.requestChange}
-              variant="secondary"
-              disabled={respond.isPending}
-              onPress={() => {
-                setError(null)
-                setNoteFor('request_change')
-              }}
-            />
-          </View>
+          {canApprove ? (
+            // Owner path: show Approve button + secondary actions.
+            <>
+              <Button
+                title={t.approve}
+                onPress={() => respond.mutate({ action: 'approve' })}
+                loading={respond.isPending}
+                block
+              />
+              <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                <Button
+                  title={t.comment}
+                  variant="secondary"
+                  disabled={respond.isPending}
+                  onPress={() => {
+                    setError(null)
+                    setNoteFor('comment')
+                  }}
+                />
+                <Button
+                  title={t.requestChange}
+                  variant="secondary"
+                  disabled={respond.isPending}
+                  onPress={() => {
+                    setError(null)
+                    setNoteFor('request_change')
+                  }}
+                />
+              </View>
+            </>
+          ) : (
+            // Non-owner path (family/advisor): advise, never gatekeep.
+            <View style={{ gap: SPACE.sm }}>
+              <Small muted>{t.onlyOwnerApprove}</Small>
+              {canComment ? (
+                <Button
+                  title={t.comment}
+                  variant="secondary"
+                  disabled={respond.isPending}
+                  onPress={() => {
+                    setError(null)
+                    setNoteFor('comment')
+                  }}
+                />
+              ) : null}
+            </View>
+          )}
         </View>
       )}
     </CalmCard>

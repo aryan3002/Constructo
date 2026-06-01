@@ -205,9 +205,9 @@ export default function Design() {
           >
             <Small muted>{STR.plansEmpty}</Small>
           </View>
-          {/* TODO: wire up to a plans/drawings approval endpoint once the
-              backend exposes one. No endpoint exists yet — stubbed disabled. */}
+          {/* Drawing approval coming soon — not yet wired to a backend endpoint. */}
           <Button title={STR.approveDrawing} variant="secondary" disabled />
+          <Small muted style={{ marginTop: SPACE.xs }}>{STR.approveDrawingComingSoon}</Small>
         </View>
       </Card>
 

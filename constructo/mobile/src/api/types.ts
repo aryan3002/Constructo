@@ -138,6 +138,10 @@ export interface Change {
   schedule_delta_days: number | null
   reason: string | null
   approved_by: string | null
+  requested_by: string | null
+  running_total_cost: number
+  approved_by_name: string | null
+  requested_by_name: string | null
   created_at: string
 }
 
@@ -256,4 +260,10 @@ export interface HomeownerDecision {
   detail: string | null
   state: string
   created_at: string
+}
+
+export interface Capabilities {
+  sub_role: HomeownerSubRole
+  can_approve: boolean
+  can_comment: boolean
 }

@@ -2,9 +2,11 @@
  * Photos & Videos (H2) — curated site photos, grouped by date / room / milestone,
  * with a full-screen viewer, client-side storage policy, and an upload-intent sheet.
  *
- * All write actions (Save / Share / Free up space / upload) are deliberate no-op
- * stubs with TODOs: the photo set is curated server data, and the real upload
- * endpoint lands later. "Hide" is local-only state.
+ * Save: expo-media-library (download-then-save two-step).
+ * Share: React Native built-in Share.share.
+ * Free up space: FileSystem.deleteAsync on cacheDirectory.
+ * Upload: coming soon — intent capture only, no upload endpoint yet.
+ * "Hide" is local-only state.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -14,11 +16,14 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   useWindowDimensions,
   View,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
+import * as MediaLibrary from 'expo-media-library'
 import { useQuery } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
@@ -84,10 +89,14 @@ const STR = {
     permTitle: 'Permission needed',
     permCamera: 'Allow camera access to take a photo.',
     permLibrary: 'Allow photo library access to choose a photo.',
-    pickedTitle: 'Photo selected',
-    pickedBody: 'Upload will be wired up in a later update.',
+    pickedTitle: 'Photo noted',
+    pickedBody: 'Uploads are coming soon — your photo has been noted locally.',
     freedTitle: 'Cache cleared',
     freedBody: 'Local cache was cleared. Your curated photos stay on the server.',
+    savedTitle: 'Saved',
+    savedBody: 'Photo saved to your gallery.',
+    saveErrorTitle: 'Could not save',
+    saveErrorBody: 'Please try again.',
   },
   hi: {
     title: 'फ़ोटो और वीडियो',
@@ -123,10 +132,14 @@ const STR = {
     permTitle: 'अनुमति आवश्यक',
     permCamera: 'फ़ोटो लेने के लिए कैमरा एक्सेस की अनुमति दें।',
     permLibrary: 'फ़ोटो चुनने के लिए लाइब्रेरी एक्सेस की अनुमति दें।',
-    pickedTitle: 'फ़ोटो चुनी गई',
-    pickedBody: 'अपलोड बाद के अपडेट में जोड़ा जाएगा।',
+    pickedTitle: 'फ़ोटो नोट की गई',
+    pickedBody: 'अपलोड जल्द आ रहा है — आपकी फ़ोटो लोकली नोट की गई है।',
     freedTitle: 'कैश साफ़ किया गया',
     freedBody: 'लोकल कैश साफ़ हो गया। आपकी फ़ोटो सर्वर पर सुरक्षित रहती हैं।',
+    savedTitle: 'सहेजा गया',
+    savedBody: 'फ़ोटो आपकी गैलरी में सहेजी गई।',
+    saveErrorTitle: 'सहेजा नहीं जा सका',
+    saveErrorBody: 'कृपया फिर कोशिश करें।',
   },
 } as const
 
@@ -268,8 +281,12 @@ export default function Photos() {
     }
   }, [s])
 
-  const onFreeUpSpace = useCallback(() => {
-    // TODO(H?): no real deletion — curated server data. Local cache clear stub.
+  const onFreeUpSpace = useCallback(async () => {
+    try {
+      await FileSystem.deleteAsync(FileSystem.cacheDirectory ?? '', { idempotent: true })
+    } catch {
+      // Non-fatal — server data is unaffected.
+    }
     Alert.alert(s.freedTitle, s.freedBody)
   }, [s])
 
@@ -543,16 +560,35 @@ export default function Photos() {
                     title={s.save}
                     variant="secondary"
                     style={{ flex: 1 }}
-                    onPress={() => {
-                      // TODO(H?): save the image to the device gallery (no-op stub).
+                    onPress={async () => {
+                      if (!active?.image_url) return
+                      const { status } = await MediaLibrary.requestPermissionsAsync()
+                      if (status !== 'granted') {
+                        Alert.alert(s.permTitle, s.permLibrary)
+                        return
+                      }
+                      try {
+                        const localUri = await FileSystem.downloadAsync(
+                          active.image_url,
+                          (FileSystem.cacheDirectory ?? '') + active.id + '.jpg',
+                        )
+                        await MediaLibrary.saveToLibraryAsync(localUri.uri)
+                        Alert.alert(s.savedTitle, s.savedBody)
+                      } catch {
+                        Alert.alert(s.saveErrorTitle, s.saveErrorBody)
+                      }
                     }}
                   />
                   <Button
                     title={s.share}
                     variant="secondary"
                     style={{ flex: 1 }}
-                    onPress={() => {
-                      // TODO(H?): open the native share sheet (no-op stub).
+                    onPress={async () => {
+                      if (!active?.image_url) return
+                      await Share.share({
+                        message: active.caption ?? s.caption,
+                        url: active.image_url,
+                      })
                     }}
                   />
                   <Button

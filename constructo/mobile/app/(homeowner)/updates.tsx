@@ -7,14 +7,16 @@
  * and renders its own loading / empty / error states.
  */
 import { useState } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Pressable, TextInput, View, type TextStyle } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { homeowner } from '../../src/api/client'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE, STATUS } from '../../src/theme/tokens'
+import type { Change } from '../../src/api/types'
 import {
+  Body,
   BodyStrong,
   Button,
   CalmCard,
@@ -59,6 +61,21 @@ const STR = {
     scheduleLabel: 'Schedule change',
     notStarted: 'Not started',
     reason: 'Why',
+    // Change story card strings (H5.D)
+    changeWhat: 'What changed',
+    changeWhy: 'Why',
+    changeCost: 'Cost',
+    changeSchedule: 'Schedule',
+    changeWho: 'Approved by',
+    changeRequested: 'Requested by',
+    changeRunning: 'Running total',
+    changeApproveTitle: 'Approve this change',
+    changeOnlyOwnerApprove: 'Only an owner can approve this. You can add a comment.',
+    changeCommentPlaceholder: 'Add a note…',
+    changeSend: 'Send',
+    changeCancel: 'Cancel',
+    changeApprove: 'Approve',
+    changeApprovalStub: 'Approval linked to your Decisions tab.',
   },
   hi: {
     tabs: { timeline: 'टाइमलाइन', milestones: 'पड़ाव', changes: 'बदलाव', property: 'संपत्ति' },
@@ -79,6 +96,21 @@ const STR = {
     scheduleLabel: 'समय में बदलाव',
     notStarted: 'शुरू नहीं हुआ',
     reason: 'कारण',
+    // Change story card strings (H5.D)
+    changeWhat: 'क्या बदला',
+    changeWhy: 'क्यों',
+    changeCost: 'लागत',
+    changeSchedule: 'समय',
+    changeWho: 'मंज़ूरी दी',
+    changeRequested: 'अनुरोध किया',
+    changeRunning: 'कुल बदलाव',
+    changeApproveTitle: 'इस बदलाव को मंज़ूर करें',
+    changeOnlyOwnerApprove: 'केवल संपत्ति के मालिक इसे मंज़ूर कर सकते हैं। आप एक टिप्पणी छोड़ सकते हैं।',
+    changeCommentPlaceholder: 'नोट जोड़ें…',
+    changeSend: 'भेजें',
+    changeCancel: 'रद्द करें',
+    changeApprove: 'मंज़ूर करें',
+    changeApprovalStub: 'मंज़ूरी आपके निर्णय टैब से जुड़ी है।',
   },
 } as const
 
@@ -331,6 +363,124 @@ function MilestonesTab() {
   )
 }
 
+// ---- Change Story Card (H5.D) ----
+function ChangeStoryCard({
+  ch,
+  canApprove,
+  lang,
+}: {
+  ch: Change
+  canApprove: boolean
+  lang: 'en' | 'hi'
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const str = STR[lang]
+  const [note, setNote] = useState('')
+  const [commenting, setCommenting] = useState(false)
+
+  const costColor =
+    (ch.cost_delta ?? 0) > 0 ? STATUS.risk : (ch.cost_delta ?? 0) < 0 ? STATUS.ok : c.textMute
+  const dayColor =
+    (ch.schedule_delta_days ?? 0) > 0 ? STATUS.risk : (ch.schedule_delta_days ?? 0) < 0 ? STATUS.ok : c.textMute
+  const runningColor =
+    (ch.running_total_cost ?? 0) > 0 ? STATUS.risk : (ch.running_total_cost ?? 0) < 0 ? STATUS.ok : c.textMute
+
+  const inputStyle: TextStyle = {
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: theme.radii.control,
+    backgroundColor: c.paper,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.md,
+    minHeight: 72,
+    color: c.text,
+    textAlignVertical: 'top',
+  }
+
+  return (
+    <View style={{ gap: SPACE.sm }}>
+      {/* WHAT */}
+      <BodyStrong>{ch.description}</BodyStrong>
+
+      {/* WHY */}
+      {ch.reason ? (
+        <Small muted>
+          {str.changeWhy}: {ch.reason}
+        </Small>
+      ) : null}
+
+      {/* COST + SCHEDULE */}
+      <View style={{ flexDirection: 'row', gap: SPACE.lg }}>
+        <View>
+          <Small muted>{str.changeCost}</Small>
+          <Mono color={costColor}>{formatRupeeDelta(ch.cost_delta)}</Mono>
+        </View>
+        <View>
+          <Small muted>{str.changeSchedule}</Small>
+          <Mono color={dayColor}>{formatDayDelta(ch.schedule_delta_days, lang)}</Mono>
+        </View>
+      </View>
+
+      {/* WHO: approved_by_name + requested_by_name */}
+      {ch.approved_by_name ? (
+        <Small muted>
+          {str.changeWho}: {ch.approved_by_name} · {formatDate(ch.created_at, lang)}
+        </Small>
+      ) : null}
+      {ch.requested_by_name ? (
+        <Small muted>
+          {str.changeRequested}: {ch.requested_by_name}
+        </Small>
+      ) : null}
+
+      {/* RUNNING TOTAL */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <Small muted>{str.changeRunning}:</Small>
+        <Mono color={runningColor}>{formatRupeeDelta(ch.running_total_cost)}</Mono>
+      </View>
+
+      {/* ACTION — Option B: no decision_id FK yet, render honest stub + comment for non-owners */}
+      {canApprove ? (
+        <View>
+          <Small muted style={{ marginBottom: SPACE.xs }}>{str.changeApprovalStub}</Small>
+        </View>
+      ) : commenting ? (
+        <View style={{ gap: SPACE.sm }}>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder={str.changeCommentPlaceholder}
+            placeholderTextColor={c.textMute}
+            multiline
+            style={inputStyle}
+          />
+          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+            <Button title={str.changeSend} onPress={() => setCommenting(false)} />
+            <Button
+              title={str.changeCancel}
+              variant="ghost"
+              onPress={() => {
+                setNote('')
+                setCommenting(false)
+              }}
+            />
+          </View>
+        </View>
+      ) : (
+        <View style={{ gap: SPACE.xs }}>
+          <Small muted>{str.changeOnlyOwnerApprove}</Small>
+          <Button
+            title={str.changeCommentPlaceholder}
+            variant="secondary"
+            onPress={() => setCommenting(true)}
+          />
+        </View>
+      )}
+    </View>
+  )
+}
+
 // ---- Changes ----
 function ChangesTab() {
   const { lang } = useT()
@@ -342,6 +492,12 @@ function ChangesTab() {
     queryKey: ['homeowner', 'changes'],
     queryFn: () => homeowner.changes(),
   })
+
+  const capQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capQ.data?.can_approve ?? false
 
   if (q.isLoading) return <Loading />
   if (q.isError) return <ErrorState message={str.errChanges} onRetry={() => void q.refetch()} />
@@ -387,23 +543,9 @@ function ChangesTab() {
                 padding: SPACE.lg,
                 borderTopWidth: i === 0 ? 0 : 1,
                 borderTopColor: c.line,
-                gap: SPACE.xs,
               }}
             >
-              <BodyStrong>{ch.description}</BodyStrong>
-              <View style={{ flexDirection: 'row', gap: SPACE.lg, marginTop: SPACE.xs }}>
-                <Mono color={(ch.cost_delta ?? 0) > 0 ? STATUS.risk : (ch.cost_delta ?? 0) < 0 ? STATUS.ok : c.textMute}>
-                  {formatRupeeDelta(ch.cost_delta)}
-                </Mono>
-                <Mono color={(ch.schedule_delta_days ?? 0) > 0 ? STATUS.risk : (ch.schedule_delta_days ?? 0) < 0 ? STATUS.ok : c.textMute}>
-                  {formatDayDelta(ch.schedule_delta_days, lang)}
-                </Mono>
-              </View>
-              {ch.reason ? (
-                <Small muted style={{ marginTop: SPACE.xs }}>
-                  {str.reason}: {ch.reason}
-                </Small>
-              ) : null}
+              <ChangeStoryCard ch={ch} canApprove={canApprove} lang={lang} />
             </View>
           ))}
         </Card>

@@ -415,7 +415,10 @@ async def create_change(
         id=change.id, site_id=change.site_id, description=change.description,
         cost_delta=float(change.cost_delta) if change.cost_delta is not None else None,
         schedule_delta_days=change.schedule_delta_days, reason=change.reason,
-        approved_by=change.approved_by, created_at=change.created_at,
+        approved_by=change.approved_by, requested_by=change.requested_by,
+        # Single just-created item: its running total is its own cost delta.
+        running_total_cost=float(change.cost_delta) if change.cost_delta is not None else 0.0,
+        created_at=change.created_at,
     )
 
 

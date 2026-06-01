@@ -6,6 +6,7 @@
 import { API_BASE } from './config'
 import { getToken } from '../store/secure'
 import type {
+  Capabilities,
   ChangesLog,
   DesignProfile,
   DesignReference,
@@ -109,4 +110,6 @@ export const homeowner = {
       method: 'POST',
       body: JSON.stringify({ action, note }),
     }),
+  capabilities: (siteId?: string) =>
+    request<Capabilities>(`/api/v1/homeowner/me/capabilities${qs({ site_id: siteId })}`),
 }

@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.constructo.app"
+      "bundleIdentifier": "ai.constructo.app",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "Constructo saves your site photos here."
+      }
     },
     "android": {
       "package": "ai.constructo.app",
@@ -46,6 +49,14 @@
         "expo-camera",
         {
           "cameraPermission": "Constructo uses your camera so you can capture site photos."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Constructo saves your site photos to your gallery.",
+          "savePhotosPermission": "Constructo saves your site photos to your gallery.",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ],

@@ -49,6 +49,32 @@ class MemberPrefsIn(BaseModel):
     notif_prefs: dict
 
 
+class HomeownerMemberInviteIn(BaseModel):
+    """A primary/co-owner mints a household member (and a join code to redeem)."""
+
+    site_id: UUID | None = None  # resolve_site if omitted
+    sub_role: HomeownerSubRole = HomeownerSubRole.family
+    phone: str | None = None
+    display_name: str | None = None
+    can_design: bool = False
+    design_space_id: UUID | None = None  # must belong to site_id if set
+    notif_prefs: dict = Field(default_factory=dict)
+
+
+class HomeownerMemberManageIn(BaseModel):
+    """A primary/co-owner designates role + design participation for a member.
+
+    All fields optional — only the supplied ones are changed. ``design_space_id``
+    is tri-state-ish via the model_fields_set check in the handler (omitted =
+    leave as-is; explicit null = clear the room scope).
+    """
+
+    sub_role: HomeownerSubRole | None = None
+    display_name: str | None = None
+    can_design: bool | None = None
+    design_space_id: UUID | None = None
+
+
 class MemberOut(BaseModel):
     id: UUID
     site_id: UUID
@@ -61,6 +87,12 @@ class MemberOut(BaseModel):
     created_at: datetime
     # A deep link the contractor shares; the app reads the code from it.
     invite_link: str
+    # --- multi-member management (proposal A) -------------------------------
+    display_name: str | None = None
+    can_design: bool = False
+    design_space_id: UUID | None = None
+    invited_by_member_id: UUID | None = None
+    invited_at: datetime | None = None
 
 
 # ---- feed reads ------------------------------------------------------------
@@ -113,6 +145,13 @@ class ChangeOut(BaseModel):
     schedule_delta_days: int | None
     reason: str | None
     approved_by: UUID | None
+    requested_by: UUID | None = None          # who initiated the scope change
+    # Cumulative cost delta up to and including this item. Defaulted so single-item
+    # constructors (e.g. the publish create-change response) need not compute it;
+    # the homeowner changes-log handler always populates it.
+    running_total_cost: float = 0.0
+    approved_by_name: str | None = None       # resolved server-side via User JOIN
+    requested_by_name: str | None = None      # resolved server-side via User JOIN
     created_at: datetime
 
 
@@ -289,3 +328,14 @@ class HomeownerDecisionOut(BaseModel):
     detail: str | None
     state: str
     created_at: datetime
+
+
+class CapabilitiesOut(BaseModel):
+    """What the calling member may do on a property (drives client affordances)."""
+
+    sub_role: str
+    can_approve: bool
+    can_comment: bool
+    can_manage_members: bool
+    can_design: bool
+    design_space_id: UUID | None = None
