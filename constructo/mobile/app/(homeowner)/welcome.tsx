@@ -136,7 +136,7 @@ export default function Welcome() {
   }
 
   return (
-    <Screen>
+    <Screen floatingNav>
       {/* Brand eyebrow + a soft Calm-Pine welcome mark. */}
       <View style={{ marginTop: SPACE.xl, gap: SPACE.lg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>

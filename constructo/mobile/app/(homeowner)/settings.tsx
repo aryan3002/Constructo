@@ -102,7 +102,7 @@ export default function Settings() {
   }
 
   return (
-    <Screen>
+    <Screen floatingNav>
       <Display>{tx.title}</Display>
 
       {/* HOUSEHOLD */}

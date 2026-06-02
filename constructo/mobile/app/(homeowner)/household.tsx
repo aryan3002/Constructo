@@ -208,7 +208,7 @@ export default function Household() {
   } as const
 
   return (
-    <Screen>
+    <Screen floatingNav>
       <View style={{ gap: SPACE.sm }}>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>
