@@ -57,6 +57,7 @@ import {
   Small,
   PhotoTile,
   type PhotoTileData,
+  FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 
 /** Backend grouping view (drives the query); "My visits" is a client filter. */
@@ -459,9 +460,9 @@ export default function Photos() {
   const contentWidth = width - SPACE.lg * 2
   const cellSize = Math.floor((contentWidth - gridGap) / 2)
 
-  // Reserve room so the last row clears the floating nav (bar 64 + ~12 gap +
-  // safe-area) plus the Ask pill above it.
-  const navClearance = 64 + 12 + insets.bottom + 56
+  // The homeowner layout's `sceneStyle` already reserves room for the floating
+  // bar + Ask pill (FLOATING_NAV_CLEARANCE); keep only a small breathing pad.
+  const navClearance = insets.bottom + FLOATING_NAV_CLEARANCE
 
   // Shared PhotoTile action labels.
   const tileLabels = {
