@@ -10,7 +10,8 @@
  *   supervisor       → /(contractor)/supervisor/capture
  *   labor_contractor → /(contractor)/mukadam/attendance
  *   pm               → /(contractor)/pm/dpr        (C4 Auto-DPR review)
- *   accountant/procurement → /(contractor)         (Tier-2 placeholder; web primary)
+ *   accountant       → /(contractor)/accountant/reconcile (C4 Reconcile cockpit)
+ *   procurement      → /(contractor)               (Tier-2 placeholder; web primary)
  */
 import { ActivityIndicator, View } from 'react-native'
 import { Redirect } from 'expo-router'
@@ -46,6 +47,11 @@ export default function Index() {
   }
   // PM (C4) — native Auto-DPR review surface.
   if (role === 'pm') return <Redirect href="/(contractor)/pm/dpr" />
-  // Other Tier-2 roles (accountant/procurement) — placeholder; web is primary.
+  // Accountant (C4) — native Reconcile cockpit (read-mostly, tracking-only).
+  if (role === 'accountant') {
+    return <Redirect href="/(contractor)/accountant/reconcile" />
+  }
+  // Procurement is a HAT, not a seat (correction #3) — no dedicated home; the
+  // PM/supervisor wears it. Falls through to the Tier-2 placeholder for now.
   return <Redirect href="/(contractor)" />
 }

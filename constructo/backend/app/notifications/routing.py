@@ -14,7 +14,7 @@ from app.models import DecisionKind, DecisionState, UserRole
 
 # kind -> the role responsible for acting on it.
 #   owner       = risk / homeowner questions
-#   pm          = execution / approvals
+#   pm          = execution / approvals (incl. procurement — see below)
 #   accountant  = billing
 #   labor_contractor (mukadam) = payment holds
 _KIND_TO_ROLE: dict[DecisionKind, UserRole] = {
@@ -24,10 +24,35 @@ _KIND_TO_ROLE: dict[DecisionKind, UserRole] = {
     DecisionKind.generic: UserRole.owner,
 }
 
+# Procurement is a HAT, not a seat (contractor correction #3): in the 3–15-site
+# SMB there is usually no dedicated `procurement` user, so a procurement request
+# (material ask -> quote -> propose-to-owner) must default-route to whoever wears
+# the hat — the site's PM (or supervisor), the default hat-wearer — and NEVER to a
+# non-existent procurement seat. We deliberately reuse `DecisionKind.approval`
+# (already PM-routed) rather than adding a new enum value + migration. This list
+# is the explicit, ordered fallback chain the feed walks: the PM, then the
+# supervisor, then the owner as the backstop. The supplier/vendor portal is V2.
+PROCUREMENT_HAT_ROLES: tuple[UserRole, ...] = (
+    UserRole.pm,
+    UserRole.supervisor,
+    UserRole.owner,
+)
+
 
 def role_for_kind(kind: DecisionKind) -> UserRole:
     """Which role owns a decision of this kind."""
     return _KIND_TO_ROLE.get(kind, UserRole.owner)
+
+
+def role_for_procurement() -> UserRole:
+    """The default role a procurement request routes to.
+
+    Correction #3: procurement is a hat (no guaranteed seat), so a procurement
+    decision routes to the default hat-wearer — the PM — not a `procurement`
+    seat that may not exist. ``PROCUREMENT_HAT_ROLES`` is the ordered fallback
+    chain (pm -> supervisor -> owner) the feed layer can walk when no PM exists.
+    """
+    return PROCUREMENT_HAT_ROLES[0]
 
 
 def severity_for(kind: DecisionKind, state: DecisionState) -> str:

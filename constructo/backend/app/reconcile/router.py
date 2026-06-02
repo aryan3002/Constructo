@@ -5,6 +5,7 @@ Reconciliation derives delivery-vs-invoice matches from the existing
 problem by creating a B0 ``Decision`` of kind ``hold_payment`` routed to the
 company owner. All routes are auth'd and site-scoped exactly like ``app/sites``.
 """
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -14,7 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import Decision, DecisionKind, Site, SiteEventModel, User, UserRole
+from app.models import (
+    Decision,
+    DecisionKind,
+    DecisionState,
+    Site,
+    SiteEventModel,
+    User,
+    UserRole,
+)
 from app.reconcile.matching import (
     DeliveryEvent,
     InvoiceEvent,
@@ -23,12 +32,15 @@ from app.reconcile.matching import (
     reconcile,
 )
 from app.reconcile.schemas import (
+    AccountantOverviewOut,
     EventSideOut,
     GrnDraftOut,
     HoldPaymentIn,
     HoldPaymentOut,
+    MoneyExceptionOut,
     ReconcileItemOut,
     ReconcileListOut,
+    ReconcileSiteSummaryOut,
     ReconcileSummaryOut,
 )
 from app.sites.router import effective_visible_site_ids
@@ -99,6 +111,154 @@ async def _load_event(session: AsyncSession, event_id: UUID) -> SiteEventModel:
     if ev is None:
         raise AppError(404, "not_found", "Event not found")
     return ev
+
+
+# --- accountant overview (C4 — read-only) -----------------------------------
+
+
+# Finance roles see EVERY company site's money slice (mirrors the payments
+# "owner/pm/accountant see all payments" rule). Others see assigned sites only.
+_FINANCE_ALL_SITES_ROLES = {UserRole.owner, UserRole.pm, UserRole.accountant}
+
+
+def _summary_severity(s: ReconcileSummaryOut) -> int:
+    """Worst-first sort key for a site summary: more bad rows = sorts first."""
+    return s.mismatch * 3 + s.missing_proof * 2 + s.needs_approval
+
+
+async def _overview_visible_site_ids(session: AsyncSession, user: User) -> list[UUID]:
+    """Sites the caller may see money for: all company sites for finance roles,
+    otherwise just the caller's assigned sites."""
+    if user.role in _FINANCE_ALL_SITES_ROLES:
+        rows = await session.execute(
+            select(Site.id).where(Site.company_id == user.company_id)
+        )
+        return list(rows.scalars().all())
+    return await effective_visible_site_ids(session, user)
+
+
+@router.get("/overview", response_model=AccountantOverviewOut)
+async def accountant_overview(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    window_days: int = Query(7, ge=0, le=60),
+) -> AccountantOverviewOut:
+    """The accountant's money cockpit across every visible site (read-only).
+
+    Aggregates per-site reconciliation status (worst-first) and the open money
+    exceptions (``hold_payment`` decisions already flagged). Tracking-only:
+    nothing here moves money or resolves a flag — the accountant *sees* the
+    worst money risks; the owner resolves them from the approvals inbox.
+    """
+    visible = await _overview_visible_site_ids(session, user)
+    if not visible:
+        return AccountantOverviewOut(sites=[], exceptions=[])
+    visible_set = set(visible)
+
+    sites = list(
+        (
+            await session.execute(
+                select(Site).where(
+                    Site.company_id == user.company_id,
+                    Site.id.in_(visible),
+                )
+            )
+        ).scalars().all()
+    )
+    site_name = {s.id: s.name for s in sites}
+
+    # Pull all delivery/invoice events for the visible sites in one query.
+    rows = (
+        await session.execute(
+            select(SiteEventModel).where(
+                SiteEventModel.site_id.in_(visible),
+                SiteEventModel.event_type.in_([_DELIVERY, _INVOICE]),
+            )
+        )
+    ).scalars().all()
+
+    per_site_events: dict[UUID, list[SiteEventModel]] = {sid: [] for sid in visible}
+    for e in rows:
+        per_site_events.setdefault(e.site_id, []).append(e)
+
+    site_summaries: list[ReconcileSiteSummaryOut] = []
+    total_at_risk = 0.0
+    for sid in visible:
+        events = per_site_events.get(sid, [])
+        deliveries = [_to_delivery(e) for e in events if e.event_type == _DELIVERY]
+        invoices = [_to_invoice(e) for e in events if e.event_type == _INVOICE]
+        items = reconcile(deliveries, invoices, window_days=window_days)
+        summary = ReconcileSummaryOut()
+        for it in items:
+            setattr(summary, it.status.value, getattr(summary, it.status.value) + 1)
+            summary.total_amount_at_risk += it.amount_at_risk
+        summary.total_amount_at_risk = round(summary.total_amount_at_risk, 2)
+        total_at_risk += summary.total_amount_at_risk
+        site_summaries.append(
+            ReconcileSiteSummaryOut(
+                site_id=sid,
+                site_name=site_name.get(sid, ""),
+                summary=summary,
+            )
+        )
+
+    # Worst-first: most problem rows, then biggest money-at-risk.
+    site_summaries.sort(
+        key=lambda s: (_summary_severity(s.summary), s.summary.total_amount_at_risk),
+        reverse=True,
+    )
+
+    # Open money exceptions = unresolved hold_payment decisions on visible sites.
+    exc_rows = (
+        await session.execute(
+            select(Decision).where(
+                Decision.company_id == user.company_id,
+                Decision.kind == DecisionKind.hold_payment,
+                Decision.state.in_([DecisionState.pending, DecisionState.escalated]),
+            )
+        )
+    ).scalars().all()
+    exceptions: list[MoneyExceptionOut] = []
+    for d in exc_rows:
+        if d.site_id is not None and d.site_id not in visible_set:
+            continue
+        exceptions.append(
+            MoneyExceptionOut(
+                decision_id=d.id,
+                site_id=d.site_id,
+                title=d.title,
+                detail=d.detail,
+                state=d.state.value,
+                amount_at_risk=_risk_from_detail(d.detail),
+                created_at=d.created_at,
+            )
+        )
+    exceptions.sort(key=lambda e: e.created_at, reverse=True)
+
+    return AccountantOverviewOut(
+        total_amount_at_risk=round(total_at_risk, 2),
+        open_exception_count=len(exceptions),
+        sites=site_summaries,
+        exceptions=exceptions,
+    )
+
+
+def _risk_from_detail(detail: str | None) -> float:
+    """Best-effort recover the ₹-at-risk encoded in a hold_payment detail.
+
+    ``hold_payment`` decisions encode the at-risk amount in their detail text
+    ("…(₹8,400 at risk).") rather than a column; parse it back out for display.
+    Returns 0.0 when no amount can be read (never raises — display-only).
+    """
+    if not detail:
+        return 0.0
+    m = re.search(r"₹\s*([\d,]+(?:\.\d+)?)", detail)
+    if not m:
+        return 0.0
+    try:
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return 0.0
 
 
 # --- reconcile listing ------------------------------------------------------
