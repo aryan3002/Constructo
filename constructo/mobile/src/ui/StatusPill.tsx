@@ -3,13 +3,21 @@
  * DISTINCT glyph + a text label (never color alone, for accessibility). Tints
  * are derived from the status hue at low alpha so they read on both themes.
  */
+import type * as React from 'react'
 import { View, type ViewStyle } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 
 import { STATUS, STATUS_LABEL, type Status } from '../theme/tokens'
 import { Micro, Small } from './Typography'
 
-/** Distinct glyph per status (shape cue independent of color). */
-const GLYPH: Record<Status, string> = { ok: '✓', warn: '!', risk: '✕', info: 'i' }
+/** Distinct premium icon per status (shape cue independent of color). */
+const ICON: Record<Status, React.ComponentProps<typeof Feather>['name']> = {
+  ok: 'check',
+  warn: 'alert-triangle',
+  risk: 'alert-octagon',
+  info: 'info',
+  quiet: 'clock',
+}
 
 /** Hex + alpha → rgba tint (e.g. '#1e9e5a' @ 0.12). */
 function tint(hex: string, alpha: number): string {
@@ -76,9 +84,7 @@ export function StatusPill({ status, label, size = 'md', style }: StatusPillProp
           justifyContent: 'center',
         }}
       >
-        <Micro color="#ffffff" style={{ fontSize: 11, lineHeight: 14 }}>
-          {GLYPH[status]}
-        </Micro>
+        <Feather name={ICON[status]} size={10} color="#ffffff" />
       </View>
       <Label color={color} style={{ fontWeight: '600' }}>
         {text}

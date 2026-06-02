@@ -13,14 +13,19 @@
  */
 
 export type ThemeName = 'blueprint' | 'daylight'
-export type Status = 'ok' | 'warn' | 'risk' | 'info'
+export type Status = 'ok' | 'warn' | 'risk' | 'info' | 'quiet'
 
-/** Shared status spine — identical across both themes. */
+/**
+ * Shared status spine — identical across both themes. ALWAYS paired with an
+ * icon/word, never color alone (accessibility). `quiet` is the calm grey
+ * quiet-period tone (homeowner "Calm Cockpit") — never red, never alarming.
+ */
 export const STATUS = {
   ok: '#1e9e5a',
   warn: '#e8a317',
   risk: '#e5484d',
   info: '#3b7dd8',
+  quiet: '#8c8a82',
 } as const
 
 export interface ThemeColors {
@@ -35,8 +40,12 @@ export interface ThemeColors {
   /** Primary action. */
   accent: string
   accentDeep: string
-  /** Warm secondary accent. */
+  /** Soft primary-container tint (selected chips / soft states). */
   accentWarm: string
+  /** Celebration / milestone accent (Warm Clay) — NEVER warnings. */
+  secondary: string
+  /** Soft clay container (weekly-summary accent bg, milestone chips). */
+  secondaryContainer: string
   /** Label color that reads best ON the accent. */
   onAccent: string
   /** Default text + muted text. */
@@ -47,12 +56,19 @@ export interface ThemeColors {
   warn: string
   risk: string
   info: string
+  /** Calm quiet-period tone (grey) — never red. */
+  quiet: string
 }
 
 export interface ThemeRadii {
+  /** chips / inputs / controls. */
+  chip: number
   card: number
+  /** hero / large surfaces. */
+  hero: number
   sheet: number
   pill: number
+  /** alias of `chip` — kept for existing call sites (inputs/controls). */
   control: number
 }
 
@@ -78,43 +94,47 @@ const BLUEPRINT_COLORS: ThemeColors = {
   accent: '#f2a100', // amber — THE primary action
   accentDeep: '#c77f00',
   accentWarm: '#c77f00',
+  secondary: '#c5683b', // warm clay (shared celebration accent)
+  secondaryContainer: '#f4d9c6',
   onAccent: '#15171c', // dark ink reads best on amber
   text: '#15171c',
   textMute: '#6b6f78',
   ...STATUS,
 }
 
-// Daylight = the homeowner surface, refined to the "Architectural Precision"
-// system (warm cream + desaturated teal-green, quiet-luxury). Values ported
-// from the Stitch DESIGN.md.
+// Daylight = the homeowner surface, on the "Calm Cockpit" system (§3.1):
+// warm paper + Calm Pine green + a Warm Clay celebration accent. Warm paper
+// background, never pure white; red reserved for genuine risk.
 const DAYLIGHT_COLORS: ThemeColors = {
-  bg: '#fcf9f3', // warm cream base
-  card: '#ffffff', // surface-container-lowest
-  paper: '#f6f3ed', // surface-container-low (inset surfaces)
-  line: '#e6e2da', // tertiary-fixed (card stroke)
-  accent: '#214b49', // primary (deep teal-green)
-  accentDeep: '#3a6361', // primary-container (pressed/hover)
-  accentWarm: '#cfe8e3', // secondary-container (soft chips)
+  bg: '#faf6ee', // Warm Paper — app canvas (never pure white)
+  card: '#ffffff', // cards / content surfaces
+  paper: '#f5f0e5', // surfaceLow — inset surfaces / search fields
+  line: '#d9d2c2', // hairlines / dividers
+  accent: '#1e7a63', // Calm Pine — primary actions, active nav, "on track"
+  accentDeep: '#155c4a', // pressed/hover primary
+  accentWarm: '#cde7dd', // primaryContainer — soft green chips / selected states
+  secondary: '#c5683b', // Warm Clay — celebration / milestones ONLY (never warnings)
+  secondaryContainer: '#f4d9c6', // soft clay chips, weekly-summary accent bg
   onAccent: '#ffffff',
-  text: '#1c1c18', // on-surface
-  textMute: '#404848', // on-surface-variant
+  text: '#1e2230', // body / headings
+  textMute: '#5b6166', // metadata, captions, inactive nav
   ...STATUS,
 }
 
 /**
- * "Architectural Precision" extras used by the Daylight (homeowner) Stitch
- * screens — kept here so screens read colors from one place rather than
- * hardcoding hexes. (Only the homeowner surface uses these.)
+ * "Calm Cockpit" extras used by the Daylight (homeowner) screens — kept here so
+ * screens read colors from one place rather than hardcoding hexes. (Only the
+ * homeowner surface uses these.) Values track the §3.1 palette.
  */
 export const AP = {
-  surfaceLow: '#f6f3ed', // surface-container-low
-  surfaceContainer: '#f0eee8', // surface-container
-  onDark: '#ffffff', // text on the deep-teal cards
-  onDarkMuted: '#b2ddda', // on-primary-container (eyebrows on teal)
-  chip: '#cfe8e3', // secondary-container (soft chip bg)
-  onChip: '#526965', // on-secondary-container
-  outline: '#717978',
-  ringTrack: '#e5e2dc', // surface-variant (progress-ring track)
+  surfaceLow: '#f5f0e5', // surfaceLow — inset surfaces
+  surfaceContainer: '#efe9dc', // a touch below surfaceLow
+  onDark: '#ffffff', // text on the Calm-Pine cards
+  onDarkMuted: '#cde7dd', // primaryContainer (eyebrows on pine)
+  chip: '#cde7dd', // primaryContainer (soft green chip bg)
+  onChip: '#155c4a', // accentDeep (text on green chip)
+  outline: '#8c8a82', // muted outline / quiet tone
+  ringTrack: '#e7e1d2', // time-bar / track behind the Calm-Pine fill
 } as const
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -122,7 +142,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     name: 'blueprint',
     colors: BLUEPRINT_COLORS,
     // Site = 8px cards / 12px sheets.
-    radii: { card: 8, sheet: 12, pill: 9999, control: 8 },
+    radii: { chip: 8, card: 8, hero: 12, sheet: 12, pill: 9999, control: 8 },
     shadowCard: {
       shadowColor: '#15171c',
       shadowOffset: { width: 0, height: 1 },
@@ -134,33 +154,45 @@ export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     name: 'daylight',
     colors: DAYLIGHT_COLORS,
-    // Architectural Precision: cards 16px, hero/sheets 24px, controls 10px.
-    radii: { card: 16, sheet: 24, pill: 9999, control: 10 },
-    // Soft, teal-tinted ambient shadow — surfaces sit just above the cream base.
+    // Calm Cockpit (§3.4): chip/input 12, card 16, hero 20, sheet 24, pill 9999.
+    radii: { chip: 12, card: 16, hero: 20, sheet: 24, pill: 9999, control: 12 },
+    // Soft, warm, residential ambient shadow (§3.5: 0 8px 24px rgba(60,50,30,.06)).
     shadowCard: {
-      shadowColor: '#4d635f',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
+      shadowColor: '#3c321e',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.06,
+      shadowRadius: 24,
       elevation: 2,
     },
   },
 }
 
 /**
- * The type scale (size / line-height), ported from the web scale. Families are
- * applied via the loaded font names (see `fonts.ts`).
+ * The type scale (size / line-height), per the Calm Cockpit spec §3.2
+ * (Devanagari-first; never below 14px for visible copy). Families are applied
+ * via the loaded font names (see `fonts.ts`).
+ *
+ * Note: `micro` is 14 (not 12) — the spec floors visible text at 14px. The
+ * 13px mono eyebrow (`monoSm`) is the one exception and is mono-only.
  */
 export const TYPE = {
-  display: { fontSize: 28, lineHeight: 34 },
-  h1: { fontSize: 22, lineHeight: 28 },
-  h2: { fontSize: 18, lineHeight: 24 },
+  display: { fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
+  h1: { fontSize: 28, lineHeight: 34, letterSpacing: -0.3 },
+  h2: { fontSize: 22, lineHeight: 28, letterSpacing: -0.2 },
+  title: { fontSize: 18, lineHeight: 24 },
+  bodyLg: { fontSize: 18, lineHeight: 28 },
   body: { fontSize: 16, lineHeight: 24 },
+  /** labels / captions / nav — the 14px floor. */
   small: { fontSize: 14, lineHeight: 20 },
-  micro: { fontSize: 12, lineHeight: 16 },
+  /** eyebrow caption — kept at the 14px floor (was 12). */
+  micro: { fontSize: 14, lineHeight: 18 },
+  /** ₹ amounts / counts (mono). */
+  dataNum: { fontSize: 16, lineHeight: 22 },
+  /** dates / timestamps / mono eyebrows — mono-only sub-14 exception. */
+  monoSm: { fontSize: 13, lineHeight: 18, letterSpacing: 0.3 },
 } as const
 
-/** 4 / 8 spacing scale. */
+/** 4px-base spacing scale (§3.3). `gutter` = screen side margin (20px). */
 export const SPACE = {
   xs: 4,
   sm: 8,
@@ -168,6 +200,7 @@ export const SPACE = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  gutter: 20,
 } as const
 
 /** Minimum touch target (accessibility floor). */
@@ -179,6 +212,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   warn: 'Needs attention',
   risk: 'At risk',
   info: 'Info',
+  quiet: 'Quiet',
 }
 
 /** Map the backend RiskSeverity (high/med/low) onto the status spine. */

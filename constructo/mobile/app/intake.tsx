@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, TextInput, View } from 'react-native'
 import { Redirect, useRouter } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
@@ -47,7 +48,7 @@ import {
 // ---- copy ----------------------------------------------------------------
 const STR = {
   en: {
-    skip: '✕ Skip for now',
+    skip: 'Skip for now',
     step: 'Step {n} of {total}',
     // step 1
     s1Title: 'What feels like home?',
@@ -66,7 +67,7 @@ const STR = {
     feelsRight: 'This feels right',
     adjust: 'Adjust',
     save: 'Save changes',
-    voice: '🎙️ Describe it in your words',
+    voice: 'Describe it in your words',
     // step 4 — owners only
     s4Title: 'Who else gets a design say?',
     s4Body: 'You can let other household members weigh in on design choices — for the whole home or just one room.',
@@ -83,7 +84,7 @@ const STR = {
     finish: 'Finish',
   },
   hi: {
-    skip: '✕ अभी छोड़ें',
+    skip: 'अभी छोड़ें',
     step: 'चरण {n} / {total}',
     s1Title: 'घर जैसा क्या लगता है?',
     s1Body: 'जो रूप आपको पसंद हों उन्हें चुनें। कोई गलत जवाब नहीं — जितने चाहें चुनें।',
@@ -99,7 +100,7 @@ const STR = {
     feelsRight: 'यह सही लगता है',
     adjust: 'बदलें',
     save: 'बदलाव सहेजें',
-    voice: '🎙️ अपने शब्दों में बताएँ',
+    voice: 'अपने शब्दों में बताएँ',
     s4Title: 'और किसे डिज़ाइन में राय देनी है?',
     s4Body: 'आप अन्य सदस्यों को डिज़ाइन विकल्पों में भाग लेने दे सकते हैं — पूरे घर के लिए या सिर्फ़ एक कमरे के लिए।',
     noSay: 'कोई राय नहीं',
@@ -149,9 +150,11 @@ function IntakeGuard() {
 function IntakeFlow() {
   const router = useRouter()
   const { lang } = useT()
+  const { theme } = useTheme()
   const { subRole, siteId, markOnboarded } = useAuth()
   const L: Lang = lang === 'hi' ? 'hi' : 'en'
   const tx = STR[L]
+  const skipColor = theme.colors.textMute
 
   const isOwner = isOwnerRole(subRole)
   const totalSteps = isOwner ? 4 : 3
@@ -330,10 +333,17 @@ function IntakeFlow() {
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={tx.skip}
           hitSlop={8}
           onPress={() => void finish()}
-          style={{ minHeight: TAP, justifyContent: 'center' }}
+          style={{
+            minHeight: TAP,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.xs,
+          }}
         >
+          <Feather name="x" size={14} color={skipColor} />
           <Small muted>{tx.skip}</Small>
         </Pressable>
       </View>
@@ -452,34 +462,58 @@ function StepStyles({
             <Pressable
               key={opt.key}
               accessibilityRole="button"
+              accessibilityLabel={opt.label[L]}
               accessibilityState={{ selected: isOn }}
               onPress={() => onToggle(opt.key)}
-              style={{ width: '47%' }}
+              style={{
+                width: '47%',
+                aspectRatio: 1,
+                borderRadius: theme.radii.card,
+                overflow: 'hidden',
+                borderWidth: isOn ? 2 : 1,
+                borderColor: isOn ? theme.colors.accent : theme.colors.line,
+                backgroundColor: theme.colors.paper,
+              }}
             >
-              <Card
+              {/* Real interior photo — never an emoji or AI render (§8). */}
+              <Image
+                source={{ uri: opt.imageUrl }}
+                resizeMode="cover"
+                style={{ width: '100%', height: '100%' }}
+              />
+              {/* Bottom scrim so the white label stays legible on any photo. */}
+              <View
                 style={{
-                  borderColor: isOn ? theme.colors.accent : theme.colors.line,
-                  borderWidth: isOn ? 2 : 1,
-                  minHeight: 96,
-                  justifyContent: 'space-between',
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  paddingHorizontal: SPACE.md,
+                  paddingTop: SPACE.xl,
+                  paddingBottom: SPACE.md,
+                  backgroundColor: 'rgba(0,0,0,0.35)',
                 }}
               >
+                <BodyStrong color="#ffffff">{opt.label[L]}</BodyStrong>
+              </View>
+              {/* Selected badge — premium check on Calm Pine. */}
+              {isOn ? (
                 <View
                   style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
+                    position: 'absolute',
+                    top: SPACE.sm,
+                    right: SPACE.sm,
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: theme.colors.accent,
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  <Body>{opt.glyph}</Body>
-                  {isOn ? (
-                    <Body color={theme.colors.accent} style={{ fontWeight: '700' }}>
-                      ✓
-                    </Body>
-                  ) : null}
+                  <Feather name="check" size={16} color={theme.colors.onAccent} />
                 </View>
-                <BodyStrong style={{ marginTop: SPACE.sm }}>{opt.label[L]}</BodyStrong>
-              </Card>
+              ) : null}
             </Pressable>
           )
         })}
@@ -631,11 +665,18 @@ function StepProfile({
           {/* voice affordance stub */}
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={tx.voice}
             onPress={() => {
               // TODO(voice): wire up voice capture of the design profile.
             }}
-            style={{ minHeight: TAP, justifyContent: 'center' }}
+            style={{
+              minHeight: TAP,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.sm,
+            }}
           >
+            <Feather name="mic" size={16} color={theme.colors.accent} />
             <Small muted>{tx.voice}</Small>
           </Pressable>
 

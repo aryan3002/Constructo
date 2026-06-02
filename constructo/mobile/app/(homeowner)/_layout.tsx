@@ -4,17 +4,17 @@
  * non-homeowners back to the gate. Content for each tab is H2's job; H1 ships
  * the themed, role-branched shell.
  */
-import { Text, type ColorValue } from 'react-native'
+import type * as React from 'react'
 import { Redirect, Tabs } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
 
-function icon(glyph: string) {
-  return ({ color }: { color: ColorValue }) => (
-    <Text style={{ fontSize: 20, color }}>{glyph}</Text>
-  )
+/** Premium tab icon (Feather) — replaces emoji glyphs (§8: no emoji-as-UI). */
+function icon(name: React.ComponentProps<typeof Feather>['name']) {
+  return ({ color }: { color: string }) => <Feather name={name} size={22} color={color} />
 }
 
 function HomeownerTabs() {
@@ -39,19 +39,19 @@ function HomeownerTabs() {
     >
       <Tabs.Screen
         name="home"
-        options={{ title: t('nav.home'), tabBarIcon: icon('🏠') }}
+        options={{ title: t('nav.home'), tabBarIcon: icon('home') }}
       />
       <Tabs.Screen
         name="photos"
-        options={{ title: t('nav.photos'), tabBarIcon: icon('🖼') }}
+        options={{ title: t('nav.photos'), tabBarIcon: icon('image') }}
       />
       <Tabs.Screen
         name="updates"
-        options={{ title: t('nav.updates'), tabBarIcon: icon('📋') }}
+        options={{ title: t('nav.updates'), tabBarIcon: icon('bell') }}
       />
       <Tabs.Screen
         name="design"
-        options={{ title: t('nav.design'), tabBarIcon: icon('🎨') }}
+        options={{ title: t('nav.design'), tabBarIcon: icon('layout') }}
       />
       <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
       {/* Onboarding screens — no tab bar entry */}

@@ -11,6 +11,7 @@
  */
 import { Image, Pressable, StyleSheet, View } from 'react-native'
 import { Link } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { Href } from 'expo-router'
 
@@ -106,9 +107,7 @@ export function HomeWidget({
         </View>
 
         {/* Arrow */}
-        <Micro color={arrowColor} style={styles.arrow}>
-          →
-        </Micro>
+        <Feather name="arrow-up-right" size={16} color={arrowColor} style={styles.arrow} />
       </Pressable>
     </Link>
   )

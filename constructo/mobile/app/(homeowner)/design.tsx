@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { Alert, Image, TextInput, View } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { Link } from 'expo-router'
 
@@ -415,9 +416,12 @@ export default function Design() {
                           padding: SPACE.md,
                         }}
                       >
-                        <Small color={note.fits ? c.ok : c.warn}>
-                          {note.fits ? '✓' : '~'}
-                        </Small>
+                        <Feather
+                          name={note.fits ? 'check-circle' : 'help-circle'}
+                          size={16}
+                          color={note.fits ? c.ok : c.warn}
+                          style={{ marginTop: 2 }}
+                        />
                         <View style={{ flex: 1, gap: SPACE.xs }}>
                           <Small>{note.feedback}</Small>
                           <Micro muted>{STR.adviceNote}</Micro>

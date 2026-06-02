@@ -11,6 +11,7 @@
  */
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Link } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -59,7 +60,7 @@ const STR = {
     latestCount: '{n} photos',
     thisWeek: 'this week',
     askShort: 'ASK',
-    askVoice: '🎙 Ask by voice',
+    askVoice: 'Ask by voice',
     errorLine: "Couldn't load your home.",
     tryAgain: 'Try again',
     quietTitle: 'Quiet on site right now',
@@ -88,7 +89,7 @@ const STR = {
     latestCount: '{n} फ़ोटो',
     thisWeek: 'इस हफ़्ते',
     askShort: 'सवाल?',
-    askVoice: '🎙 बोलकर पूछें',
+    askVoice: 'बोलकर पूछें',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
@@ -275,7 +276,7 @@ export default function Home() {
                 justifyContent: 'center',
               }}
             >
-              <Body color="#ffffff">⚙︎</Body>
+              <Feather name="settings" size={20} color="#ffffff" />
             </Pressable>
           </Link>
         </View>
@@ -345,9 +346,17 @@ export default function Home() {
                   {t.needs.toUpperCase()}
                 </Micro>
                 <BodyStrong style={{ marginTop: SPACE.xs }}>{firstAttention.title}</BodyStrong>
-                <Small color={c.accent} style={{ marginTop: SPACE.sm }}>
-                  {t.review} →
-                </Small>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.xs,
+                    marginTop: SPACE.sm,
+                  }}
+                >
+                  <Small color={c.accent}>{t.review}</Small>
+                  <Feather name="arrow-right" size={14} color={c.accent} />
+                </View>
               </Card>
             </Pressable>
           </Link>

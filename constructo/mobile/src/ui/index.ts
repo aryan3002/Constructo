@@ -1,5 +1,18 @@
 // Constructo "Blueprint & Daylight" RN design system — public surface.
-export { Display, H1, H2, Body, BodyStrong, Small, Micro, Mono } from './Typography'
+export {
+  Display,
+  H1,
+  H2,
+  Title,
+  BodyLg,
+  Body,
+  BodyStrong,
+  Small,
+  Micro,
+  DataNum,
+  MonoSm,
+  Mono,
+} from './Typography'
 export { Button } from './Button'
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button'
 export { StatusPill, StatusDot } from './StatusPill'
