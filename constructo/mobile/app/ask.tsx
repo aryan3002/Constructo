@@ -1,12 +1,16 @@
 /**
- * Ask the Builder — a calm chat with the site team (Architectural Precision).
+ * Ask the Builder — a calm chat-style request thread with your site team
+ * (Calm Cockpit, §5 "Ask/Assistant").
  *
- * There is no realtime chat backend, so this is honestly backed by the
- * homeowner REQUESTS API: each question you send becomes a request
+ * HONEST FRAMING: there is no grounded-RAG / realtime-chat backend (H8 is
+ * gated), so this is NOT a grounded assistant — it is honestly backed by the
+ * homeowner REQUESTS API. Each question you send becomes a request
  * (POST /homeowner/requests); the team's progress on it (sent → seen →
- * in_progress → done) is shown back as their reply. Root route, self-themed
- * Daylight, self-guarded.
+ * in_progress → done) is shown back as their reply. On money/structural
+ * questions we add an extra honest note that the team will weigh in — we never
+ * fake an AI answer. Root route, self-themed Daylight, self-guarded.
  */
+import type * as React from 'react'
 import { useState } from 'react'
 import {
   ActivityIndicator,
@@ -18,6 +22,7 @@ import {
   View,
 } from 'react-native'
 import { Redirect, useRouter } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -26,39 +31,62 @@ import type { HomeownerRequest, RequestStatus } from '../src/api/types'
 import { useAuth } from '../src/auth/AuthContext'
 import { useT } from '../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
-import { AP, SPACE, TAP } from '../src/theme/tokens'
-import { Body, BodyStrong, Micro, Small } from '../src/ui'
+import { SPACE, STATUS, TAP, type Status } from '../src/theme/tokens'
+import { Body, BodyStrong, Mono, Small } from '../src/ui'
+import { isMoneyOrStructural } from './_requests.util'
 
 const STR = {
   en: {
     title: 'Your site team',
-    subtitle: 'SITE FOREMAN',
+    subtitle: 'ASK THE BUILDER',
     placeholder: 'Type your question here…',
-    footer: 'The team typically replies within a few hours on working days.',
-    empty: 'Ask anything about your build — materials, timeline, a change you’d like.',
+    footer: 'This goes straight to your site team — not a bot. They typically reply within a few hours on working days.',
+    empty: 'Ask anything about your build — materials, timeline, a change you’d like. Your site team will reply here.',
+    micSoon: 'Voice — coming soon',
+    moneyNote: 'This touches cost or structure, so we’ll make sure your builder weighs in directly — we won’t guess on money or safety.',
+    replyEyebrow: 'SITE TEAM',
     reply: {
       sent: 'Sent to your site team.',
       seen: 'Seen by the site team.',
       in_progress: 'The team is looking into this.',
-      done: 'Resolved ✓',
+      done: 'Resolved.',
     } as Record<RequestStatus, string>,
     back: 'Back',
+    send: 'Send',
   },
   hi: {
     title: 'आपकी साइट टीम',
-    subtitle: 'साइट फ़ोरमैन',
+    subtitle: 'बिल्डर से पूछें',
     placeholder: 'अपना सवाल यहाँ लिखें…',
-    footer: 'टीम आमतौर पर कामकाजी दिनों में कुछ घंटों में जवाब देती है।',
-    empty: 'अपने निर्माण के बारे में कुछ भी पूछें — सामान, समय, या कोई बदलाव।',
+    footer: 'यह सीधे आपकी साइट टीम को जाता है — कोई बॉट नहीं। वे आमतौर पर कामकाजी दिनों में कुछ घंटों में जवाब देते हैं।',
+    empty: 'अपने निर्माण के बारे में कुछ भी पूछें — सामान, समय, या कोई बदलाव। आपकी साइट टीम यहाँ जवाब देगी।',
+    micSoon: 'आवाज़ — जल्द आ रहा है',
+    moneyNote: 'यह लागत या ढाँचे से जुड़ा है, इसलिए हम आपके बिल्डर से सीधे राय लेंगे — हम पैसे या सुरक्षा पर अंदाज़ा नहीं लगाते।',
+    replyEyebrow: 'साइट टीम',
     reply: {
       sent: 'आपकी साइट टीम को भेज दिया।',
       seen: 'टीम ने देख लिया।',
       in_progress: 'टीम इस पर काम कर रही है।',
-      done: 'हल हो गया ✓',
+      done: 'हल हो गया।',
     } as Record<RequestStatus, string>,
     back: 'वापस',
+    send: 'भेजें',
   },
 } as const
+
+/** Reply tone follows the status spine (calm, never red here). */
+const REPLY_TONE: Record<RequestStatus, Status> = {
+  sent: 'info',
+  seen: 'info',
+  in_progress: 'warn',
+  done: 'ok',
+}
+const REPLY_ICON: Record<RequestStatus, React.ComponentProps<typeof Feather>['name']> = {
+  sent: 'send',
+  seen: 'eye',
+  in_progress: 'clock',
+  done: 'check',
+}
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -71,7 +99,7 @@ function AskInner() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const qc = useQueryClient()
-  const t = STR[lang]
+  const t = STR[lang as 'en' | 'hi'] ?? STR.en
 
   const [text, setText] = useState('')
 
@@ -89,48 +117,54 @@ function AskInner() {
     a.created_at.localeCompare(b.created_at),
   )
 
+  const canSend = !!text.trim() && !send.isPending
+  // Live honest hint while composing a money/structural question.
+  const composingMoneyOrStructural = isMoneyOrStructural(text)
+
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      {/* Header */}
+      {/* Header — warm card, Feather glyphs (no emoji) */}
       <View
-        style={{
-          paddingTop: insets.top + 6,
-          paddingBottom: SPACE.sm,
-          paddingHorizontal: SPACE.lg,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: SPACE.md,
-          backgroundColor: c.card,
-          borderBottomWidth: 1,
-          borderBottomColor: c.line,
-        }}
+        style={[
+          {
+            paddingTop: insets.top + 6,
+            paddingBottom: SPACE.md,
+            paddingHorizontal: SPACE.gutter,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.md,
+            backgroundColor: c.card,
+            borderBottomWidth: 1,
+            borderBottomColor: c.line,
+          },
+        ]}
       >
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel={t.back}
           hitSlop={10}
-          style={{ minWidth: 32, minHeight: 32, justifyContent: 'center' }}
+          style={{ width: 36, height: 36, justifyContent: 'center' }}
         >
-          <Body style={{ fontSize: 22 }}>←</Body>
+          <Feather name="chevron-left" size={26} color={c.text} />
         </Pressable>
         <View
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: AP.chip,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: c.accentWarm,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Body color={AP.onChip}>👷</Body>
+          <Feather name="users" size={20} color={c.accentDeep} />
         </View>
         <View style={{ flex: 1 }}>
-          <BodyStrong>{t.title}</BodyStrong>
-          <Micro muted style={{ letterSpacing: 1 }}>
+          <Small muted style={{ letterSpacing: 1, marginBottom: 1 }}>
             {t.subtitle}
-          </Micro>
+          </Small>
+          <BodyStrong>{t.title}</BodyStrong>
         </View>
       </View>
 
@@ -141,134 +175,231 @@ function AskInner() {
       >
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.md }}
+          contentContainerStyle={{ padding: SPACE.gutter, gap: SPACE.lg }}
+          keyboardShouldPersistTaps="handled"
         >
           {q.isLoading ? (
-            <View style={{ paddingVertical: SPACE.xl, alignItems: 'center' }}>
+            <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center' }}>
               <ActivityIndicator color={c.accent} />
             </View>
           ) : requests.length === 0 ? (
-            <View style={{ paddingVertical: SPACE.xl, alignItems: 'center' }}>
-              <Body muted style={{ textAlign: 'center' }}>
+            <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center', gap: SPACE.md }}>
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: c.accentWarm,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="message-circle" size={26} color={c.accentDeep} />
+              </View>
+              <Body muted style={{ textAlign: 'center', maxWidth: 300 }}>
                 {t.empty}
               </Body>
             </View>
           ) : (
-            requests.map((r) => (
-              <View key={r.id} style={{ gap: SPACE.sm }}>
-                {/* Outgoing question (right, teal) */}
-                <View style={{ alignItems: 'flex-end' }}>
-                  <View
-                    style={{
-                      maxWidth: '85%',
-                      backgroundColor: c.accent,
-                      borderRadius: theme.radii.card,
-                      borderBottomRightRadius: 4,
-                      paddingHorizontal: SPACE.md,
-                      paddingVertical: SPACE.sm,
-                    }}
-                  >
-                    <Body color={AP.onDark}>{r.title}</Body>
-                    {r.detail ? (
-                      <Body color="rgba(255,255,255,0.85)" style={{ marginTop: 2 }}>
-                        {r.detail}
-                      </Body>
-                    ) : null}
-                  </View>
-                  <Micro muted style={{ marginTop: 2 }}>
-                    {timeLabel(r.created_at)}
-                  </Micro>
-                </View>
-                {/* Team reply (left, white) — derived from status */}
-                <View style={{ alignItems: 'flex-start' }}>
-                  <View
-                    style={[
-                      {
-                        maxWidth: '85%',
-                        backgroundColor: c.card,
-                        borderWidth: 1,
-                        borderColor: c.line,
+            requests.map((r) => {
+              const tone = REPLY_TONE[r.status]
+              const moneyOrStructural = isMoneyOrStructural(`${r.title} ${r.detail ?? ''}`)
+              return (
+                <View key={r.id} style={{ gap: SPACE.sm }}>
+                  {/* Outgoing question (right, Calm Pine) */}
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <View
+                      style={{
+                        maxWidth: '86%',
+                        backgroundColor: c.accent,
                         borderRadius: theme.radii.card,
-                        borderBottomLeftRadius: 4,
-                        paddingHorizontal: SPACE.md,
-                        paddingVertical: SPACE.sm,
-                      },
-                      theme.shadowCard,
-                    ]}
-                  >
-                    <Body>{t.reply[r.status]}</Body>
+                        borderBottomRightRadius: 6,
+                        paddingHorizontal: SPACE.lg,
+                        paddingVertical: SPACE.md,
+                      }}
+                    >
+                      <Body color={c.onAccent}>{r.title}</Body>
+                      {r.detail ? (
+                        <Body color="rgba(255,255,255,0.88)" style={{ marginTop: 2 }}>
+                          {r.detail}
+                        </Body>
+                      ) : null}
+                    </View>
+                    <Mono muted style={{ marginTop: 4, marginRight: 4 }}>
+                      {timeLabel(r.created_at)}
+                    </Mono>
                   </View>
+
+                  {/* Team reply (left, warm paper) — derived from status */}
+                  <View style={{ alignItems: 'flex-start' }}>
+                    <View
+                      style={[
+                        {
+                          maxWidth: '86%',
+                          backgroundColor: c.card,
+                          borderWidth: 1,
+                          borderColor: c.line,
+                          borderRadius: theme.radii.card,
+                          borderBottomLeftRadius: 6,
+                          paddingHorizontal: SPACE.lg,
+                          paddingVertical: SPACE.md,
+                          gap: 6,
+                        },
+                        theme.shadowCard,
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Feather name={REPLY_ICON[r.status]} size={13} color={STATUS[tone]} />
+                        <Small style={{ color: STATUS[tone], letterSpacing: 1, fontWeight: '600' }}>
+                          {t.replyEyebrow}
+                        </Small>
+                      </View>
+                      <Body>{t.reply[r.status]}</Body>
+                    </View>
+                  </View>
+
+                  {/* Honest money/structural note — never a fake answer */}
+                  {moneyOrStructural ? (
+                    <View style={{ alignItems: 'flex-start' }}>
+                      <View
+                        style={{
+                          maxWidth: '90%',
+                          flexDirection: 'row',
+                          gap: SPACE.sm,
+                          backgroundColor: c.secondaryContainer,
+                          borderRadius: theme.radii.chip,
+                          paddingHorizontal: SPACE.md,
+                          paddingVertical: SPACE.sm,
+                        }}
+                      >
+                        <Feather name="shield" size={15} color={c.secondary} style={{ marginTop: 2 }} />
+                        <Small style={{ flex: 1, color: c.text }}>{t.moneyNote}</Small>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-            ))
+              )
+            })
           )}
+
+          {/* Live composing hint (before send) so the promise is set up-front */}
+          {composingMoneyOrStructural ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: SPACE.sm,
+                backgroundColor: c.secondaryContainer,
+                borderRadius: theme.radii.chip,
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm,
+              }}
+            >
+              <Feather name="shield" size={15} color={c.secondary} style={{ marginTop: 2 }} />
+              <Small style={{ flex: 1, color: c.text }}>{t.moneyNote}</Small>
+            </View>
+          ) : null}
         </ScrollView>
 
-        {/* Input bar */}
+        {/* Input bar (§4 CaptureBar styling — input + mic affordance + send) */}
         <View
           style={{
             flexDirection: 'row',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             gap: SPACE.sm,
-            paddingHorizontal: SPACE.lg,
+            paddingHorizontal: SPACE.gutter,
             paddingTop: SPACE.sm,
-            paddingBottom: insets.bottom + SPACE.sm,
+            paddingBottom: SPACE.sm,
             borderTopWidth: 1,
             borderTopColor: c.line,
             backgroundColor: c.card,
           }}
         >
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder={t.placeholder}
-            placeholderTextColor={c.textMute}
-            multiline
+          <View
             style={{
               flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.sm,
               minHeight: TAP,
-              maxHeight: 120,
               borderWidth: 1,
               borderColor: c.line,
-              borderRadius: theme.radii.control,
-              paddingHorizontal: SPACE.md,
-              paddingVertical: SPACE.sm,
-              backgroundColor: c.bg,
-              color: c.text,
-              fontSize: 16,
-            }}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            disabled={!text.trim() || send.isPending}
-            onPress={() => send.mutate(text.trim())}
-            style={{
-              width: TAP,
-              height: TAP,
-              borderRadius: theme.radii.control,
-              backgroundColor: c.accent,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: !text.trim() || send.isPending ? 0.5 : 1,
+              borderRadius: theme.radii.pill,
+              backgroundColor: c.paper,
+              paddingLeft: SPACE.lg,
+              paddingRight: SPACE.sm,
             }}
           >
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder={t.placeholder}
+              placeholderTextColor={c.textMute}
+              multiline
+              style={{
+                flex: 1,
+                maxHeight: 110,
+                paddingVertical: SPACE.sm,
+                color: c.text,
+                fontSize: 16,
+              }}
+            />
+            {/* Honest "coming soon" mic — non-interactive, no false affordance */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.micSoon}
+              disabled
+              style={{
+                width: 32,
+                height: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 0.4,
+              }}
+            >
+              <Feather name="mic" size={18} color={c.textMute} />
+            </Pressable>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.send}
+            accessibilityState={{ disabled: !canSend }}
+            disabled={!canSend}
+            onPress={() => send.mutate(text.trim())}
+            style={({ pressed }) => [
+              {
+                width: TAP,
+                height: TAP,
+                borderRadius: theme.radii.pill,
+                backgroundColor: c.accent,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: !canSend ? 0.5 : 1,
+                transform: [{ scale: pressed && canSend ? 0.96 : 1 }],
+              },
+              canSend ? theme.shadowCard : null,
+            ]}
+          >
             {send.isPending ? (
-              <ActivityIndicator color={AP.onDark} />
+              <ActivityIndicator color={c.onAccent} />
             ) : (
-              <Body color={AP.onDark} style={{ fontSize: 20 }}>
-                ➤
-              </Body>
+              <Feather name="arrow-up" size={22} color={c.onAccent} />
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
 
-      <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: insets.bottom, backgroundColor: c.card }}>
-        <Small muted style={{ textAlign: 'center', paddingBottom: SPACE.sm }}>
-          {t.footer}
-        </Small>
-      </View>
+        {/* Honest footer — it's your team, not a bot */}
+        <View
+          style={{
+            paddingHorizontal: SPACE.gutter,
+            paddingBottom: insets.bottom + SPACE.sm,
+            backgroundColor: c.card,
+          }}
+        >
+          <Small muted style={{ textAlign: 'center' }}>
+            {t.footer}
+          </Small>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   )
 }
