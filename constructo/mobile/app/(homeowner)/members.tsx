@@ -86,7 +86,7 @@ export default function Members() {
   const viewerCanManage = canManage(caps)
 
   return (
-    <Screen>
+    <Screen floatingNav>
       <View style={{ gap: SPACE.sm }}>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>

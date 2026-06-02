@@ -111,7 +111,7 @@ export default function Notifications() {
   }
 
   return (
-    <Screen>
+    <Screen floatingNav>
       <View style={{ gap: SPACE.sm }}>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>

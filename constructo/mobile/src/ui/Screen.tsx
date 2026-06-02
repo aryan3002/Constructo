@@ -9,16 +9,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '../theme/ThemeProvider'
 import { SPACE } from '../theme/tokens'
+import { FLOATING_NAV_CLEARANCE } from './FloatingTabBar'
 
 export function Screen({
   children,
   scroll = true,
   padded = true,
+  floatingNav = false,
   style,
 }: {
   children: ReactNode
   scroll?: boolean
   padded?: boolean
+  /**
+   * Reserve bottom room for the homeowner floating bar + Ask pill. The four tab
+   * screens pad themselves, but the off-tab routes (settings/members/
+   * notifications/welcome/household) render inside the same Tabs navigator — the
+   * bar + pill float over them too — so they opt in here to scroll fully clear
+   * (handoff §2.6). Off by default so contractor (Blueprint) screens are
+   * unaffected.
+   */
+  floatingNav?: boolean
   style?: ViewStyle
 }) {
   const { theme } = useTheme()
@@ -30,6 +41,7 @@ export function Screen({
     backgroundColor: theme.colors.bg,
     flex: 1,
   }
+  const bottomPad = insets.bottom + (floatingNav ? FLOATING_NAV_CLEARANCE : SPACE.xl)
 
   if (!scroll) {
     return (
@@ -40,7 +52,7 @@ export function Screen({
     <ScrollView
       style={base}
       contentContainerStyle={[
-        { paddingTop: insets.top + SPACE.md, paddingBottom: insets.bottom + SPACE.xl },
+        { paddingTop: insets.top + SPACE.md, paddingBottom: bottomPad },
         pad,
         style,
       ]}
