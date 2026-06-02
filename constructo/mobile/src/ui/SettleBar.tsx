@@ -14,9 +14,11 @@
  * Pure/presentational (colors passed in, mirrors ProgressRing) so it is trivial
  * to reason about and reuse.
  */
-import { View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { Animated, Easing, View } from 'react-native'
 
 import { Micro } from './Typography'
+import { useReducedMotion } from './motion'
 
 export interface SettleBarProps {
   /** 0..1 — elapsed fraction of (started → handover). Drives FILL WIDTH only;
@@ -55,6 +57,29 @@ export function SettleBar({
   const fill = clamp01(fraction)
   const tick = tickFraction == null ? null : clamp01(tickFraction)
 
+  // §3.6: the fill grows in (300ms ease-out) on data load; Reduce Motion → snap.
+  const reduced = useReducedMotion()
+  const grow = useRef(new Animated.Value(reduced ? 1 : 0)).current
+  useEffect(() => {
+    if (reduced) {
+      grow.setValue(1)
+      return
+    }
+    const anim = Animated.timing(grow, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.out(Easing.cubic),
+      // width is a layout prop → cannot use the native driver.
+      useNativeDriver: false,
+    })
+    anim.start()
+    return () => anim.stop()
+  }, [grow, reduced, fill])
+  const fillWidth = grow.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', `${fill * 100}%`],
+  })
+
   return (
     <View style={{ gap: 8 }}>
       {/* Track */}
@@ -67,14 +92,14 @@ export function SettleBar({
           justifyContent: 'center',
         }}
       >
-        {/* Elapsed-time fill */}
-        <View
+        {/* Elapsed-time fill (grows in on load; never a percentage label) */}
+        <Animated.View
           style={{
             position: 'absolute',
             left: 0,
             top: 0,
             bottom: 0,
-            width: `${fill * 100}%`,
+            width: fillWidth,
             borderRadius: height / 2,
             backgroundColor: color,
           }}

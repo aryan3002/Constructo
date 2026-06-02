@@ -36,6 +36,7 @@ import {
   StatusCard,
   WeeklySummaryCard,
   FLOATING_NAV_CLEARANCE,
+  FadeInUp,
 } from '../../src/ui'
 import type { LivingHomeHeroStatusChip } from '../../src/ui'
 import type { QuietPeriod } from '../../src/api/types'
@@ -179,7 +180,12 @@ function QuietCard({ quiet, lang }: { quiet: QuietPeriod; lang: 'en' | 'hi' }) {
   if (nextDate) bodyParts.push(`${t.quietNextPrefix} ${nextDate}.`)
   const body = bodyParts.join(' ') || undefined
 
-  return <CalmCard status="quiet" title={t.quietTitle} body={body} />
+  // §3.6: quiet-period card mounts with a plain fade only — never a rise/pulse.
+  return (
+    <FadeInUp rise={false} linear>
+      <CalmCard status="quiet" title={t.quietTitle} body={body} />
+    </FadeInUp>
+  )
 }
 
 function formatRupees(n: number): string {
@@ -329,7 +335,7 @@ export default function Home() {
 
         {/* ---- ShortcutRail row 1: Next Up + Latest photos ---- */}
         {milestone_next || photos.length > 0 ? (
-          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+          <FadeInUp style={{ flexDirection: 'row', gap: SPACE.sm }}>
             {milestone_next ? (
               <HomeWidget
                 eyebrow={t.nextUp}
@@ -352,11 +358,11 @@ export default function Home() {
                 accessibilityLabel={`${photos.length} site photos — view gallery`}
               />
             ) : null}
-          </View>
+          </FadeInUp>
         ) : null}
 
         {/* ---- ShortcutRail row 2: Approved Changes + Ask Builder ---- */}
-        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+        <FadeInUp delay={40} style={{ flexDirection: 'row', gap: SPACE.sm }}>
           {spend_summary && spend_summary.change_count > 0 ? (
             <HomeWidget
               eyebrow={t.approvedChanges}
@@ -374,19 +380,21 @@ export default function Home() {
             href="/ask"
             accessibilityLabel={t.askBuilder}
           />
-        </View>
+        </FadeInUp>
 
         {/* ---- Weekly summary (warm-clay) — Home only, when a letter exists ---- */}
         {weekly?.text ? (
-          <WeeklySummaryCard
-            eyebrowPrefix={t.thisWeekEyebrow}
-            rangeLabel={weekRange(weekly.week_start) ?? ''}
-            summary={weekly.text}
-            listenLabel={t.listen}
-            readMoreLabel={t.readLetter}
-            readMoreHref="/(homeowner)/updates"
-            lang={lang}
-          />
+          <FadeInUp delay={80}>
+            <WeeklySummaryCard
+              eyebrowPrefix={t.thisWeekEyebrow}
+              rangeLabel={weekRange(weekly.week_start) ?? ''}
+              summary={weekly.text}
+              listenLabel={t.listen}
+              readMoreLabel={t.readLetter}
+              readMoreHref="/(homeowner)/updates"
+              lang={lang}
+            />
+          </FadeInUp>
         ) : null}
       </View>
     </ScrollView>
