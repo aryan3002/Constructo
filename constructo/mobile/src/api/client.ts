@@ -156,6 +156,18 @@ export const homeowner = {
       body: JSON.stringify(body),
     }),
 
+  /**
+   * Self-PATCH a member's own `notif_prefs` jsonb (no migration; same path the
+   * push-token persister uses). The caller passes the full merged prefs object —
+   * the server replaces the stored blob. Used by the Notifications screen.
+   * PATCH /homeowner/members/{id}
+   */
+  updateNotifPrefs: (id: string, notif_prefs: Record<string, unknown>) =>
+    request<HomeownerMember>(`/api/v1/homeowner/members/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ notif_prefs }),
+    }),
+
   /** Remove a household member. DELETE /homeowner/members/{id} */
   removeMember: (id: string) =>
     request<void>(`/api/v1/homeowner/members/${id}`, { method: 'DELETE' }),
