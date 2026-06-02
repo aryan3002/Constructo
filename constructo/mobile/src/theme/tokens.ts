@@ -72,6 +72,15 @@ export interface ThemeRadii {
   control: number
 }
 
+/** A single type role's size/line-height (+ optional tracking). */
+export type TypeStyle = { fontSize: number; lineHeight: number; letterSpacing?: number }
+export type TypeRole =
+  | 'display' | 'h1' | 'h2' | 'title' | 'bodyLg' | 'body'
+  | 'small' | 'micro' | 'dataNum' | 'monoSm'
+/** A full type scale (one size per role). Theme-aware: Daylight = Calm Cockpit,
+ *  Blueprint = the contractor's tighter engineered scale. */
+export type TypeScale = Record<TypeRole, TypeStyle>
+
 export interface Theme {
   name: ThemeName
   colors: ThemeColors
@@ -191,6 +200,25 @@ export const TYPE = {
   /** dates / timestamps / mono eyebrows — mono-only sub-14 exception. */
   monoSm: { fontSize: 13, lineHeight: 18, letterSpacing: 0.3 },
 } as const
+
+/**
+ * Blueprint (contractor) type scale — the original "engineered/dense" sizing,
+ * one notch smaller than the homeowner Calm Cockpit scale. The contractor app
+ * keeps a 12px micro (the homeowner floors visible text at 14px). Lives behind
+ * `theme.type` so the shared Typography components size per active surface.
+ */
+export const TYPE_BLUEPRINT: TypeScale = {
+  display: { fontSize: 28, lineHeight: 34, letterSpacing: -0.3 },
+  h1: { fontSize: 22, lineHeight: 28, letterSpacing: -0.2 },
+  h2: { fontSize: 18, lineHeight: 24 },
+  title: { fontSize: 16, lineHeight: 22 },
+  bodyLg: { fontSize: 16, lineHeight: 24 },
+  body: { fontSize: 16, lineHeight: 24 },
+  small: { fontSize: 14, lineHeight: 20 },
+  micro: { fontSize: 12, lineHeight: 16 },
+  dataNum: { fontSize: 16, lineHeight: 22 },
+  monoSm: { fontSize: 13, lineHeight: 18, letterSpacing: 0.3 },
+}
 
 /** 4px-base spacing scale (§3.3). `gutter` = screen side margin (20px). */
 export const SPACE = {
