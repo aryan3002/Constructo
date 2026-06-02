@@ -2,6 +2,7 @@
 
 from app.models.company import Company
 from app.models.decision import Decision, DecisionKind, DecisionState
+from app.models.dpr import Dpr, DprStatus
 from app.models.event_embedding import EventEmbedding
 from app.models.homeowner_design import (
     DesignProfile,
@@ -57,6 +58,8 @@ __all__ = [
     "DesignProfile",
     "DesignReference",
     "DesignSelection",
+    "Dpr",
+    "DprStatus",
     "DrawingKind",
     "EventEmbedding",
     "HomeownerMember",

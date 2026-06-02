@@ -25,6 +25,7 @@ from app.capture.router import router as capture_router
 from app.common.errors import install_error_handlers
 from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
+from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
 from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
@@ -88,6 +89,7 @@ app.include_router(invites_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(brief_router)
+app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
 app.include_router(attendance_router)  # phaseB capture/attendance
 app.include_router(reconcile_router)  # phaseB reconcile
