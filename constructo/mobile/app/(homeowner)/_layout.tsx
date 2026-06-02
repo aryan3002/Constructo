@@ -48,6 +48,9 @@ function HomeownerTabs() {
         <Tabs.Screen name="updates" options={{ title: t('nav.updates') }} />
         <Tabs.Screen name="design" options={{ title: t('nav.design') }} />
         <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
+        {/* Settings cluster — pushed from the Settings hub, no tab bar entry */}
+        <Tabs.Screen name="members" options={{ href: null }} />
+        <Tabs.Screen name="notifications" options={{ href: null }} />
         {/* Onboarding screens — no tab bar entry */}
         <Tabs.Screen name="welcome" options={{ href: null }} />
         <Tabs.Screen name="household" options={{ href: null }} />
