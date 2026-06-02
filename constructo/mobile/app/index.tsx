@@ -9,7 +9,8 @@
  *   owner            → /(contractor)/owner/brief  (Blueprint, H4)
  *   supervisor       → /(contractor)/supervisor/capture
  *   labor_contractor → /(contractor)/mukadam/attendance
- *   pm/accountant/procurement → /(contractor)     (Tier-2 placeholder; web primary)
+ *   pm               → /(contractor)/pm/dpr        (C4 Auto-DPR review)
+ *   accountant/procurement → /(contractor)         (Tier-2 placeholder; web primary)
  */
 import { ActivityIndicator, View } from 'react-native'
 import { Redirect } from 'expo-router'
@@ -43,6 +44,8 @@ export default function Index() {
   if (role === 'labor_contractor') {
     return <Redirect href="/(contractor)/mukadam/attendance" />
   }
-  // Tier-2 roles (PM/accountant/procurement) — placeholder; web is primary.
+  // PM (C4) — native Auto-DPR review surface.
+  if (role === 'pm') return <Redirect href="/(contractor)/pm/dpr" />
+  // Other Tier-2 roles (accountant/procurement) — placeholder; web is primary.
   return <Redirect href="/(contractor)" />
 }
