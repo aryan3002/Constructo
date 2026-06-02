@@ -13,8 +13,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useT } from '../../src/i18n/I18nProvider'
 import { homeowner } from '../../src/api/client'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, STATUS } from '../../src/theme/tokens'
-import type { Change, QuietPeriod } from '../../src/api/types'
+import { SPACE, STATUS, type Status } from '../../src/theme/tokens'
+import type { Change, ComponentStatus, QuietPeriod } from '../../src/api/types'
 import {
   Body,
   BodyStrong,
@@ -589,6 +589,18 @@ function ChangesTab() {
 }
 
 // ---- Property ----
+/**
+ * Per-component stage → status spine tone (mirrors `milestoneMeta`): done is "on
+ * track" green, in-progress is a calm neutral blue, not-started is the muted
+ * quiet tone. Calm Cockpit §8 forbids any %/progress bar — rooms read as stage
+ * chips (color + icon + the stage word) instead.
+ */
+const COMPONENT_TONE: Record<ComponentStatus, Status> = {
+  done: 'ok',
+  in_progress: 'info',
+  not_started: 'quiet',
+}
+
 function PropertyTab() {
   const { lang } = useT()
   const { theme } = useTheme()
@@ -609,7 +621,9 @@ function PropertyTab() {
   return (
     <Card padded={false}>
       {spaces.map((s, i) => {
-        const pct = s.progress != null ? Math.round(Math.max(0, Math.min(1, s.progress)) * 100) : null
+        // Calm Cockpit §8: no %, no progress bar. Each room reads as its set of
+        // stage chips (StatusPill = color + icon + stage word).
+        const components = s.components ?? []
         return (
           <View
             key={s.id}
@@ -620,40 +634,21 @@ function PropertyTab() {
               gap: SPACE.sm,
             }}
           >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: SPACE.md,
-              }}
-            >
-              <BodyStrong style={{ flex: 1 }}>{s.name}</BodyStrong>
-              {pct != null ? (
-                <Mono muted style={{ fontSize: 12 }}>{`${pct}%`}</Mono>
-              ) : (
-                <Small muted>{str.notStarted}</Small>
-              )}
-            </View>
-            {pct != null ? (
-              <View
-                style={{
-                  height: 6,
-                  borderRadius: 3,
-                  backgroundColor: c.line,
-                  overflow: 'hidden',
-                }}
-              >
-                <View
-                  style={{
-                    width: `${pct}%`,
-                    height: '100%',
-                    borderRadius: 3,
-                    backgroundColor: c.accent,
-                  }}
-                />
+            <BodyStrong>{s.name}</BodyStrong>
+            {components.length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                {components.map((comp) => (
+                  <StatusPill
+                    key={comp.id}
+                    size="sm"
+                    status={COMPONENT_TONE[comp.status]}
+                    label={comp.name}
+                  />
+                ))}
               </View>
-            ) : null}
+            ) : (
+              <Small muted>{str.notStarted}</Small>
+            )}
           </View>
         )
       })}
