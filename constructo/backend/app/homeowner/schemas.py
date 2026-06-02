@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.models import (
     ComponentStatus,
+    DrawingKind,
     HomeownerRequestStatus,
     HomeownerSubRole,
     MemberStatus,
@@ -151,6 +152,24 @@ class WeeklySummaryOut(BaseModel):
     week_start: date
     text: str
     published_at: datetime
+
+
+class DrawingOut(BaseModel):
+    """A published drawing/plan sheet (E2 columns). Shared by the contractor
+    publish response and the homeowner read slice."""
+
+    id: UUID
+    site_id: UUID
+    title: str
+    version: str
+    file_url: str
+    kind: DrawingKind
+    published_by: UUID | None
+    published_at: datetime
+    plain_summary_en: str | None
+    plain_summary_hi: str | None
+    change_note: str | None
+    supersedes_id: UUID | None
 
 
 class ChangeOut(BaseModel):

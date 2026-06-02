@@ -139,6 +139,20 @@ export interface CreateDecisionResponse {
 }
 
 // ============================================================================
+// Team members (assignable users) — GET /api/v1/users (owner/pm scope).
+// The Approvals "Assign" member picker reads this and POSTs the chosen user's
+// real UUID to /approvals/{id}/assign (replaces the old hard-coded 'pm').
+// ============================================================================
+
+export interface Member {
+  id: string
+  company_id: string
+  name: string
+  phone: string | null
+  role: Role
+}
+
+// ============================================================================
 // Site events (single-site timeline) — GET /sites/{id}/events
 // Ported from web/src/api/types.ts (SiteEvent).
 // ============================================================================
@@ -286,6 +300,9 @@ export const owner = {
       method: 'POST',
       body: JSON.stringify({ ids, note: note ?? null }),
     }),
+
+  // --- Team members (assignable users for the Assign picker) ---
+  members: () => request<Paginated<Member>>('/api/v1/users'),
 
   // --- Sites ---
   sites: () => request<Paginated<Site>>('/api/v1/sites'),

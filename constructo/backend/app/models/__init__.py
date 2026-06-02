@@ -9,6 +9,7 @@ from app.models.homeowner_design import (
     DesignSelection,
     ReferenceSource,
 )
+from app.models.homeowner_drawings import DrawingKind, PublishedDrawing
 from app.models.homeowner_feed import (
     Change,
     Milestone,
@@ -56,6 +57,7 @@ __all__ = [
     "DesignProfile",
     "DesignReference",
     "DesignSelection",
+    "DrawingKind",
     "EventEmbedding",
     "HomeownerMember",
     "HomeownerRequest",
@@ -71,6 +73,7 @@ __all__ = [
     "Permit",
     "PermitStatus",
     "Property",
+    "PublishedDrawing",
     "PublishedPhoto",
     "PushToken",
     "QuietPeriod",

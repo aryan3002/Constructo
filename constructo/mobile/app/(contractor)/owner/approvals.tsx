@@ -5,13 +5,14 @@
  * carry a 🏠 tag + SLA countdown (Owner.md §6.4).
  */
 import { useMemo, useState } from 'react'
-import { RefreshControl, ScrollView, View } from 'react-native'
+import { Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, type Status } from '../../../src/theme/tokens'
-import { owner, type Decision } from '../../../src/api/owner'
+import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
+import { owner, type Decision, type Member } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, Card, H1, Small } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from './_components'
 
@@ -20,7 +21,7 @@ const STR = {
     title: 'Approvals',
     subtitle: (n: number) => (n === 0 ? 'Nothing waiting on you.' : `${n} decision${n === 1 ? '' : 's'} waiting on you`),
     empty: 'Nothing waiting on you. All decisions are made.',
-    approve: 'Approve', hold: 'Hold', assign: 'Assign → PM',
+    approve: 'Approve', hold: 'Hold', assign: 'Assign',
     batchApprove: (n: number) => `Approve ${n} selected`,
     selectAll: 'Select all',
     clear: 'Clear',
@@ -30,12 +31,17 @@ const STR = {
     slaDue: (h: string) => `SLA: ${h}`,
     errorLine: 'We could not load your approvals just now.',
     tryAgain: 'Try again',
+    assignTitle: 'Assign to',
+    assignSubtitle: 'Pick a team member to hand this decision to.',
+    assignEmpty: 'No team members to assign yet.',
+    assignLoading: 'Loading team…',
+    cancel: 'Cancel',
   },
   hi: {
     title: 'मंज़ूरी',
     subtitle: (n: number) => (n === 0 ? 'आप पर कुछ भी लंबित नहीं।' : `आप पर ${n} निर्णय लंबित`),
     empty: 'आप पर कुछ भी लंबित नहीं। सभी निर्णय हो चुके हैं।',
-    approve: 'मंज़ूर', hold: 'रोकें', assign: 'सौंपें → PM',
+    approve: 'मंज़ूर', hold: 'रोकें', assign: 'सौंपें',
     batchApprove: (n: number) => `${n} चुने मंज़ूर करें`,
     selectAll: 'सभी चुनें',
     clear: 'साफ़ करें',
@@ -45,6 +51,11 @@ const STR = {
     slaDue: (h: string) => `SLA: ${h}`,
     errorLine: 'अभी मंज़ूरियाँ लोड नहीं हो सकीं।',
     tryAgain: 'फिर कोशिश करें',
+    assignTitle: 'किसे सौंपें',
+    assignSubtitle: 'इस निर्णय को सौंपने के लिए एक टीम सदस्य चुनें।',
+    assignEmpty: 'अभी सौंपने के लिए कोई टीम सदस्य नहीं।',
+    assignLoading: 'टीम लोड हो रही है…',
+    cancel: 'रद्द करें',
   },
 } as const
 
@@ -76,20 +87,27 @@ export default function Approvals() {
   const t = STR[lang]
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // The decision awaiting an assignee (drives the member picker modal). The old
+  // hard-coded `owner.assign(id, 'pm')` is gone — the user picks a real member.
+  const [assigningId, setAssigningId] = useState<string | null>(null)
 
   const q = useQuery({ queryKey: ['owner', 'approvals'], queryFn: () => owner.approvals('pending') })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['owner', 'approvals'] })
 
   const act = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'hold' | 'assign' }) => {
-      if (action === 'approve') return owner.approve(id)
-      if (action === 'hold') return owner.reject(id)
-      // Assign → PM. With no member picker on this surface, route to the owner
-      // as approver placeholder; the web/team picker sets the real assignee.
-      return owner.assign(id, 'pm')
-    },
+    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'hold' }) =>
+      action === 'approve' ? owner.approve(id) : owner.reject(id),
     onSuccess: () => void invalidate(),
+  })
+
+  const assignMut = useMutation({
+    mutationFn: ({ id, assignedTo }: { id: string; assignedTo: string }) =>
+      owner.assign(id, assignedTo),
+    onSuccess: () => {
+      setAssigningId(null)
+      void invalidate()
+    },
   })
 
   const batch = useMutation({
@@ -121,7 +139,7 @@ export default function Approvals() {
     )
   }
 
-  const pending = act.isPending || batch.isPending
+  const pending = act.isPending || batch.isPending || assignMut.isPending
 
   return (
     <Wrap onRefresh={invalidate} refreshing={q.isRefetching}>
@@ -175,13 +193,147 @@ export default function Approvals() {
                 selected={selected.has(d.id)}
                 onToggleSelect={() => toggle(d.id)}
                 chips={{ approve: t.approve, hold: t.hold, assign: t.assign }}
-                onChip={(action) => act.mutate({ id: d.id, action })}
+                onChip={(action) =>
+                  action === 'assign'
+                    ? setAssigningId(d.id)
+                    : act.mutate({ id: d.id, action })
+                }
               />
             ))}
           </View>
         </>
       )}
+
+      <MemberPicker
+        visible={assigningId !== null}
+        busy={assignMut.isPending}
+        t={t}
+        onClose={() => setAssigningId(null)}
+        onPick={(memberId) =>
+          assigningId && assignMut.mutate({ id: assigningId, assignedTo: memberId })
+        }
+      />
     </Wrap>
+  )
+}
+
+// Human label per role for the picker rows (en/hi mirror the i18n strings).
+const ROLE_LABEL: Record<'en' | 'hi', Partial<Record<Member['role'], string>>> = {
+  en: {
+    owner: 'Owner',
+    pm: 'Project Manager',
+    supervisor: 'Supervisor',
+    accountant: 'Accountant',
+    procurement: 'Procurement',
+    labor_contractor: 'Mukadam',
+  },
+  hi: {
+    owner: 'मालिक',
+    pm: 'प्रोजेक्ट मैनेजर',
+    supervisor: 'सुपरवाइज़र',
+    accountant: 'अकाउंटेंट',
+    procurement: 'खरीद',
+    labor_contractor: 'मुकादम',
+  },
+}
+
+/**
+ * MemberPicker — the Assign member picker (C3). Lists assignable team members
+ * (GET /users) and hands the chosen member's REAL UUID back so the decision is
+ * assigned to a person, not the old hard-coded 'pm' literal. The list query is
+ * lazy: it only fires while the modal is open.
+ */
+function MemberPicker({
+  visible,
+  busy,
+  t,
+  onClose,
+  onPick,
+}: {
+  visible: boolean
+  busy: boolean
+  t: { assignTitle: string; assignSubtitle: string; assignEmpty: string; assignLoading: string; cancel: string }
+  onClose: () => void
+  onPick: (memberId: string) => void
+}) {
+  const { lang } = useT()
+  const { theme } = useTheme()
+  const labels = ROLE_LABEL[lang]
+
+  const q = useQuery({
+    queryKey: ['owner', 'members'],
+    queryFn: () => owner.members(),
+    enabled: visible,
+  })
+
+  // Homeowners are never assignment targets for a contractor decision; every
+  // other company role (owner included, for self-assign) is pickable.
+  const members = (q.data?.items ?? []).filter((m) => m.role !== 'homeowner')
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' }}
+      >
+        <Pressable
+          onPress={() => undefined}
+          style={{
+            backgroundColor: theme.colors.bg,
+            borderTopLeftRadius: theme.radii.sheet,
+            borderTopRightRadius: theme.radii.sheet,
+            padding: SPACE.lg,
+            paddingBottom: SPACE.xxl,
+            gap: SPACE.md,
+          }}
+        >
+          <View style={{ gap: SPACE.xs }}>
+            <BodyStrong>{t.assignTitle}</BodyStrong>
+            <Small color={theme.colors.textMute}>{t.assignSubtitle}</Small>
+          </View>
+
+          {q.isLoading ? (
+            <Body muted>{t.assignLoading}</Body>
+          ) : members.length === 0 ? (
+            <Body muted>{t.assignEmpty}</Body>
+          ) : (
+            <View style={{ gap: SPACE.sm }}>
+              {members.map((m) => (
+                <Pressable
+                  key={m.id}
+                  disabled={busy}
+                  onPress={() => onPick(m.id)}
+                  style={{
+                    minHeight: TAP,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.md,
+                    paddingVertical: SPACE.sm,
+                    paddingHorizontal: SPACE.md,
+                    borderWidth: 1,
+                    borderColor: theme.colors.line,
+                    borderRadius: theme.radii.card,
+                    backgroundColor: theme.colors.card,
+                    opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  <Feather name="user" size={18} color={theme.colors.accentDeep} />
+                  <View style={{ flex: 1 }}>
+                    <BodyStrong>{m.name}</BodyStrong>
+                    <Small color={theme.colors.textMute}>
+                      {labels[m.role] ?? m.role}
+                    </Small>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={theme.colors.textMute} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <Button title={t.cancel} variant="secondary" size="md" onPress={onClose} />
+        </Pressable>
+      </Pressable>
+    </Modal>
   )
 }
 

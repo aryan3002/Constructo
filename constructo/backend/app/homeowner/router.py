@@ -59,6 +59,7 @@ from app.homeowner.schemas import (
     DesignConflictResolveIn,
     DesignProfileOut,
     DesignProfilePutIn,
+    DrawingOut,
     HomeOut,
     HomeownerDecisionOut,
     HomeownerMemberInviteIn,
@@ -103,6 +104,7 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     Property,
+    PublishedDrawing,
     PublishedPhoto,
     QuietPeriod,
     QuietStatus,
@@ -1035,6 +1037,48 @@ async def milestones(
         )
     ).scalars().all()
     return [_milestone_out(m) for m in rows]
+
+
+def _drawing_out(d: PublishedDrawing) -> DrawingOut:
+    return DrawingOut(
+        id=d.id,
+        site_id=d.site_id,
+        title=d.title,
+        version=d.version,
+        file_url=d.file_url,
+        kind=d.kind,
+        published_by=d.published_by,
+        published_at=d.published_at,
+        plain_summary_en=d.plain_summary_en,
+        plain_summary_hi=d.plain_summary_hi,
+        change_note=d.change_note,
+        supersedes_id=d.supersedes_id,
+    )
+
+
+@router.get("/drawings", response_model=list[DrawingOut])
+async def drawings(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> list[DrawingOut]:
+    """The published drawings/plans for a property (newest first), read-only.
+
+    The contractor publishes via ``POST /api/v1/publish/drawings``; this is the
+    homeowner-visible slice (scoped via ``resolve_site``). NOTE (follow-up): the
+    full homeowner plans-APPROVAL flow (the disabled approve path) is out of
+    scope for C3 — this only exposes the read so the data is available to the
+    homeowner app.
+    """
+    sid = await resolve_site(session, user, site_id)
+    rows = (
+        await session.execute(
+            select(PublishedDrawing)
+            .where(PublishedDrawing.site_id == sid)
+            .order_by(PublishedDrawing.published_at.desc(), PublishedDrawing.id)
+        )
+    ).scalars().all()
+    return [_drawing_out(d) for d in rows]
 
 
 @router.get("/quiet-periods", response_model=list[QuietPeriodOut])

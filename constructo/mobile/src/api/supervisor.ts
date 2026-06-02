@@ -15,7 +15,8 @@
  * bridge, NOT the app). So capture is NOT called from here directly — the
  * Capture screen ENQUEUES a {@link CaptureBody} into the offline outbox against
  * the assumed shape below; the outbox will replay it through `request` once the
- * backend exposes the endpoint. See {@link CAPTURE_PATH}/{@link CaptureBody}.
+ * backend exposes the endpoint. See {@link CaptureBody} (the Capture screen owns
+ * the replay path constant locally).
  */
 import { request, ApiError } from './client'
 import type { Paginated, Site } from './types'
@@ -99,9 +100,6 @@ export interface CaptureBody {
   /** Idempotency key so a replay never double-files a capture. */
   client_capture_id: string
 }
-
-/** The path the outbox will replay against once the backend exposes it. */
-export const CAPTURE_PATH = '/api/v1/captures'
 
 // ---------------------------------------------------------------------------
 // API surface (reads).
