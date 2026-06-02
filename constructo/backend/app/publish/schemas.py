@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models import ComponentStatus, MilestoneStatus, SpaceKind, UpdateType
+from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind, UpdateType
 
 # ---- publish to the feed ---------------------------------------------------
 
@@ -41,6 +41,25 @@ class PublishWeeklySummaryIn(BaseModel):
     site_id: UUID
     week_start: date
     text: str | None = None  # omitted → AI-drafted from this week's update titles
+
+
+class PublishDrawingIn(BaseModel):
+    """Publish a drawing/plan sheet into the homeowner-visible set (E2 columns).
+
+    A new version of an existing sheet sets ``supersedes_id`` to the prior
+    drawing's id (append-only versioning). Plain-language summaries are optional
+    — the read side can surface the raw sheet before a plain pass exists.
+    """
+
+    site_id: UUID
+    title: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    file_url: str = Field(min_length=1)
+    kind: DrawingKind = DrawingKind.other
+    change_note: str | None = None
+    plain_summary_en: str | None = None
+    plain_summary_hi: str | None = None
+    supersedes_id: UUID | None = None
 
 
 # ---- property skeleton -----------------------------------------------------

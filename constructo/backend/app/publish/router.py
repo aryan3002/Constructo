@@ -33,6 +33,7 @@ from app.homeowner.router import (
 from app.homeowner.schemas import (
     ChangeOut,
     ComponentOut,
+    DrawingOut,
     MemberOut,
     MilestoneOut,
     PhotoOut,
@@ -47,6 +48,7 @@ from app.models import (
     HomeownerMember,
     Milestone,
     Property,
+    PublishedDrawing,
     PublishedPhoto,
     QuietPeriod,
     SiteEventModel,
@@ -63,6 +65,7 @@ from app.publish.schemas import (
     MilestoneUpdateIn,
     PropertyCreateIn,
     PropertyUpdateIn,
+    PublishDrawingIn,
     PublishPhotoIn,
     PublishUpdateIn,
     PublishWeeklySummaryIn,
@@ -465,6 +468,79 @@ async def create_change(
         running_total_cost=float(change.cost_delta) if change.cost_delta is not None else 0.0,
         created_at=change.created_at,
     )
+
+
+# ---- drawings / plans ------------------------------------------------------
+
+
+def _drawing_out(d: PublishedDrawing) -> DrawingOut:
+    return DrawingOut(
+        id=d.id,
+        site_id=d.site_id,
+        title=d.title,
+        version=d.version,
+        file_url=d.file_url,
+        kind=d.kind,
+        published_by=d.published_by,
+        published_at=d.published_at,
+        plain_summary_en=d.plain_summary_en,
+        plain_summary_hi=d.plain_summary_hi,
+        change_note=d.change_note,
+        supersedes_id=d.supersedes_id,
+    )
+
+
+@router.post("/drawings", response_model=DrawingOut, status_code=201)
+async def publish_drawing(
+    body: PublishDrawingIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DrawingOut:
+    """Publish a drawing/plan sheet into the homeowner-visible set (C3, E2).
+
+    Append-only versioning: a revision sets ``supersedes_id`` to the prior
+    drawing on the SAME site (validated in-scope). The publish is contractor-
+    reviewed by definition — no AI gate here, the contractor uploads the sheet.
+    """
+    await _assert_site(session, user, body.site_id)
+    if body.supersedes_id is not None:
+        prior = await session.get(PublishedDrawing, body.supersedes_id)
+        if prior is None or prior.site_id != body.site_id:
+            raise AppError(404, "not_found", "Superseded drawing not found on this site")
+    drawing = PublishedDrawing(
+        site_id=body.site_id,
+        title=body.title,
+        version=body.version,
+        file_url=body.file_url,
+        kind=body.kind,
+        change_note=body.change_note,
+        plain_summary_en=body.plain_summary_en,
+        plain_summary_hi=body.plain_summary_hi,
+        supersedes_id=body.supersedes_id,
+        published_by=user.id,
+    )
+    session.add(drawing)
+    await session.commit()
+    await session.refresh(drawing)
+    return _drawing_out(drawing)
+
+
+@router.get("/drawings", response_model=list[DrawingOut])
+async def list_drawings(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID = Query(...),
+) -> list[DrawingOut]:
+    """List the drawings published for a site (newest first), contractor view."""
+    await _assert_site(session, user, site_id)
+    rows = (
+        await session.execute(
+            select(PublishedDrawing)
+            .where(PublishedDrawing.site_id == site_id)
+            .order_by(PublishedDrawing.published_at.desc(), PublishedDrawing.id)
+        )
+    ).scalars().all()
+    return [_drawing_out(d) for d in rows]
 
 
 # ---- members (contractor view) ---------------------------------------------
