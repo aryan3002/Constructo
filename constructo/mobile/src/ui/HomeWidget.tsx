@@ -75,6 +75,8 @@ export function HomeWidget({
               source={{ uri: bgImageUri }}
               style={[StyleSheet.absoluteFill, { borderRadius: theme.radii.card }]}
               resizeMode="cover"
+              importantForAccessibility="no"
+              accessibilityElementsHidden
             />
             <LinearGradient
               colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
