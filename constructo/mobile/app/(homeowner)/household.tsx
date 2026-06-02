@@ -12,10 +12,15 @@
  *
  * Guards: only Primary/Co-owner may reach this screen. Family/Advisor are
  * never routed here (welcome.tsx branches them away before arriving).
+ *
+ * Calm Cockpit: roster cards match the Members screen (avatar chip, role label,
+ * positive capability line, clock icon for invited). Premium Feather icons,
+ * warm paper, graceful authority. Strings stay in the per-screen en/hi pattern.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ActivityIndicator, Modal, Pressable, Share, TextInput, View } from 'react-native'
 import { useRouter } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner, ApiError } from '../../src/api/client'
@@ -101,6 +106,13 @@ const STR = {
     error: 'कुछ गड़बड़ हो गई',
   },
 } as const
+
+/** A premium Feather glyph per invitable role — a shape cue beside the chip. */
+const ROLE_ICON: Record<InvitableSubRole, React.ComponentProps<typeof Feather>['name']> = {
+  co_owner: 'home',
+  family: 'users',
+  advisor: 'feather',
+}
 
 export default function Household() {
   const { lang } = useT()
@@ -190,7 +202,7 @@ export default function Household() {
     borderColor: theme.colors.line,
     borderRadius: theme.radii.control,
     paddingHorizontal: SPACE.lg,
-    backgroundColor: theme.colors.card,
+    backgroundColor: AP.surfaceLow,
     color: theme.colors.text,
     fontSize: 16,
   } as const
@@ -200,26 +212,37 @@ export default function Household() {
       <View style={{ gap: SPACE.sm }}>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>
-        <Small muted>{tx.cap}</Small>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Feather name="users" size={13} color={theme.colors.textMute} />
+          <Small muted>{tx.cap}</Small>
+        </View>
       </View>
 
-      {/* Flash message */}
+      {/* Flash message — calm pine confirm with a check. */}
       {flashMsg ? (
         <View
           style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
             backgroundColor: AP.chip,
             borderRadius: theme.radii.control,
-            padding: SPACE.md,
+            paddingHorizontal: SPACE.lg,
+            paddingVertical: SPACE.md,
           }}
         >
-          <Small style={{ color: AP.onChip }}>{flashMsg}</Small>
+          <Feather name="check-circle" size={16} color={AP.onChip} />
+          <Small style={{ color: AP.onChip, fontWeight: '600' }}>{flashMsg}</Small>
         </View>
       ) : null}
 
       {/* Add-member form */}
       {!atCap ? (
         <Card style={{ gap: SPACE.md }}>
-          <BodyStrong>{tx.addMember}</BodyStrong>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Feather name="user-plus" size={18} color={theme.colors.accent} />
+            <BodyStrong>{tx.addMember}</BodyStrong>
+          </View>
           <TextInput
             value={draft.name}
             onChangeText={(v) => setDraft((d) => ({ ...d, name: v }))}
@@ -250,6 +273,9 @@ export default function Household() {
                     accessibilityState={{ selected: active }}
                     onPress={() => setDraft((d) => ({ ...d, sub_role: r }))}
                     style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
                       borderRadius: theme.radii.pill,
                       borderWidth: 1,
                       borderColor: active ? theme.colors.accent : theme.colors.line,
@@ -257,11 +283,15 @@ export default function Household() {
                       paddingHorizontal: SPACE.md,
                       paddingVertical: SPACE.xs,
                       minHeight: TAP,
-                      alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Small style={{ color: active ? theme.colors.accent : theme.colors.text }}>
+                    <Feather
+                      name={ROLE_ICON[r]}
+                      size={14}
+                      color={active ? theme.colors.accentDeep : theme.colors.textMute}
+                    />
+                    <Small style={{ color: active ? theme.colors.accentDeep : theme.colors.text, fontWeight: active ? '600' : '400' }}>
                       {ROLE_LABEL[r][L]}
                     </Small>
                   </Pressable>
@@ -273,19 +303,27 @@ export default function Household() {
             </Small>
           </View>
 
-          {draftError ? <Small color={theme.colors.risk}>{draftError}</Small> : null}
-          {serverError ? <Small color={theme.colors.risk}>{serverError}</Small> : null}
+          {draftError ? <FormError theme={theme} message={draftError} /> : null}
+          {serverError ? <FormError theme={theme} message={serverError} /> : null}
 
           <Button
             title={inviteMut.isPending ? tx.sending : tx.sendInvite}
             block
             loading={inviteMut.isPending}
             onPress={tryAdd}
+            leading={
+              inviteMut.isPending ? undefined : (
+                <Feather name="send" size={16} color={theme.colors.onAccent} />
+              )
+            }
           />
         </Card>
       ) : (
-        <Card>
-          <Small color={theme.colors.warn}>{tx.capReached}</Small>
+        <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.warn }}>
+          <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+            <Feather name="alert-triangle" size={16} color={theme.colors.warn} style={{ marginTop: 2 }} />
+            <Small color={theme.colors.warn} style={{ flex: 1 }}>{tx.capReached}</Small>
+          </View>
         </Card>
       )}
 
@@ -315,7 +353,13 @@ export default function Household() {
 
       {/* Navigation */}
       <View style={{ gap: SPACE.md, marginTop: SPACE.sm }}>
-        <Button title={tx.continue} block size="lg" onPress={() => router.replace('/(homeowner)/intake')} />
+        <Button
+          title={tx.continue}
+          block
+          size="lg"
+          onPress={() => router.replace('/(homeowner)/intake')}
+          leading={<Feather name="arrow-right" size={18} color={theme.colors.onAccent} />}
+        />
         <Button title={tx.skip} block variant="ghost" onPress={() => router.replace('/(homeowner)/home')} />
       </View>
 
@@ -339,7 +383,21 @@ export default function Household() {
               width: '100%',
             }}
           >
-            <BodyStrong>{tx.coOwnerConfirmTitle}</BodyStrong>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: theme.radii.pill,
+                  backgroundColor: theme.colors.secondaryContainer,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="shield" size={18} color={theme.colors.secondary} />
+              </View>
+              <BodyStrong>{tx.coOwnerConfirmTitle}</BodyStrong>
+            </View>
             <Body muted>
               {tx.coOwnerConfirmBody.replace('{name}', draft.name || 'This person')}
             </Body>
@@ -349,6 +407,22 @@ export default function Household() {
         </View>
       </Modal>
     </Screen>
+  )
+}
+
+// ---- small error row -----------------------------------------------------
+function FormError({
+  theme,
+  message,
+}: {
+  theme: ReturnType<typeof useTheme>['theme']
+  message: string
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Feather name="alert-circle" size={14} color={theme.colors.risk} />
+      <Small color={theme.colors.risk} style={{ flex: 1 }}>{message}</Small>
+    </View>
   )
 }
 
@@ -368,6 +442,7 @@ function MemberRow({
 }) {
   const isPrimary = member.sub_role === 'primary_owner'
   const isInvited = member.status === 'invited'
+  const name = member.display_name ?? member.phone ?? '—'
 
   return (
     <Card
@@ -379,14 +454,37 @@ function MemberRow({
         borderLeftColor: isInvited ? theme.colors.warn : 'transparent',
       }}
     >
+      {/* Avatar chip — matches the Members screen. */}
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: theme.radii.pill,
+          backgroundColor: AP.chip,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Feather name="user" size={18} color={theme.colors.accentDeep} />
+      </View>
+
       <View style={{ flex: 1, gap: SPACE.xs }}>
-        <BodyStrong>{member.display_name ?? member.phone ?? '—'}</BodyStrong>
-        <Small muted>{subRoleLabel(member.sub_role, lang)}</Small>
-        <Small
-          style={{ color: isInvited ? theme.colors.warn : theme.colors.ok }}
-        >
-          {statusLabel(member.status, lang)}
+        <BodyStrong numberOfLines={1}>{name}</BodyStrong>
+        <Small style={{ color: theme.colors.accentDeep }}>
+          {subRoleLabel(member.sub_role, lang)}
         </Small>
+
+        {isInvited ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <Feather name="clock" size={13} color={theme.colors.warn} />
+            <Small style={{ color: theme.colors.warn }}>{statusLabel(member.status, lang)}</Small>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <Feather name="check" size={13} color={theme.colors.ok} />
+            <Small style={{ color: theme.colors.ok }}>{statusLabel(member.status, lang)}</Small>
+          </View>
+        )}
       </View>
 
       <View style={{ gap: SPACE.sm, alignItems: 'flex-end' }}>
@@ -395,16 +493,19 @@ function MemberRow({
             accessibilityRole="button"
             onPress={onShare}
             style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
               borderRadius: theme.radii.pill,
               backgroundColor: AP.chip,
               paddingHorizontal: SPACE.md,
               paddingVertical: 6,
               minHeight: TAP,
-              alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Small style={{ color: AP.onChip }}>
+            <Feather name="share-2" size={14} color={AP.onChip} />
+            <Small style={{ color: AP.onChip, fontWeight: '600' }}>
               {lang === 'hi' ? 'लिंक भेजें' : 'Share link'}
             </Small>
           </Pressable>
@@ -413,13 +514,19 @@ function MemberRow({
         {!isPrimary ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={lang === 'hi' ? 'हटाएँ' : 'Remove'}
             onPress={onRemove}
             hitSlop={8}
-            style={{ minHeight: TAP, alignItems: 'center', justifyContent: 'center' }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: TAP,
+              justifyContent: 'center',
+            }}
           >
-            <Small color={theme.colors.risk}>
-              {lang === 'hi' ? 'हटाएँ' : 'Remove'}
-            </Small>
+            <Feather name="x" size={14} color={theme.colors.risk} />
+            <Small color={theme.colors.risk}>{lang === 'hi' ? 'हटाएँ' : 'Remove'}</Small>
           </Pressable>
         ) : null}
       </View>

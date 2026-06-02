@@ -12,6 +12,11 @@
  *
  * Entry: welcome.tsx → household.tsx → this screen (or direct deep-link).
  * Exit:  finish/skip → /(homeowner)/home (with L3 empty-state copy shown there).
+ *
+ * Calm Cockpit (§5): a clean step indicator, the real-photo preference grid,
+ * and a Step-3 AI profile card with a grounding/"Reviewed" feel + tone pills +
+ * honest abstention when inputs are sparse. Premium Feather icons, warm paper,
+ * no emoji, no %. Strings stay in the per-screen en/hi pattern.
  */
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, TextInput, View } from 'react-native'
@@ -30,10 +35,8 @@ import {
   Body,
   BodyStrong,
   Button,
-  CalmCard,
   Card,
   Display,
-  H2,
   Micro,
   Screen,
   Small,
@@ -61,13 +64,19 @@ const STR = {
     // step 3
     s3Title: 'Here is your design vibe',
     s3Body: 'We drafted this from your choices. Does it feel like you?',
+    s3Eyebrow: 'YOUR DESIGN PROFILE',
+    grounded: 'Drafted from your choices',
     drafting: 'Crafting your design profile…',
     profileError: 'We could not draft your profile just now.',
+    // Honest abstention when the model has too little to go on (§0 rule 5).
+    sparse:
+      "We don't have enough to capture your style yet. Pick a few looks or add a photo, and we'll draft it — or describe it in your own words below.",
     retry: 'Try again',
     feelsRight: 'This feels right',
     adjust: 'Adjust',
     save: 'Save changes',
     voice: 'Describe it in your words',
+    toneLabel: 'TONE',
     // step 4 — owners only
     s4Title: 'Who else gets a design say?',
     s4Body: 'You can let other household members weigh in on design choices — for the whole home or just one room.',
@@ -94,13 +103,18 @@ const STR = {
     photosCount: '{n} तस्वीर(ें) जोड़ी गईं',
     s3Title: 'यह रहा आपका डिज़ाइन अंदाज़',
     s3Body: 'हमने इसे आपकी पसंद से तैयार किया है। क्या यह आपके जैसा लगता है?',
+    s3Eyebrow: 'आपका डिज़ाइन प्रोफ़ाइल',
+    grounded: 'आपकी पसंद से तैयार',
     drafting: 'आपका डिज़ाइन प्रोफ़ाइल तैयार हो रहा है…',
     profileError: 'अभी हम आपका प्रोफ़ाइल तैयार नहीं कर सके।',
+    sparse:
+      'आपकी पसंद समझने के लिए अभी हमारे पास पर्याप्त नहीं है। कुछ रूप चुनें या एक तस्वीर जोड़ें, फिर हम तैयार करेंगे — या नीचे अपने शब्दों में बताएँ।',
     retry: 'फिर कोशिश करें',
     feelsRight: 'यह सही लगता है',
     adjust: 'बदलें',
     save: 'बदलाव सहेजें',
     voice: 'अपने शब्दों में बताएँ',
+    toneLabel: 'अंदाज़',
     s4Title: 'और किसे डिज़ाइन में राय देनी है?',
     s4Body: 'आप अन्य सदस्यों को डिज़ाइन विकल्पों में भाग लेने दे सकते हैं — पूरे घर के लिए या सिर्फ़ एक कमरे के लिए।',
     noSay: 'कोई राय नहीं',
@@ -376,6 +390,7 @@ function IntakeFlow() {
           loading={profileMut.isPending}
           error={profileMut.isError}
           text={text}
+          tone={tone}
           editing={editing}
           draft={draft}
           setDraft={setDraft}
@@ -412,21 +427,29 @@ function IntakeFlow() {
 function ProgressBar({ step, total, label }: { step: number; total: number; label: string }) {
   const { theme } = useTheme()
   return (
-    <View style={{ gap: SPACE.xs }}>
-      <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-        {Array.from({ length: total }, (_, i) => i + 1).map((i) => (
-          <View
-            key={i}
-            style={{
-              flex: 1,
-              height: 6,
-              borderRadius: 3,
-              backgroundColor: i <= step ? theme.colors.accent : theme.colors.line,
-            }}
-          />
-        ))}
+    <View style={{ gap: SPACE.sm }}>
+      <View style={{ flexDirection: 'row', gap: SPACE.sm, alignItems: 'center' }}>
+        {Array.from({ length: total }, (_, i) => i + 1).map((i) => {
+          const done = i < step
+          const current = i === step
+          return (
+            <View
+              key={i}
+              style={{
+                flex: 1,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: done || current ? theme.colors.accent : theme.colors.line,
+                opacity: current ? 0.65 : 1,
+              }}
+            />
+          )
+        })}
       </View>
-      <Small muted>{label}</Small>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Feather name="compass" size={13} color={theme.colors.textMute} />
+        <Small muted>{label}</Small>
+      </View>
     </View>
   )
 }
@@ -525,6 +548,7 @@ function StepStyles({
         size="lg"
         disabled={selected.length === 0}
         onPress={onContinue}
+        leading={<Feather name="arrow-right" size={18} color={theme.colors.onAccent} />}
       />
     </View>
   )
@@ -552,11 +576,20 @@ function StepReferences({
         <Body muted>{tx.s2Body}</Body>
       </View>
 
-      <Button title={tx.addPhotos} variant="secondary" block onPress={onAdd} />
+      <Button
+        title={tx.addPhotos}
+        variant="secondary"
+        block
+        onPress={onAdd}
+        leading={<Feather name="image" size={18} color={theme.colors.text} />}
+      />
 
       {photos.length > 0 ? (
         <View style={{ gap: SPACE.sm }}>
-          <Small muted>{fmt(tx.photosCount, { n: photos.length })}</Small>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Feather name="check" size={13} color={theme.colors.ok} />
+            <Small muted>{fmt(tx.photosCount, { n: photos.length })}</Small>
+          </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
             {photos.map((uri, i) => (
               <Image
@@ -575,7 +608,12 @@ function StepReferences({
       ) : null}
 
       <View style={{ flexDirection: 'row', gap: SPACE.md }}>
-        <Button title={tx.back} variant="ghost" onPress={onBack} />
+        <Button
+          title={tx.back}
+          variant="ghost"
+          onPress={onBack}
+          leading={<Feather name="arrow-left" size={16} color={theme.colors.text} />}
+        />
         <View style={{ flex: 1 }} />
         <Button title={tx.skipStep} variant="ghost" onPress={onContinue} />
         <Button title={tx.continue} onPress={onContinue} />
@@ -590,6 +628,7 @@ function StepProfile({
   loading,
   error,
   text,
+  tone,
   editing,
   draft,
   setDraft,
@@ -604,6 +643,7 @@ function StepProfile({
   loading: boolean
   error: boolean
   text: string
+  tone: string
   editing: boolean
   draft: string
   setDraft: (s: string) => void
@@ -615,6 +655,9 @@ function StepProfile({
   onBack: () => void
 }) {
   const { theme } = useTheme()
+  // Honest abstention: the model returned (no error) but produced no usable text.
+  const isSparse = !loading && !error && !editing && text.trim().length === 0
+
   return (
     <View style={{ gap: SPACE.lg }}>
       <View style={{ gap: SPACE.xs }}>
@@ -624,22 +667,75 @@ function StepProfile({
 
       {loading ? (
         <Card>
-          <Body muted>{tx.drafting}</Body>
-        </Card>
-      ) : null}
-
-      {error && !loading ? (
-        <Card>
-          <View style={{ gap: SPACE.md }}>
-            <Small color={theme.colors.risk}>{tx.profileError}</Small>
-            <Button title={tx.retry} variant="secondary" onPress={onRetry} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+            <ActivityIndicator color={theme.colors.accent} />
+            <Body muted>{tx.drafting}</Body>
           </View>
         </Card>
       ) : null}
 
-      {!loading && !error ? (
+      {error && !loading ? (
+        <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.warn }}>
+          <View style={{ gap: SPACE.md }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+              <Feather name="alert-triangle" size={16} color={theme.colors.warn} style={{ marginTop: 2 }} />
+              <Small color={theme.colors.warn} style={{ flex: 1 }}>{tx.profileError}</Small>
+            </View>
+            <Button
+              title={tx.retry}
+              variant="secondary"
+              onPress={onRetry}
+              leading={<Feather name="refresh-cw" size={16} color={theme.colors.text} />}
+            />
+          </View>
+        </Card>
+      ) : null}
+
+      {/* Honest abstention — sparse inputs, no fabricated profile (§0 rule 5). */}
+      {isSparse ? (
+        <Card style={{ backgroundColor: AP.surfaceLow, borderColor: theme.colors.line }}>
+          <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+            <Feather name="info" size={16} color={theme.colors.info} style={{ marginTop: 2 }} />
+            <Small muted style={{ flex: 1 }}>{tx.sparse}</Small>
+          </View>
+        </Card>
+      ) : null}
+
+      {!loading && !error && !isSparse ? (
         <>
-          <CalmCard title={tx.s3Title} status="ok">
+          {/* AI profile card — pine-bordered, with a grounding/"Reviewed" badge. */}
+          <View
+            style={[
+              {
+                backgroundColor: theme.colors.card,
+                borderRadius: theme.radii.card,
+                borderLeftWidth: 4,
+                borderLeftColor: theme.colors.accent,
+                padding: SPACE.lg,
+                gap: SPACE.md,
+              },
+              theme.shadowCard,
+            ]}
+          >
+            {/* Eyebrow + grounding badge */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm }}>
+              <Micro style={{ letterSpacing: 1.5, color: theme.colors.textMute }}>{tx.s3Eyebrow}</Micro>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderRadius: theme.radii.pill,
+                  backgroundColor: AP.chip,
+                  paddingHorizontal: SPACE.sm,
+                  paddingVertical: 3,
+                }}
+              >
+                <Feather name="check-circle" size={12} color={AP.onChip} />
+                <Micro style={{ color: AP.onChip, fontWeight: '600' }}>{tx.grounded}</Micro>
+              </View>
+            </View>
+
             {editing ? (
               <TextInput
                 multiline
@@ -655,12 +751,35 @@ function StepProfile({
                   borderColor: theme.colors.line,
                   borderRadius: theme.radii.control,
                   padding: SPACE.md,
+                  backgroundColor: AP.surfaceLow,
                 }}
               />
             ) : (
               <Body>{text}</Body>
             )}
-          </CalmCard>
+
+            {/* Tone pill — a soft clay accent describing the vibe (when present). */}
+            {!editing && tone ? (
+              <View style={{ gap: SPACE.xs }}>
+                <Micro style={{ letterSpacing: 1, color: theme.colors.textMute }}>{tx.toneLabel}</Micro>
+                <View
+                  style={{
+                    alignSelf: 'flex-start',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    borderRadius: theme.radii.pill,
+                    backgroundColor: theme.colors.secondaryContainer,
+                    paddingHorizontal: SPACE.md,
+                    paddingVertical: 4,
+                  }}
+                >
+                  <Feather name="feather" size={13} color={theme.colors.secondary} />
+                  <Small style={{ color: theme.colors.secondary, fontWeight: '600' }}>{tone}</Small>
+                </View>
+              </View>
+            ) : null}
+          </View>
 
           {/* voice affordance stub */}
           <Pressable
@@ -677,21 +796,65 @@ function StepProfile({
             }}
           >
             <Feather name="mic" size={16} color={theme.colors.accent} />
-            <Small muted>{tx.voice}</Small>
+            <Small style={{ color: theme.colors.accentDeep }}>{tx.voice}</Small>
           </Pressable>
 
           {editing ? (
-            <Button title={tx.save} block size="lg" loading={saving} onPress={onSave} />
+            <Button
+              title={tx.save}
+              block
+              size="lg"
+              loading={saving}
+              onPress={onSave}
+              leading={saving ? undefined : <Feather name="check" size={18} color={theme.colors.onAccent} />}
+            />
           ) : (
             <View style={{ gap: SPACE.md }}>
-              <Button title={tx.feelsRight} block size="lg" onPress={onFeelsRight} />
-              <Button title={tx.adjust} block variant="secondary" onPress={onAdjust} />
+              <Button
+                title={tx.feelsRight}
+                block
+                size="lg"
+                onPress={onFeelsRight}
+                leading={<Feather name="check" size={18} color={theme.colors.onAccent} />}
+              />
+              <Button
+                title={tx.adjust}
+                block
+                variant="secondary"
+                onPress={onAdjust}
+                leading={<Feather name="edit-2" size={16} color={theme.colors.text} />}
+              />
             </View>
           )}
         </>
       ) : null}
 
-      <Button title={tx.back} variant="ghost" onPress={onBack} />
+      {/* When sparse, still offer voice so the user can describe it themselves. */}
+      {isSparse ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tx.voice}
+          onPress={() => {
+            // TODO(voice): wire up voice capture of the design profile.
+          }}
+          style={{
+            minHeight: TAP,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
+          }}
+        >
+          <Feather name="mic" size={16} color={theme.colors.accent} />
+          <Small style={{ color: theme.colors.accentDeep }}>{tx.voice}</Small>
+        </Pressable>
+      ) : null}
+
+      <Button
+        title={tx.back}
+        variant="ghost"
+        onPress={onBack}
+        leading={<Feather name="arrow-left" size={16} color={theme.colors.text} />}
+      />
     </View>
   )
 }
@@ -742,12 +905,15 @@ function StepDesignSay({
       </View>
 
       {members.length === 0 ? (
-        <Card>
-          <Body muted>
-            {L === 'hi'
-              ? 'अभी कोई अन्य सदस्य नहीं हैं। बाद में Settings → Members से जोड़ सकते हैं।'
-              : 'No other members yet. You can add them later from Settings → Members.'}
-          </Body>
+        <Card style={{ backgroundColor: AP.surfaceLow, borderColor: theme.colors.line }}>
+          <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+            <Feather name="users" size={16} color={theme.colors.textMute} style={{ marginTop: 2 }} />
+            <Body muted style={{ flex: 1 }}>
+              {L === 'hi'
+                ? 'अभी कोई अन्य सदस्य नहीं हैं। बाद में Settings → Members से जोड़ सकते हैं।'
+                : 'No other members yet. You can add them later from Settings → Members.'}
+            </Body>
+          </View>
         </Card>
       ) : (
         members.map((m) => {
@@ -757,18 +923,41 @@ function StepDesignSay({
 
           return (
             <Card key={m.id} style={{ gap: SPACE.md }}>
-              <BodyStrong>{m.display_name ?? m.phone ?? '—'}</BodyStrong>
-              <Micro muted style={{ letterSpacing: 1 }}>
-                {m.sub_role === 'family'
-                  ? L === 'hi' ? 'परिवार' : 'FAMILY'
-                  : L === 'hi' ? 'सलाहकार' : 'ADVISOR'}
-              </Micro>
+              {/* Member header — avatar chip + name + role, matches Members. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: theme.radii.pill,
+                    backgroundColor: AP.chip,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather
+                    name={m.sub_role === 'advisor' ? 'feather' : 'user'}
+                    size={18}
+                    color={theme.colors.accentDeep}
+                  />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <BodyStrong numberOfLines={1}>{m.display_name ?? m.phone ?? '—'}</BodyStrong>
+                  <Small style={{ color: theme.colors.accentDeep }}>
+                    {m.sub_role === 'family'
+                      ? L === 'hi' ? 'परिवार' : 'Family'
+                      : L === 'hi' ? 'सलाहकार' : 'Advisor'}
+                  </Small>
+                </View>
+              </View>
 
-              {/* Say chips */}
-              <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+              {/* Say chips — icon + word per option. */}
+              <View style={{ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' }}>
                 {(['none', 'full', 'room'] as DesignSay[]).map((opt) => {
                   const label =
                     opt === 'none' ? tx.noSay : opt === 'full' ? tx.fullSay : tx.oneRoom
+                  const icon: React.ComponentProps<typeof Feather>['name'] =
+                    opt === 'none' ? 'minus-circle' : opt === 'full' ? 'home' : 'square'
                   const active = say === opt
                   return (
                     <Pressable
@@ -777,6 +966,9 @@ function StepDesignSay({
                       accessibilityState={{ selected: active }}
                       onPress={() => onUpdate(m.id, opt, opt === 'room' ? spaceId : null)}
                       style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
                         borderRadius: theme.radii.pill,
                         borderWidth: 1,
                         borderColor: active ? theme.colors.accent : theme.colors.line,
@@ -784,11 +976,15 @@ function StepDesignSay({
                         paddingHorizontal: SPACE.md,
                         paddingVertical: SPACE.xs,
                         minHeight: TAP,
-                        alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      <Small style={{ color: active ? theme.colors.accent : theme.colors.text }}>
+                      <Feather
+                        name={icon}
+                        size={13}
+                        color={active ? theme.colors.accentDeep : theme.colors.textMute}
+                      />
+                      <Small style={{ color: active ? theme.colors.accentDeep : theme.colors.text, fontWeight: active ? '600' : '400' }}>
                         {label}
                       </Small>
                     </Pressable>
@@ -818,7 +1014,7 @@ function StepDesignSay({
                             paddingVertical: 6,
                           }}
                         >
-                          <Small style={{ color: active ? theme.colors.accent : theme.colors.text }}>
+                          <Small style={{ color: active ? theme.colors.accentDeep : theme.colors.text }}>
                             {sp.name}
                           </Small>
                         </Pressable>
@@ -832,7 +1028,12 @@ function StepDesignSay({
         })
       )}
 
-      {error ? <Small color={theme.colors.risk}>{error}</Small> : null}
+      {error ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Feather name="alert-circle" size={14} color={theme.colors.risk} />
+          <Small color={theme.colors.risk} style={{ flex: 1 }}>{error}</Small>
+        </View>
+      ) : null}
 
       <Button
         title={saving ? tx.savingSay : tx.saveSay}
@@ -840,9 +1041,15 @@ function StepDesignSay({
         size="lg"
         loading={saving}
         onPress={onSave}
+        leading={saving ? undefined : <Feather name="check" size={18} color={theme.colors.onAccent} />}
       />
       <Button title={tx.skipStep} block variant="ghost" onPress={onSkip} />
-      <Button title={tx.back} variant="ghost" onPress={onBack} />
+      <Button
+        title={tx.back}
+        variant="ghost"
+        onPress={onBack}
+        leading={<Feather name="arrow-left" size={16} color={theme.colors.text} />}
+      />
     </View>
   )
 }

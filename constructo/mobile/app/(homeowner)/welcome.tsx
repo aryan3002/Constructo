@@ -12,21 +12,35 @@
  * Parameters come from join.tsx via router params (from JoinOut).
  * Falls back gracefully when display_name / company_name are absent
  * (JoinOut extension not yet deployed on backend).
+ *
+ * Calm Cockpit: the greeting is TEMPLATED TRUTH — honest metadata only
+ * (property + "invited by"). Never an AI-generated/embellished line. Premium
+ * Feather icons, Calm-Pine accents, warm paper. Strings stay in the per-screen
+ * en/hi pattern (NOT the i18n catalog — founder's WIP).
  */
 import { View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
 
 import type { HomeownerSubRole } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
-import { Body, Button, Card, Display, Micro, Screen, Small } from '../../src/ui'
+import { Body, BodyStrong, Button, CalmCard, Card, Display, Micro, Screen, Small } from '../../src/ui'
 
 const ROLE_LABEL: Record<HomeownerSubRole, { en: string; hi: string }> = {
   primary_owner: { en: 'Primary Owner', hi: 'मुख्य मालिक' },
   co_owner: { en: 'Co-owner', hi: 'सह-मालिक' },
   family: { en: 'Family Member', hi: 'परिवार सदस्य' },
   advisor: { en: 'Advisor', hi: 'सलाहकार' },
+}
+
+/** A premium Feather glyph per role — a shape cue beside the role label. */
+const ROLE_ICON: Record<HomeownerSubRole, React.ComponentProps<typeof Feather>['name']> = {
+  primary_owner: 'home',
+  co_owner: 'home',
+  family: 'users',
+  advisor: 'feather',
 }
 
 const ROLE_COPY: Record<
@@ -93,6 +107,7 @@ export default function Welcome() {
   const displayName = params.display_name || null
   const companyName = params.company_name || null
   const roleLabel = ROLE_LABEL[subRole]?.[L] ?? ROLE_LABEL.primary_owner[L]
+  const roleIcon = ROLE_ICON[subRole] ?? ROLE_ICON.primary_owner
   const roleCopy = ROLE_COPY[subRole]?.[L] ?? ROLE_COPY.primary_owner[L]
 
   const ctaLabel = isOwner
@@ -102,6 +117,7 @@ export default function Welcome() {
     : L === 'hi'
       ? 'घर देखें'
       : 'Go to my home'
+  const ctaIcon: React.ComponentProps<typeof Feather>['name'] = isOwner ? 'user-plus' : 'arrow-right'
 
   function onContinue() {
     if (isOwner) {
@@ -121,66 +137,75 @@ export default function Welcome() {
 
   return (
     <Screen>
-      {/* Header area */}
-      <View style={{ marginTop: SPACE.xxl, gap: SPACE.sm }}>
-        <Micro
-          style={{ letterSpacing: 2, color: theme.colors.textMute }}
+      {/* Brand eyebrow + a soft Calm-Pine welcome mark. */}
+      <View style={{ marginTop: SPACE.xl, gap: SPACE.lg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+          <Feather name="home" size={16} color={theme.colors.accent} />
+          <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>CONSTRUCTO</Micro>
+        </View>
+
+        {/* Templated-truth greeting — honest metadata only (property + inviter). */}
+        <View style={{ gap: SPACE.sm }}>
+          <Display>
+            {L === 'hi' ? 'स्वागत है' : 'Welcome'}
+            {displayName ? ` — ${displayName}` : ''}
+          </Display>
+          {companyName ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="briefcase" size={14} color={theme.colors.textMute} />
+              <Small muted>
+                {L === 'hi' ? `${companyName} द्वारा आमंत्रित` : `Invited by ${companyName}`}
+              </Small>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Role chip — icon + word (never color alone). */}
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            borderRadius: theme.radii.pill,
+            backgroundColor: AP.chip,
+            paddingHorizontal: SPACE.md,
+            paddingVertical: SPACE.xs + 2,
+          }}
         >
-          CONSTRUCTO
-        </Micro>
-        <Display>
-          {L === 'hi' ? 'स्वागत है' : 'Welcome'}
-          {displayName ? ` — ${displayName}` : ''}
-        </Display>
-        {companyName ? (
-          <Small muted>
-            {L === 'hi'
-              ? `${companyName} द्वारा आमंत्रित`
-              : `Invited by ${companyName}`}
-          </Small>
-        ) : null}
+          <Feather name={roleIcon} size={14} color={AP.onChip} />
+          <Small style={{ color: AP.onChip, fontWeight: '600' }}>{roleLabel}</Small>
+        </View>
       </View>
 
-      {/* Role chip */}
-      <View
-        style={{
-          alignSelf: 'flex-start',
-          borderRadius: theme.radii.pill,
-          backgroundColor: AP.chip,
-          paddingHorizontal: SPACE.md,
-          paddingVertical: SPACE.xs,
-        }}
-      >
-        <Small style={{ color: AP.onChip }}>{roleLabel}</Small>
-      </View>
+      {/* Role-specific reassurance — a calm pine-bordered card. */}
+      <CalmCard title={roleCopy.tagline} body={roleCopy.body} status="ok" />
 
-      {/* Role-specific copy card */}
-      <Card style={{ gap: SPACE.sm, backgroundColor: theme.colors.card }}>
-        <Body style={{ fontWeight: '700' }}>{roleCopy.tagline}</Body>
-        <Body muted>{roleCopy.body}</Body>
-      </Card>
-
-      {/* Quiet period / empty state reassurance (L3) */}
-      <Card
-        style={{
-          backgroundColor: AP.surfaceLow,
-          borderWidth: 0,
-          gap: SPACE.xs,
-        }}
-      >
-        <Small muted>
-          {L === 'hi'
-            ? 'आपका बिल्डर यहाँ अपडेट शेयर करना शुरू करेगा — हम शांत दौर समझाएँगे ताकि आप कभी अनजान न रहें।'
-            : "Your builder will start sharing updates here — we'll explain quiet stretches so you're never left wondering."}
-        </Small>
+      {/* Quiet-period / empty-state reassurance (L3) — soft inset, never alarming. */}
+      <Card style={{ backgroundColor: AP.surfaceLow, borderColor: theme.colors.line }}>
+        <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+          <Feather name="clock" size={16} color={theme.colors.quiet} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1, gap: SPACE.xs }}>
+            <BodyStrong>{L === 'hi' ? 'अभी सब शांत है' : 'All calm for now'}</BodyStrong>
+            <Small muted>
+              {L === 'hi'
+                ? 'आपका बिल्डर यहाँ अपडेट शेयर करना शुरू करेगा — हम शांत दौर समझाएँगे ताकि आप कभी अनजान न रहें।'
+                : "Your builder will start sharing updates here — we'll explain quiet stretches so you're never left wondering."}
+            </Small>
+          </View>
+        </View>
       </Card>
 
       {/* CTA */}
       <View style={{ gap: SPACE.md, marginTop: SPACE.sm }}>
-        <Button title={ctaLabel} block size="lg" onPress={onContinue} />
-        {isOwner && (
-          <Button title={skipLabel} block variant="ghost" onPress={onSkip} />
-        )}
+        <Button
+          title={ctaLabel}
+          block
+          size="lg"
+          onPress={onContinue}
+          leading={<Feather name={ctaIcon} size={18} color={theme.colors.onAccent} />}
+        />
+        {isOwner && <Button title={skipLabel} block variant="ghost" onPress={onSkip} />}
       </View>
     </Screen>
   )
