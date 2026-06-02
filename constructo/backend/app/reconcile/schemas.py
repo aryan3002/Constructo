@@ -91,3 +91,44 @@ class HoldPaymentOut(BaseModel):
     site_id: UUID | None
     amount_at_risk: float
     created_at: datetime
+
+
+# --- accountant overview (C4 — read-only money slice) -----------------------
+
+
+class ReconcileSiteSummaryOut(BaseModel):
+    """One site's reconciliation summary inside the accountant overview."""
+
+    site_id: UUID
+    site_name: str
+    summary: ReconcileSummaryOut
+
+
+class MoneyExceptionOut(BaseModel):
+    """An open money flag (a ``hold_payment`` decision) for the accountant.
+
+    Read-only: it surfaces what was already flagged so the accountant can see
+    the worst money risks first. The accountant never resolves it here — the
+    owner does, from the approvals inbox (the accountant flags, the owner pays).
+    """
+
+    decision_id: UUID
+    site_id: UUID | None
+    title: str
+    detail: str | None
+    state: str
+    amount_at_risk: float
+    created_at: datetime
+
+
+class AccountantOverviewOut(BaseModel):
+    """The accountant's exceptions-first money cockpit, across visible sites.
+
+    Aggregates reconciliation status per site (worst-first) and the open money
+    exceptions. Tracking-only — there is no action here that moves money.
+    """
+
+    total_amount_at_risk: float = 0.0
+    open_exception_count: int = 0
+    sites: list[ReconcileSiteSummaryOut]
+    exceptions: list[MoneyExceptionOut]

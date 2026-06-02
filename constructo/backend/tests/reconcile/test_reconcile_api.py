@@ -209,3 +209,83 @@ async def test_hold_payment_rejects_cross_site_pair(client, factory, db_session,
         headers=auth(owner),
     )
     assert resp.status_code == 422
+
+
+# --- accountant overview (C4) -----------------------------------------------
+
+
+async def test_accountant_overview_worst_first_and_exceptions(
+    client, factory, db_session, owner
+):
+    company = await _company(db_session, owner.company_id)
+    accountant = await factory.user(company=company, role=UserRole.accountant)
+
+    clean = await factory.site(company=company, name="Clean")
+    await _delivery(db_session, clean.id, quantity=100.0)
+    await _invoice(db_session, clean.id, quantity=100.0)
+
+    messy = await factory.site(company=company, name="Messy")
+    await _delivery(db_session, messy.id, quantity=100.0)
+    await _invoice(db_session, messy.id, quantity=150.0, amount=60000.0)
+
+    # A pre-existing money flag (hold_payment) the accountant should see.
+    db_session.add(
+        Decision(
+            company_id=company.id,
+            site_id=messy.id,
+            kind=DecisionKind.hold_payment,
+            title="Hold payment to UltraTech",
+            detail="Payment held pending review (₹8,400 at risk).",
+            assigned_to=owner.id,
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get("/api/v1/reconcile/overview", headers=auth(accountant))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # Worst-first: the site with the variance sorts ahead of the clean one.
+    assert body["sites"][0]["site_name"] == "Messy"
+    assert body["total_amount_at_risk"] >= 10000.0
+
+    # The open money exception is surfaced with its ₹-at-risk recovered.
+    assert body["open_exception_count"] == 1
+    exc = body["exceptions"][0]
+    assert exc["state"] == "pending"
+    assert exc["amount_at_risk"] == 8400.0
+
+
+async def test_accountant_overview_is_site_scoped(client, factory, db_session):
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    assigned = await factory.site(company=company, name="Assigned")
+    other = await factory.site(company=company, name="Other")
+    sup = await factory.user(company=company, role=UserRole.supervisor)
+
+    # Assign the supervisor to one site only.
+    await client.post(
+        f"/api/v1/sites/{assigned.id}/assign",
+        json={"user_id": str(sup.id)},
+        headers=auth(owner),
+    )
+
+    # A hold on a site the supervisor cannot see must not leak.
+    db_session.add(
+        Decision(
+            company_id=company.id,
+            site_id=other.id,
+            kind=DecisionKind.hold_payment,
+            title="Hold on other site",
+            detail="Payment held pending review (₹9,000 at risk).",
+            assigned_to=owner.id,
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get("/api/v1/reconcile/overview", headers=auth(sup))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    site_names = {s["site_name"] for s in body["sites"]}
+    assert site_names == {"Assigned"}
+    assert body["open_exception_count"] == 0

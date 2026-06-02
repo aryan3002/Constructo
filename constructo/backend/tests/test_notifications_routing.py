@@ -30,6 +30,22 @@ def test_kind_routes_to_correct_role():
     assert routing.role_for_kind(DecisionKind.hold_payment) == UserRole.labor_contractor
 
 
+def test_procurement_routes_to_pm_hat_not_a_seat():
+    """Correction #3: procurement is a HAT — route to the PM (default hat-wearer),
+    never to a non-existent `procurement` seat."""
+    assert routing.role_for_procurement() == UserRole.pm
+    assert UserRole.procurement not in routing.PROCUREMENT_HAT_ROLES
+    # The ordered fallback chain is pm -> supervisor -> owner (no procurement seat).
+    assert routing.PROCUREMENT_HAT_ROLES == (
+        UserRole.pm,
+        UserRole.supervisor,
+        UserRole.owner,
+    )
+    # A procurement request reuses DecisionKind.approval, which is already
+    # PM-routed (no new enum value / migration needed).
+    assert routing.role_for_kind(DecisionKind.approval) == routing.role_for_procurement()
+
+
 def test_severity_escalated_is_risk():
     assert routing.severity_for(DecisionKind.approval, DecisionState.escalated) == "risk"
     assert routing.severity_for(DecisionKind.hold_payment, DecisionState.pending) == "risk"
