@@ -1,13 +1,26 @@
 /**
- * Design Documents — the homeowner's single-scroll design hub: style profile,
- * plans, an inspiration board, and material selections with a NON-blocking
- * "check fit" advisor. Philosophy: seek feedback, never gatekeep.
+ * Design — the homeowner's "Calm Cockpit" design hub (handoff §5 "Design"):
+ *   1. Style Profile card — a premium read of the AI design profile (tone pills,
+ *      contributors from proposal C, "decide together" conflict cards).
+ *   2. Plans — published drawings (title · version · kind · the AI "what changed"
+ *      line in the active language · an amber "Pending your approval" chip). The
+ *      file opens via `file_url`; the Approve action is an HONEST "coming soon —
+ *      ask your builder" placeholder (the approve backend isn't built yet).
+ *   3. Room-by-room coherence — advisory tone (✓ fits / ~ worth a look), NEVER
+ *      blocking, NEVER red.
+ *   4. Inspiration board — real reference photos with a provenance label.
+ *   5. Monthly digest — an honest warm-clay "coming soon" placeholder.
+ *
+ * Philosophy: seek feedback, never gatekeep. Real photos only, premium Feather
+ * icons (no emoji), no `%`, advisory design tone never red/blocking, honest
+ * placeholders (never fake an approval/digest).
  */
 import { useState } from 'react'
-import { Alert, Image, TextInput, View } from 'react-native'
+import { Alert, Image, Linking, TextInput, View } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Link } from 'expo-router'
 
 import { homeowner, request } from '../../src/api/client'
@@ -15,10 +28,11 @@ import type {
   ConsistencyCheck,
   DesignConflict,
   DesignSelection,
+  Drawing,
 } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
@@ -28,12 +42,17 @@ import {
   Display,
   H2,
   Micro,
+  MonoSm,
   Screen,
   Small,
   StatusPill,
+  Title,
 } from '../../src/ui'
 import {
   DESIGN_STR,
+  drawingDate,
+  drawingKindLabel,
+  drawingSummary,
   isProfileEmpty,
   profileConflicts,
   profileContributors,
@@ -46,8 +65,12 @@ export default function Design() {
   const { lang } = useT()
   const { theme } = useTheme()
   const qc = useQueryClient()
+  const insets = useSafeAreaInsets()
   const STR = DESIGN_STR[lang]
   const c = theme.colors
+
+  // Floating nav + Ask pill clearance (handoff §2.1): 64 bar + 12 gap + inset.
+  const navClearance = 64 + 12 + insets.bottom + 24
 
   const profileQ = useQuery({
     queryKey: ['design', 'profile'],
@@ -57,8 +80,13 @@ export default function Design() {
     queryKey: ['design', 'selections'],
     queryFn: () => homeowner.selections(),
   })
+  // Published drawings/plans (C3 read slice). Approval flow is not built yet.
+  const drawingsQ = useQuery({
+    queryKey: ['design', 'drawings'],
+    queryFn: () => homeowner.drawings(),
+  })
 
-  // Inspiration board — now backed by GET /design/references so attributed refs
+  // Inspiration board — backed by GET /design/references so attributed refs
   // survive a reload (proposal C; previously local-only state that vanished).
   const referencesQ = useQuery({
     queryKey: ['design', 'references'],
@@ -143,6 +171,16 @@ export default function Design() {
     }
   }
 
+  // Open a drawing's real file. The approve path is honestly "coming soon".
+  async function openDrawing(drawing: Drawing) {
+    if (!drawing.file_url) return
+    try {
+      await Linking.openURL(drawing.file_url)
+    } catch {
+      Alert.alert(STR.errorTitle, STR.openFile)
+    }
+  }
+
   const inputStyle = {
     borderWidth: 1,
     borderColor: c.line,
@@ -156,12 +194,37 @@ export default function Design() {
   const profile = profileQ.data
   const contributors = profileContributors(profile)
   const conflicts = profileConflicts(profile)
+  const tones = profileTone(profile)
+  const drawings = drawingsQ.data ?? []
+
+  // A reusable soft chip (warm-paper pill with hairline).
+  const chip = (key: string, content: React.ReactNode) => (
+    <View
+      key={key}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACE.xs,
+        borderRadius: theme.radii.pill,
+        borderWidth: 1,
+        borderColor: c.line,
+        backgroundColor: c.paper,
+        paddingHorizontal: SPACE.md,
+        paddingVertical: SPACE.xs,
+      }}
+    >
+      {content}
+    </View>
+  )
 
   return (
-    <Screen>
-      <Display>{STR.title}</Display>
+    <Screen style={{ paddingBottom: navClearance }}>
+      <View style={{ gap: 2 }}>
+        <Display>{STR.title}</Display>
+        <Small muted>{STR.subtitle}</Small>
+      </View>
 
-      {/* 1. Design profile -------------------------------------------------- */}
+      {/* 1. Style Profile -------------------------------------------------- */}
       {profileQ.isLoading ? (
         <Card>
           <Small muted>{STR.loading}</Small>
@@ -189,67 +252,71 @@ export default function Design() {
           </Link>
         </CalmCard>
       ) : (
-        <CalmCard status="info" eyebrow={STR.styleEyebrow} title={STR.profileEmptyTitle}>
+        <Card>
           <View style={{ gap: SPACE.md }}>
-            {profileText(profile) ? <Body>{profileText(profile)}</Body> : null}
-            {profileTone(profile).length ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-                {profileTone(profile).map((tone) => (
-                  <View
-                    key={tone}
-                    style={{
-                      borderRadius: theme.radii.pill,
-                      borderWidth: 1,
-                      borderColor: c.line,
-                      backgroundColor: c.paper,
-                      paddingHorizontal: SPACE.md,
-                      paddingVertical: SPACE.xs,
-                    }}
-                  >
-                    <Small>{tone}</Small>
-                  </View>
-                ))}
+            <View style={{ gap: 2 }}>
+              <Micro muted style={{ letterSpacing: 1 }}>
+                {STR.styleEyebrow}
+              </Micro>
+              <Title>{STR.styleTitle}</Title>
+            </View>
+
+            {profileText(profile) ? <Body muted>{profileText(profile)}</Body> : null}
+
+            {tones.length ? (
+              <View style={{ gap: SPACE.sm }}>
+                <MonoSm muted style={{ letterSpacing: 0.5 }}>
+                  {STR.toneEyebrow}
+                </MonoSm>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                  {tones.map((tone) =>
+                    chip(
+                      `tone-${tone}`,
+                      <>
+                        <Feather name="feather" size={12} color={c.accent} />
+                        <Small color={c.accentDeep} style={{ fontWeight: '600' }}>
+                          {tone}
+                        </Small>
+                      </>,
+                    ),
+                  )}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Contributors — who shaped this household profile (proposal C). */}
+            {contributors.length > 0 ? (
+              <View style={{ gap: SPACE.sm }}>
+                <MonoSm muted style={{ letterSpacing: 0.5 }}>
+                  {STR.contributorsTitle.toUpperCase()}
+                </MonoSm>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                  {contributors.map((person) =>
+                    chip(
+                      `c-${person.member_id ?? person.name}`,
+                      <>
+                        <Feather
+                          name={person.authoritative ? 'user-check' : 'user'}
+                          size={12}
+                          color={c.textMute}
+                        />
+                        <BodyStrong>{person.name}</BodyStrong>
+                        <Micro muted>
+                          {person.authoritative ? STR.authoritativeTag : STR.advisoryTag}
+                        </Micro>
+                      </>,
+                    ),
+                  )}
+                </View>
               </View>
             ) : null}
           </View>
-        </CalmCard>
+        </Card>
       )}
 
-      {/* 1b. Contributors — who shaped this household profile ---------------- */}
-      {contributors.length > 0 ? (
-        <Card>
-          <View style={{ gap: SPACE.sm }}>
-            <H2>{STR.contributorsTitle}</H2>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-              {contributors.map((person) => (
-                <View
-                  key={person.member_id ?? person.name}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: SPACE.xs,
-                    borderRadius: theme.radii.pill,
-                    borderWidth: 1,
-                    borderColor: c.line,
-                    backgroundColor: c.paper,
-                    paddingHorizontal: SPACE.md,
-                    paddingVertical: SPACE.xs,
-                  }}
-                >
-                  <BodyStrong>{person.name}</BodyStrong>
-                  <Micro muted>
-                    {person.authoritative ? STR.authoritativeTag : STR.advisoryTag}
-                  </Micro>
-                </View>
-              ))}
-            </View>
-          </View>
-        </Card>
-      ) : null}
-
-      {/* 1c. "Decide together" — diverging authoritative choices ------------- */}
+      {/* 1b. "Decide together" — diverging authoritative choices ------------- */}
       {/* Calm, never a fight: the app surfaces both picks and a HUMAN chooses;
-          the AI never adjudicates a winner (Hard Rule 5). */}
+          the AI never adjudicates a winner (Hard Rule 5). Amber (warn), never red. */}
       {conflicts.length > 0 ? (
         <CalmCard
           status="warn"
@@ -296,31 +363,26 @@ export default function Design() {
       {/* 2. Plans & drawings ------------------------------------------------ */}
       <Card>
         <View style={{ gap: SPACE.md }}>
-          <H2>{STR.plansTitle}</H2>
-          <View
-            style={{
-              borderRadius: theme.radii.card,
-              borderWidth: 1,
-              borderColor: c.line,
-              borderStyle: 'dashed',
-              backgroundColor: c.paper,
-              padding: SPACE.xl,
-              alignItems: 'center',
-            }}
-          >
-            <Small muted>{STR.plansEmpty}</Small>
+          <View style={{ gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Feather name="file-text" size={18} color={c.accent} />
+              <H2>{STR.plansTitle}</H2>
+            </View>
+            <Small muted>{STR.plansSubtitle}</Small>
           </View>
-          {/* Drawing approval coming soon — not yet wired to a backend endpoint. */}
-          <Button title={STR.approveDrawing} variant="secondary" disabled />
-          <Small muted style={{ marginTop: SPACE.xs }}>{STR.approveDrawingComingSoon}</Small>
-        </View>
-      </Card>
 
-      {/* 3. Inspiration board ---------------------------------------------- */}
-      <Card>
-        <View style={{ gap: SPACE.md }}>
-          <H2>{STR.inspirationTitle}</H2>
-          {refs.length === 0 ? (
+          {drawingsQ.isLoading ? (
+            <Small muted>{STR.loading}</Small>
+          ) : drawingsQ.isError ? (
+            <View style={{ gap: SPACE.sm }}>
+              <Small muted>{STR.errorTitle}</Small>
+              <Button
+                title={STR.retry}
+                variant="secondary"
+                onPress={() => void drawingsQ.refetch()}
+              />
+            </View>
+          ) : drawings.length === 0 ? (
             <View
               style={{
                 borderRadius: theme.radii.card,
@@ -330,39 +392,123 @@ export default function Design() {
                 backgroundColor: c.paper,
                 padding: SPACE.xl,
                 alignItems: 'center',
+                gap: SPACE.xs,
               }}
             >
-              <Small muted>{STR.inspirationEmpty}</Small>
+              <Feather name="layout" size={22} color={c.textMute} />
+              <BodyStrong style={{ textAlign: 'center' }}>{STR.plansEmptyTitle}</BodyStrong>
+              <Small muted style={{ textAlign: 'center' }}>
+                {STR.plansEmpty}
+              </Small>
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-              {refs.map((ref) => (
-                <Image
-                  key={ref.id}
-                  source={{ uri: ref.image_url }}
-                  style={{
-                    width: 96,
-                    height: 96,
-                    borderRadius: theme.radii.control,
-                    backgroundColor: c.paper,
-                  }}
-                />
-              ))}
+            <View style={{ gap: SPACE.md }}>
+              {drawings.map((d) => {
+                const summary = drawingSummary(d, lang)
+                const when = drawingDate(d.published_at, lang)
+                return (
+                  <View
+                    key={d.id}
+                    style={{
+                      borderRadius: theme.radii.card,
+                      borderWidth: 1,
+                      borderColor: c.line,
+                      backgroundColor: c.paper,
+                      padding: SPACE.lg,
+                      gap: SPACE.sm,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: SPACE.sm,
+                      }}
+                    >
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Title>{d.title}</Title>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: SPACE.sm,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <Micro muted>{drawingKindLabel(d.kind, STR)}</Micro>
+                          <MonoSm muted>
+                            {STR.versionLabel} {d.version}
+                          </MonoSm>
+                          {when ? <MonoSm muted>{when}</MonoSm> : null}
+                        </View>
+                      </View>
+                      {/* Amber "Pending your approval" — honest: approval flow
+                          is not built, so this is a status chip, not an action. */}
+                      <StatusPill status="warn" size="sm" label={STR.pendingApproval} />
+                    </View>
+
+                    {/* AI "what changed" line — active language, as-is. */}
+                    {summary ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          gap: SPACE.sm,
+                          backgroundColor: c.card,
+                          borderRadius: theme.radii.control,
+                          padding: SPACE.md,
+                        }}
+                      >
+                        <Feather
+                          name="edit-3"
+                          size={14}
+                          color={c.accent}
+                          style={{ marginTop: 2 }}
+                        />
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <MonoSm muted style={{ letterSpacing: 0.5 }}>
+                            {STR.whatChanged}
+                          </MonoSm>
+                          <Small>{summary}</Small>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.xs }}>
+                      <Button
+                        title={STR.openFile}
+                        variant="secondary"
+                        size="md"
+                        onPress={() => void openDrawing(d)}
+                      />
+                      {/* HONEST placeholder — the approve backend isn't built. */}
+                      <Button
+                        title={STR.approveDrawing}
+                        variant="ghost"
+                        size="md"
+                        onPress={() => Alert.alert(STR.approveDrawing, STR.approveDrawingComingSoon)}
+                      />
+                    </View>
+                  </View>
+                )
+              })}
             </View>
           )}
-          <Button
-            title={STR.addInspiration}
-            variant="secondary"
-            loading={addRefMut.isPending}
-            onPress={() => void pickInspiration()}
-          />
         </View>
       </Card>
 
-      {/* 4. Selections ------------------------------------------------------ */}
+      {/* 3. Room-by-room coherence — advisory, NEVER blocking, NEVER red ---- */}
+      {/* A gentle read on how choices fit. Tones are limited to ok (✓ fits) and
+          warn (~ worth a look) — risk/red is deliberately never used here. */}
       <Card>
         <View style={{ gap: SPACE.md }}>
-          <H2>{STR.selectionsTitle}</H2>
+          <View style={{ gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Feather name="grid" size={18} color={c.accent} />
+              <H2>{STR.coherenceTitle}</H2>
+            </View>
+            <Small muted>{STR.coherenceSubtitle}</Small>
+          </View>
 
           {selectionsQ.isLoading ? (
             <Small muted>{STR.loading}</Small>
@@ -381,6 +527,10 @@ export default function Design() {
             <View style={{ gap: SPACE.md }}>
               {selectionsQ.data!.map((sel) => {
                 const note = advice[sel.id]
+                // Advisory tone only: ✓ fits (ok) / ~ worth a look (warn).
+                // Never derive `risk` here — design feedback never blocks/reds.
+                const advisoryTone = note ? (note.fits ? 'ok' : 'warn') : selectionStatus(sel)
+                const safeTone = advisoryTone === 'risk' ? 'warn' : advisoryTone
                 return (
                   <View
                     key={sel.id}
@@ -403,7 +553,13 @@ export default function Design() {
                         <BodyStrong>{sel.item}</BodyStrong>
                         <Small muted>{sel.choice}</Small>
                       </View>
-                      <StatusPill status={selectionStatus(sel)} size="sm" label={sel.status} />
+                      {note ? (
+                        <StatusPill
+                          status={safeTone}
+                          size="sm"
+                          label={note.fits ? STR.fitsLabel : STR.worthLookLabel}
+                        />
+                      ) : null}
                     </View>
 
                     {note ? (
@@ -468,6 +624,113 @@ export default function Design() {
           </View>
         </View>
       </Card>
+
+      {/* 4. Inspiration board — REAL photos + provenance ------------------- */}
+      <Card>
+        <View style={{ gap: SPACE.md }}>
+          <View style={{ gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Feather name="image" size={18} color={c.accent} />
+              <H2>{STR.inspirationTitle}</H2>
+            </View>
+            <Small muted>{STR.inspirationSubtitle}</Small>
+          </View>
+
+          {referencesQ.isLoading ? (
+            <Small muted>{STR.loading}</Small>
+          ) : refs.length === 0 ? (
+            <View
+              style={{
+                borderRadius: theme.radii.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                borderStyle: 'dashed',
+                backgroundColor: c.paper,
+                padding: SPACE.xl,
+                alignItems: 'center',
+                gap: SPACE.xs,
+              }}
+            >
+              <Feather name="image" size={22} color={c.textMute} />
+              <Small muted style={{ textAlign: 'center' }}>
+                {STR.inspirationEmpty}
+              </Small>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md }}>
+              {refs.map((ref) => (
+                <View key={ref.id} style={{ width: 104, gap: SPACE.xs }}>
+                  <Image
+                    source={{ uri: ref.image_url }}
+                    resizeMode="cover"
+                    accessibilityIgnoresInvertColors
+                    style={{
+                      width: 104,
+                      height: 104,
+                      borderRadius: theme.radii.control,
+                      backgroundColor: AP.surfaceLow,
+                      borderWidth: 1,
+                      borderColor: c.line,
+                    }}
+                  />
+                  {/* Provenance label — where this reference came from. */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Feather
+                      name={ref.source === 'pinterest' ? 'bookmark' : 'upload'}
+                      size={11}
+                      color={c.textMute}
+                    />
+                    <Micro muted numberOfLines={1}>
+                      {ref.source === 'pinterest'
+                        ? STR.provenancePinterest
+                        : STR.provenanceUpload}
+                    </Micro>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Button
+            title={STR.addInspiration}
+            variant="secondary"
+            loading={addRefMut.isPending}
+            onPress={() => void pickInspiration()}
+          />
+        </View>
+      </Card>
+
+      {/* 5. Monthly digest — honest warm-clay "coming soon" placeholder ----- */}
+      <View
+        style={[
+          {
+            backgroundColor: c.card,
+            borderRadius: theme.radii.card,
+            borderLeftWidth: 4,
+            borderLeftColor: c.secondary,
+            padding: SPACE.lg,
+            gap: SPACE.sm,
+          },
+          theme.shadowCard,
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: c.secondaryContainer,
+            }}
+          >
+            <Feather name="calendar" size={16} color={c.secondary} />
+          </View>
+          <Title>{STR.digestTitle}</Title>
+        </View>
+        <Body muted>{STR.digestComingSoon}</Body>
+      </View>
     </Screen>
   )
 }

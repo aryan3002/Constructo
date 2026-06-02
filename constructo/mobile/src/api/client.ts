@@ -12,6 +12,7 @@ import type {
   DesignProfile,
   DesignReference,
   DesignSelection,
+  Drawing,
   Home,
   HomeownerDecision,
   HomeownerJoinRequest,
@@ -95,6 +96,9 @@ export const homeowner = {
     request<DesignProfile>(`/api/v1/homeowner/design/profile${qs({ site_id: siteId })}`),
   selections: (siteId?: string) =>
     request<DesignSelection[]>(`/api/v1/homeowner/design/selections${qs({ site_id: siteId })}`),
+  /** Published drawings/plans for a property (newest first, read-only — C3). */
+  drawings: (siteId?: string) =>
+    request<Drawing[]>(`/api/v1/homeowner/drawings${qs({ site_id: siteId })}`),
   /** Attributed inspiration references for a site (survives reload — proposal C). */
   designReferences: (siteId?: string) =>
     request<DesignReference[]>(`/api/v1/homeowner/design/references${qs({ site_id: siteId })}`),

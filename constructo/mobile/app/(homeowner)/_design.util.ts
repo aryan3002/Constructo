@@ -7,23 +7,44 @@ import type {
   DesignContributor,
   DesignProfile,
   DesignSelection,
+  Drawing,
+  DrawingKind,
+  Language,
 } from '../../src/api/types'
 import type { Status } from '../../src/theme/tokens'
 
 /** Localised string bundle shape used by the Design screen. */
 export interface DesignStrings {
   title: string
+  subtitle: string
   styleEyebrow: string
+  styleTitle: string
   profileEmptyTitle: string
   profileEmptyBody: string
   setupProfile: string
+  toneEyebrow: string
   plansTitle: string
+  plansSubtitle: string
   plansEmpty: string
+  plansEmptyTitle: string
+  whatChanged: string
+  versionLabel: string
+  pendingApproval: string
+  openFile: string
   approveDrawing: string
   approveDrawingComingSoon: string
+  coherenceTitle: string
+  coherenceSubtitle: string
+  fitsLabel: string
+  worthLookLabel: string
   inspirationTitle: string
+  inspirationSubtitle: string
   inspirationEmpty: string
   addInspiration: string
+  provenanceUpload: string
+  provenancePinterest: string
+  digestTitle: string
+  digestComingSoon: string
   selectionsTitle: string
   selectionsEmpty: string
   checkFit: string
@@ -44,23 +65,45 @@ export interface DesignStrings {
   conflictResolved: string
   authoritativeTag: string
   advisoryTag: string
+  /** Per-kind drawing labels (active language). */
+  kinds: Record<DrawingKind, string>
 }
 
 export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
   en: {
     title: 'Design',
+    subtitle: 'Your style, your plans — all in one calm place.',
     styleEyebrow: 'YOUR STYLE',
+    styleTitle: 'Your design profile',
     profileEmptyTitle: 'Tell us your style',
     profileEmptyBody:
       'Set up a quick design profile so every choice stays true to the home you imagine.',
     setupProfile: 'Set up your design profile',
+    toneEyebrow: 'THE FEELING',
     plansTitle: 'Plans',
-    plansEmpty: 'Your approved drawings will appear here.',
-    approveDrawing: 'Approve drawing',
-    approveDrawingComingSoon: 'Drawing approval coming soon',
+    plansSubtitle: 'Drawings your builder has shared.',
+    plansEmpty: 'Your builder hasn’t shared any drawings yet. They’ll appear here.',
+    plansEmptyTitle: 'No plans shared yet',
+    whatChanged: 'WHAT CHANGED',
+    versionLabel: 'Version',
+    pendingApproval: 'Pending your approval',
+    openFile: 'Open drawing',
+    approveDrawing: 'Approve',
+    approveDrawingComingSoon:
+      'Approving plans in the app is coming soon. For now, please confirm with your builder.',
+    coherenceTitle: 'How your choices fit together',
+    coherenceSubtitle: 'A gentle read on coherence — advice only, never a block.',
+    fitsLabel: 'Fits your style',
+    worthLookLabel: 'Worth a look',
     inspirationTitle: 'Inspiration',
+    inspirationSubtitle: 'Real photos that capture the look you love.',
     inspirationEmpty: 'Add photos that capture the look you love.',
     addInspiration: 'Add inspiration',
+    provenanceUpload: 'You added this',
+    provenancePinterest: 'From Pinterest',
+    digestTitle: 'Monthly design digest',
+    digestComingSoon:
+      'A warm monthly recap of how your home is taking shape is coming soon.',
     selectionsTitle: 'Selections',
     selectionsEmpty: 'No selections yet. Add your first one below.',
     checkFit: 'Check fit',
@@ -81,21 +124,50 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     conflictResolved: 'Choice saved for your home.',
     authoritativeTag: 'has a say',
     advisoryTag: 'suggesting',
+    kinds: {
+      plan: 'Floor plan',
+      elevation: 'Elevation',
+      section: 'Section',
+      structural: 'Structural',
+      electrical: 'Electrical',
+      plumbing: 'Plumbing',
+      other: 'Drawing',
+    },
   },
   hi: {
     title: 'डिज़ाइन',
+    subtitle: 'आपकी शैली, आपके नक्शे — सब एक शांत जगह पर।',
     styleEyebrow: 'आपकी शैली',
+    styleTitle: 'आपका डिज़ाइन प्रोफ़ाइल',
     profileEmptyTitle: 'हमें अपनी शैली बताएं',
     profileEmptyBody:
       'एक छोटा डिज़ाइन प्रोफ़ाइल बनाएं ताकि हर चुनाव उस घर के अनुरूप रहे जिसकी आप कल्पना करते हैं।',
     setupProfile: 'अपना डिज़ाइन प्रोफ़ाइल बनाएं',
+    toneEyebrow: 'एहसास',
     plansTitle: 'नक्शे',
-    plansEmpty: 'आपके स्वीकृत नक्शे यहाँ दिखाई देंगे।',
-    approveDrawing: 'नक्शा स्वीकृत करें',
-    approveDrawingComingSoon: 'ड्रॉइंग अप्रूवल जल्द आ रहा है',
+    plansSubtitle: 'आपके बिल्डर द्वारा साझा किए गए नक्शे।',
+    plansEmpty: 'आपके बिल्डर ने अभी तक कोई नक्शा साझा नहीं किया है। वे यहाँ दिखाई देंगे।',
+    plansEmptyTitle: 'अभी तक कोई नक्शा साझा नहीं',
+    whatChanged: 'क्या बदला',
+    versionLabel: 'संस्करण',
+    pendingApproval: 'आपकी स्वीकृति बाकी',
+    openFile: 'नक्शा खोलें',
+    approveDrawing: 'स्वीकृत करें',
+    approveDrawingComingSoon:
+      'ऐप में नक्शे स्वीकृत करना जल्द आ रहा है। फ़िलहाल, कृपया अपने बिल्डर से पुष्टि करें।',
+    coherenceTitle: 'आपके चुनाव कैसे मेल खाते हैं',
+    coherenceSubtitle: 'मेल पर एक नरम राय — सिर्फ़ सलाह, कभी रोक नहीं।',
+    fitsLabel: 'आपकी शैली से मेल खाता है',
+    worthLookLabel: 'एक नज़र डालें',
     inspirationTitle: 'प्रेरणा',
+    inspirationSubtitle: 'असली तस्वीरें जो आपकी पसंद का रूप दर्शाती हैं।',
     inspirationEmpty: 'वे तस्वीरें जोड़ें जो आपकी पसंद का रूप दर्शाती हैं।',
     addInspiration: 'प्रेरणा जोड़ें',
+    provenanceUpload: 'आपने जोड़ा',
+    provenancePinterest: 'Pinterest से',
+    digestTitle: 'मासिक डिज़ाइन सारांश',
+    digestComingSoon:
+      'आपका घर कैसे आकार ले रहा है, इसका एक गर्मजोशी भरा मासिक सारांश जल्द आ रहा है।',
     selectionsTitle: 'चयन',
     selectionsEmpty: 'अभी तक कोई चयन नहीं। नीचे अपना पहला चयन जोड़ें।',
     checkFit: 'उपयुक्तता जांचें',
@@ -116,6 +188,15 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     conflictResolved: 'आपके घर के लिए चुनाव सहेजा गया।',
     authoritativeTag: 'राय है',
     advisoryTag: 'सुझाव दे रहे',
+    kinds: {
+      plan: 'फ़्लोर प्लान',
+      elevation: 'एलिवेशन',
+      section: 'सेक्शन',
+      structural: 'स्ट्रक्चरल',
+      electrical: 'इलेक्ट्रिकल',
+      plumbing: 'प्लंबिंग',
+      other: 'नक्शा',
+    },
   },
 }
 
@@ -168,6 +249,36 @@ export function profileConflicts(profile: DesignProfile | undefined): DesignConf
 /** True when the profile carries no usable content yet. */
 export function isProfileEmpty(profile: DesignProfile | undefined): boolean {
   return profileText(profile).length === 0 && profileTone(profile).length === 0
+}
+
+/**
+ * The AI "what changed" line in the active language (render as-is, never both).
+ * Falls back to the other language when the active one is missing, then to the
+ * raw change note — honest empty ("" ) when nothing is shared.
+ */
+export function drawingSummary(drawing: Drawing, lang: Language): string {
+  const active = lang === 'hi' ? drawing.plain_summary_hi : drawing.plain_summary_en
+  const other = lang === 'hi' ? drawing.plain_summary_en : drawing.plain_summary_hi
+  return (active ?? other ?? drawing.change_note ?? '').trim()
+}
+
+/** Localised human label for a drawing kind (tolerant of unknown kinds). */
+export function drawingKindLabel(kind: DrawingKind, strings: DesignStrings): string {
+  return strings.kinds[kind] ?? strings.kinds.other
+}
+
+/**
+ * Short, locale-aware published-on date for a drawing ("6 Jun" / "6 जून").
+ * Returns null on a missing/invalid date so callers can omit the chip.
+ */
+export function drawingDate(iso: string | null, lang: Language): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+    day: 'numeric',
+    month: 'short',
+  })
 }
 
 /** Map a selection's freeform status onto the shared status spine. */

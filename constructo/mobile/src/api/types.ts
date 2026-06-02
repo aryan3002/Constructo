@@ -320,6 +320,42 @@ export interface ConsistencyCheck {
   feedback: string
 }
 
+/** Drawing/plan sheet kinds (mirrors backend DrawingKind StrEnum). */
+export type DrawingKind =
+  | 'plan'
+  | 'elevation'
+  | 'section'
+  | 'structural'
+  | 'electrical'
+  | 'plumbing'
+  | 'other'
+
+/**
+ * A published drawing/plan sheet — the homeowner read slice of
+ * `GET /api/v1/homeowner/drawings` (mirrors backend `DrawingOut`).
+ *
+ * Append-only versioning: a revision is a new row whose `supersedes_id` points
+ * at the prior version. `plain_summary_*` is the AI "what changed" line, native
+ * per language (render the active-language one as-is, never both). The
+ * homeowner APPROVAL flow is NOT built yet — this is read-only.
+ */
+export interface Drawing {
+  id: string
+  site_id: string
+  title: string
+  version: string
+  file_url: string
+  kind: DrawingKind
+  published_by: string | null
+  published_at: string
+  /** AI "what changed" summary (English). */
+  plain_summary_en: string | null
+  /** AI "what changed" summary (Hindi). */
+  plain_summary_hi: string | null
+  change_note: string | null
+  supersedes_id: string | null
+}
+
 // ---- H0: requests & decisions ----
 export type RequestStatus = 'sent' | 'seen' | 'in_progress' | 'done'
 
