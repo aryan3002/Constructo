@@ -7,12 +7,13 @@
  * built for gloves/sun/one-thumb (≥56px targets). Capture beats forms for this
  * role, so this is photo/voice first; the "what is this?" tag is one tap.
  */
-import { useRef } from 'react'
+import type { ReactNode } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Display, H2, Mono, Small, StatusDot } from '../../../src/ui'
+import { Body, BodyStrong, H2, Mono, Small, StatusDot } from '../../../src/ui'
 import type { CaptureKind } from '../../../src/api/supervisor'
 
 // ---------------------------------------------------------------------------
@@ -182,23 +183,18 @@ export function KindChipRow({
 
 export function CaptureBar({
   photoLabel,
-  voiceLabel,
-  voiceHint,
   busy,
   onPhoto,
-  onVoice,
+  voiceSlot,
 }: {
   photoLabel: string
-  voiceLabel: string
-  voiceHint: string
   busy: boolean
   onPhoto: () => void
-  /** Fired once on release of a hold (we don't have real audio capture). */
-  onVoice: () => void
+  /** The hold-to-talk recorder (real audio) rendered under the photo button. */
+  voiceSlot: ReactNode
 }) {
   const { theme } = useTheme()
   const c = theme.colors
-  const heldRef = useRef(false)
 
   return (
     <View style={{ gap: SPACE.md }}>
@@ -224,45 +220,14 @@ export function CaptureBar({
           <ActivityIndicator color={c.onAccent} />
         ) : (
           <>
-            <Display color={c.onAccent} style={{ fontSize: 56, lineHeight: 64 }}>
-              📷
-            </Display>
+            <Feather name="camera" size={52} color={c.onAccent} />
             <H2 color={c.onAccent}>{photoLabel}</H2>
           </>
         )}
       </Pressable>
 
-      {/* Hold-to-talk mic. Real audio/STT has no client endpoint yet, so this
-          captures-but-stubs: a press registers the intent and enqueues a voice
-          note on release. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={voiceLabel}
-        disabled={busy}
-        onPressIn={() => {
-          heldRef.current = true
-        }}
-        onPressOut={() => {
-          if (heldRef.current) {
-            heldRef.current = false
-            onVoice()
-          }
-        }}
-        style={({ pressed }) => ({
-          minHeight: 96,
-          borderRadius: theme.radii.sheet,
-          borderWidth: 2,
-          borderColor: pressed ? c.accent : c.line,
-          backgroundColor: c.card,
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 2,
-          opacity: busy ? 0.6 : 1,
-        })}
-      >
-        <BodyStrong>🎙 {voiceLabel}</BodyStrong>
-        <Small muted>{voiceHint}</Small>
-      </Pressable>
+      {/* Real hold-to-talk recorder (records actual audio → STT pipeline). */}
+      {voiceSlot}
     </View>
   )
 }
