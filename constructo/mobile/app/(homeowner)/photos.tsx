@@ -1,12 +1,22 @@
 /**
- * Photos & Videos (H2) — curated site photos, grouped by date / room / milestone,
- * with a full-screen viewer, client-side storage policy, and an upload-intent sheet.
+ * Photos (H2) — the homeowner "Calm Cockpit" photos surface (handoff §5).
+ *
+ * Layout: an AI search bar (text + 🎤 mic), a "Latest" hero tile, a segmented
+ * filter [All · By Room · By Milestone · My visits], a grouped grid (by
+ * date / room / milestone) built from the reusable {@link PhotoTile}, a `+` FAB
+ * for her own uploads, a quiet tile when the site is sparse, and a calm empty
+ * state. Captions render as-is in the active language. A full-screen viewer is
+ * pushed inline (no separate route yet) with caption · date · room · ⓘ
+ * translate and Save / Share / Hide (Hide is per-member + reversible).
  *
  * Save: expo-media-library (download-then-save two-step).
  * Share: React Native built-in Share.share.
  * Free up space: FileSystem.deleteAsync on cacheDirectory.
- * Upload: coming soon — intent capture only, no upload endpoint yet.
- * "Hide" is local-only state.
+ * Upload: intent capture only (noted to "My visits" locally) — no upload
+ * endpoint yet. "Hide" is local-only, per-member, reversible.
+ *
+ * NOTE: this screen keeps its own `STR` string table (en/hi) by design — the
+ * founder is migrating per-screen strings to the i18n catalog separately.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -17,9 +27,11 @@ import {
   Pressable,
   ScrollView,
   Share,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Feather } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -31,7 +43,7 @@ import { homeowner } from '../../src/api/client'
 import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../src/theme/tokens'
+import { AP, SPACE, TAP } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
@@ -40,14 +52,22 @@ import {
   Card,
   Display,
   H2,
+  MonoSm,
   Screen,
   Small,
+  PhotoTile,
+  type PhotoTileData,
 } from '../../src/ui'
 
+/** Backend grouping view (drives the query); "My visits" is a client filter. */
 type ViewMode = 'all' | 'room' | 'milestone'
+/** The segmented filter tabs (UI). */
+type FilterTab = 'all' | 'room' | 'milestone' | 'mine'
 type RetentionDays = 7 | 30 | 90
 
 const POLICY_KEY = 'constructo.photoPolicy'
+/** Locally-noted uploads (intent capture only — no real upload endpoint yet). */
+const MY_VISITS_KEY = 'constructo.photoMyVisits'
 
 interface PhotoPolicy {
   keepStarredAndMilestone: boolean
@@ -56,37 +76,59 @@ interface PhotoPolicy {
 
 const DEFAULT_POLICY: PhotoPolicy = { keepStarredAndMilestone: true, retentionDays: 30 }
 
+/** A locally-captured "my visit" photo (her own upload intent). */
+interface MyVisit {
+  id: string
+  uri: string
+  at: string
+}
+
 const STR = {
   en: {
-    title: 'Photos & Videos',
+    title: 'Photos',
+    subtitle: 'Curated by your builder',
+    searchPlaceholder: 'Ask about a room, stage, or date…',
+    mic: 'Search by voice',
+    voiceTitle: 'Voice search',
+    voiceBody: 'Voice search is coming soon — type a room, stage, or date for now.',
+    latest: 'Latest from site',
     all: 'All',
     room: 'By Room',
     milestone: 'By Milestone',
+    mine: 'My visits',
     unsorted: 'Unsorted',
     general: 'General',
     milestoneHeader: 'Milestone',
     loading: 'Loading photos…',
-    empty: 'No photos yet — your builder will share progress here.',
+    empty: 'No photos yet — your builder will start sharing soon.',
+    emptyMine: 'Nothing here yet. Tap + to add a photo from your visit.',
+    noResults: 'No photos match that. Try another room, stage, or date.',
     quietTitle: 'Quiet on site right now',
     quietNextPrefix: 'Next photos expected around',
     error: 'Could not load photos. Pull to refresh in a moment.',
     retry: 'Try again',
-    caption: 'No caption',
-    starred: 'Starred',
+    caption: 'No caption yet',
+    starred: 'Kept',
+    video: 'Video',
+    translate: 'What does this mean?',
+    translateBody:
+      'A plain-language explanation is coming soon. For now you can ask your builder.',
     save: 'Save',
     share: 'Share',
     hide: 'Hide',
     close: 'Close',
-    storageTitle: 'Storage management',
+    yourPhoto: 'Your photo',
+    storageTitle: 'Storage',
     storageNote:
       'These photos live on the server and stay curated for you — nothing is really deleted from your account.',
-    keepLabel: 'Keep starred + milestone photos',
+    keepLabel: 'Keep kept + milestone photos',
     autoManage: 'Auto-manage cached photos older than',
     days7: '7 days',
     days30: '30 days',
     days90: '90 days',
     freeUp: 'Free up space',
     addPhoto: 'Add a photo',
+    addNote: 'Share a photo from your own site visit.',
     takePhoto: 'Take a photo',
     chooseLibrary: 'Choose from library',
     cancel: 'Cancel',
@@ -94,7 +136,7 @@ const STR = {
     permCamera: 'Allow camera access to take a photo.',
     permLibrary: 'Allow photo library access to choose a photo.',
     pickedTitle: 'Photo noted',
-    pickedBody: 'Uploads are coming soon — your photo has been noted locally.',
+    pickedBody: 'Uploads are coming soon — your photo is saved under "My visits".',
     freedTitle: 'Cache cleared',
     freedBody: 'Local cache was cleared. Your curated photos stay on the server.',
     savedTitle: 'Saved',
@@ -103,66 +145,78 @@ const STR = {
     saveErrorBody: 'Please try again.',
   },
   hi: {
-    title: 'फ़ोटो और वीडियो',
+    title: 'तस्वीरें',
+    subtitle: 'आपके बिल्डर द्वारा चुनी गई',
+    searchPlaceholder: 'कमरा, चरण या तारीख़ पूछें…',
+    mic: 'आवाज़ से खोजें',
+    voiceTitle: 'आवाज़ से खोज',
+    voiceBody: 'आवाज़ से खोज जल्द आ रही है — अभी कमरा, चरण या तारीख़ टाइप करें।',
+    latest: 'साइट से नवीनतम',
     all: 'सभी',
     room: 'कमरे अनुसार',
     milestone: 'चरण अनुसार',
+    mine: 'मेरी तस्वीरें',
     unsorted: 'बिना श्रेणी',
     general: 'सामान्य',
     milestoneHeader: 'चरण',
-    loading: 'फ़ोटो लोड हो रही हैं…',
-    empty: 'अभी कोई फ़ोटो नहीं — आपका बिल्डर यहाँ प्रगति साझा करेगा।',
+    loading: 'तस्वीरें लोड हो रही हैं…',
+    empty: 'अभी कोई तस्वीर नहीं — आपका बिल्डर जल्द साझा करना शुरू करेगा।',
+    emptyMine: 'अभी यहाँ कुछ नहीं। अपनी विज़िट की तस्वीर जोड़ने के लिए + दबाएँ।',
+    noResults: 'इससे कोई तस्वीर मेल नहीं खाई। कोई और कमरा, चरण या तारीख़ आज़माएँ।',
     quietTitle: 'अभी साइट पर शांति है',
-    quietNextPrefix: 'अगली फ़ोटो लगभग',
-    error: 'फ़ोटो लोड नहीं हो सकीं। थोड़ी देर में फिर कोशिश करें।',
+    quietNextPrefix: 'अगली तस्वीरें लगभग',
+    error: 'तस्वीरें लोड नहीं हो सकीं। थोड़ी देर में फिर कोशिश करें।',
     retry: 'फिर कोशिश करें',
-    caption: 'कोई कैप्शन नहीं',
-    starred: 'चिह्नित',
+    caption: 'अभी कोई कैप्शन नहीं',
+    starred: 'सहेजी',
+    video: 'वीडियो',
+    translate: 'इसका क्या मतलब है?',
+    translateBody: 'आसान भाषा में समझ जल्द आ रही है। अभी आप अपने बिल्डर से पूछ सकते हैं।',
     save: 'सहेजें',
     share: 'साझा करें',
     hide: 'छिपाएँ',
     close: 'बंद करें',
-    storageTitle: 'स्टोरेज प्रबंधन',
+    yourPhoto: 'आपकी तस्वीर',
+    storageTitle: 'स्टोरेज',
     storageNote:
-      'ये फ़ोटो सर्वर पर रहती हैं और आपके लिए सुरक्षित हैं — आपके खाते से कुछ भी वास्तव में हटाया नहीं जाता।',
-    keepLabel: 'चिह्नित + चरण फ़ोटो रखें',
-    autoManage: 'इससे पुरानी कैश फ़ोटो स्वतः प्रबंधित करें',
+      'ये तस्वीरें सर्वर पर रहती हैं और आपके लिए सुरक्षित हैं — आपके खाते से कुछ भी वास्तव में हटाया नहीं जाता।',
+    keepLabel: 'सहेजी + चरण तस्वीरें रखें',
+    autoManage: 'इससे पुरानी कैश तस्वीरें स्वतः प्रबंधित करें',
     days7: '7 दिन',
     days30: '30 दिन',
     days90: '90 दिन',
     freeUp: 'जगह खाली करें',
-    addPhoto: 'फ़ोटो जोड़ें',
-    takePhoto: 'फ़ोटो लें',
+    addPhoto: 'तस्वीर जोड़ें',
+    addNote: 'अपनी साइट विज़िट की तस्वीर साझा करें।',
+    takePhoto: 'तस्वीर लें',
     chooseLibrary: 'लाइब्रेरी से चुनें',
     cancel: 'रद्द करें',
     permTitle: 'अनुमति आवश्यक',
-    permCamera: 'फ़ोटो लेने के लिए कैमरा एक्सेस की अनुमति दें।',
-    permLibrary: 'फ़ोटो चुनने के लिए लाइब्रेरी एक्सेस की अनुमति दें।',
-    pickedTitle: 'फ़ोटो नोट की गई',
-    pickedBody: 'अपलोड जल्द आ रहा है — आपकी फ़ोटो लोकली नोट की गई है।',
+    permCamera: 'तस्वीर लेने के लिए कैमरा एक्सेस की अनुमति दें।',
+    permLibrary: 'तस्वीर चुनने के लिए लाइब्रेरी एक्सेस की अनुमति दें।',
+    pickedTitle: 'तस्वीर नोट की गई',
+    pickedBody: 'अपलोड जल्द आ रहा है — आपकी तस्वीर "मेरी तस्वीरें" में सहेजी गई है।',
     freedTitle: 'कैश साफ़ किया गया',
-    freedBody: 'लोकल कैश साफ़ हो गया। आपकी फ़ोटो सर्वर पर सुरक्षित रहती हैं।',
+    freedBody: 'लोकल कैश साफ़ हो गया। आपकी तस्वीरें सर्वर पर सुरक्षित रहती हैं।',
     savedTitle: 'सहेजा गया',
-    savedBody: 'फ़ोटो आपकी गैलरी में सहेजी गई।',
+    savedBody: 'तस्वीर आपकी गैलरी में सहेजी गई।',
     saveErrorTitle: 'सहेजा नहीं जा सका',
     saveErrorBody: 'कृपया फिर कोशिश करें।',
   },
 } as const
 
-/** Short date — "6 Jun" — for quiet-card next-expected display. */
-function shortDate(iso: string | null): string | null {
+/** Short date — "6 Jun" — for tiles + quiet-card next-expected display. */
+function shortDate(iso: string | null, lang: 'en' | 'hi'): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+    day: 'numeric',
+    month: 'short',
+  })
 }
 
-interface Group {
-  key: string
-  label: string
-  items: Photo[]
-}
-
+/** Long date header — "6 June 2026" — for the "All" date-group headings. */
 function formatDate(iso: string, lang: 'en' | 'hi'): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -171,6 +225,12 @@ function formatDate(iso: string, lang: 'en' | 'hi'): string {
     month: 'long',
     year: 'numeric',
   })
+}
+
+interface Group {
+  key: string
+  label: string
+  items: Photo[]
 }
 
 function groupPhotos(
@@ -192,7 +252,7 @@ function groupPhotos(
       key = p.milestone_id ?? '__general__'
       label = p.milestone_id ? `${s.milestoneHeader} ${p.milestone_id}` : s.general
     } else {
-      // "all" — group by the date (day) of publication
+      // "all" — group by the date (day) of publication.
       const day = (p.published_at ?? '').slice(0, 10)
       key = day || '__undated__'
       label = day ? formatDate(p.published_at, lang) : ''
@@ -208,20 +268,30 @@ function groupPhotos(
   return order.map((k) => map.get(k)!)
 }
 
+/** Below this count the grid feels "sparse" → show a calm quiet tile alongside. */
+const SPARSE_THRESHOLD = 3
+
 export default function Photos() {
   const { theme } = useTheme()
   const c = theme.colors
   const { lang } = useT()
   const s = STR[lang]
   const { width } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
 
-  const [view, setView] = useState<ViewMode>('all')
+  const [tab, setTab] = useState<FilterTab>('all')
+  const [search, setSearch] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [policy, setPolicy] = useState<PhotoPolicy>(DEFAULT_POLICY)
+  const [myVisits, setMyVisits] = useState<MyVisit[]>([])
 
-  // Load persisted storage policy.
+  // Backend grouping mode — "My visits" reuses the flat "all" query, so it can
+  // overlay her local uploads with the same chronology.
+  const view: ViewMode = tab === 'mine' ? 'all' : tab
+
+  // Load persisted storage policy + locally-noted "my visit" photos.
   useEffect(() => {
     void AsyncStorage.getItem(POLICY_KEY).then((raw) => {
       if (!raw) return
@@ -236,11 +306,27 @@ export default function Photos() {
         /* corrupt value — keep defaults */
       }
     })
+    void AsyncStorage.getItem(MY_VISITS_KEY).then((raw) => {
+      if (!raw) return
+      try {
+        setMyVisits(JSON.parse(raw) as MyVisit[])
+      } catch {
+        /* corrupt value — start empty */
+      }
+    })
   }, [])
 
   const savePolicy = useCallback((next: PhotoPolicy) => {
     setPolicy(next)
     void AsyncStorage.setItem(POLICY_KEY, JSON.stringify(next))
+  }, [])
+
+  const noteMyVisit = useCallback((uri: string) => {
+    setMyVisits((prev) => {
+      const next = [{ id: `local-${Date.now()}`, uri, at: new Date().toISOString() }, ...prev]
+      void AsyncStorage.setItem(MY_VISITS_KEY, JSON.stringify(next))
+      return next
+    })
   }, [])
 
   const query = useQuery({
@@ -252,18 +338,37 @@ export default function Photos() {
     queryKey: ['homeowner', 'quietPeriods'],
     queryFn: () => homeowner.quietPeriods(),
   })
-  // Most-recent confirmed quiet period — the endpoint orders detected_at DESC,
-  // so the newest is the first element.
+  // Most-recent confirmed quiet period — the endpoint orders detected_at DESC.
   const activeQuiet: QuietPeriod | null = quietQ.data?.[0] ?? null
 
-  const visible = useMemo(
-    () => (query.data?.items ?? []).filter((p) => !hidden.has(p.id)),
-    [query.data, hidden],
-  )
-  const groups = useMemo(
-    () => groupPhotos(visible, view, lang, s),
-    [visible, view, lang, s],
-  )
+  // Visible site photos: not hidden + matching the search query (caption/room).
+  const q = search.trim().toLowerCase()
+  const sitePhotos = useMemo(() => {
+    let items = (query.data?.items ?? []).filter((p) => !hidden.has(p.id))
+    if (q) {
+      items = items.filter(
+        (p) =>
+          (p.caption ?? '').toLowerCase().includes(q) ||
+          (p.room_tag ?? '').toLowerCase().includes(q),
+      )
+    }
+    return items
+  }, [query.data, hidden, q])
+
+  // The newest published photo → the "Latest from site" hero (only on "All",
+  // with no active search, so the hero stays a true "most-recent" cue).
+  const latest = useMemo(() => {
+    if (tab !== 'all' || q) return null
+    const all = (query.data?.items ?? []).filter((p) => !hidden.has(p.id))
+    return all.length ? all[0] : null
+  }, [query.data, hidden, tab, q])
+
+  // Grid groups: site photos for all/room/milestone, minus the hero on "All".
+  const groups = useMemo(() => {
+    if (tab === 'mine') return []
+    const forGrid = latest ? sitePhotos.filter((p) => p.id !== latest.id) : sitePhotos
+    return groupPhotos(forGrid, view, lang, s)
+  }, [sitePhotos, latest, view, lang, s, tab])
 
   const hide = useCallback((id: string) => {
     setHidden((prev) => {
@@ -274,7 +379,7 @@ export default function Photos() {
     setActive(null)
   }, [])
 
-  // ---- Upload-intent (permission + picker; no real upload yet) ----
+  // ---- Upload-intent (permission + picker; noted to "My visits" locally) ----
   const onTakePhoto = useCallback(async () => {
     setUploadOpen(false)
     const perm = await ImagePicker.requestCameraPermissionsAsync()
@@ -283,11 +388,12 @@ export default function Photos() {
       return
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
-    if (!result.canceled) {
+    if (!result.canceled && result.assets[0]) {
       // TODO(H?): POST the picked asset to the (not-yet-defined) upload endpoint.
+      noteMyVisit(result.assets[0].uri)
       Alert.alert(s.pickedTitle, s.pickedBody)
     }
-  }, [s])
+  }, [s, noteMyVisit])
 
   const onChooseLibrary = useCallback(async () => {
     setUploadOpen(false)
@@ -297,11 +403,12 @@ export default function Photos() {
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
-    if (!result.canceled) {
+    if (!result.canceled && result.assets[0]) {
       // TODO(H?): POST the picked asset to the (not-yet-defined) upload endpoint.
+      noteMyVisit(result.assets[0].uri)
       Alert.alert(s.pickedTitle, s.pickedBody)
     }
-  }, [s])
+  }, [s, noteMyVisit])
 
   const onFreeUpSpace = useCallback(async () => {
     try {
@@ -312,22 +419,134 @@ export default function Photos() {
     Alert.alert(s.freedTitle, s.freedBody)
   }, [s])
 
-  // 2-column square grid sizing (Screen pads SPACE.lg on each side; Card pads SPACE.lg).
+  const onSavePhoto = useCallback(
+    async (url?: string, id?: string) => {
+      if (!url) return
+      const { status } = await MediaLibrary.requestPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert(s.permTitle, s.permLibrary)
+        return
+      }
+      try {
+        const localUri = await FileSystem.downloadAsync(
+          url,
+          (FileSystem.cacheDirectory ?? '') + (id ?? 'photo') + '.jpg',
+        )
+        await MediaLibrary.saveToLibraryAsync(localUri.uri)
+        Alert.alert(s.savedTitle, s.savedBody)
+      } catch {
+        Alert.alert(s.saveErrorTitle, s.saveErrorBody)
+      }
+    },
+    [s],
+  )
+
+  const onSharePhoto = useCallback(
+    async (url?: string, caption?: string | null) => {
+      if (!url) return
+      await Share.share({ message: caption ?? s.caption, url })
+    },
+    [s],
+  )
+
+  const onTranslate = useCallback(() => {
+    // ⓘ jargon-translate — honest "coming soon + ask your builder" (§0 rule 5).
+    Alert.alert(s.translate, s.translateBody)
+  }, [s])
+
+  // 2-column square grid sizing (Screen pads SPACE.lg each side).
   const gridGap = SPACE.sm
   const contentWidth = width - SPACE.lg * 2
   const cellSize = Math.floor((contentWidth - gridGap) / 2)
 
-  const tabs: { mode: ViewMode; label: string }[] = [
-    { mode: 'all', label: s.all },
-    { mode: 'room', label: s.room },
-    { mode: 'milestone', label: s.milestone },
+  // Reserve room so the last row clears the floating nav (bar 64 + ~12 gap +
+  // safe-area) plus the Ask pill above it.
+  const navClearance = 64 + 12 + insets.bottom + 56
+
+  // Shared PhotoTile action labels.
+  const tileLabels = {
+    caption: s.caption,
+    translate: s.translate,
+    save: s.save,
+    share: s.share,
+    hide: s.hide,
+    video: s.video,
+    starred: s.starred,
+  }
+
+  /** Adapt a backend Photo → the PhotoTile data shape (active-language date). */
+  const toTile = useCallback(
+    (p: Photo): PhotoTileData => ({
+      id: p.id,
+      imageUri: p.image_url,
+      caption: p.caption,
+      date: shortDate(p.published_at, lang),
+      room: p.room_tag,
+      starred: p.is_starred,
+    }),
+    [lang],
+  )
+
+  const tabs: { id: FilterTab; label: string }[] = [
+    { id: 'all', label: s.all },
+    { id: 'room', label: s.room },
+    { id: 'milestone', label: s.milestone },
+    { id: 'mine', label: s.mine },
   ]
 
   return (
-    <Screen>
-      <Display>{s.title}</Display>
+    <Screen style={{ paddingBottom: navClearance }}>
+      <View style={{ gap: 2 }}>
+        <Display>{s.title}</Display>
+        <Small muted>{s.subtitle}</Small>
+      </View>
 
-      {/* Segmented control */}
+      {/* AI search bar (text + 🎤 mic) */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.sm,
+          backgroundColor: AP.surfaceLow,
+          borderRadius: theme.radii.control,
+          borderWidth: 1,
+          borderColor: c.line,
+          paddingHorizontal: SPACE.md,
+          minHeight: TAP,
+        }}
+      >
+        <Feather name="search" size={18} color={c.textMute} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={s.searchPlaceholder}
+          placeholderTextColor={c.textMute}
+          returnKeyType="search"
+          accessibilityLabel={s.searchPlaceholder}
+          style={{ flex: 1, color: c.text, fontSize: 16, paddingVertical: SPACE.sm }}
+        />
+        {search ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={s.close}
+            onPress={() => setSearch('')}
+            hitSlop={8}
+          >
+            <Feather name="x" size={18} color={c.textMute} />
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={s.mic}
+          onPress={() => Alert.alert(s.voiceTitle, s.voiceBody)}
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+        >
+          <Feather name="mic" size={18} color={c.accent} />
+        </Pressable>
+      </View>
+
+      {/* Segmented filter [All · By Room · By Milestone · My visits] */}
       <View
         style={{
           flexDirection: 'row',
@@ -339,14 +558,14 @@ export default function Photos() {
           gap: SPACE.xs,
         }}
       >
-        {tabs.map((tab) => {
-          const activeTab = view === tab.mode
+        {tabs.map((t) => {
+          const activeTab = tab === t.id
           return (
             <Pressable
-              key={tab.mode}
+              key={t.id}
               accessibilityRole="tab"
               accessibilityState={{ selected: activeTab }}
-              onPress={() => setView(tab.mode)}
+              onPress={() => setTab(t.id)}
               style={{
                 flex: 1,
                 minHeight: 36,
@@ -355,21 +574,50 @@ export default function Photos() {
                 borderRadius: theme.radii.pill,
                 backgroundColor: activeTab ? c.accent : 'transparent',
                 paddingVertical: SPACE.sm,
+                paddingHorizontal: 2,
               }}
             >
               <Small
                 color={activeTab ? c.onAccent : c.textMute}
                 style={{ fontWeight: '600' }}
+                numberOfLines={1}
               >
-                {tab.label}
+                {t.label}
               </Small>
             </Pressable>
           )
         })}
       </View>
 
-      {/* Body: loading / error / empty / grid */}
-      {query.isLoading ? (
+      {/* ---- My visits tab (local uploads only) ---- */}
+      {tab === 'mine' ? (
+        myVisits.length === 0 ? (
+          <Card>
+            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
+              <Feather name="camera" size={28} color={c.textMute} />
+              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
+                {s.emptyMine}
+              </Body>
+            </View>
+          </Card>
+        ) : (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
+            {myVisits.map((v) => (
+              <PhotoTile
+                key={v.id}
+                photo={{
+                  id: v.id,
+                  imageUri: v.uri,
+                  caption: s.yourPhoto,
+                  date: shortDate(v.at, lang),
+                }}
+                size={cellSize}
+                labels={tileLabels}
+              />
+            ))}
+          </View>
+        )
+      ) : query.isLoading ? (
         <Card>
           <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
             <ActivityIndicator color={c.accent} />
@@ -383,16 +631,26 @@ export default function Photos() {
             <Button title={s.retry} variant="secondary" onPress={() => query.refetch()} />
           </View>
         </Card>
-      ) : visible.length === 0 ? (
-        activeQuiet ? (
+      ) : sitePhotos.length === 0 ? (
+        // Empty / quiet / no-search-results — all calm, never red.
+        q ? (
+          <Card>
+            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
+              <Feather name="search" size={28} color={c.textMute} />
+              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
+                {s.noResults}
+              </Body>
+            </View>
+          </Card>
+        ) : activeQuiet ? (
           (() => {
-            const nextDate = shortDate(activeQuiet.next_expected_at)
+            const nextDate = shortDate(activeQuiet.next_expected_at, lang)
             const bodyParts: string[] = []
             if (activeQuiet.reason) bodyParts.push(activeQuiet.reason)
             if (nextDate) bodyParts.push(`${s.quietNextPrefix} ${nextDate}.`)
             return (
               <CalmCard
-                status="info"
+                status="quiet"
                 title={s.quietTitle}
                 body={bodyParts.join(' ') || undefined}
               />
@@ -401,7 +659,8 @@ export default function Photos() {
         ) : (
           <Card>
             <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
-              <Body muted style={{ textAlign: 'center' }}>
+              <Feather name="image" size={28} color={c.textMute} />
+              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
                 {s.empty}
               </Body>
             </View>
@@ -409,6 +668,40 @@ export default function Photos() {
         )
       ) : (
         <View style={{ gap: SPACE.lg }}>
+          {/* "Latest" hero (only on All, no search) */}
+          {latest ? (
+            <View style={{ gap: SPACE.sm }}>
+              <Small muted style={{ fontWeight: '600', letterSpacing: 0.5 }}>
+                {s.latest.toUpperCase()}
+              </Small>
+              <PhotoTile
+                photo={toTile(latest)}
+                variant="hero"
+                labels={tileLabels}
+                onPress={() => setActive(latest)}
+                onTranslate={onTranslate}
+              />
+            </View>
+          ) : null}
+
+          {/* Quiet tile when the site is sparse (calm, never red, fade only) */}
+          {!q && activeQuiet && sitePhotos.length <= SPARSE_THRESHOLD ? (
+            (() => {
+              const nextDate = shortDate(activeQuiet.next_expected_at, lang)
+              const bodyParts: string[] = []
+              if (activeQuiet.reason) bodyParts.push(activeQuiet.reason)
+              if (nextDate) bodyParts.push(`${s.quietNextPrefix} ${nextDate}.`)
+              return (
+                <CalmCard
+                  status="quiet"
+                  title={s.quietTitle}
+                  body={bodyParts.join(' ') || undefined}
+                />
+              )
+            })()
+          ) : null}
+
+          {/* Grouped grid */}
           {groups.map((group) => (
             <View key={group.key} style={{ gap: SPACE.sm }}>
               {group.label ? (
@@ -416,53 +709,16 @@ export default function Photos() {
                   {group.label}
                 </Small>
               ) : null}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  gap: gridGap,
-                }}
-              >
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
                 {group.items.map((photo) => (
-                  <Pressable
+                  <PhotoTile
                     key={photo.id}
-                    accessibilityRole="imagebutton"
-                    accessibilityLabel={photo.caption ?? s.caption}
+                    photo={toTile(photo)}
+                    size={cellSize}
+                    labels={tileLabels}
                     onPress={() => setActive(photo)}
-                    style={{
-                      width: cellSize,
-                      height: cellSize,
-                      borderRadius: theme.radii.card,
-                      overflow: 'hidden',
-                      backgroundColor: c.paper,
-                      borderWidth: 1,
-                      borderColor: c.line,
-                    }}
-                  >
-                    <Image
-                      source={{ uri: photo.image_url }}
-                      resizeMode="cover"
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                    {photo.is_starred ? (
-                      <View
-                        accessibilityLabel={s.starred}
-                        style={{
-                          position: 'absolute',
-                          top: SPACE.sm,
-                          right: SPACE.sm,
-                          width: 28,
-                          height: 28,
-                          borderRadius: 14,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: 'rgba(0,0,0,0.45)',
-                        }}
-                      >
-                        <Feather name="star" size={14} color="#ffffff" />
-                      </View>
-                    ) : null}
-                  </Pressable>
+                    onTranslate={onTranslate}
+                  />
                 ))}
               </View>
             </View>
@@ -475,7 +731,7 @@ export default function Photos() {
         <View style={{ gap: SPACE.md }}>
           <H2>{s.storageTitle}</H2>
 
-          {/* Keep starred + milestone toggle */}
+          {/* Keep kept + milestone toggle */}
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: policy.keepStarredAndMilestone }}
@@ -531,10 +787,7 @@ export default function Photos() {
                     backgroundColor: selected ? c.accent : 'transparent',
                   }}
                 >
-                  <Small
-                    color={selected ? c.onAccent : c.text}
-                    style={{ fontWeight: '600' }}
-                  >
+                  <Small color={selected ? c.onAccent : c.text} style={{ fontWeight: '600' }}>
                     {label}
                   </Small>
                 </Pressable>
@@ -547,28 +800,29 @@ export default function Photos() {
         </View>
       </Card>
 
-      {/* Floating "+" upload-intent button */}
+      {/* Floating "+" upload FAB (above the floating nav) */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={s.addPhoto}
         onPress={() => setUploadOpen(true)}
-        style={{
+        style={({ pressed }) => ({
           position: 'absolute',
           right: SPACE.lg,
-          bottom: SPACE.xl,
+          bottom: navClearance - 8,
           width: 56,
           height: 56,
           borderRadius: 28,
           backgroundColor: c.accent,
           alignItems: 'center',
           justifyContent: 'center',
+          transform: [{ scale: pressed ? 0.96 : 1 }],
           ...theme.shadowCard,
-        }}
+        })}
       >
         <Feather name="plus" size={26} color={c.onAccent} />
       </Pressable>
 
-      {/* Full-screen viewer */}
+      {/* Full-screen viewer (pushed inline; no separate route yet) */}
       <Modal
         visible={active !== null}
         transparent
@@ -577,55 +831,79 @@ export default function Photos() {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)' }}>
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: SPACE.lg }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'center',
+              padding: SPACE.lg,
+              paddingTop: insets.top + SPACE.lg,
+              paddingBottom: insets.bottom + SPACE.xl,
+            }}
           >
             {active ? (
               <View style={{ gap: SPACE.lg }}>
                 <Image
                   source={{ uri: active.image_url }}
                   resizeMode="contain"
+                  accessibilityIgnoresInvertColors
                   style={{ width: '100%', height: width, borderRadius: theme.radii.card }}
                 />
-                <BodyStrong color="#ffffff">{active.caption ?? s.caption}</BodyStrong>
+
+                {/* Caption + ⓘ translate */}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+                  <BodyStrong color="#ffffff" style={{ flex: 1 }}>
+                    {active.caption ?? s.caption}
+                  </BodyStrong>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={s.translate}
+                    onPress={onTranslate}
+                    hitSlop={8}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 2 })}
+                  >
+                    <Feather name="info" size={20} color="#ffffff" />
+                  </Pressable>
+                </View>
+
+                {/* Date · room */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                  <MonoSm color={AP.onDarkMuted}>{shortDate(active.published_at, lang)}</MonoSm>
+                  {active.room_tag ? (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: 'rgba(255,255,255,0.15)',
+                        borderRadius: 9999,
+                        paddingVertical: 2,
+                        paddingHorizontal: 8,
+                      }}
+                    >
+                      <Feather name="map-pin" size={11} color="#ffffff" />
+                      <Small color="#ffffff" style={{ fontWeight: '600' }}>
+                        {active.room_tag}
+                      </Small>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Save / Share / Hide */}
                 <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
                   <Button
                     title={s.save}
                     variant="secondary"
                     style={{ flex: 1 }}
-                    onPress={async () => {
-                      if (!active?.image_url) return
-                      const { status } = await MediaLibrary.requestPermissionsAsync()
-                      if (status !== 'granted') {
-                        Alert.alert(s.permTitle, s.permLibrary)
-                        return
-                      }
-                      try {
-                        const localUri = await FileSystem.downloadAsync(
-                          active.image_url,
-                          (FileSystem.cacheDirectory ?? '') + active.id + '.jpg',
-                        )
-                        await MediaLibrary.saveToLibraryAsync(localUri.uri)
-                        Alert.alert(s.savedTitle, s.savedBody)
-                      } catch {
-                        Alert.alert(s.saveErrorTitle, s.saveErrorBody)
-                      }
-                    }}
+                    onPress={() => onSavePhoto(active.image_url, active.id)}
                   />
                   <Button
                     title={s.share}
                     variant="secondary"
                     style={{ flex: 1 }}
-                    onPress={async () => {
-                      if (!active?.image_url) return
-                      await Share.share({
-                        message: active.caption ?? s.caption,
-                        url: active.image_url,
-                      })
-                    }}
+                    onPress={() => onSharePhoto(active.image_url, active.caption)}
                   />
                   <Button
                     title={s.hide}
-                    variant="danger"
+                    variant="ghost"
                     style={{ flex: 1 }}
                     onPress={() => hide(active.id)}
                   />
@@ -657,19 +935,15 @@ export default function Photos() {
               borderTopLeftRadius: theme.radii.sheet,
               borderTopRightRadius: theme.radii.sheet,
               padding: SPACE.lg,
-              paddingBottom: SPACE.xxl,
+              paddingBottom: insets.bottom + SPACE.xl,
               gap: SPACE.md,
             }}
           >
             <H2>{s.addPhoto}</H2>
+            <Small muted>{s.addNote}</Small>
             <Button title={s.takePhoto} block onPress={onTakePhoto} />
             <Button title={s.chooseLibrary} variant="secondary" block onPress={onChooseLibrary} />
-            <Button
-              title={s.cancel}
-              variant="ghost"
-              block
-              onPress={() => setUploadOpen(false)}
-            />
+            <Button title={s.cancel} variant="ghost" block onPress={() => setUploadOpen(false)} />
           </Pressable>
         </Pressable>
       </Modal>
