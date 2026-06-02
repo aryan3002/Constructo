@@ -34,15 +34,24 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = 
 /** Warm-paper fill over the blur. Higher opacity on Android (weaker blur). */
 const FILL = Platform.OS === 'android' ? 'rgba(250,246,238,0.92)' : 'rgba(250,246,238,0.72)'
 
+/**
+ * Vertical space a scrolling tab screen must reserve at its bottom so content
+ * clears BOTH the floating bar and the Ask pill that floats above it. Excludes
+ * the safe-area inset — add `insets.bottom`. = bar-gap 12 + bar 64 + gap 12 +
+ * pill 48 + 16 breathing. Consumed by the homeowner layout's `sceneStyle`.
+ */
+export const FLOATING_NAV_CLEARANCE = 12 + 64 + 12 + 48 + 16
+
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
 
-  // Only the 4 top-level tabs (drop `href: null` sub-routes like settings).
-  const routes = state.routes.filter((r) => {
-    const opt = descriptors[r.key].options as { href?: string | null }
-    return opt.href !== null
-  })
+  // Only the 4 top-level destinations. A custom tabBar receives *every* route
+  // in `state.routes`; Expo Router consumes `href: null` and does NOT surface it
+  // on `descriptors[...].options`, so filtering by `href` is unreliable and lets
+  // pushed routes (settings, members, onboarding…) leak in as extra tabs. Filter
+  // by the explicit allowlist of the four tab routes (the `TAB_ICONS` keys).
+  const routes = state.routes.filter((r) => r.name in TAB_ICONS)
 
   return (
     <View

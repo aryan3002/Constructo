@@ -18,14 +18,6 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
 import { AskPill, FloatingTabBar } from '../../src/ui'
 
-/**
- * Vertical room reserved below each tab scene so scrolling content clears the
- * floating bar (bar height 64 + ~12 gap + breathing room). The bar itself is
- * absolutely positioned and does not occupy layout space, so screens need this
- * padding to avoid hiding content behind it.
- */
-const BAR_CLEARANCE = 92
-
 function HomeownerTabs() {
   const { t } = useT()
   const { theme } = useTheme()
@@ -40,7 +32,12 @@ function HomeownerTabs() {
         tabBar={(props) => <FloatingTabBar {...props} />}
         screenOptions={{
           headerShown: false,
-          sceneStyle: { paddingBottom: BAR_CLEARANCE },
+          // Warm-paper scene background so the navigator's default (grey)
+          // background never shows behind the floating bar. Each tab screen
+          // reserves its own bottom clearance (FLOATING_NAV_CLEARANCE) *inside*
+          // its scroll content, so the warm canvas fills to the edge and there
+          // is no grey band.
+          sceneStyle: { backgroundColor: theme.colors.bg },
         }}
       >
         <Tabs.Screen name="home" options={{ title: t('nav.home') }} />

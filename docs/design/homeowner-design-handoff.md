@@ -77,6 +77,16 @@ Home has no standard header — the living-home hero IS the header. Overlaid on 
 ```
 Settings/Members/Notifications/flows are **pushed screens, never a 5th tab.**
 
+### 2.5 Bottom nav — EXACTLY 4 tabs (hard rule)
+The tab bar contains **only these four, in this order, with full untruncated labels: Home · Photos · Updates · Design.** Nothing else is ever a tab. Settings, Members, Notifications, Welcome, Household, Login, Flag, Requests, Decision, Ask, Recap, Handover, Inbox, and all viewers are **pushed/modal routes**, reached from in-screen affordances (Home avatar, FABs, card actions, the Ask pill) — never the tab bar. If a label truncates ("Phot…"), the bar is wrong (too many items or too narrow). 4 items must fit comfortably.
+
+### 2.6 Layout safety (safe-areas, scroll insets, z-order) — prevents the overlap bugs
+- **Top safe-area:** every screen header/search bar sits **below** the status bar — apply the top safe-area inset (`react-native-safe-area-context`). The search field must never touch the clock/status icons.
+- **Bottom scroll inset:** because the bottom bar **and** the "Ask" pill float over content, every scrollable screen must add bottom content padding = `floatingBarHeight + askPillHeight + margins` (≈ **140px**). The last card/tile must scroll **fully clear** of both — nothing may hide behind the pill or bar.
+- **Z-order:** floating bar (top layer) > Ask pill (just below/above bar, never over a tappable card) > content. The Ask pill is **right-aligned and offset up** so it never sits on top of a content tile; if a tile would collide, the content reflows above it.
+- **Cards are solid:** shortcut-rail tiles / content cards are **opaque white** (`card #FFFFFF`), never translucent. Only the *nav bar* is translucent.
+- **No stray chrome:** no leftover "back/Camera" labels on top-level tabs (Stitch artifact); top-level tabs have no back button.
+
 ---
 
 ## 3. Design tokens
@@ -260,6 +270,18 @@ Two big inputs: **📷 Photo** + **🎙 Hold-to-talk** (each ≥`72px`), tiny "t
 - ❌ **Red used decoratively** (red = genuine delay/risk only); alarms without a next step; gamified streaks/badges.
 - ❌ Clinical pure-white app background → use Warm Paper.
 - ❌ An **opaque, edge-to-edge bottom bar** → it must float + be translucent (§2.1).
+- ❌ A bottom bar with **more than 4 tabs** / truncated tab labels (§2.5).
+- ❌ The **Ask pill or nav bar overlapping content** → reserve bottom scroll inset (§2.6).
+- ❌ **Generic stock imagery** (city traffic, water/rocks, offices). All photos are **real construction / house-under-construction** (concrete frames, brick walls, plaster, Indian residential site) — sourced from real contractor uploads in production; use construction imagery in any mockup.
+
+### 8.1 Known Stitch-mockup artifacts — do NOT replicate in code
+The Stitch reference renders (project `14655651634697253072`) are visual targets, but they carry generation artifacts that are **NOT** part of the design:
+- **9-tab bottom bar** — Stitch auto-wires a nav item per project frame. Real app = the fixed 4 tabs (§2.5).
+- **Opaque, edge-pinned nav** — implement floating + translucent (§2.1).
+- **Ask pill / search bar overlapping content or the status bar** — fix with safe-area + scroll insets (§2.6).
+- **Generic city/stock photos** — replace with real construction imagery.
+- **Faded/translucent content tiles** — content cards are solid white.
+Treat the layout, components, copy, color, type, time-bar, and card structure as the target; treat the shell (nav, overlaps, imagery) per this spec, not per the mockup.
 
 ---
 

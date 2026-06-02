@@ -35,6 +35,7 @@ import {
   Small,
   StatusCard,
   WeeklySummaryCard,
+  FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 import type { LivingHomeHeroStatusChip } from '../../src/ui'
 import type { QuietPeriod } from '../../src/api/types'
@@ -282,7 +283,7 @@ export default function Home() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xl }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}
     >
       {/* ---- Living-home hero (IS the header) ---- */}
       <LivingHomeHero

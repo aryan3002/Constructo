@@ -47,6 +47,7 @@ import {
   Small,
   StatusPill,
   Title,
+  FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 import {
   DESIGN_STR,
@@ -69,8 +70,9 @@ export default function Design() {
   const STR = DESIGN_STR[lang]
   const c = theme.colors
 
-  // Floating nav + Ask pill clearance (handoff §2.1): 64 bar + 12 gap + inset.
-  const navClearance = 64 + 12 + insets.bottom + 24
+  // The homeowner layout's `sceneStyle` already reserves room for the floating
+  // bar + Ask pill (FLOATING_NAV_CLEARANCE); keep only a small breathing pad.
+  const navClearance = insets.bottom + FLOATING_NAV_CLEARANCE
 
   const profileQ = useQuery({
     queryKey: ['design', 'profile'],
