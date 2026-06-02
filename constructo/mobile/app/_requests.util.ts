@@ -74,6 +74,31 @@ export function buildRequestDetail({
   return joined.length ? joined : undefined
 }
 
+/** A request is "resolved" once the team marks it done; everything else is open. */
+export function isRequestResolved(status: RequestStatus): boolean {
+  return status === 'done'
+}
+
+/**
+ * The SLA promise line shown under an OPEN request. Honest: if the backend gave
+ * us an `sla_due_at` we show it ("Reply expected by 2 Jun"); otherwise we fall
+ * back to the team's general promise, never a fabricated deadline.
+ */
+export function slaPromise(
+  req: { sla_due_at: string | null; status: RequestStatus },
+  lang: 'en' | 'hi',
+): string {
+  const L = (e: string, h: string) => (lang === 'hi' ? h : e)
+  if (req.sla_due_at) {
+    const by = formatDate(req.sla_due_at, lang)
+    if (by) return L(`Reply expected by ${by}`, `जवाब ${by} तक अपेक्षित`)
+  }
+  return L(
+    'Your team usually replies within a few hours on working days.',
+    'टीम आमतौर पर कामकाजी दिनों में कुछ घंटों में जवाब देती है।',
+  )
+}
+
 /** A short, locale-aware date like "30 May" / readable timestamp. */
 export function formatDate(iso: string, lang: 'en' | 'hi'): string {
   const d = new Date(iso)
@@ -91,4 +116,31 @@ export function formatDate(iso: string, lang: 'en' | 'hi'): string {
 /** A decision is resolved (and should drop out of the list) once acted on. */
 export function isDecisionResolved(state: string): boolean {
   return state !== 'pending'
+}
+
+/**
+ * Heuristic: does this question touch MONEY or STRUCTURE? There is no
+ * grounded-RAG backend (H8 is gated), so the Ask screen never invents an
+ * answer — but for money/structural questions we add an extra-honest note that
+ * the team will weigh in, since these are the questions a homeowner most needs
+ * a human (not a guess) on. Pure keyword match (EN + HI), no AI.
+ */
+const MONEY_STRUCTURAL_TERMS = [
+  // money (en)
+  'cost', 'price', 'budget', 'payment', 'pay', 'invoice', 'bill', 'rupee', 'rs', 'rs.',
+  'amount', 'quote', 'quotation', 'estimate', 'extra charge', 'expensive', 'cheaper', 'refund',
+  'advance', 'emi', 'loan', 'overrun', '₹',
+  // money (hi)
+  'पैसा', 'पैसे', 'रुपये', 'रुपए', 'लागत', 'कीमत', 'दाम', 'बजट', 'भुगतान', 'बिल', 'किस्त', 'अग्रिम', 'खर्च',
+  // structural (en)
+  'structure', 'structural', 'beam', 'column', 'pillar', 'slab', 'foundation', 'load',
+  'load-bearing', 'load bearing', 'rcc', 'reinforcement', 'crack', 'wall remove', 'remove wall',
+  'break wall', 'demolish', 'roof', 'support',
+  // structural (hi)
+  'ढाँचा', 'ढांचा', 'संरचना', 'बीम', 'कॉलम', 'खंभा', 'स्लैब', 'नींव', 'भार', 'दरार', 'दीवार',
+]
+
+export function isMoneyOrStructural(question: string): boolean {
+  const q = question.toLowerCase()
+  return MONEY_STRUCTURAL_TERMS.some((term) => q.includes(term))
 }
