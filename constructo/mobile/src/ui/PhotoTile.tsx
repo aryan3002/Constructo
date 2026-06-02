@@ -140,6 +140,9 @@ export function PhotoTile({
           source={{ uri: photo.imageUri }}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
+          // The Pressable above is the labelled imagebutton (caption = alt text);
+          // don't let the raw image announce a second, unlabelled node.
+          importantForAccessibility="no"
           style={{ width: '100%', height: '100%', backgroundColor: AP.surfaceLow }}
         />
 

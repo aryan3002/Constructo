@@ -87,7 +87,13 @@ export function LivingHomeHero({
   return (
     <View style={{ height }}>
       {imageUri ? (
-        <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image
+          source={{ uri: imageUri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          importantForAccessibility="no"
+          accessibilityElementsHidden
+        />
       ) : (
         // Warm placeholder — NEVER an AI/3D render. A calm clay→pine paper wash.
         <View style={StyleSheet.absoluteFill}>
