@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -23,6 +24,7 @@ import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { captureSites, type CaptureMedia } from '../../../src/api/capture'
 import type { Site } from '../../../src/api/types'
+import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { VoiceOutButton, MUKADAM_TAP, tapFeedback } from './_voice'
 
 const STR = {
@@ -43,9 +45,13 @@ const STR = {
     markedBody: 'Supervisor will verify. Saved on this phone; it sends on its own when online.',
     markAnother: 'Change the count',
     photoAdded: '✓ Crew photo added',
-    voiceAdded: '✓ Voice note added — “{n} came”',
+    voiceAdded: '✓ Voice note added',
     permTitle: 'Camera needed',
     permBody: 'Allow the camera to take a crew photo.',
+    micPermTitle: 'Microphone needed',
+    micPermBody: 'Allow the microphone to record the count.',
+    recording: 'Recording… release to send',
+    tooShort: 'Too short — hold and speak.',
     ok: 'OK',
     noSite: 'No site assigned yet — ask your supervisor.',
   },
@@ -66,9 +72,13 @@ const STR = {
     markedBody: 'Supervisor देख लेंगे। फ़ोन में सेव है; online होते ही अपने-आप चला जाएगा।',
     markAnother: 'गिनती बदलो',
     photoAdded: '✓ फ़ोटो जुड़ गई',
-    voiceAdded: '✓ आवाज़ जुड़ गई — “{n} आए”',
+    voiceAdded: '✓ आवाज़ जुड़ गई',
     permTitle: 'कैमरा चाहिए',
     permBody: 'फ़ोटो लेने के लिए कैमरा चालू करने दें।',
+    micPermTitle: 'माइक चाहिए',
+    micPermBody: 'गिनती रिकॉर्ड करने के लिए माइक की अनुमति दें।',
+    recording: 'रिकॉर्ड हो रहा… छोड़ो तो भेज देंगे',
+    tooShort: 'बहुत छोटा — दबाकर बोलो।',
     ok: 'ठीक है',
     noSite: 'अभी कोई साइट असाइन नहीं — supervisor से पूछो।',
   },
@@ -91,7 +101,8 @@ export default function Attendance() {
 
   const [count, setCount] = useState(0)
   const [photoUri, setPhotoUri] = useState<string | undefined>()
-  const [voiceUri, setVoiceUri] = useState<string | undefined>()
+  // A REAL recorded audio clip (voice proof) — replaces the old fake voice:// uri.
+  const [voiceAudio, setVoiceAudio] = useState<RecordedAudio | undefined>()
   const [marked, setMarked] = useState(false)
   const [sites, setSites] = useState<Site[]>([])
 
@@ -122,12 +133,11 @@ export default function Attendance() {
     }
   }
 
-  function recordVoice() {
-    // TODO(audio/STT): wire expo-av recording + speech-to-text to extract the
-    // count. For now we stub a local uri so the capture still carries voice
-    // proof through the outbox; the count stays user-confirmed via the stepper.
-    const stubUri = `voice://local/${Date.now()}.m4a`
-    setVoiceUri(stubUri)
+  function onRecorded(audio: RecordedAudio) {
+    // Real on-device audio — voice PROOF that runs through the backend STT path.
+    setVoiceAudio(audio)
+    // A voice note implies a crew was counted; nudge to at least 1.
+    if (count === 0) setCount(1)
   }
 
   async function markPresent() {
@@ -148,6 +158,22 @@ export default function Attendance() {
       path: '/api/v1/capture',
       capture: { site_id: site.id, type: 'attendance', text, media },
     })
+    // A capture carries ONE media file, so when a voice clip ALSO exists we file
+    // it as a second attendance capture — the real audio runs through STT, and
+    // we never drop the spoken proof. The headcount text already rode above.
+    if (voiceAudio) {
+      await enqueue({
+        label: lang === 'hi' ? 'हाज़िरी · आवाज़' : 'Attendance · voice',
+        method: 'POST',
+        path: '/api/v1/capture',
+        capture: {
+          site_id: site.id,
+          type: 'attendance',
+          text: null,
+          media: { uri: voiceAudio.uri, name: voiceAudio.name, mime: voiceAudio.mime },
+        },
+      })
+    }
     if (online) void flush()
     tapFeedback()
     setMarked(true)
@@ -156,7 +182,7 @@ export default function Attendance() {
   function reset() {
     setMarked(false)
     setPhotoUri(undefined)
-    setVoiceUri(undefined)
+    setVoiceAudio(undefined)
   }
 
   return (
@@ -196,24 +222,54 @@ export default function Attendance() {
           </Card>
         ) : (
           <>
-            {/* Answer way 1 + 2: photo OR voice — icon + WORD, ≥56px. */}
-            <View style={{ flexDirection: 'row', gap: SPACE.md }}>
-              <CaptureTile
-                glyph="📷"
-                label={str.photo}
-                done={!!photoUri}
-                doneLabel={str.photoAdded}
-                onPress={takeCrewPhoto}
-              />
-              <CaptureTile
-                glyph="🎙"
+            {/* Answer way 1: crew photo proof — icon + WORD, ≥56px. */}
+            <CaptureTile
+              icon="camera"
+              label={str.photo}
+              done={!!photoUri}
+              doneLabel={str.photoAdded}
+              onPress={takeCrewPhoto}
+            />
+
+            {/* Answer way 2: REAL hold-to-talk voice proof (records audio → STT). */}
+            {voiceAudio ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.sm,
+                  minHeight: 96,
+                  borderRadius: theme.radii.card,
+                  borderWidth: 2,
+                  borderColor: STATUS.ok,
+                  backgroundColor: 'rgba(30,158,90,0.08)',
+                  paddingHorizontal: SPACE.lg,
+                }}
+              >
+                <Feather name="check-circle" size={24} color={STATUS.ok} />
+                <BodyStrong color={STATUS.ok}>{str.voiceAdded}</BodyStrong>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={str.markAnother}
+                  onPress={() => setVoiceAudio(undefined)}
+                  style={{ marginLeft: 'auto', minHeight: MUKADAM_TAP, justifyContent: 'center' }}
+                >
+                  <Feather name="x" size={22} color={c.textMute} />
+                </Pressable>
+              </View>
+            ) : (
+              <HoldToTalk
                 label={str.voice}
                 hint={str.voiceHint}
-                done={!!voiceUri}
-                doneLabel={str.voiceAdded.replace('{n}', String(count))}
-                onPress={recordVoice}
+                recordingLabel={str.recording}
+                tooShortLabel={str.tooShort}
+                permLabel={str.micPermBody}
+                onRecorded={onRecorded}
+                onPermissionDenied={() =>
+                  Alert.alert(str.micPermTitle, str.micPermBody, [{ text: str.ok }])
+                }
               />
-            </View>
+            )}
 
             {/* Answer way 3: the GIANT stepper. */}
             <Card>
@@ -256,14 +312,14 @@ export default function Attendance() {
 }
 
 function CaptureTile({
-  glyph,
+  icon,
   label,
   hint,
   done,
   doneLabel,
   onPress,
 }: {
-  glyph: string
+  icon: keyof typeof Feather.glyphMap
   label: string
   hint?: string
   done?: boolean
@@ -279,26 +335,28 @@ function CaptureTile({
       accessibilityState={{ selected: done }}
       onPress={onPress}
       style={({ pressed }) => ({
-        flex: 1,
-        minHeight: 120,
+        minHeight: 96,
+        flexDirection: 'row',
         borderRadius: theme.radii.card,
         borderWidth: 2,
         borderColor: done ? STATUS.ok : c.line,
         backgroundColor: done ? 'rgba(30,158,90,0.08)' : c.card,
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: SPACE.md,
-        gap: SPACE.xs,
+        gap: SPACE.md,
+        paddingVertical: SPACE.md,
+        paddingHorizontal: SPACE.lg,
         opacity: pressed ? 0.9 : 1,
       })}
     >
-      <BodyStrong style={{ fontSize: 36 }}>{glyph}</BodyStrong>
-      <BodyStrong style={{ textAlign: 'center' }}>{label}</BodyStrong>
-      {done ? (
-        <Small color={STATUS.ok} style={{ textAlign: 'center' }}>{doneLabel}</Small>
-      ) : hint ? (
-        <Small muted style={{ textAlign: 'center', fontSize: 12 }}>{hint}</Small>
-      ) : null}
+      <Feather name={done ? 'check-circle' : icon} size={32} color={done ? STATUS.ok : c.accentDeep} />
+      <View style={{ flex: 1 }}>
+        <BodyStrong>{label}</BodyStrong>
+        {done ? (
+          <Small color={STATUS.ok}>{doneLabel}</Small>
+        ) : hint ? (
+          <Small muted style={{ fontSize: 12 }}>{hint}</Small>
+        ) : null}
+      </View>
     </Pressable>
   )
 }

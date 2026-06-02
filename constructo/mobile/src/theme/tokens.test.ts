@@ -17,10 +17,18 @@ describe('design tokens', () => {
     expect(THEMES.blueprint.radii.card).toBe(8)
   })
 
-  it('keeps the brand primaries (Blueprint amber, Daylight teal-green)', () => {
+  it('keeps the brand primaries (Blueprint amber, Daylight Calm Pine)', () => {
     expect(THEMES.blueprint.colors.accent).toBe('#f2a100')
-    // Daylight uses the "Architectural Precision" deep teal-green primary.
-    expect(THEMES.daylight.colors.accent).toBe('#214b49')
+    // Daylight uses the "Calm Cockpit" Calm Pine primary (§3.1).
+    expect(THEMES.daylight.colors.accent).toBe('#1e7a63')
+  })
+
+  it('adds the Warm Clay celebration accent + quiet tone to Daylight', () => {
+    expect(THEMES.daylight.colors.secondary).toBe('#c5683b')
+    expect(THEMES.daylight.colors.secondaryContainer).toBe('#f4d9c6')
+    expect(THEMES.daylight.colors.quiet).toBe('#8c8a82')
+    // Warm Paper canvas — never pure white.
+    expect(THEMES.daylight.colors.bg).toBe('#faf6ee')
   })
 
   it('maps backend severity onto the status spine', () => {

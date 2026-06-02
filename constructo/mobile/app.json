@@ -58,7 +58,8 @@
           "savePhotosPermission": "Constructo saves your site photos to your gallery.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "router": {},

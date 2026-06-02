@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { Feather } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as MediaLibrary from 'expo-media-library'
@@ -458,9 +459,7 @@ export default function Photos() {
                           backgroundColor: 'rgba(0,0,0,0.45)',
                         }}
                       >
-                        <Small color="#ffffff" style={{ lineHeight: 18 }}>
-                          ★
-                        </Small>
+                        <Feather name="star" size={14} color="#ffffff" />
                       </View>
                     ) : null}
                   </Pressable>
@@ -503,9 +502,7 @@ export default function Photos() {
               }}
             >
               {policy.keepStarredAndMilestone ? (
-                <Small color={c.onAccent} style={{ lineHeight: 16 }}>
-                  ✓
-                </Small>
+                <Feather name="check" size={16} color={c.onAccent} />
               ) : null}
             </View>
             <Body style={{ flex: 1 }}>{s.keepLabel}</Body>
@@ -568,9 +565,7 @@ export default function Photos() {
           ...theme.shadowCard,
         }}
       >
-        <Display color={c.onAccent} style={{ lineHeight: 30 }}>
-          +
-        </Display>
+        <Feather name="plus" size={26} color={c.onAccent} />
       </Pressable>
 
       {/* Full-screen viewer */}
