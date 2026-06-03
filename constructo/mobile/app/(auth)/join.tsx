@@ -20,8 +20,8 @@ import { ApiError } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../src/theme/tokens'
-import { Body, Button, Display, Screen, Small } from '../../src/ui'
+import { SPACE } from '../../src/theme/tokens'
+import { Body, Button, Display, Screen, Small, useInputStyle } from '../../src/ui'
 
 const RESEND_SECONDS = 30
 
@@ -119,16 +119,7 @@ export default function Join() {
     }
   }
 
-  const inputStyle = {
-    minHeight: TAP,
-    borderWidth: 1,
-    borderColor: theme.colors.line,
-    borderRadius: theme.radii.control,
-    paddingHorizontal: SPACE.lg,
-    backgroundColor: theme.colors.card,
-    color: theme.colors.text,
-    fontSize: 18,
-  } as const
+  const inputStyle = useInputStyle()
 
   const canJoin = joinCode.trim().length > 0 && phone.trim().length >= 10 && otp.trim().length === 6
 

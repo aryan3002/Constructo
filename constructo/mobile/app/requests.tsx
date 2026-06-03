@@ -389,6 +389,7 @@ const noteInputStyle = (theme: ReturnType<typeof useTheme>['theme']): TextStyle 
   paddingVertical: SPACE.md,
   minHeight: TAP,
   color: theme.colors.text,
+  letterSpacing: 0, // prevent iOS custom-font tracking from leaking into placeholder
 })
 
 // ---------------------------------------------------------------------------

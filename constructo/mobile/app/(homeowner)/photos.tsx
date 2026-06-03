@@ -516,7 +516,7 @@ export default function Photos() {
           placeholderTextColor={c.textMute}
           returnKeyType="search"
           accessibilityLabel={s.searchPlaceholder}
-          style={{ flex: 1, color: c.text, fontSize: 16, paddingVertical: SPACE.sm }}
+          style={{ flex: 1, color: c.text, fontSize: 16, paddingVertical: SPACE.sm, letterSpacing: 0 }}
         />
         {search ? (
           <Pressable
