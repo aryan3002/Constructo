@@ -233,6 +233,16 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
     member.status = MemberStatus.active
     if member.phone is None:
         member.phone = body.phone
+    # Capture the homeowner's name on first join so Members / Settings show a
+    # real name, not a bare phone. Set the canonical User.name, and — if the
+    # inviting owner didn't already label this member — the member display_name
+    # too (so the roster reads the name without a User join).
+    if body.name and body.name.strip():
+        clean = body.name.strip()
+        if not user.name:
+            user.name = clean
+        if member.display_name is None:
+            member.display_name = clean
     await session.commit()
 
     # Onboarding enrichment: the property's display name + the building company.

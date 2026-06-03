@@ -20,6 +20,8 @@ export const en = {
     verify: 'Verify & continue',
     joinTitle: 'Join your home',
     joinSubtitle: 'Enter the code your builder shared with you.',
+    nameLabel: 'Your name',
+    namePlaceholder: 'e.g. Anita Sharma',
     joinCodeLabel: 'Join code',
     joinCta: 'Join',
     haveJoinCode: 'I have a join code',

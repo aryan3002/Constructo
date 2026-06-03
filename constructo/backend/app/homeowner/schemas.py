@@ -29,6 +29,10 @@ class JoinIn(BaseModel):
     join_code: str = Field(min_length=1)
     phone: str = Field(min_length=1)
     otp: str = Field(min_length=1)
+    # The joining homeowner's own name, captured on the join form so Members /
+    # Settings show a real name instead of a bare phone. Optional for backward
+    # compatibility (older clients / API callers omit it).
+    name: str | None = None
 
 
 class TokenOut(BaseModel):

@@ -29,15 +29,23 @@ export const authApi = {
     return resp.token
   },
 
-  /** Homeowner join: redeem a join code for a token. Stores the JWT. */
+  /** Homeowner join: redeem a join code for a token. Stores the JWT.
+   * `name` (optional) is the homeowner's own name, persisted so Members /
+   * Settings show a real name instead of a bare phone. */
   async joinAsHomeowner(
     joinCode: string,
     phone: string,
     otp: string,
+    name?: string,
   ): Promise<HomeownerJoinResponse> {
     const resp = await request<HomeownerJoinResponse>('/api/v1/homeowner/join', {
       method: 'POST',
-      body: JSON.stringify({ join_code: joinCode, phone, otp }),
+      body: JSON.stringify({
+        join_code: joinCode,
+        phone,
+        otp,
+        ...(name && name.trim() ? { name: name.trim() } : {}),
+      }),
     })
     await setToken(resp.token)
     return resp
