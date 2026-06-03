@@ -21,9 +21,7 @@ import { AskPill, FloatingTabBar } from '../../src/ui'
 function HomeownerTabs() {
   const { t } = useT()
   const { theme } = useTheme()
-  // No `nav.ask` key in the shared catalog (owned by another agent); use a
-  // minimal inline fallback. TODO: add `nav.ask` ("Ask" / "पूछें") to en/hi.
-  const askLabel = 'Ask'
+  const askLabel = t('nav.ask')
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
