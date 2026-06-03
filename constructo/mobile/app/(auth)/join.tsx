@@ -35,6 +35,7 @@ export default function Join() {
   const params = useLocalSearchParams<{ code?: string }>()
 
   const [joinCode, setJoinCode] = useState(params.code ?? '')
+  const [name, setName] = useState('')
   const [phone, setPhone] = useState('+91')
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
@@ -97,7 +98,12 @@ export default function Join() {
     setBusy(true)
     setError(null)
     try {
-      const resp = await authApi.joinAsHomeowner(joinCode.trim(), phone.trim(), otp.trim())
+      const resp = await authApi.joinAsHomeowner(
+        joinCode.trim(),
+        phone.trim(),
+        otp.trim(),
+        name.trim(),
+      )
       // Persist sub_role + site_id before calling refresh() so routing can branch.
       await setJoinData(resp.sub_role, resp.site_id)
       await refresh()
@@ -121,7 +127,11 @@ export default function Join() {
 
   const inputStyle = useInputStyle()
 
-  const canJoin = joinCode.trim().length > 0 && phone.trim().length >= 10 && otp.trim().length === 6
+  const canJoin =
+    name.trim().length > 0 &&
+    joinCode.trim().length > 0 &&
+    phone.trim().length >= 10 &&
+    otp.trim().length === 6
 
   return (
     <Screen>
@@ -141,6 +151,20 @@ export default function Join() {
       </View>
 
       <View style={{ gap: SPACE.md, marginTop: SPACE.xl }}>
+        {/* Name — so Members / Settings show a real name, not a bare phone */}
+        <Small muted>{t('auth.nameLabel')}</Small>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          autoComplete="name"
+          textContentType="name"
+          autoFocus={!params.code}
+          style={inputStyle}
+          placeholder={t('auth.namePlaceholder')}
+          placeholderTextColor={theme.colors.textMute}
+        />
+
         {/* Join code */}
         <Small muted>{t('auth.joinCodeLabel')}</Small>
         <TextInput
@@ -148,7 +172,6 @@ export default function Join() {
           onChangeText={setJoinCode}
           autoCapitalize="none"
           autoCorrect={false}
-          autoFocus={!params.code}
           style={inputStyle}
           placeholder="abc123…"
           placeholderTextColor={theme.colors.textMute}

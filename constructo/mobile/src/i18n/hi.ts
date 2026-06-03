@@ -22,6 +22,8 @@ export const hi: Dict = {
     verify: 'सत्यापित करें और आगे बढ़ें',
     joinTitle: 'अपने घर से जुड़ें',
     joinSubtitle: 'आपके बिल्डर ने जो कोड साझा किया है उसे डालें।',
+    nameLabel: 'आपका नाम',
+    namePlaceholder: 'जैसे अनीता शर्मा',
     joinCodeLabel: 'जॉइन कोड',
     joinCta: 'जुड़ें',
     haveJoinCode: 'मेरे पास जॉइन कोड है',

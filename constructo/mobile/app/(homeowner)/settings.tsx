@@ -153,7 +153,7 @@ export default function Settings() {
         <SettingsGroup>
           <SettingsRow
             icon="user"
-            title={tx.profile}
+            title={me?.name ?? tx.profile}
             subtitle={me?.phone ?? tx.profileSubUnknown}
             hideChevron
             onPress={() => {

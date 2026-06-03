@@ -145,6 +145,11 @@ function MemberCard({
 }) {
   const isInvited = member.status === 'invited'
   const name = member.display_name ?? member.phone ?? '—'
+  // Initial avatar when we have a real name (not a phone/dash fallback) — the
+  // first letter, uppercased. `\p{L}` keeps it to letters (incl. Devanagari),
+  // so a phone like "+9198…" falls back to the generic icon.
+  const initial = member.display_name?.trim()?.[0]?.toUpperCase()
+  const showInitial = Boolean(initial && /\p{L}/u.test(initial))
   const cap = capabilityLine(member.sub_role, lang)
   const design = designLine(member, lang)
 
@@ -169,7 +174,11 @@ function MemberCard({
           justifyContent: 'center',
         }}
       >
-        <Feather name="user" size={18} color={theme.colors.accentDeep} />
+        {showInitial ? (
+          <BodyStrong color={theme.colors.accentDeep}>{initial}</BodyStrong>
+        ) : (
+          <Feather name="user" size={18} color={theme.colors.accentDeep} />
+        )}
       </View>
 
       <View style={{ flex: 1, gap: SPACE.xs }}>
