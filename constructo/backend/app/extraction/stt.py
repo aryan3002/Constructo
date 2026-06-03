@@ -118,6 +118,48 @@ class AzureWhisperSTT:
         return resp.text
 
 
+class SarvamSTT:
+    """Indian-language STT via Sarvam AI (Saaras) — purpose-built for Hindi /
+    Hinglish / code-mixed site speech. Fetches the audio URL, posts it as
+    multipart, returns the transcript. The provider-agnostic numeral-repair pass
+    runs afterwards exactly as for Whisper.
+    """
+
+    URL = "https://api.sarvam.ai/speech-to-text"
+    _MIME = {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+    }
+
+    def __init__(self, api_key: str, model: str = "saaras:v3") -> None:
+        self._key = api_key
+        self._model = model
+
+    async def transcribe(self, audio_url: str, lang_hint: str = "hi") -> str:  # pragma: no cover
+        from urllib.parse import urlparse
+
+        import httpx
+
+        ext = (os.path.splitext(urlparse(audio_url).path)[1] or ".wav").lower()
+        async with httpx.AsyncClient(timeout=30) as http:
+            audio = (await http.get(audio_url)).content
+            data = {"model": self._model}
+            if lang_hint:
+                data["language_code"] = lang_hint if "-" in lang_hint else f"{lang_hint}-IN"
+            resp = await http.post(
+                self.URL,
+                headers={"api-subscription-key": self._key},
+                data=data,
+                files={"file": (f"voice{ext}", audio, self._MIME.get(ext, "audio/wav"))},
+            )
+            resp.raise_for_status()
+            return resp.json().get("transcript", "")
+
+
 def get_stt_client() -> STTClient:
     """Return an :class:`STTClient` selected by environment.
 
@@ -132,13 +174,13 @@ def get_stt_client() -> STTClient:
     hit the network).
     """
     provider = os.environ.get("STT_PROVIDER", "openai").lower()
-    # TODO(SarvamSTT): provider seam — founder will supply API; Azure STT is
-    # current. To add Sarvam later, implement the STTClient interface
-    # (``async def transcribe(self, audio_url, lang_hint="hi") -> str``) and add
-    # a ``if provider == "sarvam": return SarvamSTT(...)`` branch here. The
-    # post-ASR numeral-repair pass (app.extraction.numeral_repair) is
-    # provider-agnostic and already runs after whichever provider transcribes.
-    if provider == "azure":
+    # The post-ASR numeral-repair pass (app.extraction.numeral_repair) is
+    # provider-agnostic and runs after whichever provider transcribes.
+    if provider == "sarvam":
+        key = os.environ.get("SARVAM_API_KEY")
+        if key:
+            return SarvamSTT(api_key=key, model=os.environ.get("STT_MODEL", "saaras:v3"))
+    elif provider == "azure":
         key = os.environ.get("AZURE_OPENAI_API_KEY")
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
         deployment = os.environ.get("AZURE_WHISPER_DEPLOYMENT")
