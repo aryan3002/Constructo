@@ -1,0 +1,19 @@
+# Keep the build context (and image) small. The app needs: app/, alembic/,
+# alembic.ini, pyproject.toml, uv.lock, docker-entrypoint.sh.
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+tests
+media
+scripts
+*.md
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.DS_Store
