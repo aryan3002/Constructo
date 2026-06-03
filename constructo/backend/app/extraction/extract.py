@@ -14,12 +14,10 @@ network. The ``fields`` shapes follow the construction domain conventions in
 """
 from __future__ import annotations
 
-import os
 from datetime import date
 from typing import Any
 from uuid import UUID
 
-from app.config import settings
 from app.contracts.events import EventType, MediaType, RawMessage, SiteEvent
 from app.extraction.classify import classify
 from app.extraction.llm import LLMClient, get_llm_client
@@ -28,6 +26,7 @@ from app.extraction.ocr import OCRClient
 from app.extraction.ocr import ocr as run_ocr
 from app.extraction.stt import STTClient
 from app.extraction.stt import transcribe as run_transcribe
+from app.storage import get_storage
 
 CLARIFY_THRESHOLD = 0.6
 
@@ -95,27 +94,15 @@ def _llm_schema(event_type: EventType) -> dict:
 
 
 def _normalize_media_ref(media_url: str | None) -> str | None:
-    """Normalize a media reference into a local filesystem path the workers read.
+    """Resolve a stored media ref into something OCR/STT/vision can fetch.
 
-    The WhatsApp bridge and extraction share a ``MEDIA_DIR`` (see README /
-    ``app.config.settings.media_dir``). The bridge sets ``media_url`` to an
-    absolute local path; we also tolerate ``file://`` URIs and bare relative
-    paths (resolved against ``MEDIA_DIR``). Real http(s) URLs are passed through
-    unchanged so object-storage / Cloud-API URLs still work later.
+    Delegates to the active storage backend (``app.storage``): a bare key becomes
+    a presigned GET URL on S3/R2, or a MEDIA_DIR path on the local backend; real
+    http(s) URLs (WhatsApp Cloud-API media, Unsplash stopgap) pass through. The
+    WhatsApp bridge's absolute paths and ``file://`` URIs are still tolerated by
+    the local backend.
     """
-    if not media_url:
-        return media_url
-    ref = media_url.strip()
-    low = ref.lower()
-    if low.startswith(("http://", "https://")):
-        return ref
-    if low.startswith("file://"):
-        # file:///abs/path -> /abs/path
-        return ref[len("file://") :]
-    if os.path.isabs(ref):
-        return ref
-    # Bare relative path: resolve against the shared media dir.
-    return os.path.join(settings.media_dir, ref)
+    return get_storage().url_for(media_url)
 
 
 def _looks_like_document(raw: RawMessage) -> bool:
