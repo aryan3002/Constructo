@@ -5,6 +5,7 @@ import { clearToken } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, Display, H2, Small, ThemeProvider } from '../../ui'
+import { useThemeMode, type ThemeMode } from '../../ui/ThemeModeProvider'
 import { useMe } from '../auth/useMe'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { Toggle } from './Toggle'
@@ -50,6 +51,7 @@ export function Settings() {
   const [nameError, setNameError] = useState<string | null>(null)
   const [highContrast, setHighContrast] = useHighContrast()
   const [notifs, setNotifs] = useNotifPrefs()
+  const { mode, setMode } = useThemeMode()
 
   useEffect(() => {
     if (me?.name) setName(me.name)
@@ -143,6 +145,32 @@ export function Settings() {
               <Small>{t('settings.language.subtitle')}</Small>
               <div className="mt-3">
                 <LanguageSwitcher />
+              </div>
+            </Section>
+
+            {/* TODO(i18n W6): move these labels into en.ts/hi.ts */}
+            <Section title="Appearance">
+              <Small>Choose how the console looks. System follows your device.</Small>
+              <div
+                className="mt-3 inline-flex rounded-control border border-line p-1"
+                role="group"
+                aria-label="Theme"
+              >
+                {(['light', 'dark', 'system'] as ThemeMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    aria-pressed={mode === m}
+                    className={`min-h-tap rounded-[6px] px-4 font-body text-small font-semibold capitalize transition-colors duration-160 ${
+                      mode === m
+                        ? 'bg-primary text-on-primary'
+                        : 'text-text-mute hover:text-text'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
               </div>
             </Section>
 

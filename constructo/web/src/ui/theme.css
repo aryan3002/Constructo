@@ -1,79 +1,200 @@
 /* ============================================================================
- * Constructo — "Blueprint & Daylight" design tokens.
+ * Constructo — "Blueprint" design tokens · Light + Dark (W0).
  *
- * Two themes share one token spine and are switched via `data-theme` on a
- * wrapping element (see ThemeProvider):
- *   data-theme="site"      contractor app  — Uber-like: bold, warm paper, amber
- *   data-theme="daylight"  homeowner app   — Airbnb-like: soft, photo-forward
+ * THREE-TIER MODEL (see vault 11-Contractor-Web-Experience/01):
+ *   primitive values  →  semantic ROLE tokens  →  component tokens / Tailwind.
+ * Components + Tailwind utilities bind to ROLE tokens (--surface, --brand,
+ * --text-primary, …). The role VALUES are redefined per MODE; everything else
+ * recalculates instantly with no re-render.
  *
- * Tailwind reads these CSS variables through theme.extend (tailwind.config.js),
- * so utilities like `bg-paper`, `text-ink`, `bg-primary` resolve per active
- * theme. Status colors are shared across both surfaces.
+ * MODE lives on <html data-theme="light|dark"> (set pre-paint by the no-FOUC
+ * script in index.html, managed by ThemeModeProvider). Because CSS custom
+ * properties INHERIT, any nested `data-theme="site"` wrapper (legacy per-screen
+ * surfaces) is mode-transparent — it inherits the root mode. `data-theme="daylight"`
+ * (homeowner palette, gallery-only) hard-sets its own values and is mode-agnostic.
+ *
+ * Legacy `--c-*` names are kept as ALIASES → role tokens, so every existing
+ * Tailwind utility (bg-paper, text-ink, bg-primary, border-line, …) keeps
+ * working in BOTH modes with no page edits. Sunset the aliases once pages
+ * migrate to the role names (one release).
  * ========================================================================== */
 
 :root,
-[data-theme='site'] {
-  /* --- Status spine (shared; always paired with an icon/shape) --- */
-  --c-ok: #1e9e5a;
-  --c-warn: #e8a317;
-  --c-risk: #e5484d;
-  --c-info: #3b7dd8;
+[data-theme='light'] {
+  /* ---- Semantic ROLE tokens — LIGHT (the default; "the record you read in the sun") ---- */
+  --surface: #f7f5f0; /* app canvas — warm paper, never clinical white */
+  --surface-card: #ffffff; /* cards, grid body, sidebar */
+  --surface-elevated: #ffffff; /* raised card, sticky header */
+  --surface-overlay: #ffffff; /* command palette, popover, menu, toast */
+  --surface-sunken: #f1eee6; /* grid header strip, input track, wells */
+  --surface-hover: #f1eee6; /* row / control hover */
+  --surface-selected: rgba(242, 161, 0, 0.15); /* selected row / active nav */
 
-  /* --- Site surface (contractor app — DEFAULT) --- */
-  --c-ink: #15171c;
-  --c-ink-2: #22262e;
-  --c-paper: #f7f5f0; /* warm, NOT clinical white */
-  --c-paper-2: #ffffff;
-  --c-line: #d9d4c8;
-  --c-primary: #f2a100; /* amber — THE primary action */
-  --c-primary-deep: #c77f00;
-  --c-text: #15171c;
-  --c-text-mute: #6b6f78;
+  --text-primary: #15171c;
+  --text-secondary: #4a4e57;
+  --text-muted: #6b6f78;
+  --text-on-brand: #15171c; /* dark ink reads best on amber (9:1+) */
 
-  /* App-level mapped roles (consumed by Tailwind utilities) */
-  --c-bg: var(--c-paper);
-  --c-card: var(--c-paper-2);
-  --c-accent: var(--c-primary);
-  --c-accent-warm: var(--c-primary-deep);
-  --c-on-primary: #15171c; /* dark ink reads best on amber */
+  --border: #c4beb1; /* UI element border */
+  --border-strong: #9a9486; /* focused/hovered control, table outer */
+  --divider: #d9d4c8; /* hairline between rows; the "blueprint grid" */
 
-  /* --- Radii: Site = 8px cards / 12px sheets --- */
+  --brand: #f2a100; /* THE one primary action — safety-amber */
+  --brand-hover: #d98c00;
+  --brand-pressed: #c77f00;
+  --brand-subtle: #fce8bf; /* amber tint surface (active nav bg, ⌘K match) */
+  --brand-text: #5a3b00; /* amber-AS-TEXT (deep; passes on paper) */
+  --ring: #a06600; /* focus ring — deep amber, clears 3:1 on paper (NOT #f2a100) */
+  --ring-offset: var(--surface);
+  --scrim: rgba(21, 23, 28, 0.45);
+
+  /* ---- Status spine — keeps its hue; -solid / -bg (tint) / -fg (text) per mode ---- */
+  --ok-solid: #1e9e5a;
+  --ok-bg: #e4f5ec;
+  --ok-fg: #0f6b3a;
+  --warn-solid: #e8a317;
+  --warn-bg: #fcf1d8;
+  --warn-fg: #8a5a00;
+  --risk-solid: #e5484d;
+  --risk-bg: #fce7e8;
+  --risk-fg: #b0282c;
+  --info-solid: #3b7dd8;
+  --info-bg: #e4eefb;
+  --info-fg: #1f5bae;
+
+  /* ---- Data-viz — categorical (colorblind-distinguishable, status-safe) ---- */
+  --chart-1: #3b7dd8;
+  --chart-2: #d98c00; /* deep amber — never the CTA #f2a100 */
+  --chart-3: #1e9e5a;
+  --chart-4: #7a5af8;
+  --chart-5: #b5651d;
+
+  /* ---- Elevation (light: shadows read) ---- */
+  --shadow-card: 0 1px 2px rgba(21, 23, 28, 0.06), 0 2px 8px rgba(21, 23, 28, 0.05);
+  --shadow-sheet: 0 -8px 24px rgba(21, 23, 28, 0.12);
+  --shadow-pop: 0 6px 20px rgba(21, 23, 28, 0.14);
+}
+
+[data-theme='dark'] {
+  /* ---- Semantic ROLE tokens — DARK (glare-free companion for long indoor sessions) ---- */
+  --surface: #0e1014;
+  --surface-card: #14171d;
+  --surface-elevated: #1b1f27;
+  --surface-overlay: #1b1f27;
+  --surface-sunken: #0b0d11;
+  --surface-hover: #232831;
+  --surface-selected: rgba(242, 161, 0, 0.15);
+
+  --text-primary: #eceef1; /* not pure #fff — halation on near-black */
+  --text-secondary: #a6adb8;
+  --text-muted: #7b828e;
+  --text-on-brand: #15171c;
+
+  --border: #2c313b;
+  --border-strong: #3a4150;
+  --divider: #23272f;
+
+  --brand: #ffb72e; /* amber LIFTS in dark (less halation, same meaning) */
+  --brand-hover: #ffc54d;
+  --brand-pressed: #ffb72e;
+  --brand-subtle: rgba(242, 161, 0, 0.15);
+  --brand-text: #ffb72e; /* lifted amber clears 3:1 on dark → amber-as-text OK here */
+  --ring: #ffb72e;
+  --ring-offset: var(--surface);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --ok-solid: #3bc07a;
+  --ok-bg: #11271c;
+  --ok-fg: #3bc07a;
+  --warn-solid: #f2b638;
+  --warn-bg: #2a2008;
+  --warn-fg: #f2b638;
+  --risk-solid: #f26469;
+  --risk-bg: #2a1314;
+  --risk-fg: #f26469;
+  --info-solid: #5c9cee;
+  --info-bg: #0f1e33;
+  --info-fg: #5c9cee;
+
+  --chart-1: #5c9cee;
+  --chart-2: #ffb72e;
+  --chart-3: #3bc07a;
+  --chart-4: #9b82ff;
+  --chart-5: #d98a4a;
+
+  /* Dark elevation = luminance-lift hairline + deeper soft shadow (shadows barely read on dark). */
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-sheet: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 -10px 30px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* ============================================================================
+ * Shared (mode-agnostic): legacy --c-* ALIAS map, fonts, radii.
+ * The alias map points at ROLE tokens, so `--c-paper` follows light/dark
+ * automatically and every existing utility keeps working with no page edits.
+ * ========================================================================== */
+:root {
+  /* --- Legacy alias map (→ role tokens) — keeps existing utilities working --- */
+  --c-bg: var(--surface);
+  --c-paper: var(--surface);
+  --c-card: var(--surface-card);
+  --c-paper-2: var(--surface-card);
+  --c-line: var(--divider);
+  --c-ink: var(--text-primary);
+  --c-ink-2: var(--text-secondary);
+  --c-text: var(--text-primary);
+  --c-text-mute: var(--text-muted);
+  --c-primary: var(--brand);
+  --c-accent: var(--brand);
+  --c-primary-deep: var(--brand-pressed);
+  --c-accent-warm: var(--brand-pressed);
+  --c-on-primary: var(--text-on-brand);
+  --c-ok: var(--ok-solid);
+  --c-warn: var(--warn-solid);
+  --c-risk: var(--risk-solid);
+  --c-info: var(--info-solid);
+
+  /* --- Radii: Site = 8px cards / 12px sheets (squared, engineered) --- */
   --radius-card: 8px;
   --radius-sheet: 12px;
   --radius-pill: 9999px;
   --radius-control: 8px;
 
-  /* --- Elevation: flat, hairline + subtle shadow (not floaty) --- */
-  --shadow-card: 0 1px 2px rgba(21, 23, 28, 0.06), 0 1px 1px rgba(21, 23, 28, 0.04);
-  --shadow-sheet: 0 -8px 24px rgba(21, 23, 28, 0.12);
-  --shadow-pop: 0 6px 20px rgba(21, 23, 28, 0.14);
-
-  /* --- Type families --- */
+  /* --- Type families (Devanagari-first) --- */
   --font-display: 'Anek Latin', 'Anek Devanagari', system-ui, sans-serif;
   --font-body: 'Hind', 'Anek Devanagari', system-ui, sans-serif;
   --font-mono: 'Spline Sans Mono', ui-monospace, 'SFMono-Regular', monospace;
 }
 
+/* ============================================================================
+ * Homeowner "Daylight" surface — gallery-only on web, mode-agnostic.
+ * Redefines the ROLE tokens to the homeowner palette; the --c-* aliases follow.
+ * ========================================================================== */
 [data-theme='daylight'] {
-  /* Homeowner surface — Airbnb-like warmth. Status spine unchanged. */
-  --c-bg: #fbfaf7;
-  --c-card: #ffffff;
-  --c-accent: #2f8f6f;
-  --c-accent-warm: #e7b66a;
-  --c-text: #1e2230;
-  --c-text-mute: #5b6172;
-  --c-line: #ece7dd;
-  --c-on-primary: #ffffff;
+  --surface: #fbfaf7;
+  --surface-card: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #f3f0ea;
+  --surface-hover: #f3f0ea;
 
-  /* Keep an ink token defined so shared components don't fall back to black. */
-  --c-ink: #1e2230;
-  --c-ink-2: #2b3144;
-  --c-paper: #fbfaf7;
-  --c-paper-2: #ffffff;
-  --c-primary: #2f8f6f;
-  --c-primary-deep: #25785c;
+  --text-primary: #1e2230;
+  --text-secondary: #3a4156;
+  --text-muted: #5b6172;
+  --text-on-brand: #ffffff;
 
-  /* Daylight = softer, larger radius (16px) and a touch more lift. */
+  --border: #ece7dd;
+  --border-strong: #d9d2c4;
+  --divider: #ece7dd;
+
+  --brand: #2f8f6f; /* calm green-teal */
+  --brand-hover: #2a8366;
+  --brand-pressed: #25785c;
+  --brand-subtle: #e3f1ec;
+  --brand-text: #1d6149;
+  --ring: #25785c;
+
+  /* Daylight = softer, larger radius + more lift. */
   --radius-card: 16px;
   --radius-sheet: 20px;
   --radius-control: 12px;
@@ -81,11 +202,14 @@
   --shadow-pop: 0 10px 30px rgba(30, 34, 48, 0.12);
 }
 
-/* Global base — type spine + warm canvas. Applied to the app root, never the
- * raw <body> (so the gallery can show both themes side by side). */
+/* ============================================================================
+ * Base helpers (unchanged surface API).
+ * ========================================================================== */
+
+/* App root — type spine + mode-aware canvas. */
 .cstk-root {
-  background-color: var(--c-bg);
-  color: var(--c-text);
+  background-color: var(--surface);
+  color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 16px;
   line-height: 24px;
@@ -100,7 +224,14 @@
   font-feature-settings: 'tnum' 1;
 }
 
-/* Reduced-motion: collapse the EvidenceCard reveal + any transitions. */
+/* Global focus-visible ring — deep amber on paper, lifted amber on dark (WCAG 2.2 SC 2.4.11). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* Reduced-motion: collapse the reveal + any transitions. */
 @media (prefers-reduced-motion: reduce) {
   .cstk-animate {
     transition: none !important;

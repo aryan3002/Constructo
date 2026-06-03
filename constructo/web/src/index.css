@@ -7,14 +7,15 @@
 @import './ui/theme.css';
 
 :root {
-  color-scheme: light;
+  /* Both modes supported; the active one is set on <html data-theme> pre-paint. */
+  color-scheme: light dark;
 }
 
 body {
   margin: 0;
-  /* Warm Site paper canvas + Hind body font (Devanagari + Latin). */
-  background-color: var(--c-paper);
-  color: var(--c-text);
+  /* Mode-aware canvas (paper in light, ink in dark) + Hind body (Devanagari + Latin). */
+  background-color: var(--surface);
+  color: var(--text-primary);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
