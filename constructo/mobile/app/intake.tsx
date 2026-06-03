@@ -498,9 +498,9 @@ function StepStyles({
                 backgroundColor: theme.colors.paper,
               }}
             >
-              {/* Real interior photo — never an emoji or AI render (§8). */}
+              {/* Real interior photo (bundled asset) — never an emoji or AI render (§8). */}
               <Image
-                source={{ uri: opt.imageUrl }}
+                source={opt.image}
                 resizeMode="cover"
                 style={{ width: '100%', height: '100%' }}
               />
