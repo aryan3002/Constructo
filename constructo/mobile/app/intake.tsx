@@ -439,8 +439,11 @@ function ProgressBar({ step, total, label }: { step: number; total: number; labe
                 flex: 1,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: done || current ? theme.colors.accent : theme.colors.line,
-                opacity: current ? 0.65 : 1,
+                // All segments are accent so future steps read as a faint green
+                // track (not the near-invisible hairline `line` on warm paper):
+                // done = solid, current = mid, future = faint.
+                backgroundColor: theme.colors.accent,
+                opacity: done ? 1 : current ? 0.65 : 0.2,
               }}
             />
           )

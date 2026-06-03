@@ -18,7 +18,7 @@
  * Feather icons, Calm-Pine accents, warm paper. Strings stay in the per-screen
  * en/hi pattern (NOT the i18n catalog — founder's WIP).
  */
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 
@@ -205,7 +205,18 @@ export default function Welcome() {
           onPress={onContinue}
           leading={<Feather name={ctaIcon} size={18} color={theme.colors.onAccent} />}
         />
-        {isOwner && <Button title={skipLabel} block variant="ghost" onPress={onSkip} />}
+        {isOwner && (
+          <Pressable
+            onPress={onSkip}
+            accessibilityRole="button"
+            accessibilityLabel={skipLabel}
+            style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+          >
+            {/* A quiet dismiss link, not a bold ghost button — keeps the primary
+                CTA above it visually dominant (calmer hierarchy). */}
+            <Small muted>{skipLabel}</Small>
+          </Pressable>
+        )}
       </View>
     </Screen>
   )
