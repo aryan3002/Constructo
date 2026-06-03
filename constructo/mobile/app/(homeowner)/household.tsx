@@ -205,6 +205,7 @@ export default function Household() {
     backgroundColor: AP.surfaceLow,
     color: theme.colors.text,
     fontSize: 16,
+    letterSpacing: 0,
   } as const
 
   return (

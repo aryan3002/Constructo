@@ -18,8 +18,8 @@ import { ApiError } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../src/theme/tokens'
-import { Body, Button, Display, Screen, Small } from '../../src/ui'
+import { SPACE } from '../../src/theme/tokens'
+import { Body, Button, Display, Screen, Small, useInputStyle } from '../../src/ui'
 
 export default function Login() {
   return (
@@ -41,16 +41,7 @@ function LoginInner() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const inputStyle = {
-    minHeight: TAP,
-    borderWidth: 1,
-    borderColor: theme.colors.line,
-    borderRadius: theme.radii.control,
-    paddingHorizontal: SPACE.lg,
-    backgroundColor: theme.colors.card,
-    color: theme.colors.text,
-    fontSize: 18,
-  }
+  const inputStyle = useInputStyle()
 
   async function sendCode() {
     setBusy(true)

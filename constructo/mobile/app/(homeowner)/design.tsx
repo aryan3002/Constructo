@@ -191,6 +191,7 @@ export default function Design() {
     paddingVertical: SPACE.sm,
     color: c.text,
     fontSize: 16,
+    letterSpacing: 0, // prevent iOS custom-font tracking from leaking into placeholder
   }
 
   const profile = profileQ.data
