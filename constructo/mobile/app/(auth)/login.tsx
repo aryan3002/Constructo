@@ -1,6 +1,12 @@
 /**
- * Staff phone + OTP login (the contractor/builder entry). Two steps: enter
- * phone → request code → enter the 6-digit OTP. Dev OTP is 000000.
+ * Staff phone + OTP login (the contractor/builder entry, reached from the "Who
+ * are you?" chooser). Two steps: enter phone → request code → enter the 6-digit
+ * OTP. Dev OTP is 000000.
+ *
+ * Rendered in the **Blueprint** theme (amber-on-ink) — builders see their brand
+ * here even though the auth group default is Daylight, since only staff reach
+ * this screen. The themed body lives in `LoginInner` so its `useTheme()` reads
+ * the nested Blueprint provider.
  */
 import { useState } from 'react'
 import { TextInput, View } from 'react-native'
@@ -10,11 +16,19 @@ import { authApi } from '../../src/api/auth'
 import { ApiError } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
-import { useTheme } from '../../src/theme/ThemeProvider'
+import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../src/theme/tokens'
 import { Body, Button, Display, Screen, Small } from '../../src/ui'
 
 export default function Login() {
+  return (
+    <ThemeProvider initial="blueprint">
+      <LoginInner />
+    </ThemeProvider>
+  )
+}
+
+function LoginInner() {
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
