@@ -61,8 +61,9 @@ function LoginInner() {
     setError(null)
     try {
       await authApi.login(phone, otp)
-      await refresh()
-      router.replace('/')
+      const me = await refresh()
+      if (me) router.replace('/')
+      else setError(t('common.somethingWrong'))
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
     } finally {

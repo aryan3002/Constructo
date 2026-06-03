@@ -106,7 +106,11 @@ export default function Join() {
       )
       // Persist sub_role + site_id before calling refresh() so routing can branch.
       await setJoinData(resp.sub_role, resp.site_id)
-      await refresh()
+      const me = await refresh()
+      if (!me) {
+        setError(t('common.somethingWrong'))
+        return
+      }
       // Route to welcome, carrying display_name / company_name if the backend
       // already returns JoinOut. Fallback to empty strings gracefully.
       router.replace({
