@@ -11,7 +11,8 @@
  *     display_name / company_name / sub_role from the JoinOut response.
  */
 import { useEffect, useRef, useState } from 'react'
-import { TextInput, View } from 'react-native'
+import { Pressable, TextInput, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { Link, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { authApi } from '../../src/api/auth'
@@ -133,7 +134,17 @@ export default function Join() {
 
   return (
     <Screen>
-      <View style={{ marginTop: SPACE.xxl, gap: SPACE.sm }}>
+      {/* Back button → chooser */}
+      <Pressable
+        onPress={() => router.back()}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={{ alignSelf: 'flex-start', padding: SPACE.sm, marginBottom: SPACE.xs ?? 4 }}
+      >
+        <Feather name="arrow-left" size={24} color={theme.colors.text} />
+      </Pressable>
+
+      <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
         <Display>{t('auth.joinTitle')}</Display>
         <Small muted>{t('auth.joinSubtitle')}</Small>
       </View>
@@ -152,11 +163,18 @@ export default function Join() {
           placeholderTextColor={theme.colors.textMute}
         />
 
-        {/* Phone — OTP auto-fires on blur */}
+        {/* Phone — OTP auto-fires on blur; +91 prefix is non-deletable */}
         <Small muted>{t('auth.phoneLabel')}</Small>
         <TextInput
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(text) => {
+            // Preserve the +91 prefix — never let it be removed
+            if (!text.startsWith('+91')) {
+              setPhone('+91')
+            } else {
+              setPhone(text)
+            }
+          }}
           keyboardType="phone-pad"
           style={inputStyle}
           placeholderTextColor={theme.colors.textMute}
@@ -186,7 +204,7 @@ export default function Join() {
           placeholder="••••••"
           placeholderTextColor={theme.colors.textMute}
         />
-        <Small muted>{t('auth.devOtpHint')}</Small>
+        {__DEV__ && <Small muted>{t('auth.devOtpHint')}</Small>}
 
         {!otpRequested && (
           <Button
