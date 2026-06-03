@@ -25,6 +25,12 @@ export const en = {
     haveJoinCode: 'I have a join code',
     staffLogin: 'Builder / staff login',
     signOut: 'Sign out',
+    chooseTitle: 'Who are you?',
+    chooseSubtitle: 'Choose how you use Constructo to continue.',
+    homeownerCard: "I'm a homeowner",
+    homeownerCardSub: 'Follow your home being built — photos, updates, decisions.',
+    staffCard: 'Builder / site team',
+    staffCardSub: 'Manage your sites and crew. Owner, PM, supervisor, accountant, mukadam.',
   },
   nav: {
     home: 'Home',

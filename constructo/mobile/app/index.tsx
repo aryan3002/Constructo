@@ -1,7 +1,7 @@
 /**
  * Entry gate / role→route map. Branches on auth status + role:
  *   loading          → a calm splash
- *   guest            → /(auth)/login
+ *   guest            → /(auth)        ("Who are you?" role chooser)
  *   homeowner        → /(homeowner)/home          (Daylight)
  *                      NOTE: For new joins, join.tsx routes directly to welcome
  *                      (bypassing this gate entirely). This gate only handles
@@ -35,7 +35,7 @@ export default function Index() {
       </View>
     )
   }
-  if (status === 'guest') return <Redirect href="/(auth)/login" />
+  if (status === 'guest') return <Redirect href="/(auth)" />
   // Homeowners always land on home for returning sessions. New joins are routed
   // to (homeowner)/welcome directly from join.tsx (not through this gate).
   if (role === 'homeowner') return <Redirect href="/(homeowner)/home" />

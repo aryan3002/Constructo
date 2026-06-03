@@ -27,6 +27,12 @@ export const hi: Dict = {
     haveJoinCode: 'मेरे पास जॉइन कोड है',
     staffLogin: 'बिल्डर / स्टाफ़ लॉगिन',
     signOut: 'साइन आउट',
+    chooseTitle: 'आप कौन हैं?',
+    chooseSubtitle: 'जारी रखने के लिए चुनें कि आप Constructo कैसे उपयोग करते हैं।',
+    homeownerCard: 'मैं एक घर-मालिक हूँ',
+    homeownerCardSub: 'अपने घर का बनना देखें — तस्वीरें, अपडेट, फ़ैसले।',
+    staffCard: 'बिल्डर / साइट टीम',
+    staffCardSub: 'अपनी साइट और टीम संभालें। मालिक, PM, सुपरवाइज़र, अकाउंटेंट, मुकादम।',
   },
   nav: {
     home: 'होम',
