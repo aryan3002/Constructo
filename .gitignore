@@ -10,6 +10,10 @@ venv/
 # Env
 .env
 
+# Backend runtime media — voice notes / photo uploads written at runtime,
+# never source. (constructo/backend/media/*.m4a etc.)
+constructo/backend/media/
+
 # OS
 .DS_Store
 
