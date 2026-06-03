@@ -147,6 +147,7 @@ async def test_capture_media_stores_file(client, db_session, world, tmp_path, mo
         await db_session.execute(select(RawMessageModel).where(RawMessageModel.source == "app"))
     ).scalars().one()
     assert row.media_type == "image"
-    assert row.media_url is not None and row.media_url.startswith("app_")
+    # Stored as a storage key under the captures/ prefix (durable on S3/R2).
+    assert row.media_url is not None and row.media_url.startswith("captures/app_")
     saved = tmp_path / row.media_url
     assert saved.exists() and saved.read_bytes().startswith(b"\xff\xd8\xff")

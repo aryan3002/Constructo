@@ -36,10 +36,19 @@ You already run Azure OpenAI. The backend reads these from the environment (copy
 → **Set a budget alert:** Cost Management → Budgets → alert at $20 (and $50). Student credit expires ~12 months.
 
 ## 3. Cloudflare R2 — media storage 🧑
-*(Needed once the storage PR lands — captured photos are ephemeral until then.)*
+The S3-compatible storage adapter is built (private bucket + presigned URLs). Set `STORAGE_BACKEND=s3` so captured/uploaded media is durable (not on the container's ephemeral disk).
 1. https://dash.cloudflare.com → R2 → Create bucket `constructo-media`.
 2. R2 → Manage API Tokens → Create token (**Object Read & Write**). Note: **Access Key ID**, **Secret**, and the **S3 endpoint** `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
-3. Hold these for step 4's env vars (`STORAGE_BACKEND=s3`, `S3_*`).
+3. Add these to step 4's env (secrets for the keys):
+   ```
+   STORAGE_BACKEND=s3
+   S3_ENDPOINT_URL=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+   S3_BUCKET=constructo-media
+   S3_REGION=auto
+   S3_ACCESS_KEY_ID=secretref:s3-key
+   S3_SECRET_ACCESS_KEY=secretref:s3-secret
+   ```
+4. *(For the homeowner direct-upload flow, R1)* add a **CORS rule** on the bucket allowing `PUT` from your app origin — R2 → bucket → Settings → CORS. Not needed for contractor capture (server-side upload).
 
 ## 4. Deploy to Azure Container Apps (~10 min) 🧑
 From `constructo/backend`:
@@ -106,5 +115,5 @@ curl https://<fqdn>/healthz   # → {"status":"ok"}
 ## Gotchas
 - **Neon direct vs pooled:** the pilot uses the **direct** endpoint (no pgbouncer). If you later hit connection limits, switch to the **pooled** endpoint *and* disable the asyncpg statement cache (1-line code change — ask).
 - **Scheduler:** `min=max=1` + `ENABLE_SCHEDULER=true` runs the 7am brief in-process. **If you ever scale past 1 replica, turn the scheduler OFF** (else duplicate briefs) and move sweeps to a cron hitting `/api/v1/admin/run-*`.
-- **Media is ephemeral** until the R2 storage PR — captured photos won't survive a restart/redeploy until then.
+- **Media durability** — set `STORAGE_BACKEND=s3` (step 3) or captured photos sit on the container's ephemeral disk and vanish on restart. With `local` (the default) media is fine for dev but NOT for Container Apps.
 - **Cost:** 1 small always-on replica + Neon free + R2 free ≈ a few $/mo of Azure credit. AI inference is the main draw — that's the point of putting only AI on Azure.

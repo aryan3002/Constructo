@@ -22,12 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.common.errors import AppError
-from app.config import settings
 from app.contracts.events import MediaType
 from app.db import get_session
 from app.models import RawMessageModel, User
 from app.queue import enqueue_extraction
 from app.sites.router import effective_visible_site_ids
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1", tags=["capture"])
 
@@ -66,22 +66,20 @@ def _ext_for(content_type: str | None, filename: str | None) -> str:
 
 
 async def _store_media(media: UploadFile) -> tuple[str, str, MediaType]:
-    """Persist an uploaded file under MEDIA_DIR. Returns (media_url, mime, type).
+    """Persist an uploaded capture and return (media_ref, mime, type).
 
-    ``media_url`` is the bare filename (relative to MEDIA_DIR), matching the
-    convention the extraction media-resolver expects — it resolves bare paths
-    against ``settings.media_dir``.
+    ``media_ref`` is the storage key (a bare ``captures/app_<uuid>.<ext>``
+    relative path). The extraction media-resolver turns it into a fetchable URL
+    (presigned GET on S3/R2) or a local path — so this is durable on object
+    storage instead of the container's ephemeral disk.
     """
     data = await media.read()
     if len(data) > MAX_MEDIA_BYTES:
         raise AppError(413, "media_too_large", "Capture media exceeds 10 MB")
-    os.makedirs(settings.media_dir, exist_ok=True)
-    filename = f"app_{uuid4().hex}{_ext_for(media.content_type, media.filename)}"
-    with open(os.path.join(settings.media_dir, filename), "wb") as fh:
-        fh.write(data)
-    return filename, media.content_type or "application/octet-stream", _infer_media_type(
-        media.content_type, media.filename
-    )
+    content_type = media.content_type or "application/octet-stream"
+    key = f"captures/app_{uuid4().hex}{_ext_for(media.content_type, media.filename)}"
+    ref = get_storage().put_bytes(key, data, content_type)
+    return ref, content_type, _infer_media_type(media.content_type, media.filename)
 
 
 @router.post("/capture", status_code=201)

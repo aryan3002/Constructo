@@ -38,6 +38,24 @@ class Settings(BaseSettings):
     # Default is <repo>/media; the bridge defaults to the same (see whatsapp-bridge).
     media_dir: str = "./media"
 
+    # ---- Object storage (media durability) --------------------------------
+    # STORAGE_BACKEND selects where uploaded media lives:
+    #   "local" (default) -> the MEDIA_DIR filesystem (dev / tests).
+    #   "s3"              -> any S3-compatible store (Cloudflare R2 in prod).
+    # With "s3" the app stores only the OBJECT KEY in media_url and resolves it
+    # to a short-lived presigned GET URL at read time (private bucket). Extraction
+    # (OCR/STT/vision) consumes URLs, so this is a drop-in. Set the S3_* group for
+    # R2: endpoint https://<account>.r2.cloudflarestorage.com, region "auto".
+    storage_backend: str = "local"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_region: str = "auto"
+    # TTL (seconds) for presigned GET/PUT URLs. GET is used right before
+    # extraction and for app display; PUT for the homeowner direct upload (R1).
+    s3_presign_ttl: int = 3600
+
     # Nightly brief scheduler (APScheduler, in-process). Off by default so tests
     # and CI never spin a background scheduler.
     enable_scheduler: bool = False
