@@ -65,6 +65,38 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   return (await res.json()) as T
 }
 
+/** A file part for multipart upload — React Native's FormData file shape. */
+export interface UploadFile {
+  uri: string
+  name: string
+  type: string
+}
+
+/**
+ * Multipart upload (e.g. a homeowner visit photo). Unlike {@link request} we must
+ * NOT set Content-Type — `fetch` adds the multipart boundary itself. The JWT is
+ * still attached.
+ */
+export async function uploadMultipart<T>(path: string, form: FormData): Promise<T> {
+  const headers = new Headers()
+  const token = await getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', body: form, headers })
+  if (!res.ok) {
+    let message = res.statusText
+    let code = 'http_error'
+    try {
+      const body = await res.json()
+      message = body?.error?.message ?? body?.detail ?? body?.message ?? message
+      code = body?.error?.code ?? code
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, message, code)
+  }
+  return (await res.json()) as T
+}
+
 const qs = (params: Record<string, string | undefined>): string => {
   const entries = Object.entries(params).filter(([, v]) => v != null) as [string, string][]
   return entries.length ? '?' + new URLSearchParams(entries).toString() : ''
@@ -80,8 +112,20 @@ export const homeowner = {
   me: () => request<Me>('/api/v1/auth/me'),
   members: () => request<HomeownerMember[]>('/api/v1/homeowner/members'),
   home: (siteId?: string) => request<Home>(`/api/v1/homeowner/home${qs({ site_id: siteId })}`),
-  photos: (siteId?: string, view: 'all' | 'room' | 'milestone' = 'all') =>
+  photos: (siteId?: string, view: 'all' | 'room' | 'milestone' | 'mine' = 'all') =>
     request<Paginated<Photo>>(`/api/v1/homeowner/photos${qs({ site_id: siteId, view })}`),
+  /** Upload a homeowner "site visit" photo (R1). Server streams it to R2. */
+  uploadVisitPhoto: (file: UploadFile, caption?: string, siteId?: string) => {
+    const form = new FormData()
+    // RN FormData accepts the {uri,name,type} file shape directly.
+    form.append('media', file as unknown as Blob)
+    if (caption) form.append('caption', caption)
+    if (siteId) form.append('site_id', siteId)
+    return uploadMultipart<Photo>('/api/v1/homeowner/photos', form)
+  },
+  /** Delete one of the caller's own visit photos. */
+  deleteVisitPhoto: (id: string) =>
+    request<void>(`/api/v1/homeowner/photos/${id}`, { method: 'DELETE' }),
   updates: (siteId?: string) =>
     request<Paginated<Update>>(`/api/v1/homeowner/updates${qs({ site_id: siteId })}`),
   weeklySummary: (siteId?: string) =>

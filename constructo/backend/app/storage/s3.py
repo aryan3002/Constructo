@@ -74,3 +74,6 @@ class S3Storage:
             headers={"Content-Type": content_type},
             expires_in=self._ttl,
         )
+
+    def delete(self, key: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=key)

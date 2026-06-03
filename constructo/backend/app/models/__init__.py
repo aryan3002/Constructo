@@ -35,6 +35,7 @@ from app.models.homeowner_property import (
     SpaceKind,
 )
 from app.models.homeowner_quiet import QuietPeriod, QuietStatus
+from app.models.homeowner_visit import HomeownerVisitPhoto
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
@@ -78,6 +79,7 @@ __all__ = [
     "Property",
     "PublishedDrawing",
     "PublishedPhoto",
+    "HomeownerVisitPhoto",
     "PushToken",
     "QuietPeriod",
     "QuietStatus",
