@@ -2,6 +2,8 @@
  * Local helpers for the Design Intake flow (app/intake.tsx).
  * Owned by the intake flow only — not a shared module.
  */
+import type { ImageSourcePropType } from 'react-native'
+
 import type { DesignProfile } from '../src/api/types'
 
 export type Lang = 'en' | 'hi'
@@ -12,69 +14,59 @@ export interface StyleOption {
   label: Record<Lang, string>
   /**
    * A REAL interior photo for the preference tile (handoff §5/§8: real photos,
-   * never emoji, never AI/3D renders).
-   *
-   * STOPGAP: these are royalty-free Unsplash photos referenced by direct URL
-   * while we have no licensed/bundled asset set.
-   * TODO: replace with licensed/bundled interior photos (ship the assets in-app,
-   * don't depend on a third-party CDN at runtime).
+   * never emoji, never AI/3D renders). BUNDLED in-app (assets/styles/) so the
+   * grid renders instantly and offline with no third-party CDN dependency.
+   * Source: Unsplash (Unsplash License — free for commercial use). Swap the
+   * files in assets/styles/ to recurate without touching code.
    */
-  imageUrl: string
+  image: ImageSourcePropType
 }
 
 /**
  * ~8 preset style options. `choice` posted to the backend is the stable `key`.
- * Photos are warm, real interiors that read the style at a glance. The `w=480`
- * + crop params keep payloads small for the 2-up grid tiles.
+ * Photos are warm, real interiors that read the style at a glance, bundled as
+ * 480×480 assets.
  */
 export const STYLE_OPTIONS: StyleOption[] = [
   {
     key: 'minimal',
     label: { en: 'Minimal & calm', hi: 'सरल और शांत' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/minimal.jpg'),
   },
   {
     key: 'modern',
     label: { en: 'Modern', hi: 'आधुनिक' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/modern.jpg'),
   },
   {
     key: 'traditional',
     label: { en: 'Traditional', hi: 'पारंपरिक' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/traditional.jpg'),
   },
   {
     key: 'warm-wood',
     label: { en: 'Warm wood', hi: 'गर्म लकड़ी' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/warm-wood.jpg'),
   },
   {
     key: 'luxe',
     label: { en: 'Luxe', hi: 'भव्य' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/luxe.jpg'),
   },
   {
     key: 'indoor-plants',
     label: { en: 'Indoor plants', hi: 'इनडोर पौधे' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1545241047-6083a3684587?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/indoor-plants.jpg'),
   },
   {
     key: 'earthy',
     label: { en: 'Earthy tones', hi: 'मिट्टी के रंग' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1522444195799-478538b28823?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/earthy.jpg'),
   },
   {
     key: 'bright',
     label: { en: 'Bright & airy', hi: 'उज्ज्वल और हवादार' },
-    imageUrl:
-      'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=480&h=480&fit=crop&q=70',
+    image: require('../assets/styles/bright.jpg'),
   },
 ]
 
