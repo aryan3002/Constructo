@@ -1,10 +1,13 @@
-# Constructo — AI Construction Management
+# Constructo — Backend
 
 [![CI](https://github.com/aryan3002/Constructo/actions/workflows/ci.yml/badge.svg)](https://github.com/aryan3002/Constructo/actions/workflows/ci.yml)
 
-AI-native construction-management backend. As of **Wave 2** the full loop is wired
-end-to-end: a WhatsApp message is ingested, extracted into structured site events by a
-background worker, aggregated into a nightly owner brief, and delivered over WhatsApp.
+> This is the **backend** setup & development guide. For the project overview and the other
+> apps (mobile, web, WhatsApp bridge), see the **[root README](../README.md)**.
+
+The FastAPI backend + AI pipeline. The full loop is wired end-to-end: a WhatsApp message is
+ingested, extracted into structured site events by a background worker, aggregated into a
+nightly owner brief, and delivered over WhatsApp.
 
 Pipeline: **bridge → `POST /api/v1/ingest` → Redis queue → extraction worker → `site_events`
 → nightly brief → WhatsApp send**, with the web dashboard reading events via
