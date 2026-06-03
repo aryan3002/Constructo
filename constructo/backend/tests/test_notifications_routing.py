@@ -27,7 +27,9 @@ async def _clean_store():
 def test_kind_routes_to_correct_role():
     assert routing.role_for_kind(DecisionKind.homeowner_question) == UserRole.owner
     assert routing.role_for_kind(DecisionKind.approval) == UserRole.pm
-    assert routing.role_for_kind(DecisionKind.hold_payment) == UserRole.labor_contractor
+    # hold_payment is a money decision → the owner (money-authority), matching
+    # the Decision's assigned_to (not the mukadam, who can't act on it).
+    assert routing.role_for_kind(DecisionKind.hold_payment) == UserRole.owner
 
 
 def test_procurement_routes_to_pm_hat_not_a_seat():

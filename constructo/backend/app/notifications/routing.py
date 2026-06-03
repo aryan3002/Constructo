@@ -13,14 +13,17 @@ from __future__ import annotations
 from app.models import DecisionKind, DecisionState, UserRole
 
 # kind -> the role responsible for acting on it.
-#   owner       = risk / homeowner questions
+#   owner       = risk / homeowner questions / payment holds (money-authority)
 #   pm          = execution / approvals (incl. procurement — see below)
 #   accountant  = billing
-#   labor_contractor (mukadam) = payment holds
+# A hold_payment is a MONEY decision (e.g. an invoice-vs-delivery mismatch). It
+# routes to the owner — the money-authority who actually releases/withholds a
+# payment — matching who the Decision is already `assigned_to`. (Previously this
+# pinged the labor_contractor/mukadam, who cannot act on a supplier payment.)
 _KIND_TO_ROLE: dict[DecisionKind, UserRole] = {
     DecisionKind.homeowner_question: UserRole.owner,
     DecisionKind.approval: UserRole.pm,
-    DecisionKind.hold_payment: UserRole.labor_contractor,
+    DecisionKind.hold_payment: UserRole.owner,
     DecisionKind.generic: UserRole.owner,
 }
 
