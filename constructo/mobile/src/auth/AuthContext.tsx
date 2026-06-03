@@ -43,7 +43,9 @@ interface AuthContextValue {
   setJoinData: (subRole: HomeownerSubRole, siteId: string) => Promise<void>
   /** Mark onboarding complete (called from intake finish or skip) */
   markOnboarded: () => Promise<void>
-  refresh: () => Promise<void>
+  /** Re-resolve the session from the stored token. Returns the profile on
+   *  success (so callers can navigate deterministically) or null if unauthed. */
+  refresh: () => Promise<Me | null>
   signOut: () => Promise<void>
 }
 
@@ -56,24 +58,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [siteId, setSiteId] = useState<string | null>(null)
   const [onboarded, setOnboarded] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<Me | null> => {
     const token = await getToken()
     if (!token) {
       setMe(null)
       setSubRole(null)
       setSiteId(null)
       setStatus('guest')
-      return
+      return null
     }
+
+    // AUTH is decided SOLELY by /auth/me. This is the ONLY place that may set
+    // 'guest' after we have a token — a genuine auth failure (401) or a network
+    // error fetching the profile.
+    let profile: Me
     try {
-      const profile = await authApi.me()
-      setMe(profile)
-      setStatus('authed')
-      // Register this device's push token against the user row (C-F). For a
-      // contractor (no homeowner_member) this is the ONLY token storage path;
-      // homeowners also have their notif_prefs path. Fire-and-forget, idempotent.
-      if (profile.role !== 'homeowner') void registerDevicePushToken()
-      // Restore persisted sub_role + site_id if they exist.
+      profile = await authApi.me()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) await clearToken()
+      setMe(null)
+      setSubRole(null)
+      setSiteId(null)
+      setStatus('guest')
+      return null
+    }
+
+    setMe(profile)
+    setStatus('authed')
+    // Register this device's push token (contractor's only token path). Fire-
+    // and-forget; fully insulated, never affects the session.
+    if (profile.role !== 'homeowner') void registerDevicePushToken()
+
+    // Best-effort restore of persisted sub_role / site_id / onboarded. This MUST
+    // NOT be able to demote an already-authenticated session: a flaky
+    // AsyncStorage read (seen in Expo Go SDK 54 + new architecture) used to throw
+    // here and the old outer catch logged the user straight back out to the
+    // chooser. Isolated in its own try so it can only ever ADD context.
+    try {
       const [persistedSubRole, persistedSiteId, persistedOnboarded] = await Promise.all([
         AsyncStorage.getItem(SUB_ROLE_KEY),
         AsyncStorage.getItem(SITE_ID_KEY),
@@ -82,38 +103,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (persistedSubRole) setSubRole(persistedSubRole as HomeownerSubRole)
       if (persistedSiteId) setSiteId(persistedSiteId)
       if (persistedOnboarded === '1') setOnboarded(true)
-      // For homeowners: if we don't have sub_role yet, pull from capabilities.
+      // For homeowners with no persisted sub_role, pull it from capabilities.
       if (profile.role === 'homeowner' && !persistedSubRole) {
-        try {
-          const caps: Capabilities = await homeowner.capabilities(persistedSiteId ?? undefined)
-          setSubRole(caps.sub_role)
-          if (persistedSiteId) setSiteId(persistedSiteId)
-          await AsyncStorage.setItem(SUB_ROLE_KEY, caps.sub_role)
-        } catch {
-          /* capabilities fetch is best-effort */
-        }
+        const caps: Capabilities = await homeowner.capabilities(persistedSiteId ?? undefined)
+        setSubRole(caps.sub_role)
+        if (persistedSiteId) setSiteId(persistedSiteId)
+        await AsyncStorage.setItem(SUB_ROLE_KEY, caps.sub_role)
       }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) await clearToken()
-      setMe(null)
-      setSubRole(null)
-      setSiteId(null)
-      setStatus('guest')
+    } catch {
+      /* best-effort context restore — never demotes the authed session */
     }
+    return profile
   }, [])
 
   const setJoinData = useCallback(async (sr: HomeownerSubRole, sid: string) => {
+    // In-memory first — the session works even if the device store is flaky.
     setSubRole(sr)
     setSiteId(sid)
-    await Promise.all([
-      AsyncStorage.setItem(SUB_ROLE_KEY, sr),
-      AsyncStorage.setItem(SITE_ID_KEY, sid),
-    ])
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(SUB_ROLE_KEY, sr),
+        AsyncStorage.setItem(SITE_ID_KEY, sid),
+      ])
+    } catch {
+      /* persistence is best-effort — a failed write must not break the join */
+    }
   }, [])
 
   const markOnboarded = useCallback(async () => {
     setOnboarded(true)
-    await AsyncStorage.setItem(ONBOARDED_KEY, '1')
+    try {
+      await AsyncStorage.setItem(ONBOARDED_KEY, '1')
+    } catch {
+      /* best-effort */
+    }
   }, [])
 
   const signOut = useCallback(async () => {
