@@ -514,7 +514,10 @@ function StepStyles({
                   paddingHorizontal: SPACE.md,
                   paddingTop: SPACE.xl,
                   paddingBottom: SPACE.md,
-                  backgroundColor: 'rgba(0,0,0,0.35)',
+                  // 0.48 (not 0.35) so white bold labels clear WCAG large-text
+                  // contrast even on the brightest reference photos (e.g. Modern,
+                  // Indoor plants), which washed out at the lower opacity.
+                  backgroundColor: 'rgba(0,0,0,0.48)',
                 }}
               >
                 <BodyStrong color="#ffffff">{opt.label[L]}</BodyStrong>

@@ -40,6 +40,7 @@ export const hi: Dict = {
     updates: 'अपडेट',
     design: 'डिज़ाइन',
     settings: 'सेटिंग्स',
+    ask: 'पूछें',
   },
   contractor: {
     comingSoonTitle: 'बिल्डर ऐप जल्द आ रहा है',

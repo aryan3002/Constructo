@@ -38,6 +38,7 @@ export const en = {
     updates: 'Updates',
     design: 'Design',
     settings: 'Settings',
+    ask: 'Ask',
   },
   contractor: {
     comingSoonTitle: 'The builder app is on its way',

@@ -47,7 +47,7 @@ const STR = {
     signOut: 'Sign out',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo · Daylight',
+    footer: 'Constructo',
   },
   hi: {
     title: 'सेटिंग्स',
@@ -65,7 +65,7 @@ const STR = {
     signOut: 'साइन आउट',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo · Daylight',
+    footer: 'Constructo',
   },
 } as const
 
