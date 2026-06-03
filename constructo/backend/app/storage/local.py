@@ -40,3 +40,9 @@ class LocalStorage:
             "Local storage has no presigned upload; use STORAGE_BACKEND=s3 (R2) "
             "or the server-side local upload fallback."
         )
+
+    def delete(self, key: str) -> None:
+        try:
+            os.remove(os.path.join(settings.media_dir, key))
+        except OSError:
+            pass

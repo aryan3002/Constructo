@@ -16,11 +16,12 @@ and then confirmed/edited — it never decides. See :mod:`app.homeowner.ai`.
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +101,7 @@ from app.models import (
     HomeownerMember,
     HomeownerRequest,
     HomeownerSubRole,
+    HomeownerVisitPhoto,
     MemberStatus,
     Milestone,
     MilestoneStatus,
@@ -115,6 +117,7 @@ from app.models import (
     UserRole,
     WeeklySummary,
 )
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/homeowner", tags=["homeowner"])
 
@@ -780,6 +783,20 @@ def _photo_out(p: PublishedPhoto) -> PhotoOut:
     )
 
 
+def _visit_photo_out(p: HomeownerVisitPhoto) -> PhotoOut:
+    """A homeowner's own upload, served with a presigned GET URL (private bucket)."""
+    return PhotoOut(
+        id=p.id,
+        site_id=p.site_id,
+        image_url=get_storage().url_for(p.storage_key) or "",
+        caption=p.caption,
+        room_tag=None,
+        milestone_id=None,
+        is_starred=False,
+        published_at=p.created_at,
+    )
+
+
 def _update_out(u: Update) -> UpdateOut:
     return UpdateOut(
         id=u.id, site_id=u.site_id, type=u.type, title=u.title, body=u.body,
@@ -894,8 +911,25 @@ async def photos(
     limit: int = Query(DEFAULT_LIMIT),
     cursor: str | None = Query(None),
 ) -> Page[PhotoOut]:
-    """Curated photos. ``view`` orders for the 3 client tabs (all/room/milestone)."""
+    """Photos for the client tabs. ``view`` = all/room/milestone are the curated
+    contractor feed; ``mine`` is the homeowner's own uploads (R1, presigned)."""
     sid = await resolve_site(session, user, site_id)
+    if view == "mine":
+        # "My visits" — the caller's own uploaded photos, newest first. No
+        # translation (her own captions); image_url is a presigned GET.
+        member_id = await _caller_member_id(session, user, sid)
+        stmt = (
+            select(HomeownerVisitPhoto)
+            .where(
+                HomeownerVisitPhoto.site_id == sid,
+                HomeownerVisitPhoto.member_id == member_id,
+            )
+            .order_by(HomeownerVisitPhoto.created_at.desc(), HomeownerVisitPhoto.id)
+        )
+        items, next_cursor = await _paginate(
+            session, stmt, cursor, limit, HomeownerVisitPhoto.id, _visit_photo_out
+        )
+        return Page[PhotoOut](items=items, next_cursor=next_cursor)
     stmt = select(PublishedPhoto).where(PublishedPhoto.site_id == sid)
     if view == "room":
         stmt = stmt.order_by(PublishedPhoto.room_tag, PublishedPhoto.published_at.desc(),
@@ -910,6 +944,82 @@ async def photos(
     )
     items = [await _render_photo(session, translation, user.language, p) for p in items]
     return Page[PhotoOut](items=items, next_cursor=next_cursor)
+
+
+HOMEOWNER_MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 12 MB — generous for a phone photo
+
+
+def _photo_ext(content_type: str | None, filename: str | None) -> str:
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext:
+        return ext
+    return {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/heic": ".heic",
+        "image/gif": ".gif",
+    }.get((content_type or "").lower(), ".jpg")
+
+
+@router.post("/photos", response_model=PhotoOut, status_code=201)
+async def upload_visit_photo(
+    media: UploadFile = File(...),
+    caption: str | None = Form(default=None),
+    site_id: UUID | None = Form(default=None),
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> PhotoOut:
+    """Upload a homeowner "site visit" photo (R1, the My-visits tab).
+
+    The server streams the file to object storage (R2; PRIVATE bucket) and stores
+    only the key — reads come back as short-lived presigned GET URLs. Any active
+    household member may upload their own visit photos.
+    """
+    sid = await resolve_site(session, user, site_id)
+    member_id = await _caller_member_id(session, user, sid)
+
+    if not (media.content_type or "").lower().startswith("image/"):
+        raise AppError(415, "unsupported_media", "Only image uploads are allowed")
+    data = await media.read()
+    if len(data) > HOMEOWNER_MAX_PHOTO_BYTES:
+        raise AppError(413, "media_too_large", "Photo exceeds 12 MB")
+
+    key = f"homeowner/{sid}/{uuid4().hex}{_photo_ext(media.content_type, media.filename)}"
+    get_storage().put_bytes(key, data, media.content_type or "application/octet-stream")
+
+    row = HomeownerVisitPhoto(
+        site_id=sid,
+        member_id=member_id,
+        storage_key=key,
+        caption=(caption.strip() if caption and caption.strip() else None),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _visit_photo_out(row)
+
+
+@router.delete("/photos/{photo_id}", status_code=204)
+async def delete_visit_photo(
+    photo_id: UUID,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> None:
+    """Delete one of the caller's OWN visit photos (and its stored object)."""
+    sid = await resolve_site(session, user, site_id)
+    member_id = await _caller_member_id(session, user, sid)
+    row = await session.get(HomeownerVisitPhoto, photo_id)
+    if row is None or row.site_id != sid or row.member_id != member_id:
+        raise AppError(404, "not_found", "Photo not found")
+    key = row.storage_key
+    await session.delete(row)
+    await session.commit()
+    try:
+        get_storage().delete(key)
+    except Exception:
+        pass  # best-effort; the DB row is already gone
 
 
 @router.get("/updates", response_model=Page[UpdateOut])

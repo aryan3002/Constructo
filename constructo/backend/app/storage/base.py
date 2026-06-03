@@ -31,3 +31,7 @@ class Storage(Protocol):
     def presigned_put(self, key: str, content_type: str) -> PresignedUpload:
         """Mint a short-lived direct-upload ticket for the client (R1)."""
         ...
+
+    def delete(self, key: str) -> None:
+        """Best-effort delete of a stored object (no error if absent)."""
+        ...

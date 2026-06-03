@@ -37,7 +37,7 @@ import { Feather } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as MediaLibrary from 'expo-media-library'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
 import type { Photo, QuietPeriod } from '../../src/api/types'
@@ -68,7 +68,6 @@ type RetentionDays = 7 | 30 | 90
 
 const POLICY_KEY = 'constructo.photoPolicy'
 /** Locally-noted uploads (intent capture only — no real upload endpoint yet). */
-const MY_VISITS_KEY = 'constructo.photoMyVisits'
 
 interface PhotoPolicy {
   keepStarredAndMilestone: boolean
@@ -76,13 +75,6 @@ interface PhotoPolicy {
 }
 
 const DEFAULT_POLICY: PhotoPolicy = { keepStarredAndMilestone: true, retentionDays: 30 }
-
-/** A locally-captured "my visit" photo (her own upload intent). */
-interface MyVisit {
-  id: string
-  uri: string
-  at: string
-}
 
 const STR = {
   en: {
@@ -136,8 +128,9 @@ const STR = {
     permTitle: 'Permission needed',
     permCamera: 'Allow camera access to take a photo.',
     permLibrary: 'Allow photo library access to choose a photo.',
-    pickedTitle: 'Photo noted',
-    pickedBody: 'Uploads are coming soon — your photo is saved under "My visits".',
+    pickedTitle: 'Photo added',
+    pickedBody: 'Your photo is saved under "My visits".',
+    uploadFailed: 'Could not upload your photo. Please try again.',
     freedTitle: 'Cache cleared',
     freedBody: 'Local cache was cleared. Your curated photos stay on the server.',
     savedTitle: 'Saved',
@@ -195,8 +188,9 @@ const STR = {
     permTitle: 'अनुमति आवश्यक',
     permCamera: 'तस्वीर लेने के लिए कैमरा एक्सेस की अनुमति दें।',
     permLibrary: 'तस्वीर चुनने के लिए लाइब्रेरी एक्सेस की अनुमति दें।',
-    pickedTitle: 'तस्वीर नोट की गई',
-    pickedBody: 'अपलोड जल्द आ रहा है — आपकी तस्वीर "मेरी तस्वीरें" में सहेजी गई है।',
+    pickedTitle: 'तस्वीर जोड़ी गई',
+    pickedBody: 'आपकी तस्वीर "मेरी तस्वीरें" में सहेजी गई है।',
+    uploadFailed: 'तस्वीर अपलोड नहीं हो सकी। कृपया फिर कोशिश करें।',
     freedTitle: 'कैश साफ़ किया गया',
     freedBody: 'लोकल कैश साफ़ हो गया। आपकी तस्वीरें सर्वर पर सुरक्षित रहती हैं।',
     savedTitle: 'सहेजा गया',
@@ -285,11 +279,12 @@ export default function Photos() {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [policy, setPolicy] = useState<PhotoPolicy>(DEFAULT_POLICY)
-  const [myVisits, setMyVisits] = useState<MyVisit[]>([])
+  const queryClient = useQueryClient()
 
-  // Backend grouping mode — "My visits" reuses the flat "all" query, so it can
-  // overlay her local uploads with the same chronology.
+  // Grouping mode for the curated tabs ("My visits" has no grouping — its grid
+  // is a flat, newest-first list of her own uploads).
   const view: ViewMode = tab === 'mine' ? 'all' : tab
 
   // Load persisted storage policy + locally-noted "my visit" photos.
@@ -307,14 +302,6 @@ export default function Photos() {
         /* corrupt value — keep defaults */
       }
     })
-    void AsyncStorage.getItem(MY_VISITS_KEY).then((raw) => {
-      if (!raw) return
-      try {
-        setMyVisits(JSON.parse(raw) as MyVisit[])
-      } catch {
-        /* corrupt value — start empty */
-      }
-    })
   }, [])
 
   const savePolicy = useCallback((next: PhotoPolicy) => {
@@ -322,17 +309,9 @@ export default function Photos() {
     void AsyncStorage.setItem(POLICY_KEY, JSON.stringify(next))
   }, [])
 
-  const noteMyVisit = useCallback((uri: string) => {
-    setMyVisits((prev) => {
-      const next = [{ id: `local-${Date.now()}`, uri, at: new Date().toISOString() }, ...prev]
-      void AsyncStorage.setItem(MY_VISITS_KEY, JSON.stringify(next))
-      return next
-    })
-  }, [])
-
   const query = useQuery({
-    queryKey: ['photos', view],
-    queryFn: () => homeowner.photos(undefined, view),
+    queryKey: ['photos', tab],
+    queryFn: () => homeowner.photos(undefined, tab),
   })
 
   const quietQ = useQuery({
@@ -380,7 +359,28 @@ export default function Photos() {
     setActive(null)
   }, [])
 
-  // ---- Upload-intent (permission + picker; noted to "My visits" locally) ----
+  // ---- Upload (permission + picker → POST to R2-backed endpoint → refresh) ----
+  const doUpload = useCallback(
+    async (asset: ImagePicker.ImagePickerAsset) => {
+      setUploading(true)
+      try {
+        await homeowner.uploadVisitPhoto({
+          uri: asset.uri,
+          name: asset.fileName ?? `visit-${Date.now()}.jpg`,
+          type: asset.mimeType ?? 'image/jpeg',
+        })
+        await queryClient.invalidateQueries({ queryKey: ['photos', 'mine'] })
+        setTab('mine')
+        Alert.alert(s.pickedTitle, s.pickedBody)
+      } catch {
+        Alert.alert(s.error, s.uploadFailed)
+      } finally {
+        setUploading(false)
+      }
+    },
+    [queryClient, s],
+  )
+
   const onTakePhoto = useCallback(async () => {
     setUploadOpen(false)
     const perm = await ImagePicker.requestCameraPermissionsAsync()
@@ -389,12 +389,8 @@ export default function Photos() {
       return
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
-    if (!result.canceled && result.assets[0]) {
-      // TODO(H?): POST the picked asset to the (not-yet-defined) upload endpoint.
-      noteMyVisit(result.assets[0].uri)
-      Alert.alert(s.pickedTitle, s.pickedBody)
-    }
-  }, [s, noteMyVisit])
+    if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
+  }, [s, doUpload])
 
   const onChooseLibrary = useCallback(async () => {
     setUploadOpen(false)
@@ -404,12 +400,8 @@ export default function Photos() {
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
-    if (!result.canceled && result.assets[0]) {
-      // TODO(H?): POST the picked asset to the (not-yet-defined) upload endpoint.
-      noteMyVisit(result.assets[0].uri)
-      Alert.alert(s.pickedTitle, s.pickedBody)
-    }
-  }, [s, noteMyVisit])
+    if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
+  }, [s, doUpload])
 
   const onFreeUpSpace = useCallback(async () => {
     try {
@@ -590,9 +582,16 @@ export default function Photos() {
         })}
       </View>
 
-      {/* ---- My visits tab (local uploads only) ---- */}
+      {/* ---- My visits tab (her own uploaded photos, served from R2) ---- */}
       {tab === 'mine' ? (
-        myVisits.length === 0 ? (
+        query.isLoading ? (
+          <Card>
+            <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
+              <ActivityIndicator color={c.accent} />
+              <Small muted>{s.loading}</Small>
+            </View>
+          </Card>
+        ) : sitePhotos.length === 0 ? (
           <Card>
             <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
               <Feather name="camera" size={28} color={c.textMute} />
@@ -603,14 +602,14 @@ export default function Photos() {
           </Card>
         ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
-            {myVisits.map((v) => (
+            {sitePhotos.map((p) => (
               <PhotoTile
-                key={v.id}
+                key={p.id}
                 photo={{
-                  id: v.id,
-                  imageUri: v.uri,
-                  caption: s.yourPhoto,
-                  date: shortDate(v.at, lang),
+                  id: p.id,
+                  imageUri: p.image_url,
+                  caption: p.caption ?? s.yourPhoto,
+                  date: shortDate(p.published_at, lang),
                 }}
                 size={cellSize}
                 labels={tileLabels}
@@ -805,6 +804,8 @@ export default function Photos() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={s.addPhoto}
+        accessibilityState={{ disabled: uploading }}
+        disabled={uploading}
         onPress={() => setUploadOpen(true)}
         style={({ pressed }) => ({
           position: 'absolute',
@@ -820,7 +821,11 @@ export default function Photos() {
           ...theme.shadowCard,
         })}
       >
-        <Feather name="plus" size={26} color={c.onAccent} />
+        {uploading ? (
+          <ActivityIndicator color={c.onAccent} />
+        ) : (
+          <Feather name="plus" size={26} color={c.onAccent} />
+        )}
       </Pressable>
 
       {/* Full-screen viewer (pushed inline; no separate route yet) */}
