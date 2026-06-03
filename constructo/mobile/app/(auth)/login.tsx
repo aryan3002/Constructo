@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
-import { Link, useRouter } from 'expo-router'
+import { Link, Redirect, useRouter } from 'expo-router'
 
 import { authApi } from '../../src/api/auth'
 import { ApiError } from '../../src/api/client'
@@ -19,7 +19,35 @@ import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
+import type { Role } from '../../src/api/types'
 import { Body, Button, Display, Screen, Small, useInputStyle } from '../../src/ui'
+
+/**
+ * Role → home route. Mirrors the map in app/index.tsx. We navigate to the
+ * resolved home DIRECTLY rather than `router.replace('/')`: from inside the
+ * `(auth)` Stack a bare `'/'` REPLACE resolves to THIS group's own `index`
+ * route (the "Who are you?" chooser), which is exactly the bounce we were
+ * chasing — and in some nav states it throws "no route named 'index'".
+ */
+function homeFor(role: Role | null): string {
+  switch (role) {
+    case 'owner':
+      return '/(contractor)/owner/brief'
+    case 'pm':
+      return '/(contractor)/pm/dpr'
+    case 'supervisor':
+      return '/(contractor)/supervisor/capture'
+    case 'accountant':
+      return '/(contractor)/accountant/reconcile'
+    case 'labor_contractor':
+      return '/(contractor)/mukadam/attendance'
+    case 'homeowner':
+      return '/(homeowner)/home'
+    default:
+      // procurement (Tier-2 placeholder) and any future role
+      return '/(contractor)'
+  }
+}
 
 export default function Login() {
   return (
@@ -33,7 +61,7 @@ function LoginInner() {
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
-  const { refresh } = useAuth()
+  const { refresh, status, role } = useAuth()
 
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [phone, setPhone] = useState('+91')
@@ -62,14 +90,22 @@ function LoginInner() {
     try {
       await authApi.login(phone, otp)
       const me = await refresh()
-      if (me) router.replace('/')
-      else setError(t('common.somethingWrong'))
+      // On success, navigation is handled declaratively by the `status==='authed'`
+      // redirect in the render body below — no imperative router.replace here.
+      if (!me) setError(t('common.somethingWrong'))
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
     } finally {
       setBusy(false)
     }
   }
+
+  // Once the session is authed (after verify() resolves, or if a valid token
+  // already exists when this screen mounts), redirect to the role's real home.
+  // Declarative <Redirect> is resolved by the ROOT navigator, so it correctly
+  // leaves the (auth) group — unlike router.replace('/'), which resolved to the
+  // chooser inside this group and caused the login bounce.
+  if (status === 'authed') return <Redirect href={homeFor(role) as never} />
 
   return (
     <Screen>
