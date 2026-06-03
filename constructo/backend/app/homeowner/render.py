@@ -112,7 +112,13 @@ async def render_text(
             return existing.translated
         return canonical
 
-    translated = await client.translate(canonical, target_lang=lang, style=style)
+    try:
+        translated = await client.translate(canonical, target_lang=lang, style=style)
+    except Exception:
+        # A translation-provider hiccup (network/quota) must NEVER break the
+        # homeowner read path — serve the canonical source and retry next read
+        # (no cache write, so a transient failure isn't sticky).
+        return canonical
     guard_ok = numeric_guard(canonical, translated)
 
     if existing is None:
