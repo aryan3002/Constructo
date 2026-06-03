@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, TextInput, View, type TextStyle } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { homeowner } from '../../src/api/client'
@@ -28,6 +29,7 @@ import {
   StatusPill,
   Screen,
   TimelineItem,
+  FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 import {
   SUB_TABS,
@@ -121,12 +123,13 @@ const STR = {
 export default function Updates() {
   const { t, lang } = useT()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   const c = theme.colors
   const [tab, setTab] = useState<SubTab>('timeline')
   const str = STR[lang]
 
   return (
-    <Screen>
+    <Screen style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}>
       <Display>{t('nav.updates')}</Display>
 
       {/* Segmented control — a row of ≥44px Pressable pills. */}
