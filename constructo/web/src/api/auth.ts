@@ -97,6 +97,19 @@ export interface InviteAcceptResult {
   landing: string
 }
 
+/** A company teammate (Setup & Admin → Team & roles, W4.3). */
+export interface TeamMember {
+  id: string
+  company_id: string
+  name: string | null
+  phone: string
+  role: Role
+  is_active: boolean
+}
+
+/** Owner-only edit to a teammate (partial). */
+export type TeamMemberUpdate = { role?: Role; is_active?: boolean }
+
 // ---------------------------------------------------------------------------
 // Internal fetch helper. Mirrors api/client.request but lives here so the auth
 // surface stays self-contained; reuses the shared ApiError envelope.
@@ -151,6 +164,15 @@ const mockCompany: Company = {
   timezone: 'Asia/Kolkata',
   currency: 'INR',
 }
+
+/** Dev-only mutable team so the no-backend Team & roles tour edits in place. */
+const mockTeam: TeamMember[] = [
+  // id matches the mock `me()` so the no-backend tour shows the self-lock + "You".
+  { id: 'mock-user', company_id: 'mock-co', name: 'Demo Owner', phone: '+919800000001', role: 'owner', is_active: true },
+  { id: 'u-pm', company_id: 'mock-co', name: 'Anita Rao', phone: '+919800000002', role: 'pm', is_active: true },
+  { id: 'u-acc', company_id: 'mock-co', name: 'Ravi Kumar', phone: '+919800000003', role: 'accountant', is_active: true },
+  { id: 'u-sup', company_id: 'mock-co', name: 'Suresh Patel', phone: '+919800000004', role: 'supervisor', is_active: false },
+]
 
 export const authApi = {
   /** Request a login code (no-op in dev; OTP stays 000000). Powers resend. */
@@ -284,6 +306,31 @@ export const authApi = {
     )
     setToken(resp.token)
     return resp
+  },
+
+  // ---- team (W4.3) ----
+
+  /** List the company's members (GET /api/v1/users → first page). */
+  async listTeam(): Promise<TeamMember[]> {
+    if (USE_MOCKS) return mockTeam.map((m) => ({ ...m }))
+    const page = await call<{ items: TeamMember[]; next_cursor: string | null }>(
+      '/api/v1/users',
+    )
+    return page.items
+  },
+
+  /** Change a teammate's role / active status (PATCH /api/v1/users/{id}). */
+  updateTeamMember(id: string, patch: TeamMemberUpdate): Promise<TeamMember> {
+    if (USE_MOCKS) {
+      const m = mockTeam.find((x) => x.id === id)
+      if (!m) return Promise.reject(new ApiError(404, 'User not found'))
+      Object.assign(m, patch)
+      return Promise.resolve({ ...m })
+    }
+    return call(`/api/v1/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   },
 }
 

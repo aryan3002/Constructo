@@ -11,6 +11,8 @@ export const qk = {
   me: () => ['me'] as const,
   /** The caller's company (Setup & Admin → Company Profile, W4.1). */
   company: () => ['company'] as const,
+  /** Company team roster (Setup & Admin → Team & roles, W4.3). */
+  team: () => ['team'] as const,
   sites: () => ['sites'] as const,
   site: (id: string) => ['site', id] as const,
   /** OwnerHome brief payload (migrated from `['owner-home', date]` in W1). */

@@ -19,6 +19,7 @@ import {
   type Role as ShellRole,
 } from '../../ui'
 import { CompanyProfile } from './CompanyProfile'
+import { TeamRoles } from './TeamRoles'
 
 interface SectionDef {
   key: string
@@ -32,7 +33,7 @@ interface SectionDef {
 // The control-plane IA (vault 11/06). Order = the admin's mental model.
 const SECTIONS: SectionDef[] = [
   { key: 'company', labelKey: 'admin.section.company', built: true },
-  { key: 'team', labelKey: 'admin.section.team' },
+  { key: 'team', labelKey: 'admin.section.team', built: true },
   { key: 'groups', labelKey: 'admin.section.groups', link: '/groups' },
   { key: 'baselines', labelKey: 'admin.section.baselines' },
   { key: 'integrations', labelKey: 'admin.section.integrations' },
@@ -110,8 +111,10 @@ export function AdminConsole() {
 
           {/* Active section panel. */}
           <div className="rounded-sheet border border-line bg-card p-5 shadow-card md:p-6">
-            {active.built ? (
+            {active.key === 'company' ? (
               <CompanyProfile />
+            ) : active.key === 'team' ? (
+              <TeamRoles />
             ) : (
               <ComingSoon labelKey={active.labelKey} link={active.link} />
             )}

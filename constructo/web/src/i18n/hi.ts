@@ -590,4 +590,18 @@ export const hi: Record<TranslationKey, string> = {
   'admin.company.timezone_required': 'टाइमज़ोन आवश्यक है।',
   'admin.company.currency_label': 'मुद्रा',
   'admin.company.id_label': 'कंपनी आईडी',
+  // Team & roles (W4.3)
+  'admin.team.title': 'टीम और भूमिकाएँ',
+  'admin.team.subtitle': 'आपकी टीम में कौन है और वे क्या कर सकते हैं।',
+  'admin.team.invite': 'साथी को बुलाएँ',
+  'admin.team.loading': 'टीम लोड हो रही है…',
+  'admin.team.error': 'टीम लोड नहीं हो सकी।',
+  'admin.team.saved': 'टीम अपडेट हुई',
+  'admin.team.save_failed': 'अपडेट नहीं हो सका। फिर कोशिश करें।',
+  'admin.team.you': 'आप',
+  'admin.team.inactive': 'निष्क्रिय',
+  'admin.team.unnamed': 'अनाम',
+  'admin.team.deactivate': 'निष्क्रिय करें',
+  'admin.team.reactivate': 'पुनः सक्रिय करें',
+  'admin.team.read_only': 'केवल मालिक भूमिकाएँ बदल सकता है।',
 }
