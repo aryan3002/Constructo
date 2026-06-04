@@ -29,6 +29,10 @@ async def get_current_user(
     user = await session.get(User, user_id)
     if user is None:
         raise AppError(401, "invalid_token", "User no longer exists")
+    if not user.is_active:
+        # Deactivated members keep their history but lose access immediately,
+        # even with an unexpired token (W4.3).
+        raise AppError(403, "deactivated", "This account has been deactivated")
     return user
 
 

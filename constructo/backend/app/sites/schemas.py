@@ -77,12 +77,20 @@ class UserCreate(BaseModel):
     name: str | None = None
 
 
+class UserUpdate(BaseModel):
+    """Owner-only team edit (W4.3). Partial — only provided fields change."""
+
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+
 class UserOut(BaseModel):
     id: UUID
     company_id: UUID
     name: str | None
     phone: str
     role: UserRole
+    is_active: bool = True
 
 
 # ---- assignment ------------------------------------------------------------

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -39,6 +39,12 @@ class User(Base):
     # e.g. "en" | "hi"). Nullable with an "en" default so existing rows keep
     # working; not part of the frozen contracts.
     language: Mapped[str | None] = mapped_column(String, nullable=True, server_default="en")
+    # Team management (W4.3): a deactivated member keeps their history but can no
+    # longer log in or use an existing token. NOT NULL, defaults true so existing
+    # rows stay active.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

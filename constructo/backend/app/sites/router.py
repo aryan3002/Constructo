@@ -42,6 +42,7 @@ from app.sites.schemas import (
     SiteUpdate,
     UserCreate,
     UserOut,
+    UserUpdate,
     WhatsappGroupCreate,
     WhatsappGroupOut,
 )
@@ -412,9 +413,40 @@ async def create_user(
     return _user_out(new_user)
 
 
+@router.patch("/users/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: UUID,
+    body: UserUpdate,
+    actor: User = Depends(require_role(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> UserOut:
+    """Change a teammate's role or active status (W4.3). Owner-only, scoped to
+    the caller's company. The owner can't edit their OWN role/status — which
+    also guarantees the company always keeps at least one active owner (the
+    acting owner remains), so there is no separate last-owner check to do."""
+    target = await session.get(User, user_id)
+    if target is None or target.company_id != actor.company_id:
+        raise AppError(404, "not_found", "User not found")
+    if target.id == actor.id:
+        raise AppError(403, "forbidden", "You can't change your own role or status")
+
+    if body.role is not None:
+        target.role = body.role
+    if body.is_active is not None:
+        target.is_active = body.is_active
+    await session.commit()
+    await session.refresh(target)
+    return _user_out(target)
+
+
 def _user_out(u: User) -> UserOut:
     return UserOut(
-        id=u.id, company_id=u.company_id, name=u.name, phone=u.phone, role=u.role
+        id=u.id,
+        company_id=u.company_id,
+        name=u.name,
+        phone=u.phone,
+        role=u.role,
+        is_active=u.is_active,
     )
 
 
