@@ -20,6 +20,8 @@ import { RoleLanding } from './pages/auth/RoleLanding'
 import { Settings } from './pages/settings/Settings'
 // === brief/owner ===
 import { OwnerHome } from './pages/owner/OwnerHome'
+// === pm "today" (W3.4) ===
+import { Today as PmToday } from './features/pm/Today'
 // === capture/attendance ===
 import { SupervisorCapture } from './pages/supervisor/SupervisorCapture'
 import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
@@ -84,8 +86,11 @@ export function App() {
       {/* Role-aware landing redirect (the "where do I land" map). */}
       <Route path="/" element={<Guarded><RoleLanding /></Guarded>} />
 
-      {/* Owner / PM brief. */}
+      {/* Owner brief. */}
       <Route path="/owner" element={<Guarded><OwnerHome /></Guarded>} />
+
+      {/* PM "Today" — multi-site execution glance (W3.4). */}
+      <Route path="/pm" element={<Guarded><PmToday /></Guarded>} />
 
       {/* Field-role screens (capture feature) bring their own AppShell. */}
       <Route path="/supervisor/capture" element={<Guarded><SupervisorCapture /></Guarded>} />

@@ -243,6 +243,18 @@ export const en = {
   'owner.needs.more_sites': '{n} more sites need attention',
   'owner.needs.rest_calm': '{n} other sites calm',
 
+  // PM "Today" — multi-site execution glance (W3.4)
+  'pm.today.title': 'Today',
+  'pm.today.subtitle': 'Your sites at a glance — assign the work, propose the spend.',
+  'pm.today.needs_one': '1 site needs you',
+  'pm.today.needs_many': '{n} sites need you',
+  'pm.today.all_calm': 'All sites calm',
+  'pm.today.all_calm_hint': 'Nothing needs assigning right now.',
+  'pm.today.loading': 'Loading your sites…',
+  'pm.today.error': 'Could not load your sites.',
+  'pm.today.assigned': 'Assigned · {site}',
+  'pm.today.glance_label': 'Sites needing action',
+
   // Owner Command Center — Decision Log
   'owner.log.title': 'Decision log',
   'owner.log.subtitle': 'Append-only',
