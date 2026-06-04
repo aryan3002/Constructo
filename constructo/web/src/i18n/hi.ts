@@ -350,6 +350,7 @@ export const hi: Record<TranslationKey, string> = {
   'reconcile.reason.no_invoice': 'कोई इनवॉइस नहीं मिला',
   'reconcile.reason.no_delivery': 'कोई डिलीवरी दर्ज नहीं',
   'reconcile.no_proof': 'कोई मिलता दस्तावेज़ नहीं',
+  'reconcile.col.status': 'स्थिति',
   'reconcile.proofs': 'सबूत दस्तावेज़',
   'reconcile.proof_open': 'सबूत खोलें',
   'reconcile.proof_photo': 'साइट चालान फ़ोटो',

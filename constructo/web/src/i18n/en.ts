@@ -373,6 +373,7 @@ export const en = {
   'reconcile.reason.no_invoice': 'No invoice received',
   'reconcile.reason.no_delivery': 'No delivery logged',
   'reconcile.no_proof': 'No matching document',
+  'reconcile.col.status': 'Status',
   'reconcile.proofs': 'Proof documents',
   'reconcile.proof_open': 'Open proof',
   'reconcile.proof_photo': 'Site challan photo',

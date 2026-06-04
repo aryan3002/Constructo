@@ -18,8 +18,8 @@ import {
 import { useT } from '../../i18n'
 import { useCockpitKeys } from '../../features/reconcile/useCockpitKeys'
 import { TallyExportButton } from '../../features/reconcile/TallyExportButton'
+import { Queue } from '../../features/reconcile/Queue'
 import { ReconcileDetail, type ReconcileDetailHandle } from './ReconcileDetail'
-import { ReconcileRow } from './ReconcileRow'
 import { compareStatus, formatInr, isException } from './helpers'
 
 function useReconcile(siteId: string | null) {
@@ -223,25 +223,21 @@ export function ReconcilePage() {
                     </Mono>
                   </div>
 
-                  {/* Master-detail (md+) / stacked (phone) */}
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,22rem)_1fr]">
-                    <ul className="space-y-2" aria-label={t('reconcile.title')}>
-                      {items.map((item) => (
-                        <li key={item.key}>
-                          <ReconcileRow
-                            item={item}
-                            selected={selected?.key === item.key}
-                            onSelect={() => openSel(item.key)}
-                          />
-                          {/* Phone: expand the detail inline under the row. */}
-                          {selected?.key === item.key && (
-                            <div className="mt-2 md:hidden">
-                              <ReconcileDetail item={item} onHeld={() => recon.refetch()} />
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Master-detail (md+) / stacked (phone): virtualized queue. */}
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,26rem)_1fr]">
+                    <div>
+                      <Queue
+                        items={items}
+                        selectedKey={selected?.key ?? null}
+                        onSelect={openSel}
+                      />
+                      {/* Phone: detail under the queue. */}
+                      {selected ? (
+                        <div className="mt-3 md:hidden">
+                          <ReconcileDetail item={selected} onHeld={() => recon.refetch()} />
+                        </div>
+                      ) : null}
+                    </div>
 
                     {/* Desktop detail pane */}
                     <div className="hidden md:block">

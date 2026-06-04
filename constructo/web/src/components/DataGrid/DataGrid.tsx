@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   flexRender,
   getCoreRowModel,
@@ -28,6 +28,8 @@ export interface DataGridProps<T> {
   columns: ColumnDef<T, unknown>[]
   getRowId?: (row: T, index: number) => string
   onRowClick?: (row: T) => void
+  /** Highlight + scroll-into-view this row id (keyboard-cockpit selection). */
+  selectedRowId?: string
   /** Override the store density (compact 40 / default 48 / comfortable 56 px). */
   density?: GridDensity
   emptyLabel?: string
@@ -45,6 +47,7 @@ export function DataGrid<T>({
   columns,
   getRowId,
   onRowClick,
+  selectedRowId,
   density,
   emptyLabel = 'Nothing here.',
   ariaLabel = 'Data grid',
@@ -67,6 +70,15 @@ export function DataGrid<T>({
     estimateSize: () => rowH,
     overscan: 12,
   })
+
+  // Keep the keyboard-selected row in view as the cursor scans the queue.
+  const selectedIndex = selectedRowId
+    ? rows.findIndex((r) => r.id === selectedRowId)
+    : -1
+  useEffect(() => {
+    if (selectedIndex >= 0) virtualizer.scrollToIndex(selectedIndex, { align: 'auto' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex])
 
   if (data.length === 0) {
     return (
@@ -110,14 +122,16 @@ export function DataGrid<T>({
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((vi) => {
             const row = rows[vi.index]
+            const selected = selectedRowId != null && row.id === selectedRowId
             return (
               <div
                 key={row.id}
                 role="row"
+                aria-selected={selected || undefined}
                 onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                 className={`absolute inset-x-0 flex items-center border-b border-divider font-body text-small text-text ${
                   onRowClick ? 'cursor-pointer hover:bg-surface-hover' : ''
-                }`}
+                } ${selected ? 'bg-surface-selected ring-1 ring-inset ring-primary' : ''}`}
                 style={{ height: rowH, transform: `translateY(${vi.start}px)` }}
               >
                 {row.getVisibleCells().map((cell) => {
