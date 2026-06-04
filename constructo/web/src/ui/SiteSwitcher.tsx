@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BellIcon, ChevronDownIcon } from './icons'
 import { StatusDot, type Status } from './StatusPill'
 import { Mono, Small } from './Typography'
@@ -19,7 +19,18 @@ export interface SiteSwitcherProps {
   onSelect: (id: string | null) => void
   /** Unread notification count (0 hides the badge). */
   notificationCount?: number
+  /**
+   * Fallback bell handler used only when no `notificationsPanel` is supplied
+   * (e.g. the static component gallery). Once a panel is present the bell toggles
+   * the popover instead and this is ignored.
+   */
   onNotificationsClick?: () => void
+  /**
+   * Content for the bell's dropdown (W3.3). When provided, clicking the bell
+   * opens an anchored popover rendering this node — the shell injects the live
+   * `<NotificationsPanel/>` here so the bell markup stays in one place.
+   */
+  notificationsPanel?: ReactNode
   /** Role label + initials for the avatar, e.g. { name: "Owner", initials: "RK" }. */
   role?: { name: string; initials: string }
   className?: string
@@ -36,19 +47,43 @@ export function SiteSwitcher({
   onSelect,
   notificationCount = 0,
   onNotificationsClick,
+  notificationsPanel,
   role,
   className,
 }: SiteSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
   const selected = sites.find((s) => s.id === selectedId) ?? null
 
-  // Close on Escape.
+  // Close the site sheet on Escape.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  // Close the notifications popover on Escape or an outside click.
+  useEffect(() => {
+    if (!notifOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setNotifOpen(false)
+    const onDown = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node))
+        setNotifOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+  }, [notifOpen])
+
+  function onBellClick() {
+    if (notificationsPanel) setNotifOpen((v) => !v)
+    else onNotificationsClick?.()
+  }
 
   function pick(id: string | null) {
     onSelect(id)
@@ -79,23 +114,37 @@ export function SiteSwitcher({
         </span>
       </button>
 
-      <button
-        type="button"
-        onClick={onNotificationsClick}
-        aria-label={
-          notificationCount > 0
-            ? `Notifications, ${notificationCount} unread`
-            : 'Notifications'
-        }
-        className="relative grid min-h-tap min-w-tap place-items-center rounded-control text-xl text-text cstk-animate transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        <BellIcon />
-        {notificationCount > 0 ? (
-          <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-risk px-1 font-mono text-[10px] font-bold leading-none text-white">
-            {notificationCount > 9 ? '9+' : notificationCount}
-          </span>
+      <div ref={notifRef} className="relative">
+        <button
+          type="button"
+          onClick={onBellClick}
+          aria-haspopup={notificationsPanel ? 'dialog' : undefined}
+          aria-expanded={notificationsPanel ? notifOpen : undefined}
+          aria-label={
+            notificationCount > 0
+              ? `Notifications, ${notificationCount} unread`
+              : 'Notifications'
+          }
+          className="relative grid min-h-tap min-w-tap place-items-center rounded-control text-xl text-text cstk-animate transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <BellIcon />
+          {notificationCount > 0 ? (
+            <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-risk px-1 font-mono text-[10px] font-bold leading-none text-white">
+              {notificationCount > 9 ? '9+' : notificationCount}
+            </span>
+          ) : null}
+        </button>
+
+        {notificationsPanel && notifOpen ? (
+          <div
+            role="dialog"
+            aria-label="Notifications"
+            className="absolute right-0 top-full z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] animate-reveal-down overflow-hidden rounded-sheet border border-line bg-card shadow-sheet"
+          >
+            {notificationsPanel}
+          </div>
         ) : null}
-      </button>
+      </div>
 
       {role ? (
         <span

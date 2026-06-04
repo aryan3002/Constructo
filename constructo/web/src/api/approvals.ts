@@ -128,6 +128,54 @@ const mockDecisions: Decision[] = [
   },
 ]
 
+// Stateful notification fixtures (W3.3) so the no-backend tour shows a *live*
+// bell: a badge that ticks down as rows are read. `markRead` flips `read_at`,
+// `unreadCount` derives from it — exactly like the real endpoints.
+const mockNotifications: AppNotification[] = [
+  {
+    id: 'ntf-1',
+    company_id: 'co-1',
+    recipient_id: 'owner-1',
+    role: 'owner',
+    decision_id: 'dec-2',
+    site_id: 'site-1',
+    kind: 'approval_pending',
+    title: 'Cement shortfall needs your approval (₹17,500)',
+    body: 'Tower B · supervisor raised a shortfall against today’s pour.',
+    severity: 'risk',
+    read_at: null,
+    created_at: '2026-06-04T07:02:00Z',
+  },
+  {
+    id: 'ntf-2',
+    company_id: 'co-1',
+    recipient_id: 'owner-1',
+    role: 'owner',
+    decision_id: 'dec-1',
+    site_id: 'site-1',
+    kind: 'homeowner_question',
+    title: 'Homeowner asked when the slab will be poured',
+    body: 'Villa A · awaiting your reply (SLA 24h).',
+    severity: 'warn',
+    read_at: null,
+    created_at: '2026-06-04T06:10:00Z',
+  },
+  {
+    id: 'ntf-3',
+    company_id: 'co-1',
+    recipient_id: 'owner-1',
+    role: 'owner',
+    decision_id: null,
+    site_id: 'site-2',
+    kind: 'dpr_ready',
+    title: 'Daily progress report is ready to review',
+    body: 'Tower B · 96% confidence — review before it goes to the homeowner.',
+    severity: 'info',
+    read_at: '2026-06-03T18:00:00Z',
+    created_at: '2026-06-03T17:30:00Z',
+  },
+]
+
 const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 
 function applyMock(id: string, state: DecisionState): Decision {
@@ -225,7 +273,7 @@ export const approvalsApi = {
   async notifications(): Promise<AppNotification[]> {
     if (USE_MOCKS) {
       await delay()
-      return []
+      return mockNotifications.map((n) => ({ ...n }))
     }
     return request<AppNotification[]>('/api/v1/notifications')
   },
@@ -233,7 +281,7 @@ export const approvalsApi = {
   async unreadCount(): Promise<number> {
     if (USE_MOCKS) {
       await delay()
-      return 0
+      return mockNotifications.filter((n) => n.read_at === null).length
     }
     const r = await request<{ unread: number }>(
       '/api/v1/notifications/unread-count',
@@ -244,6 +292,8 @@ export const approvalsApi = {
   async markRead(id: string): Promise<void> {
     if (USE_MOCKS) {
       await delay()
+      const n = mockNotifications.find((x) => x.id === id)
+      if (n && n.read_at === null) n.read_at = new Date().toISOString()
       return
     }
     await request<void>(`/api/v1/notifications/${id}/read`, { method: 'POST' })
