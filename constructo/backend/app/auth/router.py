@@ -135,6 +135,9 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
         )
         session.add(user)
         await session.flush()
+    elif not user.is_active:
+        # A deactivated member can't get a fresh token (W4.3).
+        raise AppError(403, "deactivated", "This account has been deactivated")
     await session.commit()
 
     token = create_access_token(str(user.id), user.role.value)
