@@ -207,3 +207,84 @@ async def _company(db_session, company_id):
     from app.models import Company
 
     return await db_session.get(Company, company_id)
+
+
+# --- financial tracking (W2.6) ----------------------------------------------
+
+
+async def test_financials_defaults_when_unset(client, factory, db_session, owner):
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    resp = await client.get(
+        f"/api/v1/payments/financials/{site.id}", headers=auth(owner)
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["quotation"] is None
+    assert body["billed"] is None
+    assert body["received"] == "0"
+    assert body["outstanding"] == "0"
+    assert body["currency"] == "INR"
+
+
+async def test_set_financials_computes_received_and_outstanding(
+    client, factory, db_session, owner
+):
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    # A homeowner->contractor payment is "received" (inflow).
+    await client.post(
+        "/api/v1/payments",
+        json=_payload(site_id=site.id, amount="150000.00"),
+        headers=auth(owner),
+    )
+
+    put = await client.put(
+        f"/api/v1/payments/financials/{site.id}",
+        json={"quotation_amount": "1000000.00", "billed_amount": "500000.00"},
+        headers=auth(owner),
+    )
+    assert put.status_code == 200, put.text
+    body = put.json()
+    assert body["quotation"] == "1000000.00"
+    assert body["billed"] == "500000.00"
+    assert body["received"] == "150000.00"
+    # outstanding = billed - received = 500000 - 150000
+    assert body["outstanding"] == "350000.00"
+
+    # GET reflects the same.
+    got = await client.get(
+        f"/api/v1/payments/financials/{site.id}", headers=auth(owner)
+    )
+    assert got.json()["outstanding"] == "350000.00"
+
+    # A second PUT updates in place (upsert, no duplicate row), untouched fields stay.
+    put2 = await client.put(
+        f"/api/v1/payments/financials/{site.id}",
+        json={"billed_amount": "600000.00"},
+        headers=auth(owner),
+    )
+    assert put2.json()["billed"] == "600000.00"
+    assert put2.json()["quotation"] == "1000000.00"
+    assert put2.json()["outstanding"] == "450000.00"
+
+
+async def test_financials_edit_forbidden_for_non_finance_role(
+    client, factory, db_session, owner
+):
+    company = await _company(db_session, owner.company_id)
+    site = await factory.site(company=company)
+    supervisor = await factory.user(company=company, role=UserRole.supervisor)
+    resp = await client.put(
+        f"/api/v1/payments/financials/{site.id}",
+        json={"billed_amount": "1000.00"},
+        headers=auth(supervisor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_financials_site_scoped_404(client, factory, db_session, owner):
+    other_company = await factory.company(name="Other Co")
+    other_site = await factory.site(company=other_company)
+    resp = await client.get(
+        f"/api/v1/payments/financials/{other_site.id}", headers=auth(owner)
+    )
+    assert resp.status_code == 404
