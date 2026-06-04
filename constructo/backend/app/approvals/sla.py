@@ -16,7 +16,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Decision, DecisionState
+from app.models import CompanyNotificationSettings, Decision, DecisionState
 from app.notifications import feed, store
 
 
@@ -40,6 +40,20 @@ async def run_sla_sweep(
     """
     moment = _aware(now) if now is not None else datetime.now(UTC)
 
+    # Companies that turned overdue-escalation OFF (W4.7) — their decisions are
+    # left un-escalated. A missing settings row means the default (escalate).
+    opted_out = set(
+        (
+            await session.execute(
+                select(CompanyNotificationSettings.company_id).where(
+                    CompanyNotificationSettings.escalate_overdue.is_(False)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     stmt = select(Decision).where(
         Decision.sla_due_at.is_not(None),
         Decision.state.in_([DecisionState.pending, DecisionState.acknowledged]),
@@ -49,6 +63,8 @@ async def run_sla_sweep(
 
     escalated: list[UUID] = []
     for decision in (await session.execute(stmt)).scalars().all():
+        if decision.company_id in opted_out:
+            continue
         due = _aware(decision.sla_due_at) if decision.sla_due_at else None
         if due is None or due > moment:
             continue
