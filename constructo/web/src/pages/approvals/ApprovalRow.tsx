@@ -29,12 +29,19 @@ const STATE_KEY: Record<DecisionState, TranslationKey> = {
   escalated: 'approvals.state.escalated',
 }
 
+/** Money-bearing decisions only the owner may bind; others propose. */
+const MONEY_KINDS = new Set<DecisionKind>(['approval', 'hold_payment'])
+
 export interface ApprovalRowProps {
   decision: Decision
   selected: boolean
   onToggleSelect: (id: string) => void
   onApprove: (id: string) => void
   onReject: (id: string) => void
+  /** Propose a money decision to the owner (non-owner roles, WC4). */
+  onPropose: (id: string) => void
+  /** True for the owner (capability `approve_money`). */
+  canApproveMoney: boolean
   busy?: boolean
 }
 
@@ -50,11 +57,16 @@ export function ApprovalRow({
   onToggleSelect,
   onApprove,
   onReject,
+  onPropose,
+  canApproveMoney,
   busy,
 }: ApprovalRowProps) {
   const t = useT()
   const status = STATE_STATUS[d.state]
   const isOpen = d.state === 'pending' || d.state === 'escalated'
+  // WC4 (abort condition): a non-owner NEVER sees Approve/Release on a money
+  // decision — only "Propose to owner →". The server is the authz source too.
+  const proposeOnly = MONEY_KINDS.has(d.kind) && !canApproveMoney
   const overdue =
     d.sla_due_at != null && new Date(d.sla_due_at).getTime() < Date.now()
 
@@ -105,22 +117,35 @@ export function ApprovalRow({
         />
         {isOpen ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              size="md"
-              variant="primary"
-              disabled={busy}
-              onClick={() => onApprove(d.id)}
-            >
-              {t('action.approve')}
-            </Button>
-            <Button
-              size="md"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => onReject(d.id)}
-            >
-              {t('approvals.action.reject')}
-            </Button>
+            {proposeOnly ? (
+              <Button
+                size="md"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => onPropose(d.id)}
+              >
+                {t('approvals.action.propose')}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="md"
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() => onApprove(d.id)}
+                >
+                  {t('action.approve')}
+                </Button>
+                <Button
+                  size="md"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => onReject(d.id)}
+                >
+                  {t('approvals.action.reject')}
+                </Button>
+              </>
+            )}
           </div>
         ) : null}
       </div>

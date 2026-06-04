@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Button, Display, Small, ThemeSurface } from '../../ui'
+import { Button, Display, Small, StatusPill, ThemeSurface } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
+import { useCan } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import type { TranslationKey } from '../../i18n'
 import type { DecisionState } from '../../api/approvals'
@@ -31,8 +32,10 @@ const TAB_KEY: Record<Tab, TranslationKey> = {
  */
 export function ApprovalInbox() {
   const t = useT()
+  const canApproveMoney = useCan('approve_money')
   const [tab, setTab] = useState<Tab>('open')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [toast, setToast] = useState<string | null>(null)
 
   const query = useApprovals(TAB_FILTER[tab])
   const action = useApprovalAction()
@@ -74,6 +77,12 @@ export function ApprovalInbox() {
           <Small className="mt-1">{t('approvals.subtitle')}</Small>
         </header>
 
+        {toast ? (
+          <p className="mb-4" role="status">
+            <StatusPill status="info" label={toast} />
+          </p>
+        ) : null}
+
         {/* Tabs */}
         <div
           role="tablist"
@@ -110,14 +119,17 @@ export function ApprovalInbox() {
               {t('approvals.batch.selected', { count: selected.size })}
             </Small>
             <div className="ml-auto flex gap-2">
-              <Button
-                size="md"
-                variant="primary"
-                disabled={busy}
-                onClick={() => runBatch('resolve')}
-              >
-                {t('approvals.batch.approve_all')}
-              </Button>
+              {/* WC4: only the owner can bulk-approve money decisions. */}
+              {canApproveMoney ? (
+                <Button
+                  size="md"
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() => runBatch('resolve')}
+                >
+                  {t('approvals.batch.approve_all')}
+                </Button>
+              ) : null}
               <Button
                 size="md"
                 variant="secondary"
@@ -156,8 +168,10 @@ export function ApprovalInbox() {
                 selected={selected.has(d.id)}
                 onToggleSelect={toggleSelect}
                 busy={busy}
+                canApproveMoney={canApproveMoney}
                 onApprove={(id) => action.mutate({ id, action: 'approve' })}
                 onReject={(id) => action.mutate({ id, action: 'reject' })}
+                onPropose={() => setToast(t('approvals.proposed'))}
               />
             ))}
           </ul>

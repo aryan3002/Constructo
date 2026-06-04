@@ -43,8 +43,11 @@ function makeDecision(over: Partial<Decision> = {}): Decision {
   }
 }
 
-function wrap(node: ReactNode) {
+function wrap(node: ReactNode, role: string = 'owner') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // Seed the current-user role so the WC4 capability gate resolves (owner sees
+  // Approve; pm/others see "Propose to owner →" on money decisions).
+  qc.setQueryData(['me'], { role })
   return render(
     <QueryClientProvider client={qc}>
       <LanguageProvider defaultLanguage="en">{node}</LanguageProvider>
@@ -108,6 +111,21 @@ describe('ApprovalInbox', () => {
     await waitFor(() =>
       expect(batch).toHaveBeenCalledWith('resolve', ['d1'], undefined),
     )
+  })
+
+  it('WC4: a PM sees "Propose to owner", never Approve on a money decision', async () => {
+    list.mockResolvedValue({ items: [makeDecision()], next_cursor: null })
+    wrap(<ApprovalInbox />, 'pm')
+    await screen.findByText('Approve extra cement')
+    expect(
+      screen.getByRole('button', { name: /propose to owner/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    // And no bulk-approve once selected.
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /select Approve extra cement/i }),
+    )
+    expect(screen.queryByRole('button', { name: 'Approve selected' })).toBeNull()
   })
 
   it('marks an SLA-overdue homeowner question as overdue', async () => {
