@@ -228,6 +228,51 @@ export const en = {
   'owner.pulse.progress': 'Progress',
   'owner.pulse.tap_evidence': 'Tap for evidence',
   'owner.pulse.no_evidence': 'No evidence yet',
+  'owner.pulse.stage': 'Stage {n} of {total}',
+  'owner.pulse.on_plan': 'On plan',
+  'owner.pulse.vs_plan': '{d}d vs plan',
+  'owner.pulse.set_stages': 'Set stages',
+  'owner.pulse.set_stages_hint': 'Add expected stages to track progress',
+
+  // Owner Command Center — Col-1 "Needs You"
+  'owner.needs.title': 'Needs you',
+  'owner.needs.count': '{n} open',
+  'owner.needs.approve_money': 'Approve ₹',
+  'owner.needs.propose': 'Propose to owner',
+  'owner.needs.proposed': 'Proposed to owner for {site}',
+  'owner.needs.more_sites': '{n} more sites need attention',
+  'owner.needs.rest_calm': '{n} other sites calm',
+
+  // Owner Command Center — Decision Log
+  'owner.log.title': 'Decision log',
+  'owner.log.subtitle': 'Append-only',
+  'owner.log.loading': 'Loading decisions…',
+  'owner.log.error': 'Could not load the decision log.',
+  'owner.log.empty': 'No decisions yet — your calls will log here.',
+  'owner.log.kind_approved': 'Approved',
+  'owner.log.kind_held': 'Held',
+  'owner.log.kind_assigned': 'Assigned',
+  'owner.log.kind_replied': 'Replied',
+  'owner.log.proof': '{n} proof',
+  'owner.log.just_now': 'just now',
+  'owner.log.mins_ago': '{n}m ago',
+  'owner.log.hrs_ago': '{n}h ago',
+  'owner.log.days_ago': '{n}d ago',
+
+  // Owner Command Center — Col-2 "Portfolio"
+  'owner.portfolio.title': 'Portfolio',
+  'owner.portfolio.linked': '{n} linked',
+
+  // Owner Command Center — Col-3 "This Week"
+  'owner.week.title': 'This week',
+  'owner.week.export': 'Export CSV',
+  'owner.week.loading': 'Loading this week…',
+  'owner.week.error': 'Could not load this week’s cash.',
+  'owner.week.cash_in': 'Cash in',
+  'owner.week.cash_out': 'Cash out',
+  'owner.week.cash_in_trend': 'Cash in, 7-day trend',
+  'owner.week.cash_out_trend': 'Cash out, 7-day trend',
+  'owner.week.pending': 'Approvals pending',
 
   'owner.setup.title': 'Finish setting up',
   'owner.setup.hint': 'A few steps and your daily brief starts working.',

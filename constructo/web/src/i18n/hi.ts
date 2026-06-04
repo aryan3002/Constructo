@@ -206,6 +206,51 @@ export const hi: Record<TranslationKey, string> = {
   'owner.pulse.progress': 'प्रगति',
   'owner.pulse.tap_evidence': 'सबूत के लिए टैप करें',
   'owner.pulse.no_evidence': 'अभी कोई सबूत नहीं',
+  'owner.pulse.stage': 'चरण {n}/{total}',
+  'owner.pulse.on_plan': 'योजना अनुसार',
+  'owner.pulse.vs_plan': 'योजना से {d} दिन',
+  'owner.pulse.set_stages': 'चरण तय करें',
+  'owner.pulse.set_stages_hint': 'प्रगति के लिए अपेक्षित चरण जोड़ें',
+
+  // Owner Command Center — Col-1 "Needs You"
+  'owner.needs.title': 'आपका ध्यान चाहिए',
+  'owner.needs.count': '{n} बाकी',
+  'owner.needs.approve_money': 'मंज़ूरी ₹',
+  'owner.needs.propose': 'मालिक को भेजें',
+  'owner.needs.proposed': '{site} के लिए मालिक को भेजा गया',
+  'owner.needs.more_sites': '{n} और साइटों को ध्यान चाहिए',
+  'owner.needs.rest_calm': '{n} अन्य साइट शांत',
+
+  // Owner Command Center — Decision Log
+  'owner.log.title': 'निर्णय लॉग',
+  'owner.log.subtitle': 'सिर्फ़ जुड़ता है',
+  'owner.log.loading': 'निर्णय लोड हो रहे हैं…',
+  'owner.log.error': 'निर्णय लॉग लोड नहीं हो सका।',
+  'owner.log.empty': 'अभी कोई निर्णय नहीं — आपके फ़ैसले यहाँ दर्ज होंगे।',
+  'owner.log.kind_approved': 'मंज़ूर',
+  'owner.log.kind_held': 'रोका',
+  'owner.log.kind_assigned': 'सौंपा',
+  'owner.log.kind_replied': 'जवाब दिया',
+  'owner.log.proof': '{n} सबूत',
+  'owner.log.just_now': 'अभी',
+  'owner.log.mins_ago': '{n} मिनट पहले',
+  'owner.log.hrs_ago': '{n} घंटे पहले',
+  'owner.log.days_ago': '{n} दिन पहले',
+
+  // Owner Command Center — Col-2 "Portfolio"
+  'owner.portfolio.title': 'पोर्टफ़ोलियो',
+  'owner.portfolio.linked': '{n} जुड़े',
+
+  // Owner Command Center — Col-3 "This Week"
+  'owner.week.title': 'इस हफ़्ते',
+  'owner.week.export': 'CSV निर्यात',
+  'owner.week.loading': 'इस हफ़्ते का लोड हो रहा है…',
+  'owner.week.error': 'इस हफ़्ते का नकद लोड नहीं हो सका।',
+  'owner.week.cash_in': 'नकद आया',
+  'owner.week.cash_out': 'नकद गया',
+  'owner.week.cash_in_trend': 'नकद आया, 7-दिन रुझान',
+  'owner.week.cash_out_trend': 'नकद गया, 7-दिन रुझान',
+  'owner.week.pending': 'मंज़ूरी बाकी',
 
   'owner.setup.title': 'सेटअप पूरा करें',
   'owner.setup.hint': 'कुछ कदम और आपका रोज़ का ब्रीफ़ चालू हो जाएगा।',

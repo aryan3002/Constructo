@@ -7,7 +7,7 @@
 // profile + language update, role-landing lookup). Those reuse `API_BASE`
 // (../api/config) and `ApiError` (./client) by import only.
 
-import { API_BASE } from './config'
+import { API_BASE, USE_MOCKS } from './config'
 import { ApiError } from './client'
 
 // ---------------------------------------------------------------------------
@@ -147,6 +147,22 @@ export const authApi = {
   },
 
   me(): Promise<Me> {
+    if (USE_MOCKS) {
+      // Dev-only: lets capability-gated UI (e.g. the owner Approve chips) render
+      // without a backend. Override the role via localStorage['cstk.mock.role'].
+      const role =
+        (typeof localStorage !== 'undefined' &&
+          (localStorage.getItem('cstk.mock.role') as Role | null)) ||
+        'owner'
+      return Promise.resolve({
+        id: 'mock-user',
+        company_id: 'mock-co',
+        name: 'Demo Owner',
+        phone: '+919800000001',
+        role,
+        language: 'en',
+      })
+    }
     return call('/api/v1/auth/me')
   },
 

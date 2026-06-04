@@ -21,8 +21,14 @@ export interface BriefCommandCardProps {
   /** Optional small meta, e.g. "12 updates today". */
   meta?: string
   risks: BriefRisk[]
-  /** Inline decision callback for each row. */
+  /** Inline decision callback for each row (used by the default chip cluster). */
   onAction?: (riskId: string, action: BriefAction) => void
+  /**
+   * Override the trailing action cluster per risk. When provided it replaces the
+   * default Approve/Hold/Assign chips — used by the Owner Command Center to gate
+   * the chips by capability (owner "Approve" vs PM "Propose to owner →").
+   */
+  renderActions?: (risk: BriefRisk) => ReactNode
   className?: string
 }
 
@@ -80,6 +86,7 @@ export function BriefCommandCard({
   meta,
   risks,
   onAction,
+  renderActions,
   className,
 }: BriefCommandCardProps) {
   const top = risks.slice(0, 3)
@@ -106,6 +113,12 @@ export function BriefCommandCard({
         <ul className="divide-y divide-line">
           {top.map((risk) => (
             <li key={risk.id} className="p-3">
+              {/*
+                When actions are overridden (Owner Command Center, narrow column)
+                they render full-width BELOW the claim so the claim text keeps the
+                whole card width. The default chip cluster stays inline-trailing
+                for the wider legacy layouts that use this primitive.
+              */}
               <EvidenceCard
                 claim={risk.claim}
                 status={risk.status}
@@ -113,22 +126,29 @@ export function BriefCommandCard({
                 evidence={risk.evidence ?? []}
                 className="!border-0 !bg-transparent !shadow-none"
                 trailing={
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    <ActionChip
-                      action="approve"
-                      onClick={() => onAction?.(risk.id, 'approve')}
-                    />
-                    <ActionChip
-                      action="hold"
-                      onClick={() => onAction?.(risk.id, 'hold')}
-                    />
-                    <ActionChip
-                      action="assign"
-                      onClick={() => onAction?.(risk.id, 'assign')}
-                    />
-                  </div>
+                  renderActions ? undefined : (
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <ActionChip
+                        action="approve"
+                        onClick={() => onAction?.(risk.id, 'approve')}
+                      />
+                      <ActionChip
+                        action="hold"
+                        onClick={() => onAction?.(risk.id, 'hold')}
+                      />
+                      <ActionChip
+                        action="assign"
+                        onClick={() => onAction?.(risk.id, 'assign')}
+                      />
+                    </div>
+                  )
                 }
               />
+              {renderActions ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-6">
+                  {renderActions(risk)}
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
