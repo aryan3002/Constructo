@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -39,11 +39,24 @@ class DecisionState(StrEnum):
 
 class Decision(Base):
     __tablename__ = "decisions"
+    # Idempotency (CA8): a client-supplied key de-dupes the same logical action
+    # (e.g. the owner's web chip + the mirrored WhatsApp action) into ONE row.
+    # Scoped per company; NULLs are distinct in Postgres so keyless decisions
+    # (the bulk of them) are unaffected.
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "client_decision_id",
+            name="uq_decisions_company_client_decision_id",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
+    # Client-generated idempotency key (nullable; only inline brief chips send it).
+    client_decision_id: Mapped[str | None] = mapped_column(String, nullable=True)
     site_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True
     )

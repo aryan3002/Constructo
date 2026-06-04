@@ -10,11 +10,12 @@ from __future__ import annotations
 from datetime import date
 
 import pytest_asyncio
+from sqlalchemy import func, select
 
 from app.auth.jwt import create_access_token
 from app.brief.generate import build_brief
 from app.extraction.llm import FakeLLMClient
-from app.models import Site, SiteBaseline, SiteEventModel, UserRole
+from app.models import Decision, Site, SiteBaseline, SiteEventModel, UserRole
 
 DAY = date(2026, 5, 28)
 
@@ -144,6 +145,84 @@ async def test_create_decision_rejects_other_company_site(client, db_session, fa
         json={"site_id": str(other_site.id), "action": "hold", "title": "x"},
     )
     assert resp.status_code == 404
+
+
+async def _count_decisions(db_session, company_id) -> int:
+    return (
+        await db_session.execute(
+            select(func.count()).select_from(Decision).where(
+                Decision.company_id == company_id
+            )
+        )
+    ).scalar_one()
+
+
+async def test_create_decision_is_idempotent_on_client_decision_id(
+    client, db_session, owner
+):
+    site = await _site(db_session, owner.company_id)
+    payload = {
+        "site_id": str(site.id),
+        "action": "approve",
+        "title": "Approve extra cement",
+        "client_decision_id": "cd-abc-123",
+    }
+
+    first = await client.post(
+        "/api/v1/dashboard/decisions", headers=auth(owner), json=payload
+    )
+    assert first.status_code == 201
+    first_id = first.json()["id"]
+
+    # A replay of the SAME client_decision_id reconciles to the existing row
+    # (200), never creates a second decision.
+    second = await client.post(
+        "/api/v1/dashboard/decisions", headers=auth(owner), json=payload
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == first_id
+    assert await _count_decisions(db_session, owner.company_id) == 1
+
+
+async def test_same_client_decision_id_isolated_per_company(
+    client, db_session, factory, owner
+):
+    # The idempotency key is company-scoped: an identical key from another
+    # company creates its own row (no cross-company collision).
+    site = await _site(db_session, owner.company_id)
+    await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={
+            "site_id": str(site.id),
+            "action": "approve",
+            "title": "Mine",
+            "client_decision_id": "shared-key",
+        },
+    )
+
+    other_company = await factory.company(name="Other Co")
+    other_owner = await factory.user(company=other_company, role=UserRole.owner)
+    resp = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(other_owner),
+        json={"action": "approve", "title": "Theirs", "client_decision_id": "shared-key"},
+    )
+    assert resp.status_code == 201
+    assert await _count_decisions(db_session, owner.company_id) == 1
+    assert await _count_decisions(db_session, other_company.id) == 1
+
+
+async def test_create_decision_without_client_id_still_creates_each_time(
+    client, db_session, owner
+):
+    # Keyless decisions (the bulk) are unaffected — two posts → two rows, even
+    # with identical content (NULL keys are distinct).
+    site = await _site(db_session, owner.company_id)
+    payload = {"site_id": str(site.id), "action": "hold", "title": "Hold payment"}
+    await client.post("/api/v1/dashboard/decisions", headers=auth(owner), json=payload)
+    await client.post("/api/v1/dashboard/decisions", headers=auth(owner), json=payload)
+    assert await _count_decisions(db_session, owner.company_id) == 2
 
 
 async def test_brief_rendering_is_exceptions_first_and_network_free(db_session, factory):

@@ -59,6 +59,9 @@ class DecisionCreateIn(BaseModel):
     detail: str | None = None
     assigned_to: UUID | None = None
     evidence_event_ids: list[UUID] = Field(default_factory=list)
+    # Idempotency key (CA8): a re-send of the same logical decision (web chip +
+    # mirrored WhatsApp action) reconciles to the existing row, never double-acts.
+    client_decision_id: str | None = Field(default=None, max_length=128)
 
 
 class DecisionOut(BaseModel):
