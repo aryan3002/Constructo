@@ -711,6 +711,24 @@ export const en = {
   'admin.materials.cat_aggregate': 'Aggregate',
   'admin.materials.cat_finishing': 'Finishing',
   'admin.materials.cat_other': 'Other',
+  // Notifications & SLA (W4.7)
+  'admin.notif.title': 'Notifications & SLA',
+  'admin.notif.subtitle': 'How and when your team gets nudged.',
+  'admin.notif.loading': 'Loading…',
+  'admin.notif.error': 'Could not load settings.',
+  'admin.notif.sla_label': 'SLA target (hours)',
+  'admin.notif.sla_hint': 'How long a decision can sit before it’s overdue.',
+  'admin.notif.sla_invalid': 'Enter 1–168 hours.',
+  'admin.notif.escalate_label': 'Escalate overdue decisions',
+  'admin.notif.escalate_hint': 'Auto-escalate and nudge when a decision passes its SLA.',
+  'admin.notif.digest_label': 'Daily brief digest',
+  'admin.notif.digest_hint': 'Send the nightly summary to owners.',
+  'admin.notif.save': 'Save settings',
+  'admin.notif.saving': 'Saving…',
+  'admin.notif.saved': 'Settings saved',
+  'admin.notif.save_failed': 'Could not save. Please try again.',
+  'admin.notif.unsaved': 'Unsaved changes',
+  'admin.notif.read_only': 'Only the owner can change these.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

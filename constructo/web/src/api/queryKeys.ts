@@ -35,5 +35,7 @@ export const qk = {
    *  `['notifications']` prefix so a single invalidate refetches both. */
   notifications: () => ['notifications', 'feed'] as const,
   notificationsUnread: () => ['notifications', 'unread'] as const,
+  /** Company notification & SLA settings (Setup & Admin, W4.7). */
+  notificationSettings: () => ['notifications', 'settings'] as const,
   search: (query: string) => ['search', query] as const,
 } as const
