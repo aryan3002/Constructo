@@ -51,6 +51,18 @@ export interface Vendor {
   created_at: string
 }
 
+/** A material/catalog master row (Setup & Admin → Materials, W4.6). */
+export interface Material {
+  id: string
+  company_id: string
+  name: string
+  unit: string | null
+  category: string | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+}
+
 // ---- Briefs ----
 export type RiskSeverity = 'high' | 'med' | 'low'
 
