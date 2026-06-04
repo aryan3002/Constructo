@@ -18,8 +18,9 @@ import datetime as dt
 from collections import defaultdict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
@@ -124,9 +125,38 @@ async def get_home(
     return HomeOut(brief_date=brief_date, **payload)
 
 
+def _decision_out(decision: Decision) -> DecisionOut:
+    return DecisionOut(
+        id=decision.id,
+        company_id=decision.company_id,
+        site_id=decision.site_id,
+        kind=str(decision.kind),
+        state=str(decision.state),
+        title=decision.title,
+        detail=decision.detail,
+        assigned_to=decision.assigned_to,
+        evidence_event_ids=list(decision.evidence_event_ids or []),
+        created_at=decision.created_at,
+    )
+
+
+async def _find_by_client_id(
+    session: AsyncSession, company_id: UUID, client_decision_id: str
+) -> Decision | None:
+    return (
+        await session.execute(
+            select(Decision).where(
+                Decision.company_id == company_id,
+                Decision.client_decision_id == client_decision_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
 @router.post("/decisions", response_model=DecisionOut, status_code=201)
 async def create_decision(
     body: DecisionCreateIn,
+    response: Response,
     user: User = Depends(require_role(UserRole.owner, UserRole.pm)),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
@@ -135,6 +165,17 @@ async def create_decision(
         raise AppError(
             422, "invalid_action", "action must be one of approve | hold | assign"
         )
+
+    # Idempotency (CA8): if this client_decision_id already resolved to a row for
+    # this company, replay it (200) instead of creating a duplicate. This makes
+    # the web chip and the mirrored WhatsApp action converge on ONE decision.
+    if body.client_decision_id is not None:
+        existing = await _find_by_client_id(
+            session, user.company_id, body.client_decision_id
+        )
+        if existing is not None:
+            response.status_code = 200
+            return _decision_out(existing)
 
     if body.site_id is not None:
         site = await session.get(Site, body.site_id)
@@ -150,20 +191,23 @@ async def create_decision(
         raised_by=user.id,
         assigned_to=body.assigned_to,
         evidence_event_ids=body.evidence_event_ids,
+        client_decision_id=body.client_decision_id,
     )
     session.add(decision)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Lost a concurrent race on the same client_decision_id — the other
+        # request committed first. Reconcile to its row instead of erroring.
+        await session.rollback()
+        if body.client_decision_id is not None:
+            existing = await _find_by_client_id(
+                session, user.company_id, body.client_decision_id
+            )
+            if existing is not None:
+                response.status_code = 200
+                return _decision_out(existing)
+        raise
     await session.refresh(decision)
 
-    return DecisionOut(
-        id=decision.id,
-        company_id=decision.company_id,
-        site_id=decision.site_id,
-        kind=str(decision.kind),
-        state=str(decision.state),
-        title=decision.title,
-        detail=decision.detail,
-        assigned_to=decision.assigned_to,
-        evidence_event_ids=list(decision.evidence_event_ids or []),
-        created_at=decision.created_at,
-    )
+    return _decision_out(decision)
