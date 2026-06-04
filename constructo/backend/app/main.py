@@ -37,6 +37,7 @@ from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sites.router import router as sites_router
+from app.vendors.router import router as vendors_router
 
 
 @asynccontextmanager
@@ -88,6 +89,7 @@ app.include_router(me_router)  # C-F /me/push-token
 app.include_router(invites_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
+app.include_router(vendors_router)
 app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
