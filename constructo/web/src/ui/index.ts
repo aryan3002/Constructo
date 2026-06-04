@@ -26,6 +26,9 @@ export type {
   BriefAction,
 } from './BriefCommandCard'
 
+export { ConfidenceMeter, bandFor } from './ConfidenceMeter'
+export type { ConfidenceMeterProps, ConfidenceBand } from './ConfidenceMeter'
+
 export { CaptureBar } from './CaptureBar'
 export type { CaptureBarProps } from './CaptureBar'
 

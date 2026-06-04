@@ -32,6 +32,10 @@ const ReconcilePage = lazy(() =>
 )
 // === approvals ===
 import { ApprovalInbox } from './pages/approvals/Inbox'
+// === dpr (PM auto-DPR review) === lazy: AI-draft surface
+const DprPage = lazy(() =>
+  import('./pages/dpr/DprPage').then((m) => ({ default: m.DprPage })),
+)
 // === search ===
 import { Search } from './pages/search/Search'
 
@@ -92,6 +96,9 @@ export function App() {
 
       {/* Approval Inbox (Site-themed full screen). */}
       <Route path="/approvals" element={<Guarded><ApprovalInbox /></Guarded>} />
+
+      {/* PM Auto-DPR review (draft → review → share; never auto-sends). */}
+      <Route path="/dpr" element={<Guarded><DprPage /></Guarded>} />
 
       {/* Search (own ThemeProvider chrome). */}
       <Route path="/search" element={<Guarded><Search /></Guarded>} />
