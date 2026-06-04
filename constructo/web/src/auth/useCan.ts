@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { authApi, type Me, type Role } from '../api/auth'
+import { qk } from '../api/queryKeys'
 import { roleCan, type Capability } from './permissions'
 
 /**
@@ -8,7 +9,7 @@ import { roleCan, type Capability } from './permissions'
  */
 export function useMeRole(): Role | undefined {
   const { data } = useQuery<Me>({
-    queryKey: ['me'],
+    queryKey: qk.me(),
     queryFn: () => authApi.me(),
     staleTime: Infinity,
     retry: 1,

@@ -103,6 +103,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Bundle budget (entry <= 250 KB gz)
+        run: npm run budget
+
       - name: Test
         run: npm test
 
