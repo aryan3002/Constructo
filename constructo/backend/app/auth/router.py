@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.auth.jwt import create_access_token
 from app.auth.landing import landing_for
+from app.auth.phone import normalize_phone, phone_candidates
 from app.common.errors import AppError
 from app.db import get_session
 from app.models import Company, PushToken, User, UserRole
@@ -101,12 +102,23 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
     if body.otp != STUB_OTP:
         raise AppError(401, "invalid_otp", "Invalid OTP")
 
+    # Tolerant lookup: match the existing user across equivalent phone forms
+    # (+919800000001 / 919800000001 / 9800000001 / 0…), so a returning owner who
+    # types their number in a slightly different format is NOT treated as new and
+    # dumped into the first-run "create your company" flow. .first() is defensive
+    # against a pre-existing duplicate (raw + canonical) row.
     user = (
-        await session.execute(select(User).where(User.phone == body.phone))
-    ).scalar_one_or_none()
+        await session.execute(
+            select(User).where(User.phone.in_(phone_candidates(body.phone)))
+        )
+    ).scalars().first()
     if user is None:
         company = await _get_or_create_default_company(session)
-        user = User(company_id=company.id, phone=body.phone, role=UserRole.owner)
+        user = User(
+            company_id=company.id,
+            phone=normalize_phone(body.phone),  # store canonical E.164 going forward
+            role=UserRole.owner,
+        )
         session.add(user)
         await session.flush()
     await session.commit()
