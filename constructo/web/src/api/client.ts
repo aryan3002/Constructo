@@ -8,6 +8,7 @@ import type {
   Paginated,
   RunBriefRequest,
   RunBriefResponse,
+  Material,
   Site,
   SiteBaseline,
   SiteEvent,
@@ -67,6 +68,13 @@ const mockVendors: Vendor[] = [
   { id: 'vendor-1', company_id: MOCK_COMPANY_ID, name: 'Ambuja Cement Depot', category: 'material', gstin: '27AAACA1234A1Z5', phone: '+919800011111', notes: null, is_active: true, created_at: '2026-02-01T00:00:00Z' },
   { id: 'vendor-2', company_id: MOCK_COMPANY_ID, name: 'Sharma Labour Supply', category: 'labour', gstin: null, phone: '+919800022222', notes: null, is_active: true, created_at: '2026-02-03T00:00:00Z' },
   { id: 'vendor-3', company_id: MOCK_COMPANY_ID, name: 'Metro Crane Rentals', category: 'equipment', gstin: '29AABCM5678B1Z3', phone: '+919800033333', notes: null, is_active: false, created_at: '2026-01-15T00:00:00Z' },
+]
+
+/** Dev-only material catalog so the no-backend admin tour lists + edits. */
+const mockMaterials: Material[] = [
+  { id: 'material-1', company_id: MOCK_COMPANY_ID, name: 'OPC 53 Cement', unit: 'bag', category: 'binder', notes: null, is_active: true, created_at: '2026-02-01T00:00:00Z' },
+  { id: 'material-2', company_id: MOCK_COMPANY_ID, name: 'TMT Steel Fe500', unit: 'kg', category: 'steel', notes: null, is_active: true, created_at: '2026-02-02T00:00:00Z' },
+  { id: 'material-3', company_id: MOCK_COMPANY_ID, name: 'River Sand', unit: 'cum', category: 'aggregate', notes: null, is_active: false, created_at: '2026-01-20T00:00:00Z' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -280,6 +288,65 @@ export const api = {
       return { ...v }
     }
     return request<Vendor>(`/api/v1/vendors/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  },
+
+  // ---- materials (W4.6) ----
+
+  async listMaterials(includeArchived = false): Promise<Material[]> {
+    if (USE_MOCKS) {
+      await delay()
+      return mockMaterials
+        .filter((m) => includeArchived || m.is_active)
+        .map((m) => ({ ...m }))
+    }
+    const q = includeArchived ? '?include_archived=true' : ''
+    return request<Material[]>(`/api/v1/materials${q}`)
+  },
+
+  async createMaterial(body: {
+    name: string
+    unit?: string | null
+    category?: string | null
+    notes?: string | null
+  }): Promise<Material> {
+    if (USE_MOCKS) {
+      await delay()
+      const created: Material = {
+        id: `material-${mockMaterials.length + 1}`,
+        company_id: MOCK_COMPANY_ID,
+        name: body.name,
+        unit: body.unit ?? null,
+        category: body.category ?? null,
+        notes: body.notes ?? null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      }
+      mockMaterials.push(created)
+      return { ...created }
+    }
+    return request<Material>('/api/v1/materials', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  async updateMaterial(
+    id: string,
+    patch: Partial<
+      Pick<Material, 'name' | 'unit' | 'category' | 'notes' | 'is_active'>
+    >,
+  ): Promise<Material> {
+    if (USE_MOCKS) {
+      await delay()
+      const m = mockMaterials.find((x) => x.id === id)
+      if (!m) throw new ApiError(404, 'Material not found')
+      Object.assign(m, patch)
+      return { ...m }
+    }
+    return request<Material>(`/api/v1/materials/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     })
