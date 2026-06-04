@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models. Importing this package registers every table on Base.metadata."""
 
 from app.models.company import Company
+from app.models.company_billing import CompanyBilling
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.dpr import Dpr, DprStatus
 from app.models.event_embedding import EventEmbedding
@@ -55,6 +56,7 @@ from app.models.whatsapp_group import WhatsappGroup
 __all__ = [
     "Change",
     "Company",
+    "CompanyBilling",
     "CompanyNotificationSettings",
     "Component",
     "ComponentStatus",
