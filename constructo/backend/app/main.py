@@ -19,6 +19,7 @@ from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
 from app.auth.router import me_router, users_router
 from app.auth.router import router as auth_router
+from app.billing.router import router as billing_router
 from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.capture.router import router as capture_router
@@ -92,6 +93,7 @@ app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(vendors_router)
 app.include_router(materials_router)
+app.include_router(billing_router)
 app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
