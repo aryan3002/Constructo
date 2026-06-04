@@ -300,6 +300,60 @@ async def test_hold_payment_rejects_cross_site_pair(client, factory, db_session,
     assert resp.status_code == 422
 
 
+# --- Tally export (OTP step-up gated) ---------------------------------------
+
+
+async def _step_up_token(client, user) -> str:
+    resp = await client.post(
+        "/api/v1/auth/step-up/verify", json={"otp": "000000"}, headers=auth(user)
+    )
+    return resp.json()["step_up_token"]
+
+
+async def test_export_tally_blocked_without_step_up(client, factory, db_session, owner):
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    await _delivery(db_session, site.id)
+    resp = await client.get(
+        f"/api/v1/reconcile/export/tally?site_id={site.id}", headers=auth(owner)
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "step_up_required"
+
+
+async def test_export_tally_with_step_up_returns_csv(client, factory, db_session, owner):
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    await _delivery(db_session, site.id, quantity=100.0)
+    await _invoice(db_session, site.id, quantity=150.0, amount=60000.0)
+
+    step_up = await _step_up_token(client, owner)
+    resp = await client.get(
+        f"/api/v1/reconcile/export/tally?site_id={site.id}",
+        headers={**auth(owner), "X-Step-Up-Token": step_up},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/csv")
+    body = resp.text
+    assert body.splitlines()[0].startswith("key,status,vendor,item,amount_at_risk")
+    assert "UltraTech" in body
+
+
+async def test_export_tally_rejects_another_users_step_up(
+    client, factory, db_session, owner
+):
+    company = await _company(db_session, owner.company_id)
+    site = await factory.site(company=company)
+    await _delivery(db_session, site.id)
+    other = await factory.user(company=company, role=UserRole.accountant)
+    other_step_up = await _step_up_token(client, other)
+    # owner's bearer + someone else's step-up token must not pass.
+    resp = await client.get(
+        f"/api/v1/reconcile/export/tally?site_id={site.id}",
+        headers={**auth(owner), "X-Step-Up-Token": other_step_up},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "step_up_required"
+
+
 # --- accountant overview (C4) -----------------------------------------------
 
 

@@ -5,6 +5,8 @@ Reconciliation derives delivery-vs-invoice matches from the existing
 problem by creating a B0 ``Decision`` of kind ``hold_payment`` routed to the
 company owner. All routes are auth'd and site-scoped exactly like ``app/sites``.
 """
+import csv
+import io
 import re
 from uuid import UUID
 
@@ -13,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, require_step_up
 from app.common.errors import AppError
 from app.db import get_session
 from app.models import (
@@ -566,3 +568,79 @@ async def _company_owner(session: AsyncSession, company_id: UUID) -> User | None
         .limit(1)
     )
     return row.scalar_one_or_none()
+
+
+# --- Tally CSV export (OTP step-up gated — irreversible egress) --------------
+
+_TALLY_COLUMNS = [
+    "key",
+    "status",
+    "vendor",
+    "item",
+    "amount_at_risk",
+    "delivery_date",
+    "delivery_qty",
+    "invoice_number",
+    "invoice_date",
+    "invoice_amount",
+    "reasons",
+]
+
+
+def _tally_csv(items: list[ReconcileItem]) -> str:
+    """A deterministic, reproducible CSV of the reconciliation rows (Tally
+    import shape). Sorted by stable key so two exports of the same data match."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_TALLY_COLUMNS)
+    for it in sorted(items, key=lambda i: i.key):
+        d, inv = it.delivery, it.invoice
+        w.writerow([
+            it.key,
+            it.status.value,
+            it.vendor or "",
+            it.item or "",
+            f"{round(it.amount_at_risk, 2)}",
+            d.occurred_on.isoformat() if d else "",
+            f"{d.quantity}" if d and d.quantity is not None else "",
+            (inv.invoice_number or "") if inv else "",
+            inv.occurred_on.isoformat() if inv else "",
+            f"{inv.amount}" if inv and inv.amount is not None else "",
+            ";".join(it.reasons),
+        ])
+    return buf.getvalue()
+
+
+@router.get("/export/tally")
+async def export_tally(
+    site_id: UUID,
+    user: User = Depends(require_step_up),
+    session: AsyncSession = Depends(get_session),
+    window_days: int = Query(7, ge=0, le=60),
+) -> Response:
+    """Export a site's reconciliation as a Tally-importable CSV.
+
+    Irreversible egress → gated by ``require_step_up`` (a fresh OTP
+    re-verification; missing/expired step-up → 403 ``step_up_required``).
+    """
+    await _require_site_in_scope(session, user, site_id)
+
+    rows = (
+        await session.execute(
+            select(SiteEventModel).where(
+                SiteEventModel.site_id == site_id,
+                SiteEventModel.event_type.in_([_DELIVERY, _INVOICE]),
+            )
+        )
+    ).scalars().all()
+    deliveries = [_to_delivery(e) for e in rows if e.event_type == _DELIVERY]
+    invoices = [_to_invoice(e) for e in rows if e.event_type == _INVOICE]
+    items = reconcile(deliveries, invoices, window_days=window_days)
+
+    return Response(
+        content=_tally_csv(items),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="reconcile-{site_id}.csv"'
+        },
+    )

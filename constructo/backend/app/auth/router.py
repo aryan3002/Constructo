@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
-from app.auth.jwt import create_access_token
+from app.auth.jwt import create_access_token, create_step_up_token
 from app.auth.landing import landing_for
 from app.auth.phone import normalize_phone, phone_candidates
 from app.common.errors import AppError
+from app.config import settings
 from app.db import get_session
 from app.models import Company, PushToken, User, UserRole
 
@@ -125,6 +126,39 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
 
     token = create_access_token(str(user.id), user.role.value)
     return TokenOut(token=token)
+
+
+# --- step-up (re-verify for sensitive/irreversible actions) -----------------
+
+
+class StepUpVerifyIn(BaseModel):
+    otp: str
+
+
+class StepUpTokenOut(BaseModel):
+    step_up_token: str
+    expires_in: int  # seconds the token is valid for
+
+
+@router.post("/step-up/request-otp", response_model=RequestOtpOut)
+async def step_up_request_otp(user: User = Depends(get_current_user)) -> RequestOtpOut:
+    """Send a re-verification code to the current user (no-op in dev; OTP stays
+    000000). Mirrors login's request-otp so the web step-up flow is identical."""
+    return RequestOtpOut()
+
+
+@router.post("/step-up/verify", response_model=StepUpTokenOut)
+async def step_up_verify(
+    body: StepUpVerifyIn, user: User = Depends(get_current_user)
+) -> StepUpTokenOut:
+    """Exchange a fresh OTP for a short-lived step-up token (for the current
+    user) that unlocks one sensitive-action window (e.g. a Tally export)."""
+    if body.otp != STUB_OTP:
+        raise AppError(401, "invalid_otp", "Invalid OTP")
+    return StepUpTokenOut(
+        step_up_token=create_step_up_token(str(user.id)),
+        expires_in=settings.step_up_expire_minutes * 60,
+    )
 
 
 def _me_out(user: User) -> MeOut:
