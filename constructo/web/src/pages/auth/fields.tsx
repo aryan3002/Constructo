@@ -2,7 +2,7 @@
 // On-brand (warm paper, amber focus, >=48px tap targets) without adding to the
 // frozen ui/ kit. Labels are always rendered (never placeholder-only) for a11y.
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
-import { useId } from 'react'
+import { forwardRef, useId } from 'react'
 
 const fieldBase =
   'mt-1 w-full min-h-tap rounded-control border border-line bg-paper-2 px-3 ' +
@@ -11,16 +11,17 @@ const fieldBase =
 
 const labelClass = 'block font-body text-small font-semibold text-text'
 
-export function TextField({
-  label,
-  hint,
-  mono,
-  ...rest
-}: {
-  label: string
-  hint?: ReactNode
-  mono?: boolean
-} & InputHTMLAttributes<HTMLInputElement>) {
+// forwardRef so React-Hook-Form's `register()` ref reaches the real <input>
+// (a plain function component would swallow the ref). Controlled callers that
+// pass no ref are unaffected.
+export const TextField = forwardRef<
+  HTMLInputElement,
+  {
+    label: string
+    hint?: ReactNode
+    mono?: boolean
+  } & InputHTMLAttributes<HTMLInputElement>
+>(function TextField({ label, hint, mono, ...rest }, ref) {
   const id = useId()
   return (
     <div>
@@ -29,6 +30,7 @@ export function TextField({
       </label>
       <input
         id={id}
+        ref={ref}
         className={`${fieldBase} ${mono ? 'cstk-mono' : ''}`}
         {...rest}
       />
@@ -37,7 +39,7 @@ export function TextField({
       ) : null}
     </div>
   )
-}
+})
 
 export function SelectField({
   label,

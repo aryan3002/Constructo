@@ -18,6 +18,11 @@ import { Join } from './pages/auth/Join'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RoleLanding } from './pages/auth/RoleLanding'
 import { Settings } from './pages/settings/Settings'
+// === setup & administration control plane (W4.1) === (lazy: keeps RHF + Zod
+// out of the entry chunk — only the owner who opens /settings/admin pays for it)
+const AdminConsole = lazy(() =>
+  import('./features/admin/AdminConsole').then((m) => ({ default: m.AdminConsole })),
+)
 // === brief/owner ===
 import { OwnerHome } from './pages/owner/OwnerHome'
 // === pm "today" (W3.4) ===
@@ -78,6 +83,8 @@ export function App() {
       <Route path="/join/:token" element={<Join />} />
       <Route path="/welcome" element={<Guarded><OwnerFirstRun /></Guarded>} />
       <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
+      {/* Setup & Administration control plane (W4.1). */}
+      <Route path="/settings/admin" element={<Guarded><AdminConsole /></Guarded>} />
       <Route path="/invite" element={<Guarded><InvitePage /></Guarded>} />
 
       {/* Public design-system gallery — view the full kit in both themes. */}
