@@ -141,6 +141,18 @@ export function Settings() {
               </form>
             </Section>
 
+            {me?.role === 'owner' ? (
+              <Section title={t('settings.admin.title')}>
+                <Body className="!text-text-mute">{t('settings.admin.hint')}</Body>
+                <Link
+                  to="/settings/admin"
+                  className="mt-3 inline-flex min-h-tap items-center gap-1.5 rounded-pill border border-primary/50 bg-card px-4 font-body text-small font-semibold text-primary-deep cstk-animate transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {t('settings.admin.open')} <span aria-hidden>→</span>
+                </Link>
+              </Section>
+            ) : null}
+
             <Section title={t('settings.language.title')}>
               <Small>{t('settings.language.subtitle')}</Small>
               <div className="mt-3">

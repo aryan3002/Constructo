@@ -127,6 +127,9 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 // Auth + onboarding + profile API.
 // ---------------------------------------------------------------------------
 
+/** Dev-only mutable company name so the no-backend admin tour reads + saves. */
+let mockCompanyName = 'Demo Construction Co'
+
 export const authApi = {
   /** Request a login code (no-op in dev; OTP stays 000000). Powers resend. */
   requestOtp(phone: string): Promise<{ sent: boolean; dev_otp: string | null }> {
@@ -196,8 +199,20 @@ export const authApi = {
 
   // ---- owner first-run ----
 
-  /** Owner first-run: name your company (PATCH /api/v1/auth/company). */
+  /** Read the caller's company (GET /api/v1/auth/company). Prefills admin. */
+  getCompany(): Promise<{ id: string; name: string }> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ id: 'mock-co', name: mockCompanyName })
+    }
+    return call('/api/v1/auth/company')
+  },
+
+  /** Rename the company (PATCH /api/v1/auth/company, owner-only). */
   renameCompany(name: string): Promise<{ id: string; name: string }> {
+    if (USE_MOCKS) {
+      mockCompanyName = name
+      return Promise.resolve({ id: 'mock-co', name })
+    }
     return call('/api/v1/auth/company', {
       method: 'PATCH',
       body: JSON.stringify({ name }),

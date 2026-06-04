@@ -17,13 +17,16 @@
     "@fontsource/anek-latin": "^5.2.7",
     "@fontsource/hind": "^5.2.8",
     "@fontsource/spline-sans-mono": "^5.2.8",
+    "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-error-boundary": "^6.1.2",
+    "react-hook-form": "^7.77.0",
     "react-router-dom": "^6.27.0",
+    "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
