@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
@@ -17,7 +17,7 @@ import {
 } from '../../ui'
 import { useT } from '../../i18n'
 import { useCockpitKeys } from '../../features/reconcile/useCockpitKeys'
-import { ReconcileDetail } from './ReconcileDetail'
+import { ReconcileDetail, type ReconcileDetailHandle } from './ReconcileDetail'
 import { ReconcileRow } from './ReconcileRow'
 import { compareStatus, formatInr, isException } from './helpers'
 
@@ -95,11 +95,16 @@ export function ReconcilePage() {
     (key: string) => patchParams({ sel: key }, { replace: false }),
     [patchParams],
   )
+  // The visible (desktop) detail pane exposes hold/draftGrn imperatively so the
+  // H/F keys drive the same paths as its buttons (W2.4).
+  const detailRef = useRef<ReconcileDetailHandle>(null)
   useCockpitKeys({
     keys: items.map((i) => i.key),
     selectedKey: selected?.key ?? null,
     onMove: moveSel,
     onOpen: openSel,
+    onHold: () => detailRef.current?.hold(),
+    onFlag: () => detailRef.current?.draftGrn(),
     enabled: items.length > 0,
   })
 
@@ -237,6 +242,7 @@ export function ReconcilePage() {
                       {selected ? (
                         <ReconcileDetail
                           key={selected.key}
+                          ref={detailRef}
                           item={selected}
                           onHeld={() => recon.refetch()}
                         />
