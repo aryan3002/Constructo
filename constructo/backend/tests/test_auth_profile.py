@@ -102,6 +102,50 @@ async def test_get_company_returns_id_and_name(client):
     body = resp.json()
     assert body["name"] == "Rao Constructions"
     assert body["id"]
+    # New profile fields default to the India SMB norm (W4.2).
+    assert body["timezone"] == "Asia/Kolkata"
+    assert body["currency"] == "INR"
+    assert body["gstin"] is None
+    assert body["address"] is None
+
+
+async def test_owner_updates_profile_fields(client):
+    token = await _login(client, "+15551110010")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.patch(
+        "/api/v1/auth/company",
+        json={
+            "name": "Verma Builders",
+            "gstin": "29ABCDE1234F1Z5",
+            "address": "12 MG Road, Bengaluru",
+            "timezone": "Asia/Kolkata",
+            "currency": "INR",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["gstin"] == "29ABCDE1234F1Z5"
+    assert body["address"] == "12 MG Road, Bengaluru"
+
+
+async def test_partial_update_preserves_other_fields(client):
+    token = await _login(client, "+15551110011")
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.patch(
+        "/api/v1/auth/company",
+        json={"name": "Initial Co", "gstin": "29ABCDE1234F1Z5"},
+        headers=headers,
+    )
+    # Patch only the address — name + gstin must survive.
+    resp = await client.patch(
+        "/api/v1/auth/company", json={"address": "New Site Office"}, headers=headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["address"] == "New Site Office"
+    assert body["name"] == "Initial Co"
+    assert body["gstin"] == "29ABCDE1234F1Z5"
 
 
 async def test_get_company_allows_any_member(client, factory, db_session):
