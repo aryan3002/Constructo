@@ -90,6 +90,35 @@ async def test_owner_can_rename_company(client):
     assert resp.json()["name"] == "Verma Builders"
 
 
+async def test_get_company_returns_id_and_name(client):
+    token = await _login(client, "+15551110007")
+    headers = {"Authorization": f"Bearer {token}"}
+    # Rename first so we have a known value to read back.
+    await client.patch(
+        "/api/v1/auth/company", json={"name": "Rao Constructions"}, headers=headers
+    )
+    resp = await client.get("/api/v1/auth/company", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Rao Constructions"
+    assert body["id"]
+
+
+async def test_get_company_allows_any_member(client, factory, db_session):
+    # The read side is not owner-gated: a field role can prefill the company too.
+    company = await factory.company(name="Shared Co")
+    supervisor = await factory.user(company=company, role=UserRole.supervisor)
+    await db_session.commit()
+    from app.auth.jwt import create_access_token
+
+    headers = {
+        "Authorization": f"Bearer {create_access_token(str(supervisor.id), supervisor.role.value)}"
+    }
+    resp = await client.get("/api/v1/auth/company", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Shared Co"
+
+
 async def test_rename_company_requires_owner(client, factory, db_session):
     company = await factory.company()
     supervisor = await factory.user(company=company, role=UserRole.supervisor)

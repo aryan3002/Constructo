@@ -183,6 +183,20 @@ async def my_landing(user: User = Depends(get_current_user)) -> LandingOut:
     return LandingOut(role=user.role, landing=landing_for(user.role))
 
 
+@router.get("/company", response_model=CompanyOut)
+async def get_company(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CompanyOut:
+    """The caller's company (id + name). Any signed-in member may read it; the
+    Setup & Administration control plane prefills its Company Profile form from
+    here (the rename PATCH below is the owner-only write side)."""
+    company = await session.get(Company, user.company_id)
+    if company is None:
+        raise AppError(404, "not_found", "Company not found")
+    return CompanyOut(id=company.id, name=company.name)
+
+
 @router.patch("/company", response_model=CompanyOut)
 async def rename_company(
     body: CompanyNameIn,
