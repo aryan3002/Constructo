@@ -17,6 +17,8 @@ export const qk = {
   site: (id: string) => ['site', id] as const,
   /** A site's baseline (Setup & Admin → Site baselines, W4.4). */
   baseline: (siteId: string) => ['baseline', siteId] as const,
+  /** Vendor master (Setup & Admin → Vendors, W4.5). */
+  vendors: (includeArchived = false) => ['vendors', includeArchived] as const,
   /** OwnerHome brief payload (migrated from `['owner-home', date]` in W1). */
   home: (date: string) => ['home', date] as const,
   brief: (date?: string) => ['brief', date] as const,
