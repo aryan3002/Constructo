@@ -146,6 +146,22 @@ export const authApi = {
     return resp.token
   },
 
+  /**
+   * Re-verify the current user with a fresh OTP to unlock a sensitive action
+   * (e.g. Tally export). Returns a short-lived step-up token + its lifetime (s).
+   */
+  async stepUpVerify(otp: string): Promise<{ token: string; expiresIn: number }> {
+    if (USE_MOCKS) {
+      if (otp !== '000000') throw new ApiError(401, 'invalid_otp')
+      return { token: 'mock-step-up', expiresIn: 300 }
+    }
+    const resp = await call<{ step_up_token: string; expires_in: number }>(
+      '/api/v1/auth/step-up/verify',
+      { method: 'POST', body: JSON.stringify({ otp }) },
+    )
+    return { token: resp.step_up_token, expiresIn: resp.expires_in }
+  },
+
   me(): Promise<Me> {
     if (USE_MOCKS) {
       // Dev-only: lets capability-gated UI (e.g. the owner Approve chips) render

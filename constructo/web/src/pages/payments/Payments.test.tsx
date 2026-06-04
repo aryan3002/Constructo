@@ -7,10 +7,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { LanguageProvider } from '../../i18n'
 import type { PaymentLedger } from '../../api/payments'
 
-// Network-free: stub the api module so no fetch ever fires.
+// Network-free: stub the api modules so no fetch ever fires.
 const ledgerMock = vi.fn<() => Promise<PaymentLedger>>()
 vi.mock('../../api/payments', () => ({
-  paymentsApi: { ledger: () => ledgerMock() },
+  paymentsApi: {
+    ledger: () => ledgerMock(),
+    getFinancials: vi.fn(),
+  },
+}))
+// No sites in this test → no site selector / no per-site financials rendered.
+vi.mock('../../api/hooks', () => ({
+  useSites: () => ({ data: { items: [] }, isLoading: false, isError: false }),
 }))
 
 const { Payments } = await import('./Payments')

@@ -17,8 +17,9 @@ import {
 } from '../../ui'
 import { useT } from '../../i18n'
 import { useCockpitKeys } from '../../features/reconcile/useCockpitKeys'
+import { TallyExportButton } from '../../features/reconcile/TallyExportButton'
+import { Queue } from '../../features/reconcile/Queue'
 import { ReconcileDetail, type ReconcileDetailHandle } from './ReconcileDetail'
-import { ReconcileRow } from './ReconcileRow'
 import { compareStatus, formatInr, isException } from './helpers'
 
 function useReconcile(siteId: string | null) {
@@ -119,22 +120,27 @@ export function ReconcilePage() {
           <H1>{t('reconcile.title')}</H1>
           <Small>{t('reconcile.subtitle')}</Small>
         </div>
-        {siteOptions.length > 0 && (
-          <label className="flex items-center gap-2">
-            <Small className="font-semibold !text-text">{t('nav.sites')}</Small>
-            <select
-              value={effectiveSiteId ?? ''}
-              onChange={(e) => patchParams({ site: e.target.value, sel: null })}
-              className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              {siteOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          {siteOptions.length > 0 && (
+            <label className="flex items-center gap-2">
+              <Small className="font-semibold !text-text">{t('nav.sites')}</Small>
+              <select
+                value={effectiveSiteId ?? ''}
+                onChange={(e) => patchParams({ site: e.target.value, sel: null })}
+                className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                {siteOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {effectiveSiteId && recon.data && allItems.length > 0 ? (
+            <TallyExportButton siteId={effectiveSiteId} />
+          ) : null}
+        </div>
       </header>
 
       {sites.isLoading && <Spinner label={t('common.loading')} />}
@@ -217,25 +223,21 @@ export function ReconcilePage() {
                     </Mono>
                   </div>
 
-                  {/* Master-detail (md+) / stacked (phone) */}
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,22rem)_1fr]">
-                    <ul className="space-y-2" aria-label={t('reconcile.title')}>
-                      {items.map((item) => (
-                        <li key={item.key}>
-                          <ReconcileRow
-                            item={item}
-                            selected={selected?.key === item.key}
-                            onSelect={() => openSel(item.key)}
-                          />
-                          {/* Phone: expand the detail inline under the row. */}
-                          {selected?.key === item.key && (
-                            <div className="mt-2 md:hidden">
-                              <ReconcileDetail item={item} onHeld={() => recon.refetch()} />
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Master-detail (md+) / stacked (phone): virtualized queue. */}
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,26rem)_1fr]">
+                    <div>
+                      <Queue
+                        items={items}
+                        selectedKey={selected?.key ?? null}
+                        onSelect={openSel}
+                      />
+                      {/* Phone: detail under the queue. */}
+                      {selected ? (
+                        <div className="mt-3 md:hidden">
+                          <ReconcileDetail item={selected} onHeld={() => recon.refetch()} />
+                        </div>
+                      ) : null}
+                    </div>
 
                     {/* Desktop detail pane */}
                     <div className="hidden md:block">

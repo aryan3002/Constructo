@@ -8,10 +8,12 @@ import {
   StatusPill,
   type EvidenceItem,
 } from '../../ui'
+import { DocIcon } from '../../ui/icons'
 import { useT } from '../../i18n'
 import {
   reconcileApi,
   type GrnDraft,
+  type Proof,
   type ReconcileEventSide,
   type ReconcileItem,
 } from '../../api/reconcile'
@@ -19,6 +21,51 @@ import { ApiError } from '../../api/client'
 import { formatDate } from '../../lib/format'
 import { newClientId } from '../../lib/ids'
 import { RECONCILE_STATUS, formatInr, formatQty, reasonKey, statusKey } from './helpers'
+
+/**
+ * The actual proof media for one side — challan photo (thumbnail) or invoice
+ * PDF/doc (link). The URLs are short-lived presigned links the backend resolved
+ * from the WhatsApp message media; open in a new tab.
+ */
+function ProofStrip({ proofs }: { proofs: Proof[] }) {
+  const t = useT()
+  if (proofs.length === 0) return null
+  return (
+    <ul className="flex flex-wrap gap-2" aria-label={t('reconcile.proofs')}>
+      {proofs.map((p) =>
+        p.kind === 'image' ? (
+          <li key={p.message_id}>
+            <a
+              href={p.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block overflow-hidden rounded-control border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              title={t('reconcile.proof_open')}
+            >
+              <img
+                src={p.url}
+                alt={t('reconcile.proof_photo')}
+                loading="lazy"
+                className="h-16 w-16 object-cover"
+              />
+            </a>
+          </li>
+        ) : (
+          <li key={p.message_id}>
+            <a
+              href={p.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-tap items-center gap-1.5 rounded-control border border-line bg-card px-3 font-body text-small font-semibold text-text cstk-animate hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <DocIcon title="" /> {t('reconcile.proof_doc')}
+            </a>
+          </li>
+        ),
+      )}
+    </ul>
+  )
+}
 
 /** Build the EvidenceCard rows for one side (delivery or invoice). */
 function sideEvidence(
@@ -160,21 +207,28 @@ export const ReconcileDetail = forwardRef<ReconcileDetailHandle, ReconcileDetail
         </ul>
       )}
 
+      {/* Three-way match: BOTH proofs side-by-side (challan photo + invoice PDF). */}
       <div className="grid gap-3 md:grid-cols-2">
-        <EvidenceCard
-          claim={t('reconcile.side.delivery')}
-          status={item.delivery ? status : 'info'}
-          detail={item.delivery?.vendor ?? undefined}
-          defaultOpen
-          evidence={sideEvidence(item.delivery, 'challan', t, t('reconcile.no_proof'))}
-        />
-        <EvidenceCard
-          claim={t('reconcile.side.invoice')}
-          status={item.invoice ? status : 'info'}
-          detail={item.invoice?.invoice_number ?? undefined}
-          defaultOpen
-          evidence={sideEvidence(item.invoice, 'message', t, t('reconcile.no_proof'))}
-        />
+        <div className="space-y-2">
+          <EvidenceCard
+            claim={t('reconcile.side.delivery')}
+            status={item.delivery ? status : 'info'}
+            detail={item.delivery?.vendor ?? undefined}
+            defaultOpen
+            evidence={sideEvidence(item.delivery, 'challan', t, t('reconcile.no_proof'))}
+          />
+          <ProofStrip proofs={item.delivery?.proofs ?? []} />
+        </div>
+        <div className="space-y-2">
+          <EvidenceCard
+            claim={t('reconcile.side.invoice')}
+            status={item.invoice ? status : 'info'}
+            detail={item.invoice?.invoice_number ?? undefined}
+            defaultOpen
+            evidence={sideEvidence(item.invoice, 'message', t, t('reconcile.no_proof'))}
+          />
+          <ProofStrip proofs={item.invoice?.proofs ?? []} />
+        </div>
       </div>
 
       {/* Draft GRN from the delivery side */}

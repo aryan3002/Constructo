@@ -1,6 +1,8 @@
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { RequireAuth } from './components/RequireAuth'
+import { Spinner } from './components/states'
 import { Components } from './pages/Components'
 import { Groups } from './pages/Groups'
 import { More } from './pages/More'
@@ -21,8 +23,13 @@ import { OwnerHome } from './pages/owner/OwnerHome'
 // === capture/attendance ===
 import { SupervisorCapture } from './pages/supervisor/SupervisorCapture'
 import { MukadamAttendance } from './pages/mukadam/MukadamAttendance'
-// === reconcile ===
-import { ReconcilePage } from './pages/reconcile/ReconcilePage'
+// === reconcile === (lazy: keeps the DataGrid + TanStack Table/Virtual out of
+// the entry chunk — only the accountant/owner who opens /reconcile pays for it)
+const ReconcilePage = lazy(() =>
+  import('./pages/reconcile/ReconcilePage').then((m) => ({
+    default: m.ReconcilePage,
+  })),
+)
 // === approvals ===
 import { ApprovalInbox } from './pages/approvals/Inbox'
 // === search ===
@@ -58,6 +65,7 @@ export function App() {
   return (
     <>
       <CommandPalette />
+      <Suspense fallback={<Spinner />}>
       <Routes>
       <Route path="/login" element={<Login />} />
       {/* === auth/settings (feature: auth) === */}
@@ -105,6 +113,7 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </>
   )
 }
