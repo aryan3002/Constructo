@@ -335,6 +335,7 @@ export const hi: Record<TranslationKey, string> = {
   'reconcile.status.needs_approval': 'मंज़ूरी चाहिए',
   'reconcile.filter.all': 'सभी ({count})',
   'reconcile.filter.exceptions': 'ध्यान चाहिए ({count})',
+  'reconcile.kbd_hint': '↑ ↓ चुनें · Enter खोलें',
   'reconcile.side.delivery': 'डिलीवरी (साइट)',
   'reconcile.side.invoice': 'इनवॉइस (सप्लायर)',
   'reconcile.field.vendor': 'विक्रेता',

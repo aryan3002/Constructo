@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
 import { authApi, type Role } from '../../api/auth'
@@ -15,6 +16,7 @@ import {
   type Role as ShellRole,
 } from '../../ui'
 import { useT } from '../../i18n'
+import { useCockpitKeys } from '../../features/reconcile/useCockpitKeys'
 import { ReconcileDetail } from './ReconcileDetail'
 import { ReconcileRow } from './ReconcileRow'
 import { compareStatus, formatInr, isException } from './helpers'
@@ -39,13 +41,35 @@ export function ReconcilePage() {
   // Reconcile is home for accountant + procurement; default to accountant tabs.
   const role: Role = me.data?.role === 'procurement' ? 'procurement' : 'accountant'
   const tabs = useRoleTabs(role as ShellRole)
-  const [siteId, setSiteId] = useState<string | null>(null)
-  const [onlyExceptions, setOnlyExceptions] = useState(false)
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+
+  // URL-as-state (04 §4.1): /reconcile?site=…&status=mismatch&sel=… restores the
+  // exact pane on refresh and is shareable. Cursor scans update with `replace`
+  // (no history pollution); explicit site change / open use `push`.
+  const [params, setParams] = useSearchParams()
+  const siteParam = params.get('site')
+  const onlyExceptions = params.get('status') === 'exceptions'
+  const selectedKey = params.get('sel')
+
+  const patchParams = useCallback(
+    (patch: Record<string, string | null>, opts?: { replace?: boolean }) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          for (const [k, v] of Object.entries(patch)) {
+            if (v == null) next.delete(k)
+            else next.set(k, v)
+          }
+          return next
+        },
+        { replace: opts?.replace ?? false },
+      )
+    },
+    [setParams],
+  )
 
   // Default to the first visible site once sites load (no render-time setState).
   const siteOptions = sites.data?.items ?? []
-  const effectiveSiteId = siteId ?? siteOptions[0]?.id ?? null
+  const effectiveSiteId = siteParam ?? siteOptions[0]?.id ?? null
 
   const recon = useReconcile(effectiveSiteId)
 
@@ -60,6 +84,24 @@ export function ReconcilePage() {
 
   const selected: ReconcileItem | null =
     items.find((i) => i.key === selectedKey) ?? items[0] ?? null
+
+  // Keyboard cockpit (W2.3): ↑/↓ scan (replace), Enter opens (push). H/F land
+  // with the optimistic hold/flag slice (W2.4).
+  const moveSel = useCallback(
+    (key: string) => patchParams({ sel: key }, { replace: true }),
+    [patchParams],
+  )
+  const openSel = useCallback(
+    (key: string) => patchParams({ sel: key }, { replace: false }),
+    [patchParams],
+  )
+  useCockpitKeys({
+    keys: items.map((i) => i.key),
+    selectedKey: selected?.key ?? null,
+    onMove: moveSel,
+    onOpen: openSel,
+    enabled: items.length > 0,
+  })
 
   const summary = recon.data?.summary
   const exceptionCount = (summary?.needs_approval ?? 0) + (summary?.mismatch ?? 0)
@@ -77,10 +119,7 @@ export function ReconcilePage() {
             <Small className="font-semibold !text-text">{t('nav.sites')}</Small>
             <select
               value={effectiveSiteId ?? ''}
-              onChange={(e) => {
-                setSiteId(e.target.value)
-                setSelectedKey(null)
-              }}
+              onChange={(e) => patchParams({ site: e.target.value, sel: null })}
               className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               {siteOptions.map((s) => (
@@ -140,13 +179,13 @@ export function ReconcilePage() {
                 />
               ) : (
                 <>
-                  {/* Filter toggle */}
-                  <div className="flex gap-2" role="tablist" aria-label="filter">
+                  {/* Filter toggle + keyboard legend (the cockpit advertises its keys). */}
+                  <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="filter">
                     <button
                       type="button"
                       role="tab"
                       aria-selected={!onlyExceptions}
-                      onClick={() => setOnlyExceptions(false)}
+                      onClick={() => patchParams({ status: null }, { replace: true })}
                       className={`min-h-tap rounded-pill border px-4 font-body text-small font-semibold cstk-animate ${
                         !onlyExceptions
                           ? 'border-primary bg-primary/10 text-primary-deep'
@@ -159,7 +198,7 @@ export function ReconcilePage() {
                       type="button"
                       role="tab"
                       aria-selected={onlyExceptions}
-                      onClick={() => setOnlyExceptions(true)}
+                      onClick={() => patchParams({ status: 'exceptions' }, { replace: true })}
                       className={`min-h-tap rounded-pill border px-4 font-body text-small font-semibold cstk-animate ${
                         onlyExceptions
                           ? 'border-primary bg-primary/10 text-primary-deep'
@@ -168,6 +207,9 @@ export function ReconcilePage() {
                     >
                       {t('reconcile.filter.exceptions', { count: exceptionCount })}
                     </button>
+                    <Mono className="ml-auto hidden text-micro text-text-mute md:inline">
+                      {t('reconcile.kbd_hint')}
+                    </Mono>
                   </div>
 
                   {/* Master-detail (md+) / stacked (phone) */}
@@ -178,7 +220,7 @@ export function ReconcilePage() {
                           <ReconcileRow
                             item={item}
                             selected={selected?.key === item.key}
-                            onSelect={() => setSelectedKey(item.key)}
+                            onSelect={() => openSel(item.key)}
                           />
                           {/* Phone: expand the detail inline under the row. */}
                           {selected?.key === item.key && (

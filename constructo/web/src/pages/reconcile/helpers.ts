@@ -3,6 +3,10 @@ import type { Status } from '../../ui'
 import type { ReconcileStatus } from '../../api/reconcile'
 import type { TranslationKey } from '../../i18n'
 
+// `formatInr` now lives in the shared `lib/money.ts`; re-exported here so the
+// reconcile screens + helpers.test.ts keep importing it from one place.
+export { formatInr } from '../../lib/money'
+
 /** Map a reconcile status onto the kit's status spine (color + icon shape). */
 export const RECONCILE_STATUS: Record<ReconcileStatus, Status> = {
   matched: 'ok',
@@ -35,22 +39,6 @@ export function isException(status: ReconcileStatus): boolean {
 
 export function compareStatus(a: ReconcileStatus, b: ReconcileStatus): number {
   return STATUS_RANK[a] - STATUS_RANK[b]
-}
-
-/**
- * Format INR with Indian digit grouping (lakh/crore) — no decimals for whole
- * rupees, the "ledger" convention owners read. Locale-independent so tests are
- * deterministic regardless of the runner's ICU data.
- */
-export function formatInr(amount: number): string {
-  const rounded = Math.round(amount)
-  const sign = rounded < 0 ? '-' : ''
-  const digits = String(Math.abs(rounded))
-  if (digits.length <= 3) return `${sign}₹${digits}`
-  const last3 = digits.slice(-3)
-  const rest = digits.slice(0, -3)
-  const grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')
-  return `${sign}₹${grouped},${last3}`
 }
 
 /** Compact quantity + unit, e.g. "100 bag" / "—" when absent. */

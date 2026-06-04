@@ -358,6 +358,7 @@ export const en = {
   'reconcile.status.needs_approval': 'Needs approval',
   'reconcile.filter.all': 'All ({count})',
   'reconcile.filter.exceptions': 'Needs action ({count})',
+  'reconcile.kbd_hint': '↑ ↓ move · Enter open',
   'reconcile.side.delivery': 'Delivery (site)',
   'reconcile.side.invoice': 'Invoice (supplier)',
   'reconcile.field.vendor': 'Vendor',
