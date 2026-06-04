@@ -62,7 +62,6 @@ export function OwnerHome() {
       sites={siteSummaries}
       selectedSiteId={selectedSiteId}
       onSelectSite={setSelectedSiteId}
-      notificationCount={home?.needs_attention_count ?? 0}
       roleBadge={{ name: 'Owner', initials: 'OW' }}
     >
       <header>

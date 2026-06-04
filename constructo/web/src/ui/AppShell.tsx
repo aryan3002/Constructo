@@ -11,6 +11,8 @@ import {
   SearchIcon,
 } from './icons'
 import { SiteSwitcher, type SiteSummary } from './SiteSwitcher'
+import { NotificationsPanel } from '../features/notifications/NotificationsPanel'
+import { useUnreadCount } from '../features/notifications/useUnreadCount'
 
 /**
  * Every backend role gets a role-shaped tab bar. Mirrors the six roles the auth
@@ -134,6 +136,13 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const tabSet = tabs ?? ROLE_TABS[role]
+  // The header (and thus the bell) only renders with site context; gate the
+  // unread poll on that so headerless surfaces never hit the network.
+  const showHeader = Boolean(sites && onSelectSite)
+  const liveUnread = useUnreadCount({ enabled: showHeader })
+  // An explicit `notificationCount` prop (the component gallery) wins; otherwise
+  // the live badge drives the bell. `??` keeps a real 0 from falling through.
+  const bellCount = notificationCount ?? liveUnread.data ?? 0
   const toggleCommand = useUiStore((s) => s.toggleCommand)
   const cmdKey =
     typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -211,14 +220,15 @@ export function AppShell({
 
       {/* Content column: SiteSwitcher top bar (once) + roomy canvas. */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {sites && onSelectSite ? (
+        {showHeader && sites && onSelectSite ? (
           <div className="sticky top-0 z-20">
             <SiteSwitcher
               sites={sites}
               selectedId={selectedSiteId}
               onSelect={onSelectSite}
-              notificationCount={notificationCount}
+              notificationCount={bellCount}
               onNotificationsClick={onNotificationsClick}
+              notificationsPanel={<NotificationsPanel />}
               role={roleBadge}
             />
           </div>

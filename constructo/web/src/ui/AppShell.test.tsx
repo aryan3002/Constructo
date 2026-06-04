@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppShell, ROLE_TABS } from './AppShell'
 
+// AppShell now sources the live unread bell via React Query, so a client is
+// required even when the header (and its poll) is disabled.
 function renderShell(props: Partial<React.ComponentProps<typeof AppShell>> = {}) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <AppShell role="owner" {...props}>
-        <p>page content</p>
-      </AppShell>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <AppShell role="owner" {...props}>
+          <p>page content</p>
+        </AppShell>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
