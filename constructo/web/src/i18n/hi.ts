@@ -418,6 +418,8 @@ export const hi: Record<TranslationKey, string> = {
   'approvals.tab.escalated': 'बढ़ाए गए',
   'approvals.tab.resolved': 'निपटाए गए',
   'approvals.action.reject': 'अस्वीकार करें',
+  'approvals.action.propose': 'मालिक को भेजें →',
+  'approvals.proposed': 'मालिक की मंज़ूरी के लिए भेजा गया।',
   'approvals.batch.selected': '{count} चुने गए',
   'approvals.batch.approve_all': 'चुने हुए मंज़ूर करें',
   'approvals.batch.reject_all': 'चुने हुए अस्वीकार करें',

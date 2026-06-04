@@ -441,6 +441,8 @@ export const en = {
   'approvals.tab.escalated': 'Escalated',
   'approvals.tab.resolved': 'Resolved',
   'approvals.action.reject': 'Reject',
+  'approvals.action.propose': 'Propose to owner →',
+  'approvals.proposed': 'Flagged to the owner for approval.',
   'approvals.batch.selected': '{count} selected',
   'approvals.batch.approve_all': 'Approve selected',
   'approvals.batch.reject_all': 'Reject selected',
