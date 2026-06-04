@@ -604,9 +604,17 @@ export const en = {
   'admin.company.loading': 'Loading company…',
   'admin.company.error': 'Could not load the company.',
   'admin.company.read_only': 'Only the owner can edit this.',
+  'admin.company.gstin_label': 'GST number',
+  'admin.company.gstin_placeholder': 'e.g. 29ABCDE1234F1Z5',
+  'admin.company.gstin_hint': 'Shown on invoices and exports.',
+  'admin.company.gstin_too_long': 'That GST number looks too long.',
+  'admin.company.address_label': 'Registered address',
+  'admin.company.address_placeholder': 'e.g. 12 MG Road, Bengaluru',
+  'admin.company.address_too_long': 'Keep the address under 500 characters.',
+  'admin.company.timezone_label': 'Timezone',
+  'admin.company.timezone_required': 'Timezone is required.',
+  'admin.company.currency_label': 'Currency',
   'admin.company.id_label': 'Company ID',
-  'admin.company.more_fields_soon':
-    'More fields (GST, address, currency, logo) arrive once the backend supports them — we won’t show inputs that save nowhere.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

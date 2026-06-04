@@ -1,28 +1,32 @@
-// Company Profile (W4.1) — the first form of the Setup & Administration control
-// plane and the template every later admin form follows: React-Hook-Form + Zod
-// (validation co-located, typed values), reading the current company via
-// GET /auth/company and writing the rename via the owner-only PATCH.
+// Company Profile (W4.1 shell, W4.2 fields) — the first form of the Setup &
+// Administration control plane and the template every later admin form follows:
+// React-Hook-Form + Zod (validation co-located, typed values), reading the
+// current company via GET /auth/company and writing the owner-only PATCH.
 //
-// Only `name` is editable today (the backend Company model is name-only). The
-// richer fields (GST, address, timezone, currency, logo) are shown as an honest
-// "needs backend" note rather than dead inputs that POST nowhere — same posture
-// as the Show-proof placeholder (P5: never fake a capability).
+// Editable: name, GST number, address, timezone, currency (all tracking-only —
+// no payments rail). Empty optional fields are sent as null, not "".
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { authApi } from '../../api/auth'
+import { authApi, type CompanyUpdate } from '../../api/auth'
 import { qk } from '../../api/queryKeys'
 import { useCan } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import { Body, Button, H2, Mono, Small, StatusPill, type Status } from '../../ui'
 import { ErrorState, Spinner } from '../../components/states'
-import { TextField } from '../../pages/auth/fields'
+import { SelectField, TextField } from '../../pages/auth/fields'
 
 interface CompanyForm {
   name: string
+  gstin: string
+  address: string
+  timezone: string
+  currency: string
 }
+
+const CURRENCIES = ['INR', 'USD', 'AED', 'GBP', 'EUR']
 
 export function CompanyProfile() {
   const t = useT()
@@ -43,6 +47,10 @@ export function CompanyProfile() {
           .trim()
           .min(1, t('admin.company.name_required'))
           .max(120, t('admin.company.name_too_long')),
+        gstin: z.string().trim().max(32, t('admin.company.gstin_too_long')),
+        address: z.string().trim().max(500, t('admin.company.address_too_long')),
+        timezone: z.string().trim().min(1, t('admin.company.timezone_required')).max(64),
+        currency: z.string().trim().min(1).max(8),
       }),
     [t],
   )
@@ -54,22 +62,51 @@ export function CompanyProfile() {
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyForm>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '' },
+    defaultValues: {
+      name: '',
+      gstin: '',
+      address: '',
+      timezone: 'Asia/Kolkata',
+      currency: 'INR',
+    },
   })
 
-  // Seed the form the moment the GET resolves (and after it changes server-side).
-  const loadedName = company.data?.name
+  // Seed the form the moment the GET resolves (null optionals → empty strings).
+  const data = company.data
   useEffect(() => {
-    if (loadedName !== undefined) reset({ name: loadedName })
-  }, [loadedName, reset])
+    if (data) {
+      reset({
+        name: data.name,
+        gstin: data.gstin ?? '',
+        address: data.address ?? '',
+        timezone: data.timezone,
+        currency: data.currency,
+      })
+    }
+  }, [data, reset])
 
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
 
   const save = useMutation({
-    mutationFn: (v: CompanyForm) => authApi.renameCompany(v.name),
+    mutationFn: (v: CompanyForm) => {
+      const patch: CompanyUpdate = {
+        name: v.name,
+        gstin: v.gstin.trim() || null,
+        address: v.address.trim() || null,
+        timezone: v.timezone,
+        currency: v.currency,
+      }
+      return authApi.updateCompany(patch)
+    },
     onSuccess: (saved) => {
       qc.setQueryData(qk.company(), saved)
-      reset({ name: saved.name })
+      reset({
+        name: saved.name,
+        gstin: saved.gstin ?? '',
+        address: saved.address ?? '',
+        timezone: saved.timezone,
+        currency: saved.currency,
+      })
       setToast({ status: 'ok', msg: t('admin.company.saved') })
     },
     onError: () => setToast({ status: 'risk', msg: t('admin.company.save_failed') }),
@@ -106,7 +143,7 @@ export function CompanyProfile() {
           className="flex flex-col gap-4"
           noValidate
         >
-          <div>
+          <Field error={errors.name?.message}>
             <TextField
               label={t('admin.company.name_label')}
               required
@@ -114,11 +151,47 @@ export function CompanyProfile() {
               aria-invalid={errors.name ? true : undefined}
               {...register('name')}
             />
-            {errors.name ? (
-              <p role="alert" className="mt-1 font-body text-small font-medium text-risk">
-                {errors.name.message}
-              </p>
-            ) : null}
+          </Field>
+
+          <Field error={errors.gstin?.message}>
+            <TextField
+              label={t('admin.company.gstin_label')}
+              placeholder={t('admin.company.gstin_placeholder')}
+              hint={t('admin.company.gstin_hint')}
+              mono
+              aria-invalid={errors.gstin ? true : undefined}
+              {...register('gstin')}
+            />
+          </Field>
+
+          <Field error={errors.address?.message}>
+            <TextField
+              label={t('admin.company.address_label')}
+              placeholder={t('admin.company.address_placeholder')}
+              aria-invalid={errors.address ? true : undefined}
+              {...register('address')}
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field error={errors.timezone?.message}>
+              <TextField
+                label={t('admin.company.timezone_label')}
+                required
+                mono
+                aria-invalid={errors.timezone ? true : undefined}
+                {...register('timezone')}
+              />
+            </Field>
+            <Field>
+              <SelectField label={t('admin.company.currency_label')} {...register('currency')}>
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </SelectField>
+            </Field>
           </div>
 
           <div className="flex items-center gap-3">
@@ -136,23 +209,55 @@ export function CompanyProfile() {
         </form>
       ) : (
         // Read-only for non-owners (the server also enforces owner-only writes).
-        <div>
-          <Small className="!text-text-mute">{t('admin.company.name_label')}</Small>
-          <Body className="mt-0.5 font-semibold">{company.data.name}</Body>
-          <Small className="mt-2 block !text-text-mute">{t('admin.company.read_only')}</Small>
-        </div>
+        <dl className="flex flex-col gap-3">
+          <ReadOnly label={t('admin.company.name_label')} value={company.data.name} />
+          <ReadOnly label={t('admin.company.gstin_label')} value={company.data.gstin} mono />
+          <ReadOnly label={t('admin.company.address_label')} value={company.data.address} />
+          <ReadOnly label={t('admin.company.currency_label')} value={company.data.currency} />
+          <Small className="!text-text-mute">{t('admin.company.read_only')}</Small>
+        </dl>
       )}
 
-      {/* Metadata + honest forward note. */}
+      {/* Metadata. */}
       <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 border-t border-line pt-4">
         <dt className="font-body text-small text-text-mute">{t('admin.company.id_label')}</dt>
         <dd>
           <Mono className="text-small text-text-mute">{company.data.id}</Mono>
         </dd>
       </dl>
-      <p className="rounded-card border border-dashed border-line bg-paper p-3 font-body text-small text-text-mute">
-        {t('admin.company.more_fields_soon')}
-      </p>
     </section>
+  )
+}
+
+/** Field wrapper: renders an optional validation error below the control. */
+function Field({ error, children }: { error?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      {children}
+      {error ? (
+        <p role="alert" className="mt-1 font-body text-small font-medium text-risk">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function ReadOnly({
+  label,
+  value,
+  mono,
+}: {
+  label: string
+  value: string | null
+  mono?: boolean
+}) {
+  return (
+    <div>
+      <Small className="!text-text-mute">{label}</Small>
+      <Body className={`mt-0.5 font-semibold ${mono ? 'cstk-mono' : ''}`}>
+        {value || '—'}
+      </Body>
+    </div>
   )
 }
