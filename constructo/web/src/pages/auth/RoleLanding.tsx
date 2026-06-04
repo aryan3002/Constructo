@@ -13,7 +13,7 @@ import { ThemeProvider } from '../../ui'
  */
 const LANDING_ROUTE: Record<string, string> = {
   brief: '/owner',
-  today: '/owner',
+  today: '/pm',
   capture: '/supervisor/capture',
   attendance: '/mukadam/attendance',
   reconcile: '/reconcile',
@@ -25,7 +25,7 @@ const LANDING_ROUTE: Record<string, string> = {
 /** Fallback landing derived purely from the role, used if /me/landing fails. */
 const ROLE_FALLBACK: Record<Role, string> = {
   owner: '/owner',
-  pm: '/owner',
+  pm: '/pm',
   supervisor: '/supervisor/capture',
   accountant: '/reconcile',
   procurement: '/reconcile',

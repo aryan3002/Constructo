@@ -221,6 +221,18 @@ export const hi: Record<TranslationKey, string> = {
   'owner.needs.more_sites': '{n} और साइटों को ध्यान चाहिए',
   'owner.needs.rest_calm': '{n} अन्य साइट शांत',
 
+  // PM "Today" — multi-site execution glance (W3.4)
+  'pm.today.title': 'आज',
+  'pm.today.subtitle': 'आपकी साइटें एक नज़र में — काम सौंपें, खर्च प्रस्तावित करें।',
+  'pm.today.needs_one': '1 साइट को आपकी ज़रूरत है',
+  'pm.today.needs_many': '{n} साइटों को आपकी ज़रूरत है',
+  'pm.today.all_calm': 'सभी साइटें शांत',
+  'pm.today.all_calm_hint': 'अभी कुछ सौंपने की ज़रूरत नहीं।',
+  'pm.today.loading': 'आपकी साइटें लोड हो रही हैं…',
+  'pm.today.error': 'आपकी साइटें लोड नहीं हो सकीं।',
+  'pm.today.assigned': 'सौंपा गया · {site}',
+  'pm.today.glance_label': 'ध्यान चाहने वाली साइटें',
+
   // Owner Command Center — Decision Log
   'owner.log.title': 'निर्णय लॉग',
   'owner.log.subtitle': 'सिर्फ़ जुड़ता है',
