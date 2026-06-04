@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "budget": "node scripts/bundle-budget.mjs"
   },
   "dependencies": {
     "@fontsource/anek-devanagari": "^5.2.7",
@@ -17,9 +18,13 @@
     "@fontsource/hind": "^5.2.8",
     "@fontsource/spline-sans-mono": "^5.2.8",
     "@tanstack/react-query": "^5.59.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.27.0"
+    "react-error-boundary": "^6.1.2",
+    "react-router-dom": "^6.27.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

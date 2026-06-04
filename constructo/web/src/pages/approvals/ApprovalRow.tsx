@@ -90,7 +90,7 @@ export function ApprovalRow({
           checked={selected}
           onChange={() => onToggleSelect(d.id)}
           aria-label={`select ${d.title}`}
-          className="mt-5 h-5 w-5 shrink-0 rounded border-line accent-[var(--amber)]"
+          className="mt-5 h-5 w-5 shrink-0 rounded border-line accent-[var(--brand)]"
         />
       ) : (
         <span className="mt-5 h-5 w-5 shrink-0" aria-hidden />

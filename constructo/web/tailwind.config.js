@@ -1,32 +1,58 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // Mode is driven by `data-theme="dark"` on <html> (set by ThemeModeProvider).
+  // This lets optional `dark:` utilities resolve, though most theming flows
+  // through CSS custom properties (which switch automatically).
+  darkMode: ['variant', '&:where([data-theme="dark"], [data-theme="dark"] *)'],
   theme: {
     extend: {
       colors: {
-        // --- Legacy brand palette (kept so not-yet-retrofitted pages build) ---
-        brand: {
-          50: '#eef6ff',
-          100: '#d9eaff',
-          500: '#2563eb',
-          600: '#1d4ed8',
-          700: '#1e40af',
-        },
+        // --- Brand: repointed from the old unused blue palette to the safety-amber
+        //     accent var, so `accent-brand` / `bg-brand` resolve to amber, mode-aware. ---
+        brand: 'var(--brand)',
+        'brand-subtle': 'var(--brand-subtle)',
+        'brand-text': 'var(--brand-text)',
 
-        // --- Constructo "Blueprint & Daylight" tokens (CSS-var backed) ---
-        // These resolve per active data-theme. Use bg-paper / text-ink / etc.
+        // --- Status spine (solids) ---
         ok: 'var(--c-ok)',
         warn: 'var(--c-warn)',
         risk: 'var(--c-risk)',
         info: 'var(--c-info)',
+        // Status tints + text (for pills/badges)
+        'ok-bg': 'var(--ok-bg)',
+        'ok-fg': 'var(--ok-fg)',
+        'warn-bg': 'var(--warn-bg)',
+        'warn-fg': 'var(--warn-fg)',
+        'risk-bg': 'var(--risk-bg)',
+        'risk-fg': 'var(--risk-fg)',
+        'info-bg': 'var(--info-bg)',
+        'info-fg': 'var(--info-fg)',
 
+        // --- NEW semantic role tokens (prefer these in new code) ---
+        surface: 'var(--surface)',
+        'surface-card': 'var(--surface-card)',
+        'surface-elevated': 'var(--surface-elevated)',
+        'surface-overlay': 'var(--surface-overlay)',
+        'surface-sunken': 'var(--surface-sunken)',
+        'surface-hover': 'var(--surface-hover)',
+        'surface-selected': 'var(--surface-selected)',
+        'text-primary': 'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
+        'text-muted': 'var(--text-muted)',
+        'text-on-brand': 'var(--text-on-brand)',
+        'chart-1': 'var(--chart-1)',
+        'chart-2': 'var(--chart-2)',
+        'chart-3': 'var(--chart-3)',
+        'chart-4': 'var(--chart-4)',
+        'chart-5': 'var(--chart-5)',
+
+        // --- Legacy aliases (kept so existing pages build; → role tokens via --c-*) ---
         ink: 'var(--c-ink)',
         'ink-2': 'var(--c-ink-2)',
         paper: 'var(--c-paper)',
         'paper-2': 'var(--c-paper-2)',
         line: 'var(--c-line)',
-
-        // Theme-mapped roles
         bg: 'var(--c-bg)',
         card: 'var(--c-card)',
         primary: 'var(--c-primary)',
@@ -34,9 +60,17 @@ export default {
         accent: 'var(--c-accent)',
         'accent-warm': 'var(--c-accent-warm)',
         'on-primary': 'var(--c-on-primary)',
-
         text: 'var(--c-text)',
         'text-mute': 'var(--c-text-mute)',
+      },
+      borderColor: {
+        edge: 'var(--border)',
+        strong: 'var(--border-strong)',
+        divider: 'var(--divider)',
+      },
+      ringColor: {
+        DEFAULT: 'var(--ring)',
+        brand: 'var(--ring)',
       },
       fontFamily: {
         display: ['Anek Latin', 'Anek Devanagari', 'system-ui', 'sans-serif'],
@@ -44,8 +78,11 @@ export default {
         mono: ['Spline Sans Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       fontSize: {
-        // Constructo mobile scale (size / line-height). Never below 14px content.
+        // Constructo scale (size / line-height). Never below 14px for on-site content;
+        // 13px caption/mono-sm allowed for desk-density grid metadata only.
         micro: ['12px', { lineHeight: '16px' }],
+        caption: ['13px', { lineHeight: '18px' }],
+        'mono-sm': ['13px', { lineHeight: '18px' }],
         small: ['14px', { lineHeight: '20px' }],
         body: ['16px', { lineHeight: '24px' }],
         h2: ['18px', { lineHeight: '24px' }],
@@ -53,16 +90,10 @@ export default {
         display: ['28px', { lineHeight: '34px' }],
       },
       spacing: {
-        // 4px base scale: 4/8/12/16/24/32/48 (existing Tailwind scale already
-        // covers these; alias `tap` for the >=48px touch-target minimum).
         tap: '48px',
       },
-      minWidth: {
-        tap: '48px',
-      },
-      minHeight: {
-        tap: '48px',
-      },
+      minWidth: { tap: '48px' },
+      minHeight: { tap: '48px' },
       borderRadius: {
         card: 'var(--radius-card)',
         sheet: 'var(--radius-sheet)',

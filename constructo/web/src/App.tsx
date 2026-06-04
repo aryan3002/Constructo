@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { RequireAuth } from './components/RequireAuth'
 import { Components } from './pages/Components'
 import { Groups } from './pages/Groups'
@@ -55,7 +56,9 @@ function Guarded({ children }: { children: React.ReactNode }) {
  */
 export function App() {
   return (
-    <Routes>
+    <>
+      <CommandPalette />
+      <Routes>
       <Route path="/login" element={<Login />} />
       {/* === auth/settings (feature: auth) === */}
       <Route path="/join/:token" element={<Join />} />
@@ -101,6 +104,7 @@ export function App() {
       <Route path="/more" element={<Guarded><More /></Guarded>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }
