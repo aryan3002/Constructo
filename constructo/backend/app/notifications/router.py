@@ -4,13 +4,15 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.schemas import NotificationOut, UnreadCountOut
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import User
+from app.models import CompanyNotificationSettings, User, UserRole
 from app.notifications import feed, store
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
@@ -72,3 +74,69 @@ async def mark_notification_read(
     if item_id not in {it.id for it in items}:
         raise AppError(404, "not_found", "Notification not found")
     store.mark_read(user.id, item_id)
+
+
+# ---- notification & SLA settings (W4.7) ------------------------------------
+
+DEFAULT_SLA_HOURS = 24
+
+
+class NotificationSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sla_hours: int
+    escalate_overdue: bool
+    daily_digest: bool
+
+
+class NotificationSettingsIn(BaseModel):
+    """Partial update; only provided fields change."""
+
+    sla_hours: int | None = Field(default=None, ge=1, le=168)
+    escalate_overdue: bool | None = None
+    daily_digest: bool | None = None
+
+
+@router.get("/settings", response_model=NotificationSettingsOut)
+async def get_notification_settings(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> NotificationSettingsOut:
+    """The company's notification & SLA preferences (defaults if never set)."""
+    row = (
+        await session.execute(
+            select(CompanyNotificationSettings).where(
+                CompanyNotificationSettings.company_id == user.company_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return NotificationSettingsOut(
+            sla_hours=DEFAULT_SLA_HOURS, escalate_overdue=True, daily_digest=True
+        )
+    return NotificationSettingsOut.model_validate(row)
+
+
+@router.put("/settings", response_model=NotificationSettingsOut)
+async def set_notification_settings(
+    body: NotificationSettingsIn,
+    owner: User = Depends(require_role(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> NotificationSettingsOut:
+    """Owner-only: upsert the company's notification & SLA preferences. The SLA
+    sweep honours ``escalate_overdue`` immediately."""
+    row = (
+        await session.execute(
+            select(CompanyNotificationSettings).where(
+                CompanyNotificationSettings.company_id == owner.company_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = CompanyNotificationSettings(company_id=owner.company_id)
+        session.add(row)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    await session.commit()
+    await session.refresh(row)
+    return NotificationSettingsOut.model_validate(row)

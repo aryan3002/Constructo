@@ -37,6 +37,7 @@ from app.models.homeowner_property import (
 from app.models.homeowner_quiet import QuietPeriod, QuietStatus
 from app.models.homeowner_visit import HomeownerVisitPhoto
 from app.models.material import Material
+from app.models.notification_settings import CompanyNotificationSettings
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
@@ -54,6 +55,7 @@ from app.models.whatsapp_group import WhatsappGroup
 __all__ = [
     "Change",
     "Company",
+    "CompanyNotificationSettings",
     "Component",
     "ComponentStatus",
     "Decision",
