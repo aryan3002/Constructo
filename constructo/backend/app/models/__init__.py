@@ -47,6 +47,7 @@ from app.models.site_event import SiteEventModel
 from app.models.site_financials import SiteFinancials
 from app.models.translation_cache import TranslationCache
 from app.models.user import User, UserRole
+from app.models.vendor import Vendor
 from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
@@ -97,6 +98,7 @@ __all__ = [
     "UpdateType",
     "User",
     "UserRole",
+    "Vendor",
     "WeeklySummary",
     "WhatsappGroup",
 ]
