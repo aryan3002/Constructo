@@ -13,6 +13,14 @@ export type ReconcileStatus =
   | 'missing_proof'
   | 'needs_approval'
 
+/** A fetchable proof document for one side — challan photo or invoice PDF. */
+export interface Proof {
+  url: string
+  kind: string // image | document | voice | video | text
+  mime: string | null
+  message_id: string
+}
+
 export interface ReconcileEventSide {
   event_id: string
   occurred_on: string
@@ -26,6 +34,15 @@ export interface ReconcileEventSide {
   summary: string
   confidence: number
   source_message_ids: string[]
+  proofs?: Proof[]
+}
+
+/** Thrown by the Tally export when the server demands a fresh OTP step-up. */
+export class StepUpRequiredError extends Error {
+  constructor() {
+    super('step_up_required')
+    this.name = 'StepUpRequiredError'
+  }
 }
 
 export interface ReconcileItem {
@@ -118,6 +135,36 @@ export const reconcileApi = {
     return request<ReconcileList>(
       `/api/v1/reconcile/sites/${encodeURIComponent(siteId)}${q}`,
     )
+  },
+
+  /**
+   * Export a site's reconciliation as Tally CSV text. Requires a fresh step-up
+   * token (irreversible egress). Throws `StepUpRequiredError` on a 403
+   * `step_up_required` so the caller can prompt for the OTP and retry.
+   */
+  async exportTally(siteId: string, stepUpToken: string | null): Promise<string> {
+    const headers = new Headers({ 'Content-Type': 'application/json' })
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    if (stepUpToken) headers.set('X-Step-Up-Token', stepUpToken)
+
+    const res = await fetch(
+      `${API_BASE}/api/v1/reconcile/export/tally?site_id=${encodeURIComponent(siteId)}`,
+      { headers },
+    )
+    if (res.status === 403) {
+      let code = ''
+      try {
+        const body = await res.json()
+        code = body?.error?.code ?? ''
+      } catch {
+        /* non-JSON */
+      }
+      if (code === 'step_up_required') throw new StepUpRequiredError()
+      throw new ApiError(403, 'Forbidden')
+    }
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+    return res.text()
   },
 
   grnDraft(deliveryEventId: string): Promise<GrnDraft> {

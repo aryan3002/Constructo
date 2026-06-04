@@ -17,6 +17,7 @@ import {
 } from '../../ui'
 import { useT } from '../../i18n'
 import { useCockpitKeys } from '../../features/reconcile/useCockpitKeys'
+import { TallyExportButton } from '../../features/reconcile/TallyExportButton'
 import { ReconcileDetail, type ReconcileDetailHandle } from './ReconcileDetail'
 import { ReconcileRow } from './ReconcileRow'
 import { compareStatus, formatInr, isException } from './helpers'
@@ -119,22 +120,27 @@ export function ReconcilePage() {
           <H1>{t('reconcile.title')}</H1>
           <Small>{t('reconcile.subtitle')}</Small>
         </div>
-        {siteOptions.length > 0 && (
-          <label className="flex items-center gap-2">
-            <Small className="font-semibold !text-text">{t('nav.sites')}</Small>
-            <select
-              value={effectiveSiteId ?? ''}
-              onChange={(e) => patchParams({ site: e.target.value, sel: null })}
-              className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              {siteOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          {siteOptions.length > 0 && (
+            <label className="flex items-center gap-2">
+              <Small className="font-semibold !text-text">{t('nav.sites')}</Small>
+              <select
+                value={effectiveSiteId ?? ''}
+                onChange={(e) => patchParams({ site: e.target.value, sel: null })}
+                className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                {siteOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {effectiveSiteId && recon.data && allItems.length > 0 ? (
+            <TallyExportButton siteId={effectiveSiteId} />
+          ) : null}
+        </div>
       </header>
 
       {sites.isLoading && <Spinner label={t('common.loading')} />}

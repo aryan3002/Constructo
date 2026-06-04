@@ -47,6 +47,22 @@ export interface PaymentLedger {
   next_cursor: string | null
 }
 
+/** A site's financial-tracking position (W2.6). Amounts are Decimal strings. */
+export interface Financials {
+  site_id: string
+  quotation: string | null
+  billed: string | null
+  received: string
+  outstanding: string
+  currency: string
+}
+
+export interface FinancialsUpdate {
+  quotation_amount?: string | null
+  billed_amount?: string | null
+  currency?: string
+}
+
 export interface CreatePaymentRequest {
   direction: PaymentDirection
   counterparty_name: string
@@ -174,6 +190,31 @@ export const paymentsApi = {
     }
     return request<PaymentLedger>(
       `/api/v1/payments/ledger${qs({ site_id: params.siteId, cursor: params.cursor })}`,
+    )
+  },
+
+  // --- financial tracking (W2.6) --------------------------------------------
+
+  async getFinancials(siteId: string): Promise<Financials> {
+    if (USE_MOCKS) {
+      return {
+        site_id: siteId,
+        quotation: '12000000',
+        billed: '7500000',
+        received: '5350000',
+        outstanding: '2150000',
+        currency: 'INR',
+      }
+    }
+    return request<Financials>(
+      `/api/v1/payments/financials/${encodeURIComponent(siteId)}`,
+    )
+  },
+
+  setFinancials(siteId: string, body: FinancialsUpdate): Promise<Financials> {
+    return request<Financials>(
+      `/api/v1/payments/financials/${encodeURIComponent(siteId)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
     )
   },
 

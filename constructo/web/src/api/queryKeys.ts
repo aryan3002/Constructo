@@ -18,6 +18,7 @@ export const qk = {
   decisions: () => ['decisions'] as const,
   reconcile: (siteId: string) => ['reconcile', siteId] as const,
   payments: () => ['payments'] as const,
+  financials: (siteId: string) => ['financials', siteId] as const,
   permits: () => ['permits'] as const,
   approvals: (tab?: string) => ['approvals', tab] as const,
   search: (query: string) => ['search', query] as const,

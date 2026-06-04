@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { paymentsApi, type Payment, type PaymentStatus } from '../../api/payments'
+import { useSites } from '../../api/hooks'
 import { useT, type TranslationKey } from '../../i18n'
 import {
   Body,
@@ -14,6 +16,7 @@ import {
   type Status,
 } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
+import { FinancialTracking } from '../../features/payments/FinancialTracking'
 import { formatDate } from '../../lib/format'
 import { formatRupees, formatRupeesCompact } from '../../lib/money'
 
@@ -36,17 +39,42 @@ const STATUS_KEY: Record<PaymentStatus, TranslationKey> = {
  */
 export function Payments() {
   const t = useT()
+  const sites = useSites()
+  const [siteId, setSiteId] = useState<string | null>(null)
+  const siteOptions = sites.data?.items ?? []
   const ledger = useQuery({
-    queryKey: ['payments', 'ledger'],
-    queryFn: () => paymentsApi.ledger(),
+    queryKey: ['payments', 'ledger', siteId],
+    queryFn: () => paymentsApi.ledger(siteId ? { siteId } : {}),
   })
 
   return (
     <ThemeSurface theme="site" className="-mx-4 -my-6 min-h-[60vh] bg-bg px-4 py-6">
-      <header className="mb-5">
-        <H1>{t('payments.title')}</H1>
-        <Small className="mt-1">{t('payments.subtitle')}</Small>
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <H1>{t('payments.title')}</H1>
+          <Small className="mt-1">{t('payments.subtitle')}</Small>
+        </div>
+        {siteOptions.length > 0 ? (
+          <label className="flex items-center gap-2">
+            <Small className="font-semibold !text-text">{t('payments.site_label')}</Small>
+            <select
+              value={siteId ?? ''}
+              onChange={(e) => setSiteId(e.target.value || null)}
+              className="min-h-tap rounded-control border border-line bg-card px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <option value="">{t('owner.home.rollup_title')}</option>
+              {siteOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </header>
+
+      {/* Per-site financial tracking (W2.6) — display only, above the ledger. */}
+      {siteId ? <div className="mb-5"><FinancialTracking siteId={siteId} /></div> : null}
 
       {ledger.isLoading && <Spinner label={t('common.loading')} />}
       {ledger.isError && (
