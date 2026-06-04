@@ -784,7 +784,9 @@ def _photo_out(p: PublishedPhoto) -> PhotoOut:
     return PhotoOut(
         id=p.id,
         site_id=p.site_id,
-        image_url=p.image_url,
+        # Resolve bare storage keys (R2/local) to a fetchable URL; full http(s)
+        # URLs (e.g. seeded picsum links) pass through url_for unchanged.
+        image_url=get_storage().url_for(p.image_url) or p.image_url,
         caption=p.caption,
         room_tag=p.room_tag,
         milestone_id=p.milestone_id,
