@@ -1,9 +1,10 @@
+import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { LanguageProvider } from '../../i18n'
-import { ReconcileDetail } from './ReconcileDetail'
+import { ReconcileDetail, type ReconcileDetailHandle } from './ReconcileDetail'
 import type { ReconcileItem } from '../../api/reconcile'
 
 const NEEDS_APPROVAL: ReconcileItem = {
@@ -121,6 +122,40 @@ describe('ReconcileDetail', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Draft GRN' }))
     await waitFor(() => expect(screen.getByText('GRN-ABCD1234')).toBeInTheDocument())
     expect(screen.getByText('Draft Goods Received Note')).toBeInTheDocument()
+  })
+
+  it('exposes hold()/draftGrn() imperatively so the H/F keys drive the pane', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        decision_id: 'dec-9',
+        state: 'pending',
+        title: 'Hold',
+        assigned_to: 'owner-1',
+        site_id: 'site-1',
+        amount_at_risk: 20000,
+        created_at: '2026-05-22T00:00:00Z',
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const ref = createRef<ReconcileDetailHandle>()
+    render(
+      <LanguageProvider defaultLanguage="en">
+        <ReconcileDetail ref={ref} item={NEEDS_APPROVAL} />
+      </LanguageProvider>,
+    )
+
+    // Pressing H (via the imperative handle) holds without touching the button.
+    ref.current!.hold()
+    await waitFor(() =>
+      expect(
+        screen.getByText('Payment held — sent to owner for approval.'),
+      ).toBeInTheDocument(),
+    )
+    // The hold carried a client_decision_id idempotency key (CA8 seam).
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init.body).client_decision_id).toBeTruthy()
   })
 
   it('hides the hold action for matched rows', () => {

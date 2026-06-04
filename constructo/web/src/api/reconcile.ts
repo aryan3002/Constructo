@@ -71,6 +71,13 @@ export interface HoldPaymentRequest {
   delivery_event_id?: string | null
   amount_at_risk?: number
   note?: string | null
+  /**
+   * Idempotency key (CA8): a re-fired hold (button + the H key, or a retry)
+   * reconciles to one decision. KNOWN GAP: `/reconcile/hold-payment` does not
+   * yet de-dupe on it server-side (only `/dashboard/decisions` does, PR #47) —
+   * the seam is sent so the backend can honor it without a client change.
+   */
+  client_decision_id?: string
 }
 
 export interface HoldPaymentResponse {

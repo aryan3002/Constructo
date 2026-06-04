@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 import {
   Body,
   Button,
@@ -17,6 +17,7 @@ import {
 } from '../../api/reconcile'
 import { ApiError } from '../../api/client'
 import { formatDate } from '../../lib/format'
+import { newClientId } from '../../lib/ids'
 import { RECONCILE_STATUS, formatInr, formatQty, reasonKey, statusKey } from './helpers'
 
 /** Build the EvidenceCard rows for one side (delivery or invoice). */
@@ -54,12 +55,20 @@ export interface ReconcileDetailProps {
   onHeld?: () => void
 }
 
+/** Imperative surface so the keyboard cockpit (H/F) can drive the visible pane. */
+export interface ReconcileDetailHandle {
+  hold: () => void
+  draftGrn: () => void
+}
+
 /**
  * Detail view for a single reconciliation row: an EvidenceCard for BOTH sides
  * of the comparison, the amount-at-risk, a "Hold payment" action that creates a
- * B0 decision routed to the owner, and a draft GRN.
+ * B0 decision routed to the owner, and a draft GRN. Exposes `hold`/`draftGrn`
+ * via a ref so the cockpit's H/F keys trigger the same paths as the buttons.
  */
-export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
+export const ReconcileDetail = forwardRef<ReconcileDetailHandle, ReconcileDetailProps>(
+  function ReconcileDetail({ item, onHeld }, ref) {
   const t = useT()
   const status = RECONCILE_STATUS[item.status]
   const [note, setNote] = useState('')
@@ -73,6 +82,7 @@ export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
   const canHold = item.status !== 'matched'
 
   async function handleHold() {
+    if (holding || held) return
     setHolding(true)
     setError(null)
     try {
@@ -81,6 +91,7 @@ export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
         delivery_event_id: item.delivery?.event_id ?? null,
         amount_at_risk: item.amount_at_risk,
         note: note.trim() || null,
+        client_decision_id: newClientId('hold'),
       })
       setHeld(res.decision_id)
       onHeld?.()
@@ -92,7 +103,7 @@ export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
   }
 
   async function handleGrn() {
-    if (!item.delivery) return
+    if (!item.delivery || grnLoading) return
     setGrnLoading(true)
     setGrnError(null)
     try {
@@ -103,6 +114,20 @@ export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
       setGrnLoading(false)
     }
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      hold: () => {
+        if (canHold) void handleHold()
+      },
+      draftGrn: () => {
+        void handleGrn()
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canHold, item, note, holding, held, grnLoading],
+  )
 
   return (
     <section aria-label={t('reconcile.detail_heading')} className="space-y-4">
@@ -215,4 +240,4 @@ export function ReconcileDetail({ item, onHeld }: ReconcileDetailProps) {
       )}
     </section>
   )
-}
+})
