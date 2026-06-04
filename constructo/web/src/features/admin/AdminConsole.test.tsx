@@ -67,7 +67,7 @@ describe('AdminConsole', () => {
   it('switches to an unbuilt section showing the coming-soon panel', async () => {
     renderConsole('owner')
     await screen.findByRole('heading', { name: /company profile/i })
-    await userEvent.click(screen.getByRole('button', { name: /team & roles/i }))
+    await userEvent.click(screen.getByRole('button', { name: /site baselines/i }))
     await waitFor(() =>
       expect(screen.getByText(/coming soon/i)).toBeInTheDocument(),
     )

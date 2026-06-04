@@ -615,6 +615,20 @@ export const en = {
   'admin.company.timezone_required': 'Timezone is required.',
   'admin.company.currency_label': 'Currency',
   'admin.company.id_label': 'Company ID',
+  // Team & roles (W4.3)
+  'admin.team.title': 'Team & roles',
+  'admin.team.subtitle': 'Who’s on your team and what they can do.',
+  'admin.team.invite': 'Invite a teammate',
+  'admin.team.loading': 'Loading team…',
+  'admin.team.error': 'Could not load the team.',
+  'admin.team.saved': 'Team updated',
+  'admin.team.save_failed': 'Could not update. Please try again.',
+  'admin.team.you': 'You',
+  'admin.team.inactive': 'Inactive',
+  'admin.team.unnamed': 'Unnamed',
+  'admin.team.deactivate': 'Deactivate',
+  'admin.team.reactivate': 'Reactivate',
+  'admin.team.read_only': 'Only the owner can change roles.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.
