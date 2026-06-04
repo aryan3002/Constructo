@@ -9,7 +9,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,13 +70,26 @@ class LandingOut(BaseModel):
     landing: str
 
 
-class CompanyNameIn(BaseModel):
-    name: str = Field(min_length=1)
+class CompanyUpdateIn(BaseModel):
+    """Partial company profile update (W4.2). Every field optional; only the
+    provided ones change. `name`, if sent, must be non-empty."""
+
+    name: str | None = Field(default=None, min_length=1)
+    gstin: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=500)
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    currency: str | None = Field(default=None, min_length=1, max_length=8)
 
 
 class CompanyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
+    gstin: str | None = None
+    address: str | None = None
+    timezone: str
+    currency: str
 
 
 async def _get_or_create_default_company(session: AsyncSession) -> Company:
@@ -194,24 +207,26 @@ async def get_company(
     company = await session.get(Company, user.company_id)
     if company is None:
         raise AppError(404, "not_found", "Company not found")
-    return CompanyOut(id=company.id, name=company.name)
+    return CompanyOut.model_validate(company)
 
 
 @router.patch("/company", response_model=CompanyOut)
-async def rename_company(
-    body: CompanyNameIn,
+async def update_company(
+    body: CompanyUpdateIn,
     owner: User = Depends(require_role(UserRole.owner)),
     session: AsyncSession = Depends(get_session),
 ) -> CompanyOut:
-    """Owner first-run: name your company. Renames the caller's own company row
-    (the one created at first login). Owner-only; scoped to their company."""
+    """Update the caller's company profile (name + GST / address / timezone /
+    currency). Owner-only; partial — only provided fields change. Still serves
+    the owner first-run rename (which sends just `name`)."""
     company = await session.get(Company, owner.company_id)
     if company is None:
         raise AppError(404, "not_found", "Company not found")
-    company.name = body.name
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(company, field, value)
     await session.commit()
     await session.refresh(company)
-    return CompanyOut(id=company.id, name=company.name)
+    return CompanyOut.model_validate(company)
 
 
 # PATCH /api/v1/users/me — profile + UI language. The web i18n layer
