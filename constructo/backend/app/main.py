@@ -29,6 +29,7 @@ from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
 from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
+from app.materials.router import router as materials_router
 from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.permits.router import router as permits_router
@@ -90,6 +91,7 @@ app.include_router(invites_router)
 app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(vendors_router)
+app.include_router(materials_router)
 app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
