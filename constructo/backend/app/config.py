@@ -16,6 +16,9 @@ class Settings(BaseSettings):
 
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
+    # Short-lived elevation for sensitive/irreversible actions (e.g. Tally export
+    # egress). A fresh OTP re-verification mints a step-up token valid this long.
+    step_up_expire_minutes: int = 5
 
     # Browser origins allowed to call the API (CORS). The web dashboard dev
     # server runs on 5173 (Vite); 3000 covered for alternate setups.

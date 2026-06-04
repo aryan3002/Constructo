@@ -68,3 +68,40 @@ async def test_visible_site_ids_supervisor_empty_until_assignment(db_session, fa
 
     visible = await visible_site_ids(db_session, supervisor)
     assert visible == []
+
+
+# --- step-up (re-verify for sensitive actions) ------------------------------
+
+
+async def _login_token(client, phone: str) -> str:
+    resp = await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+    return resp.json()["token"]
+
+
+async def test_step_up_verify_rejects_wrong_otp(client):
+    token = await _login_token(client, "+15550009001")
+    resp = await client.post(
+        "/api/v1/auth/step-up/verify",
+        json={"otp": "999999"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["error"]["code"] == "invalid_otp"
+
+
+async def test_step_up_verify_returns_short_lived_token(client):
+    token = await _login_token(client, "+15550009002")
+    resp = await client.post(
+        "/api/v1/auth/step-up/verify",
+        json={"otp": "000000"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["step_up_token"] and isinstance(body["step_up_token"], str)
+    assert body["expires_in"] == 300  # 5 minutes, in seconds
+
+
+async def test_step_up_requires_authentication(client):
+    resp = await client.post("/api/v1/auth/step-up/verify", json={"otp": "000000"})
+    assert resp.status_code == 401
