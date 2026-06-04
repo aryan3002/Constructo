@@ -36,6 +36,7 @@ from app.models.homeowner_property import (
 )
 from app.models.homeowner_quiet import QuietPeriod, QuietStatus
 from app.models.homeowner_visit import HomeownerVisitPhoto
+from app.models.material import Material
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
@@ -96,6 +97,7 @@ __all__ = [
     "TranslationCache",
     "Update",
     "UpdateType",
+    "Material",
     "User",
     "UserRole",
     "Vendor",
