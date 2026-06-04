@@ -41,26 +41,26 @@ export const TextField = forwardRef<
   )
 })
 
-export function SelectField({
-  label,
-  children,
-  ...rest
-}: {
-  label: string
-  children: ReactNode
-} & SelectHTMLAttributes<HTMLSelectElement>) {
+// forwardRef (like TextField) so RHF's register() ref reaches the <select>.
+export const SelectField = forwardRef<
+  HTMLSelectElement,
+  {
+    label: string
+    children: ReactNode
+  } & SelectHTMLAttributes<HTMLSelectElement>
+>(function SelectField({ label, children, ...rest }, ref) {
   const id = useId()
   return (
     <div>
       <label htmlFor={id} className={labelClass}>
         {label}
       </label>
-      <select id={id} className={fieldBase} {...rest}>
+      <select id={id} ref={ref} className={fieldBase} {...rest}>
         {children}
       </select>
     </div>
   )
-}
+})
 
 /** Centered card frame used by the signed-out auth screens. */
 export function AuthCard({ children }: { children: ReactNode }) {

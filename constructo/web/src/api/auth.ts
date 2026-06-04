@@ -127,8 +127,30 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 // Auth + onboarding + profile API.
 // ---------------------------------------------------------------------------
 
-/** Dev-only mutable company name so the no-backend admin tour reads + saves. */
-let mockCompanyName = 'Demo Construction Co'
+/** The company profile (W4.2 — name + tracking-only GST / address / tz / currency). */
+export interface Company {
+  id: string
+  name: string
+  gstin: string | null
+  address: string | null
+  timezone: string
+  currency: string
+}
+
+/** Fields the owner may patch (partial — only provided ones change). */
+export type CompanyUpdate = Partial<
+  Pick<Company, 'name' | 'gstin' | 'address' | 'timezone' | 'currency'>
+>
+
+/** Dev-only mutable company so the no-backend admin tour reads + saves. */
+const mockCompany: Company = {
+  id: 'mock-co',
+  name: 'Demo Construction Co',
+  gstin: null,
+  address: null,
+  timezone: 'Asia/Kolkata',
+  currency: 'INR',
+}
 
 export const authApi = {
   /** Request a login code (no-op in dev; OTP stays 000000). Powers resend. */
@@ -199,24 +221,29 @@ export const authApi = {
 
   // ---- owner first-run ----
 
-  /** Read the caller's company (GET /api/v1/auth/company). Prefills admin. */
-  getCompany(): Promise<{ id: string; name: string }> {
+  /** Read the caller's company profile (GET /api/v1/auth/company). */
+  getCompany(): Promise<Company> {
     if (USE_MOCKS) {
-      return Promise.resolve({ id: 'mock-co', name: mockCompanyName })
+      return Promise.resolve({ ...mockCompany })
     }
     return call('/api/v1/auth/company')
   },
 
-  /** Rename the company (PATCH /api/v1/auth/company, owner-only). */
-  renameCompany(name: string): Promise<{ id: string; name: string }> {
+  /** Patch the company profile (PATCH /api/v1/auth/company, owner-only). */
+  updateCompany(patch: CompanyUpdate): Promise<Company> {
     if (USE_MOCKS) {
-      mockCompanyName = name
-      return Promise.resolve({ id: 'mock-co', name })
+      Object.assign(mockCompany, patch)
+      return Promise.resolve({ ...mockCompany })
     }
     return call('/api/v1/auth/company', {
       method: 'PATCH',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(patch),
     })
+  },
+
+  /** Owner first-run convenience: name your company (patches just `name`). */
+  renameCompany(name: string): Promise<Company> {
+    return authApi.updateCompany({ name })
   },
 
   /** Create the first site (name + type only — we learn the rest). */

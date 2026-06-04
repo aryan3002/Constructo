@@ -579,7 +579,15 @@ export const hi: Record<TranslationKey, string> = {
   'admin.company.loading': 'कंपनी लोड हो रही है…',
   'admin.company.error': 'कंपनी लोड नहीं हो सकी।',
   'admin.company.read_only': 'केवल मालिक इसे संपादित कर सकता है।',
+  'admin.company.gstin_label': 'GST नंबर',
+  'admin.company.gstin_placeholder': 'जैसे 29ABCDE1234F1Z5',
+  'admin.company.gstin_hint': 'चालान और निर्यात पर दिखता है।',
+  'admin.company.gstin_too_long': 'यह GST नंबर बहुत लंबा लगता है।',
+  'admin.company.address_label': 'पंजीकृत पता',
+  'admin.company.address_placeholder': 'जैसे 12 एमजी रोड, बेंगलुरु',
+  'admin.company.address_too_long': 'पता 500 अक्षरों से कम रखें।',
+  'admin.company.timezone_label': 'टाइमज़ोन',
+  'admin.company.timezone_required': 'टाइमज़ोन आवश्यक है।',
+  'admin.company.currency_label': 'मुद्रा',
   'admin.company.id_label': 'कंपनी आईडी',
-  'admin.company.more_fields_soon':
-    'अधिक फ़ील्ड (GST, पता, मुद्रा, लोगो) तब आएँगे जब बैकएंड समर्थन करेगा — हम ऐसे इनपुट नहीं दिखाते जो कहीं सहेजे न जाएँ।',
 }

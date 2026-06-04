@@ -6,11 +6,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { LanguageProvider } from '../../i18n'
 
 const getCompany = vi.fn()
-const renameCompany = vi.fn()
+const updateCompany = vi.fn()
 vi.mock('../../api/auth', () => ({
   authApi: {
     getCompany: (...a: unknown[]) => getCompany(...a),
-    renameCompany: (...a: unknown[]) => renameCompany(...a),
+    updateCompany: (...a: unknown[]) => updateCompany(...a),
   },
 }))
 
@@ -35,8 +35,15 @@ function renderConsole(role = 'owner', initial = '/settings/admin') {
 describe('AdminConsole', () => {
   beforeEach(() => {
     getCompany.mockReset()
-    renameCompany.mockReset()
-    getCompany.mockResolvedValue({ id: 'co-1', name: 'Verma Builders' })
+    updateCompany.mockReset()
+    getCompany.mockResolvedValue({
+      id: 'co-1',
+      name: 'Verma Builders',
+      gstin: null,
+      address: null,
+      timezone: 'Asia/Kolkata',
+      currency: 'INR',
+    })
   })
 
   it('shows the Company section panel to an owner', async () => {
