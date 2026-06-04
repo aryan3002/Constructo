@@ -24,6 +24,7 @@ import { SiteBaselines } from './SiteBaselines'
 import { Vendors } from './Vendors'
 import { Materials } from './Materials'
 import { NotificationSettings } from './NotificationSettings'
+import { Billing } from './Billing'
 
 interface SectionDef {
   key: string
@@ -44,7 +45,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'materials', labelKey: 'admin.section.materials', built: true },
   { key: 'integrations', labelKey: 'admin.section.integrations' },
   { key: 'notifications', labelKey: 'admin.section.notifications', built: true },
-  { key: 'billing', labelKey: 'admin.section.billing' },
+  { key: 'billing', labelKey: 'admin.section.billing', built: true },
   { key: 'audit', labelKey: 'admin.section.audit' },
   { key: 'security', labelKey: 'admin.section.security' },
 ]
@@ -129,6 +130,8 @@ export function AdminConsole() {
               <Materials />
             ) : active.key === 'notifications' ? (
               <NotificationSettings />
+            ) : active.key === 'billing' ? (
+              <Billing />
             ) : (
               <ComingSoon labelKey={active.labelKey} link={active.link} />
             )}
