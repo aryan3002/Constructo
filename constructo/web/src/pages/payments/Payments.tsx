@@ -15,7 +15,7 @@ import {
 } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { formatDate } from '../../lib/format'
-import { formatRupees, formatRupeesCompact } from './money'
+import { formatRupees, formatRupeesCompact } from '../../lib/money'
 
 const STATUS_TO_SPINE: Record<PaymentStatus, Status> = {
   recorded: 'info',
