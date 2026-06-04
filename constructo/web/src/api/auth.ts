@@ -155,6 +155,14 @@ export type CompanyUpdate = Partial<
   Pick<Company, 'name' | 'gstin' | 'address' | 'timezone' | 'currency'>
 >
 
+/** Company billing-tracking record (Setup & Admin → Billing, W4.8). Tracking-only. */
+export interface CompanyBilling {
+  plan: string | null
+  billing_email: string | null
+  billing_contact: string | null
+  notes: string | null
+}
+
 /** Dev-only mutable company so the no-backend admin tour reads + saves. */
 const mockCompany: Company = {
   id: 'mock-co',
@@ -173,6 +181,14 @@ const mockTeam: TeamMember[] = [
   { id: 'u-acc', company_id: 'mock-co', name: 'Ravi Kumar', phone: '+919800000003', role: 'accountant', is_active: true },
   { id: 'u-sup', company_id: 'mock-co', name: 'Suresh Patel', phone: '+919800000004', role: 'supervisor', is_active: false },
 ]
+
+/** Dev-only mutable billing record so the no-backend admin tour saves. */
+const mockBilling: CompanyBilling = {
+  plan: 'Pilot',
+  billing_email: null,
+  billing_contact: null,
+  notes: null,
+}
 
 export const authApi = {
   /** Request a login code (no-op in dev; OTP stays 000000). Powers resend. */
@@ -266,6 +282,21 @@ export const authApi = {
   /** Owner first-run convenience: name your company (patches just `name`). */
   renameCompany(name: string): Promise<Company> {
     return authApi.updateCompany({ name })
+  },
+
+  /** Read the company billing-tracking record (GET /api/v1/billing). */
+  getBilling(): Promise<CompanyBilling> {
+    if (USE_MOCKS) return Promise.resolve({ ...mockBilling })
+    return call('/api/v1/billing')
+  },
+
+  /** Update billing tracking (PUT /api/v1/billing, owner-only). */
+  updateBilling(patch: Partial<CompanyBilling>): Promise<CompanyBilling> {
+    if (USE_MOCKS) {
+      Object.assign(mockBilling, patch)
+      return Promise.resolve({ ...mockBilling })
+    }
+    return call('/api/v1/billing', { method: 'PUT', body: JSON.stringify(patch) })
   },
 
   /** Create the first site (name + type only — we learn the rest). */

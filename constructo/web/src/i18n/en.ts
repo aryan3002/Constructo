@@ -729,6 +729,27 @@ export const en = {
   'admin.notif.save_failed': 'Could not save. Please try again.',
   'admin.notif.unsaved': 'Unsaved changes',
   'admin.notif.read_only': 'Only the owner can change these.',
+  // Billing (W4.8) — tracking-only
+  'admin.billing.title': 'Billing',
+  'admin.billing.subtitle': 'Your plan and where invoices should go.',
+  'admin.billing.tracking_note': 'Tracking only — no payments are processed here. This just records what you tell us.',
+  'admin.billing.loading': 'Loading…',
+  'admin.billing.error': 'Could not load billing.',
+  'admin.billing.plan_label': 'Plan',
+  'admin.billing.plan_placeholder': 'e.g. Pilot',
+  'admin.billing.email_label': 'Billing email',
+  'admin.billing.email_placeholder': 'accounts@yourco.com',
+  'admin.billing.email_invalid': 'Enter a valid email, or leave blank.',
+  'admin.billing.contact_label': 'Billing contact',
+  'admin.billing.contact_placeholder': 'e.g. R. Verma',
+  'admin.billing.notes_label': 'Notes',
+  'admin.billing.notes_placeholder': 'e.g. GST invoice required',
+  'admin.billing.save': 'Save billing',
+  'admin.billing.saving': 'Saving…',
+  'admin.billing.saved': 'Billing saved',
+  'admin.billing.save_failed': 'Could not save. Please try again.',
+  'admin.billing.unsaved': 'Unsaved changes',
+  'admin.billing.read_only': 'Only the owner can change billing.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

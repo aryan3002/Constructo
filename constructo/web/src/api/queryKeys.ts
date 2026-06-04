@@ -11,6 +11,8 @@ export const qk = {
   me: () => ['me'] as const,
   /** The caller's company (Setup & Admin → Company Profile, W4.1). */
   company: () => ['company'] as const,
+  /** Company billing tracking (Setup & Admin → Billing, W4.8). */
+  billing: () => ['billing'] as const,
   /** Company team roster (Setup & Admin → Team & roles, W4.3). */
   team: () => ['team'] as const,
   sites: () => ['sites'] as const,
