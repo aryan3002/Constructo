@@ -44,6 +44,7 @@ from app.models.raw_message import RawMessageModel
 from app.models.site import Site
 from app.models.site_baseline import SiteBaseline
 from app.models.site_event import SiteEventModel
+from app.models.site_financials import SiteFinancials
 from app.models.translation_cache import TranslationCache
 from app.models.user import User, UserRole
 from app.models.whatsapp_group import WhatsappGroup
@@ -87,6 +88,7 @@ __all__ = [
     "ReferenceSource",
     "Site",
     "SiteBaseline",
+    "SiteFinancials",
     "SiteEventModel",
     "Space",
     "SpaceKind",

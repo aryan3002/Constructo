@@ -74,3 +74,27 @@ class PaymentLedger(BaseModel):
     totals: LedgerTotals
     items: list[PaymentOut]
     next_cursor: str | None = None
+
+
+# --- financial tracking (W2.6 — display-only Quotation->Billed->Received->Outstanding)
+
+
+class FinancialsOut(BaseModel):
+    """A site's financial-tracking position. Quotation/billed are owner-stored;
+    received = ledger inflow for the site; outstanding = billed - received."""
+
+    site_id: UUID
+    quotation: Decimal | None = None
+    billed: Decimal | None = None
+    received: Decimal
+    outstanding: Decimal
+    currency: str = "INR"
+
+
+class FinancialsUpdate(BaseModel):
+    """Set/clear a site's contract figures (owner/accountant). Only the fields
+    present in the request are applied (PATCH semantics via exclude_unset)."""
+
+    quotation_amount: Decimal | None = None
+    billed_amount: Decimal | None = None
+    currency: str | None = Field(default=None, max_length=8)

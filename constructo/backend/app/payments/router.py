@@ -27,10 +27,13 @@ from app.models import (
     PaymentStatus,
     Site,
     SiteEventModel,
+    SiteFinancials,
     User,
     UserRole,
 )
 from app.payments.schemas import (
+    FinancialsOut,
+    FinancialsUpdate,
     LedgerTotals,
     PaymentCreate,
     PaymentLedger,
@@ -254,6 +257,95 @@ async def payment_ledger(
         items=[_payment_out(p) for p in page_rows],
         next_cursor=next_cursor,
     )
+
+
+# --- financial tracking (W2.6 — display-only, no rail) ----------------------
+
+_FINANCIALS_EDIT_ROLES = {UserRole.owner, UserRole.accountant}
+
+
+async def _site_received(session: AsyncSession, company_id: UUID, site_id: UUID) -> Decimal:
+    """Money received for a site = inflow (homeowner->contractor), disputed
+    excluded. Computed from the ledger so it's always consistent with payments."""
+    rows = list(
+        (
+            await session.execute(
+                select(Payment).where(
+                    Payment.company_id == company_id, Payment.site_id == site_id
+                )
+            )
+        ).scalars().all()
+    )
+    return _compute_totals(rows).inflow
+
+
+def _financials_out(site_id: UUID, fin: SiteFinancials | None, received: Decimal) -> FinancialsOut:
+    billed = fin.billed_amount if fin else None
+    outstanding = (billed if billed is not None else Decimal("0")) - received
+    return FinancialsOut(
+        site_id=site_id,
+        quotation=fin.quotation_amount if fin else None,
+        billed=billed,
+        received=received,
+        outstanding=outstanding,
+        currency=(fin.currency if fin else "INR"),
+    )
+
+
+@router.get("/financials/{site_id}", response_model=FinancialsOut)
+async def get_financials(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> FinancialsOut:
+    """A site's financial-tracking position (Quotation/Billed stored;
+    Received = ledger inflow; Outstanding = Billed - Received). Display only."""
+    await _assert_site_in_company(session, user, site_id)
+    fin = (
+        await session.execute(
+            select(SiteFinancials).where(SiteFinancials.site_id == site_id)
+        )
+    ).scalar_one_or_none()
+    received = await _site_received(session, user.company_id, site_id)
+    return _financials_out(site_id, fin, received)
+
+
+@router.put("/financials/{site_id}", response_model=FinancialsOut)
+async def set_financials(
+    site_id: UUID,
+    body: FinancialsUpdate,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> FinancialsOut:
+    """Set a site's contract figures (owner/accountant). Tracking only — never
+    moves money. Only fields present in the request are applied."""
+    if user.role not in _FINANCIALS_EDIT_ROLES:
+        raise AppError(403, "forbidden", "Only the owner or accountant can set financials")
+    await _assert_site_in_company(session, user, site_id)
+
+    fin = (
+        await session.execute(
+            select(SiteFinancials).where(SiteFinancials.site_id == site_id)
+        )
+    ).scalar_one_or_none()
+    if fin is None:
+        fin = SiteFinancials(site_id=site_id)
+        session.add(fin)
+
+    patch = body.model_dump(exclude_unset=True)
+    if "quotation_amount" in patch:
+        fin.quotation_amount = patch["quotation_amount"]
+    if "billed_amount" in patch:
+        fin.billed_amount = patch["billed_amount"]
+    if patch.get("currency"):
+        fin.currency = patch["currency"]
+    fin.updated_by = user.id
+
+    await session.commit()
+    await session.refresh(fin)
+
+    received = await _site_received(session, user.company_id, site_id)
+    return _financials_out(site_id, fin, received)
 
 
 @router.get("/{payment_id}", response_model=PaymentOut)
