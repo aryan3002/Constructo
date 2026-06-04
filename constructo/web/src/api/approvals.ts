@@ -51,6 +51,13 @@ export interface BatchResult {
   skipped: string[]
 }
 
+/** Company notification & SLA preferences (W4.7). */
+export interface NotificationSettings {
+  sla_hours: number
+  escalate_overdue: boolean
+  daily_digest: boolean
+}
+
 export interface AppNotification {
   id: string
   company_id: string
@@ -176,6 +183,13 @@ const mockNotifications: AppNotification[] = [
   },
 ]
 
+/** Dev-only mutable notification settings so the no-backend admin tour saves. */
+const mockSettings: NotificationSettings = {
+  sla_hours: 24,
+  escalate_overdue: true,
+  daily_digest: true,
+}
+
 const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 
 function applyMock(id: string, state: DecisionState): Decision {
@@ -297,5 +311,29 @@ export const approvalsApi = {
       return
     }
     await request<void>(`/api/v1/notifications/${id}/read`, { method: 'POST' })
+  },
+
+  // ---- notification & SLA settings (W4.7) ----
+
+  async getSettings(): Promise<NotificationSettings> {
+    if (USE_MOCKS) {
+      await delay()
+      return { ...mockSettings }
+    }
+    return request<NotificationSettings>('/api/v1/notifications/settings')
+  },
+
+  async updateSettings(
+    patch: Partial<NotificationSettings>,
+  ): Promise<NotificationSettings> {
+    if (USE_MOCKS) {
+      await delay()
+      Object.assign(mockSettings, patch)
+      return { ...mockSettings }
+    }
+    return request<NotificationSettings>('/api/v1/notifications/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    })
   },
 }
