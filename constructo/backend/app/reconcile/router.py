@@ -8,8 +8,9 @@ company owner. All routes are auth'd and site-scoped exactly like ``app/sites``.
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -19,6 +20,7 @@ from app.models import (
     Decision,
     DecisionKind,
     DecisionState,
+    RawMessageModel,
     Site,
     SiteEventModel,
     User,
@@ -38,12 +40,14 @@ from app.reconcile.schemas import (
     HoldPaymentIn,
     HoldPaymentOut,
     MoneyExceptionOut,
+    ProofOut,
     ReconcileItemOut,
     ReconcileListOut,
     ReconcileSiteSummaryOut,
     ReconcileSummaryOut,
 )
 from app.sites.router import effective_visible_site_ids
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/reconcile", tags=["reconcile"])
 
@@ -300,14 +304,68 @@ async def reconcile_site(
         summary.total_amount_at_risk += it.amount_at_risk
     summary.total_amount_at_risk = round(summary.total_amount_at_risk, 2)
 
+    # Resolve each side's proof media (challan photo / invoice PDF) so the cockpit
+    # can show both proofs side-by-side — the three-way match's dispute-ender.
+    proofs_by_event = await _proofs_by_event(session, rows)
+
     return ReconcileListOut(
         site_id=site_id,
         summary=summary,
-        items=[_item_out(it, by_id) for it in items],
+        items=[_item_out(it, by_id, proofs_by_event) for it in items],
     )
 
 
-def _item_out(it: ReconcileItem, by_id: dict[UUID, SiteEventModel]) -> ReconcileItemOut:
+async def _proofs_by_event(
+    session: AsyncSession, rows: list[SiteEventModel]
+) -> dict[UUID, list[ProofOut]]:
+    """Resolve `source_message_ids` -> fetchable proof media, keyed by event id.
+
+    Batch-loads the originating WhatsApp RawMessages that carry media and turns
+    each stored ref into a presigned GET URL via the shared storage backend.
+    """
+    msg_ids: set[UUID] = set()
+    for e in rows:
+        msg_ids.update(e.source_message_ids or [])
+    if not msg_ids:
+        return {}
+
+    msgs = (
+        await session.execute(
+            select(RawMessageModel).where(
+                RawMessageModel.id.in_(msg_ids),
+                RawMessageModel.media_url.is_not(None),
+            )
+        )
+    ).scalars().all()
+
+    storage = get_storage()
+    proof_by_msg: dict[UUID, ProofOut] = {}
+    for m in msgs:
+        url = storage.url_for(m.media_url)
+        if not url:
+            continue
+        proof_by_msg[m.id] = ProofOut(
+            url=url, kind=m.media_type, mime=m.media_mime, message_id=m.id
+        )
+
+    out: dict[UUID, list[ProofOut]] = {}
+    for e in rows:
+        proofs = [
+            proof_by_msg[mid]
+            for mid in (e.source_message_ids or [])
+            if mid in proof_by_msg
+        ]
+        if proofs:
+            out[e.id] = proofs
+    return out
+
+
+def _item_out(
+    it: ReconcileItem,
+    by_id: dict[UUID, SiteEventModel],
+    proofs_by_event: dict[UUID, list[ProofOut]] | None = None,
+) -> ReconcileItemOut:
+    proofs_by_event = proofs_by_event or {}
     return ReconcileItemOut(
         key=it.key,
         status=it.status,
@@ -316,12 +374,22 @@ def _item_out(it: ReconcileItem, by_id: dict[UUID, SiteEventModel]) -> Reconcile
         site_id=it.site_id,
         amount_at_risk=round(it.amount_at_risk, 2),
         reasons=it.reasons,
-        delivery=_side_out(by_id[it.delivery.id]) if it.delivery else None,
-        invoice=_side_out(by_id[it.invoice.id]) if it.invoice else None,
+        delivery=(
+            _side_out(by_id[it.delivery.id], proofs_by_event.get(it.delivery.id, []))
+            if it.delivery
+            else None
+        ),
+        invoice=(
+            _side_out(by_id[it.invoice.id], proofs_by_event.get(it.invoice.id, []))
+            if it.invoice
+            else None
+        ),
     )
 
 
-def _side_out(e: SiteEventModel) -> EventSideOut:
+def _side_out(
+    e: SiteEventModel, proofs: list[ProofOut] | None = None
+) -> EventSideOut:
     f = e.fields or {}
     return EventSideOut(
         event_id=e.id,
@@ -336,6 +404,7 @@ def _side_out(e: SiteEventModel) -> EventSideOut:
         summary=e.summary,
         confidence=e.confidence,
         source_message_ids=list(e.source_message_ids or []),
+        proofs=proofs or [],
     )
 
 
@@ -371,9 +440,22 @@ async def grn_draft(
 # --- hold payment -> decision (B0) ------------------------------------------
 
 
+def _hold_out(decision: Decision, amount_at_risk: float) -> HoldPaymentOut:
+    return HoldPaymentOut(
+        decision_id=decision.id,
+        state=decision.state.value,
+        title=decision.title,
+        assigned_to=decision.assigned_to,
+        site_id=decision.site_id,
+        amount_at_risk=amount_at_risk,
+        created_at=decision.created_at,
+    )
+
+
 @router.post("/hold-payment", response_model=HoldPaymentOut, status_code=201)
 async def hold_payment(
     body: HoldPaymentIn,
+    response: Response,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> HoldPaymentOut:
@@ -383,9 +465,27 @@ async def hold_payment(
     carries the offending event ids as ``evidence_event_ids`` so the owner can
     open the proof. No payment row is mutated here — this raises the question;
     the owner resolves it via the decisions/approvals surface.
+
+    Idempotent on ``client_decision_id`` (CA8): a re-fired hold (button + the
+    cockpit H key, or a retry) replays the existing decision (200) instead of
+    creating a duplicate.
     """
     if body.invoice_event_id is None and body.delivery_event_id is None:
         raise AppError(422, "invalid_request", "Provide an invoice or delivery event id")
+
+    # Idempotency fast-path: replay an already-recorded hold for this key.
+    if body.client_decision_id is not None:
+        existing = (
+            await session.execute(
+                select(Decision).where(
+                    Decision.company_id == user.company_id,
+                    Decision.client_decision_id == body.client_decision_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            response.status_code = 200
+            return _hold_out(existing, body.amount_at_risk)
 
     evidence_ids: list[UUID] = []
     site_id: UUID | None = None
@@ -430,20 +530,31 @@ async def hold_payment(
         raised_by=user.id,
         assigned_to=owner.id if owner else None,
         evidence_event_ids=evidence_ids,
+        client_decision_id=body.client_decision_id,
     )
     session.add(decision)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Lost a concurrent race on the same client_decision_id — reconcile to
+        # the winning row instead of erroring.
+        await session.rollback()
+        if body.client_decision_id is not None:
+            existing = (
+                await session.execute(
+                    select(Decision).where(
+                        Decision.company_id == user.company_id,
+                        Decision.client_decision_id == body.client_decision_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                response.status_code = 200
+                return _hold_out(existing, body.amount_at_risk)
+        raise
     await session.refresh(decision)
 
-    return HoldPaymentOut(
-        decision_id=decision.id,
-        state=decision.state.value,
-        title=decision.title,
-        assigned_to=decision.assigned_to,
-        site_id=decision.site_id,
-        amount_at_risk=body.amount_at_risk,
-        created_at=decision.created_at,
-    )
+    return _hold_out(decision, body.amount_at_risk)
 
 
 async def _company_owner(session: AsyncSession, company_id: UUID) -> User | None:

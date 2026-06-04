@@ -189,6 +189,95 @@ async def test_hold_payment_creates_decision_routed_to_owner(
     assert set(decision.evidence_event_ids) == {inv.id, dlv.id}
 
 
+async def _raw_message(db_session, *, media_url, media_type="image", media_mime="image/jpeg"):
+    from datetime import datetime
+
+    from app.models import RawMessageModel
+
+    m = RawMessageModel(
+        source="whatsapp",
+        external_group_id="grp-1",
+        sender_id="+919800000001",
+        media_type=media_type,
+        media_url=media_url,
+        media_mime=media_mime,
+        sent_at=datetime(2026, 5, 20, 9, 0, 0),
+        raw={},
+    )
+    db_session.add(m)
+    await db_session.flush()
+    return m
+
+
+async def test_reconcile_resolves_proof_media_for_both_sides(
+    client, factory, db_session, owner
+):
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    challan = await _raw_message(db_session, media_url="https://cdn.example/challan.jpg")
+    invoice_pdf = await _raw_message(
+        db_session, media_url="https://cdn.example/inv.pdf", media_type="document",
+        media_mime="application/pdf",
+    )
+    dlv = await _delivery(db_session, site.id, quantity=100.0)
+    dlv.source_message_ids = [challan.id]
+    inv = await _invoice(db_session, site.id, quantity=150.0, amount=60000.0)
+    inv.source_message_ids = [invoice_pdf.id]
+    await db_session.flush()
+
+    resp = await client.get(f"/api/v1/reconcile/sites/{site.id}", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    # Both proofs resolved to fetchable URLs (http URLs pass through url_for).
+    assert item["delivery"]["proofs"] == [
+        {
+            "url": "https://cdn.example/challan.jpg",
+            "kind": "image",
+            "mime": "image/jpeg",
+            "message_id": str(challan.id),
+        }
+    ]
+    assert item["invoice"]["proofs"][0]["kind"] == "document"
+    assert item["invoice"]["proofs"][0]["mime"] == "application/pdf"
+
+
+async def test_hold_payment_is_idempotent_on_client_decision_id(
+    client, factory, db_session, owner
+):
+    from sqlalchemy import func, select
+
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    dlv = await _delivery(db_session, site.id, quantity=100.0)
+    inv = await _invoice(db_session, site.id, quantity=150.0, amount=60000.0)
+    payload = {
+        "invoice_event_id": str(inv.id),
+        "delivery_event_id": str(dlv.id),
+        "amount_at_risk": 20000.0,
+        "client_decision_id": "hold-xyz-1",
+    }
+
+    first = await client.post(
+        "/api/v1/reconcile/hold-payment", json=payload, headers=auth(owner)
+    )
+    assert first.status_code == 201, first.text
+
+    # Replaying the same key returns the SAME decision at 200, no duplicate row.
+    second = await client.post(
+        "/api/v1/reconcile/hold-payment", json=payload, headers=auth(owner)
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["decision_id"] == first.json()["decision_id"]
+
+    count = (
+        await db_session.execute(
+            select(func.count()).select_from(Decision).where(
+                Decision.company_id == owner.company_id,
+                Decision.kind == DecisionKind.hold_payment,
+            )
+        )
+    ).scalar_one()
+    assert count == 1
+
+
 async def test_hold_payment_requires_an_event(client, owner):
     resp = await client.post(
         "/api/v1/reconcile/hold-payment", json={"amount_at_risk": 100.0}, headers=auth(owner)

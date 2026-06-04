@@ -7,6 +7,20 @@ from pydantic import BaseModel, Field
 from app.reconcile.matching import ReconcileStatus
 
 
+class ProofOut(BaseModel):
+    """A fetchable proof document for one side — the challan photo or invoice PDF.
+
+    Resolved from the side's ``source_message_ids`` → the originating WhatsApp
+    ``RawMessage`` media, with the storage key turned into a short-lived
+    presigned GET URL so the web cockpit can render both proofs side-by-side.
+    """
+
+    url: str
+    kind: str  # image | document | voice | video | text (RawMessage.media_type)
+    mime: str | None = None
+    message_id: UUID
+
+
 class EventSideOut(BaseModel):
     """One side of a reconciliation row (a delivery or an invoice event)."""
 
@@ -22,6 +36,8 @@ class EventSideOut(BaseModel):
     summary: str
     confidence: float
     source_message_ids: list[UUID] = Field(default_factory=list)
+    # Fetchable proof media (presigned URLs) resolved from source_message_ids.
+    proofs: list[ProofOut] = Field(default_factory=list)
 
 
 class ReconcileItemOut(BaseModel):
@@ -79,6 +95,9 @@ class HoldPaymentIn(BaseModel):
     delivery_event_id: UUID | None = None
     amount_at_risk: float = 0.0
     note: str | None = None
+    # Idempotency key (CA8): a re-fired hold (button + the cockpit H key, or a
+    # retry) reconciles to the one decision instead of creating duplicates.
+    client_decision_id: str | None = Field(default=None, max_length=128)
 
 
 class HoldPaymentOut(BaseModel):
