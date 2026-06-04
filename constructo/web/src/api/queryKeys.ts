@@ -15,6 +15,8 @@ export const qk = {
   team: () => ['team'] as const,
   sites: () => ['sites'] as const,
   site: (id: string) => ['site', id] as const,
+  /** A site's baseline (Setup & Admin → Site baselines, W4.4). */
+  baseline: (siteId: string) => ['baseline', siteId] as const,
   /** OwnerHome brief payload (migrated from `['owner-home', date]` in W1). */
   home: (date: string) => ['home', date] as const,
   brief: (date?: string) => ['brief', date] as const,

@@ -20,6 +20,7 @@ import {
 } from '../../ui'
 import { CompanyProfile } from './CompanyProfile'
 import { TeamRoles } from './TeamRoles'
+import { SiteBaselines } from './SiteBaselines'
 
 interface SectionDef {
   key: string
@@ -35,7 +36,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'company', labelKey: 'admin.section.company', built: true },
   { key: 'team', labelKey: 'admin.section.team', built: true },
   { key: 'groups', labelKey: 'admin.section.groups', link: '/groups' },
-  { key: 'baselines', labelKey: 'admin.section.baselines' },
+  { key: 'baselines', labelKey: 'admin.section.baselines', built: true },
   { key: 'integrations', labelKey: 'admin.section.integrations' },
   { key: 'notifications', labelKey: 'admin.section.notifications' },
   { key: 'billing', labelKey: 'admin.section.billing' },
@@ -115,6 +116,8 @@ export function AdminConsole() {
               <CompanyProfile />
             ) : active.key === 'team' ? (
               <TeamRoles />
+            ) : active.key === 'baselines' ? (
+              <SiteBaselines />
             ) : (
               <ComingSoon labelKey={active.labelKey} link={active.link} />
             )}

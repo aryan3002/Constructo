@@ -9,6 +9,7 @@ import type {
   RunBriefRequest,
   RunBriefResponse,
   Site,
+  SiteBaseline,
   SiteEvent,
   WhatsappGroup,
 } from './types'
@@ -56,6 +57,9 @@ async function request<T>(
 }
 
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms))
+
+/** Dev-only per-site baseline store so the no-backend admin tour reads + saves. */
+const mockBaselines: Record<string, SiteBaseline> = {}
 
 // ---------------------------------------------------------------------------
 // Public API surface. Each method returns mock data when VITE_USE_MOCKS=true.
@@ -170,5 +174,45 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     })
+  },
+
+  // ---- site baselines (W4.4) ----
+
+  async getBaseline(siteId: string): Promise<SiteBaseline> {
+    if (USE_MOCKS) {
+      await delay()
+      return (
+        mockBaselines[siteId] ?? {
+          site_id: siteId,
+          expected_daily_headcount: null,
+          notes: null,
+          updated_at: new Date(0).toISOString(),
+        }
+      )
+    }
+    return request<SiteBaseline>(
+      `/api/v1/sites/${encodeURIComponent(siteId)}/baseline`,
+    )
+  },
+
+  async setBaseline(
+    siteId: string,
+    body: { expected_daily_headcount: number | null; notes?: string | null },
+  ): Promise<SiteBaseline> {
+    if (USE_MOCKS) {
+      await delay()
+      const next: SiteBaseline = {
+        site_id: siteId,
+        expected_daily_headcount: body.expected_daily_headcount,
+        notes: body.notes ?? mockBaselines[siteId]?.notes ?? null,
+        updated_at: new Date().toISOString(),
+      }
+      mockBaselines[siteId] = next
+      return next
+    }
+    return request<SiteBaseline>(
+      `/api/v1/sites/${encodeURIComponent(siteId)}/baseline`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    )
   },
 }

@@ -29,6 +29,15 @@ export interface Site {
   created_at: string
 }
 
+/** Per-site baseline (Setup & Admin → Site baselines, W4.4). */
+export interface SiteBaseline {
+  site_id: string
+  /** Expected daily headcount; null = auto-learn / day-over-day fallback. */
+  expected_daily_headcount: number | null
+  notes: string | null
+  updated_at: string
+}
+
 // ---- Briefs ----
 export type RiskSeverity = 'high' | 'med' | 'low'
 

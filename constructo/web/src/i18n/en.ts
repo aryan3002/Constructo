@@ -629,6 +629,26 @@ export const en = {
   'admin.team.deactivate': 'Deactivate',
   'admin.team.reactivate': 'Reactivate',
   'admin.team.read_only': 'Only the owner can change roles.',
+  // Site baselines (W4.4)
+  'admin.baselines.title': 'Site baselines',
+  'admin.baselines.subtitle': 'Set each site’s expected daily headcount so labor shortfalls fire against a real number.',
+  'admin.baselines.loading': 'Loading…',
+  'admin.baselines.error': 'Could not load the baseline.',
+  'admin.baselines.no_sites': 'Add a site first to set its baseline.',
+  'admin.baselines.site_label': 'Site',
+  'admin.baselines.headcount_label': 'Expected daily headcount',
+  'admin.baselines.headcount_placeholder': 'e.g. 24',
+  'admin.baselines.headcount_hint': 'Leave blank to auto-learn from attendance.',
+  'admin.baselines.headcount_invalid': 'Enter a whole number of 1 or more, or leave blank.',
+  'admin.baselines.notes_label': 'Notes',
+  'admin.baselines.notes_placeholder': 'e.g. peak during slab work',
+  'admin.baselines.notes_too_long': 'Keep notes under 1000 characters.',
+  'admin.baselines.save': 'Save baseline',
+  'admin.baselines.saving': 'Saving…',
+  'admin.baselines.saved': 'Baseline saved',
+  'admin.baselines.save_failed': 'Could not save. Please try again.',
+  'admin.baselines.unsaved': 'Unsaved changes',
+  'admin.baselines.read_only': 'Only owners and PMs can set baselines.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.
