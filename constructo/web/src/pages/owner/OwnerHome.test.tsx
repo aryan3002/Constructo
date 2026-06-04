@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { LanguageProvider } from '../../i18n'
 
-// Mock the owned api module so the page is fully network-free.
+// Mock every owned api module so the page is fully network-free.
 const getHome = vi.fn()
 const createDecision = vi.fn()
 vi.mock('../../api/dashboard', () => ({
@@ -15,13 +15,26 @@ vi.mock('../../api/dashboard', () => ({
   },
 }))
 
+const listApprovals = vi.fn()
+vi.mock('../../api/approvals', () => ({
+  approvalsApi: { list: (...a: unknown[]) => listApprovals(...a) },
+}))
+
+const ledger = vi.fn()
+vi.mock('../../api/payments', () => ({
+  paymentsApi: { ledger: (...a: unknown[]) => ledger(...a) },
+}))
+
 const { OwnerHome } = await import('./OwnerHome')
 import type { OwnerHome as OwnerHomeData } from '../../api/dashboard'
 
-function renderHome() {
+function renderHome(role: string = 'owner') {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  // Seed the current-user role so the RBAC chip gate resolves synchronously
+  // (owner → Approve/Hold/Assign; anyone else → "Propose to owner →").
+  qc.setQueryData(['me'], { role })
   return render(
     <QueryClientProvider client={qc}>
       <LanguageProvider defaultLanguage="en">
@@ -88,10 +101,20 @@ const WITH_RISK: OwnerHomeData = {
   ],
 }
 
-describe('OwnerHome', () => {
+describe('OwnerHome — Command Center', () => {
   beforeEach(() => {
     getHome.mockReset()
     createDecision.mockReset()
+    listApprovals.mockReset()
+    ledger.mockReset()
+    // Quiet defaults for the supporting columns (Decision Log + This Week).
+    listApprovals.mockResolvedValue({ items: [], next_cursor: null })
+    ledger.mockResolvedValue({
+      site_id: null,
+      totals: { inflow: '0', outflow: '0', net: '0', count: 0 },
+      items: [],
+      next_cursor: null,
+    })
   })
 
   it('shows the cold-start setup checklist instead of a blank grid', async () => {
@@ -101,7 +124,6 @@ describe('OwnerHome', () => {
     expect(await screen.findByText('Finish setting up')).toBeInTheDocument()
     expect(screen.getByText('Add your first site')).toBeInTheDocument()
     expect(screen.getByText('Set the expected daily headcount')).toBeInTheDocument()
-    // headline reads "All sites calm" when nothing needs attention
     expect(screen.getByText('All sites calm')).toBeInTheDocument()
   })
 
@@ -116,16 +138,15 @@ describe('OwnerHome', () => {
       screen.getByRole('heading', { name: /attendance 3 below expected 10/i }),
     ).toBeInTheDocument()
 
-    // The signature "Show proof" control reveals the linked evidence in place.
     const proof = screen.getAllByRole('button', { name: /show proof/i })[0]
     await userEvent.click(proof)
     expect(await screen.findByText('ev-1')).toBeInTheDocument()
   })
 
-  it('posts a decision when an inline action chip is used', async () => {
+  it('posts a decision when an inline owner chip is used', async () => {
     getHome.mockResolvedValue(WITH_RISK)
     createDecision.mockResolvedValue({ id: 'd1' })
-    renderHome()
+    renderHome('owner')
 
     await screen.findByRole('heading', { name: /attendance 3 below expected 10/i })
     const approve = screen.getAllByRole('button', { name: /^approve$/i })[0]
@@ -137,6 +158,36 @@ describe('OwnerHome', () => {
       action: 'approve',
       evidence_event_ids: ['ev-1'],
     })
+    // Idempotency seam is sent even though the server does not yet honor it.
+    expect(createDecision.mock.calls[0][0].client_decision_id).toBeTruthy()
+  })
+
+  it('reverts the brief + surfaces a toast when a decision fails (rollback)', async () => {
+    getHome.mockResolvedValue(WITH_RISK)
+    createDecision.mockRejectedValue(new Error('500'))
+    renderHome('owner')
+
+    await screen.findByRole('heading', { name: /attendance 3 below expected 10/i })
+    await userEvent.click(screen.getAllByRole('button', { name: /^approve$/i })[0])
+
+    // The failure is never swallowed; the exception stays in the brief.
+    expect(await screen.findByText(/could not record that action/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /attendance 3 below expected 10/i }),
+      ).toBeInTheDocument(),
+    )
+  })
+
+  it('gates the chip: a PM sees "Propose to owner", not Approve', async () => {
+    getHome.mockResolvedValue(WITH_RISK)
+    renderHome('pm')
+
+    await screen.findByRole('heading', { name: /attendance 3 below expected 10/i })
+    expect(
+      screen.getByRole('button', { name: /propose to owner/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve$/i })).toBeNull()
   })
 
   it('renders the 2x2 pulse grid with all four tiles', async () => {
@@ -146,7 +197,17 @@ describe('OwnerHome', () => {
     const grid = await screen.findByRole('list', { name: /today’s pulse/i })
     const tiles = within(grid).getAllByRole('button')
     expect(tiles).toHaveLength(4)
-    // labor tile is tappable (has evidence); others are disabled (no evidence)
     expect(within(grid).getByRole('button', { name: /labor/i })).toBeEnabled()
+  })
+
+  it('progress tile shows a stage prompt — never a %-ring', async () => {
+    getHome.mockResolvedValue(WITH_RISK)
+    renderHome()
+
+    const grid = await screen.findByRole('list', { name: /today’s pulse/i })
+    const progress = within(grid).getByRole('button', { name: /set stages/i })
+    expect(progress).toBeInTheDocument()
+    // Invariant 5: no fabricated percent anywhere in the progress tile.
+    expect(progress.textContent ?? '').not.toMatch(/%/)
   })
 })

@@ -4,7 +4,7 @@
 // visibility/reconciliation only. Reuses the shared API_BASE / ApiError / token
 // from the foundation (imported, never modified).
 
-import { API_BASE } from './config'
+import { API_BASE, USE_MOCKS } from './config'
 import { ApiError } from './client'
 import { getToken } from './auth'
 import type { Paginated } from './types'
@@ -93,6 +93,64 @@ function qs(params: Record<string, string | undefined>): string {
   return s ? `?${s}` : ''
 }
 
+// ---- mock ledger (network-free dev — only when VITE_USE_MOCKS=true) --------
+// A trailing week of in/out movements so the "This Week" sparklines render
+// without a backend. Dates are computed relative to today so the 7-day window
+// always lands on data.
+function mockLedger(): PaymentLedger {
+  const today = new Date()
+  const day = (back: number) => {
+    const d = new Date(today)
+    d.setDate(today.getDate() - back)
+    return d.toISOString().slice(0, 10)
+  }
+  const mk = (
+    id: string,
+    back: number,
+    direction: PaymentDirection,
+    amount: string,
+    counterparty_name: string,
+  ): Payment => ({
+    id,
+    company_id: 'mock-co',
+    site_id: null,
+    direction,
+    counterparty_name,
+    amount,
+    currency: 'INR',
+    paid_on: day(back),
+    method: 'upi',
+    reference_no: null,
+    status: 'recorded',
+    notes: null,
+    source_event_id: null,
+    created_by: null,
+    created_at: day(back),
+  })
+  const items: Payment[] = [
+    mk('p1', 6, 'homeowner_to_contractor', '500000', 'Sharma (Tower B)'),
+    mk('p2', 5, 'contractor_to_supplier', '240000', 'Steel Junction'),
+    mk('p3', 4, 'contractor_to_supplier', '85000', 'ACC Cement'),
+    mk('p4', 3, 'homeowner_to_contractor', '300000', 'Verma (Villa A)'),
+    mk('p5', 2, 'contractor_to_supplier', '52000', 'Bansal Hardware'),
+    mk('p6', 1, 'homeowner_to_contractor', '150000', 'Sharma (Tower B)'),
+    mk('p7', 0, 'contractor_to_supplier', '38000', 'Daily wages'),
+  ]
+  const inflow = 950000
+  const outflow = 415000
+  return {
+    site_id: null,
+    totals: {
+      inflow: String(inflow),
+      outflow: String(outflow),
+      net: String(inflow - outflow),
+      count: items.length,
+    },
+    items,
+    next_cursor: null,
+  }
+}
+
 export const paymentsApi = {
   list(params: {
     siteId?: string
@@ -110,7 +168,10 @@ export const paymentsApi = {
     )
   },
 
-  ledger(params: { siteId?: string; cursor?: string } = {}): Promise<PaymentLedger> {
+  async ledger(params: { siteId?: string; cursor?: string } = {}): Promise<PaymentLedger> {
+    if (USE_MOCKS) {
+      return mockLedger()
+    }
     return request<PaymentLedger>(
       `/api/v1/payments/ledger${qs({ site_id: params.siteId, cursor: params.cursor })}`,
     )
