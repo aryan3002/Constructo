@@ -11,6 +11,7 @@ import type {
   Site,
   SiteBaseline,
   SiteEvent,
+  Vendor,
   WhatsappGroup,
 } from './types'
 import {
@@ -60,6 +61,13 @@ const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms))
 
 /** Dev-only per-site baseline store so the no-backend admin tour reads + saves. */
 const mockBaselines: Record<string, SiteBaseline> = {}
+
+/** Dev-only vendor master so the no-backend admin tour lists + edits. */
+const mockVendors: Vendor[] = [
+  { id: 'vendor-1', company_id: MOCK_COMPANY_ID, name: 'Ambuja Cement Depot', category: 'material', gstin: '27AAACA1234A1Z5', phone: '+919800011111', notes: null, is_active: true, created_at: '2026-02-01T00:00:00Z' },
+  { id: 'vendor-2', company_id: MOCK_COMPANY_ID, name: 'Sharma Labour Supply', category: 'labour', gstin: null, phone: '+919800022222', notes: null, is_active: true, created_at: '2026-02-03T00:00:00Z' },
+  { id: 'vendor-3', company_id: MOCK_COMPANY_ID, name: 'Metro Crane Rentals', category: 'equipment', gstin: '29AABCM5678B1Z3', phone: '+919800033333', notes: null, is_active: false, created_at: '2026-01-15T00:00:00Z' },
+]
 
 // ---------------------------------------------------------------------------
 // Public API surface. Each method returns mock data when VITE_USE_MOCKS=true.
@@ -214,5 +222,66 @@ export const api = {
       `/api/v1/sites/${encodeURIComponent(siteId)}/baseline`,
       { method: 'PUT', body: JSON.stringify(body) },
     )
+  },
+
+  // ---- vendors (W4.5) ----
+
+  async listVendors(includeArchived = false): Promise<Vendor[]> {
+    if (USE_MOCKS) {
+      await delay()
+      return mockVendors
+        .filter((v) => includeArchived || v.is_active)
+        .map((v) => ({ ...v }))
+    }
+    const q = includeArchived ? '?include_archived=true' : ''
+    return request<Vendor[]>(`/api/v1/vendors${q}`)
+  },
+
+  async createVendor(body: {
+    name: string
+    category?: string | null
+    gstin?: string | null
+    phone?: string | null
+    notes?: string | null
+  }): Promise<Vendor> {
+    if (USE_MOCKS) {
+      await delay()
+      const created: Vendor = {
+        id: `vendor-${mockVendors.length + 1}`,
+        company_id: MOCK_COMPANY_ID,
+        name: body.name,
+        category: body.category ?? null,
+        gstin: body.gstin ?? null,
+        phone: body.phone ?? null,
+        notes: body.notes ?? null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      }
+      mockVendors.push(created)
+      return { ...created }
+    }
+    return request<Vendor>('/api/v1/vendors', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  async updateVendor(
+    id: string,
+    patch: Partial<
+      Pick<Vendor, 'name' | 'category' | 'gstin' | 'phone' | 'notes' | 'is_active'>
+    >,
+  ): Promise<Vendor> {
+    if (USE_MOCKS) {
+      await delay()
+      const v = mockVendors.find((x) => x.id === id)
+      if (!v) throw new ApiError(404, 'Vendor not found')
+      Object.assign(v, patch)
+      return { ...v }
+    }
+    return request<Vendor>(`/api/v1/vendors/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   },
 }

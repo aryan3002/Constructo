@@ -38,6 +38,19 @@ export interface SiteBaseline {
   updated_at: string
 }
 
+/** A supplier/vendor master row (Setup & Admin → Vendors, W4.5). */
+export interface Vendor {
+  id: string
+  company_id: string
+  name: string
+  category: string | null
+  gstin: string | null
+  phone: string | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+}
+
 // ---- Briefs ----
 export type RiskSeverity = 'high' | 'med' | 'low'
 
