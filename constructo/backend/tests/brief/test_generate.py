@@ -90,6 +90,47 @@ async def test_build_brief_payload_and_persists(db_session, company_with_sites):
     assert row.payload["text"] == result["text"]
 
 
+async def test_build_brief_is_idempotent_per_company_day(db_session, company_with_sites):
+    """Re-running build_brief for the same (company, day) replaces the brief in
+    place — it must NOT pile up duplicate rows (which `/briefs` would show
+    side-by-side, stale next to fresh). It also reuses the existing row id."""
+    company, site_a, _ = company_with_sites
+    await _add_event(db_session, site_a.id, EventType.attendance, fields={"headcount": 12})
+    fake = FakeLLMClient()
+
+    first = await build_brief(db_session, company.id, DAY, llm=fake)
+    second = await build_brief(db_session, company.id, DAY, llm=fake)
+
+    # Same row reused, not a new one.
+    assert first["brief_id"] == second["brief_id"]
+    rows = (
+        await db_session.execute(
+            select(OwnerBrief).where(
+                OwnerBrief.company_id == company.id, OwnerBrief.brief_date == DAY
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1  # exactly one brief for the day
+
+
+async def test_build_brief_preserves_sent_at_on_rebuild(db_session, company_with_sites):
+    """A rebuild keeps a delivered brief's sent_at (it stays 'delivered')."""
+    from datetime import UTC, datetime
+
+    company, site_a, _ = company_with_sites
+    await _add_event(db_session, site_a.id, EventType.attendance, fields={"headcount": 5})
+    fake = FakeLLMClient()
+    first = await build_brief(db_session, company.id, DAY, llm=fake)
+    sent = datetime(2026, 5, 27, 6, 0, tzinfo=UTC)
+    row = await db_session.get(OwnerBrief, first["brief_id"])
+    row.sent_at = sent
+    await db_session.flush()
+
+    second = await build_brief(db_session, company.id, DAY, llm=fake)
+    rebuilt = await db_session.get(OwnerBrief, second["brief_id"])
+    assert rebuilt.sent_at == sent
+
+
 async def test_build_brief_caps_top_risks_at_three(db_session, company_with_sites):
     company, site_a, _ = company_with_sites
     # generate >3 distinct risks on one site

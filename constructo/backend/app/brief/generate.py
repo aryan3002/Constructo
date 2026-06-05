@@ -196,12 +196,38 @@ async def build_brief(
 
     text = await _render_text(llm, payload)
 
-    brief = OwnerBrief(
-        company_id=company_id,
-        brief_date=brief_date,
-        payload={**payload, "text": text},
+    # Idempotent per (company, day): replace any existing brief(s) for this date
+    # rather than inserting a duplicate. Without this, re-running (a re-import, a
+    # manual /briefs/run, or a nightly re-run) piles up rows that `/briefs`
+    # returns side-by-side — stale next to fresh. Reuse the existing row's id +
+    # sent_at when present (so a delivered brief stays "delivered"); delete any
+    # extra duplicates that earlier runs may already have created.
+    existing = (
+        (
+            await session.execute(
+                select(OwnerBrief)
+                .where(
+                    OwnerBrief.company_id == company_id,
+                    OwnerBrief.brief_date == brief_date,
+                )
+                .order_by(OwnerBrief.id)
+            )
+        )
+        .scalars()
+        .all()
     )
-    session.add(brief)
+    if existing:
+        brief = existing[0]
+        brief.payload = {**payload, "text": text}
+        for dup in existing[1:]:  # collapse any pre-existing duplicates
+            await session.delete(dup)
+    else:
+        brief = OwnerBrief(
+            company_id=company_id,
+            brief_date=brief_date,
+            payload={**payload, "text": text},
+        )
+        session.add(brief)
     await session.commit()
     await session.refresh(brief)
 
