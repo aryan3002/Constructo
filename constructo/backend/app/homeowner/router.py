@@ -745,7 +745,7 @@ async def home(
             {
                 "id": d.id,
                 "title": _strip_tag(d.title),
-                "detail": d.detail,
+                "detail": _humanize_detail(d.detail),
                 "kind": str(d.kind),
                 "created_at": d.created_at,
             }
@@ -765,6 +765,38 @@ def _strip_tag(title: str) -> str:
         if idx != -1:
             return title[idx + 2 :]
     return title
+
+
+# Internal risk/decision *kind* tokens that must NEVER reach the homeowner as
+# raw enum strings (the calm "why this is coming up now" copy). Real-data import
+# paths have leaked bare tokens like "unverified_invoice" into Decision.detail;
+# this maps the known ones to plain, reassuring language and humanises any other
+# bare snake_case token as a last resort.
+_DECISION_REASON_LABELS = {
+    "unverified_invoice": "An invoice came in that doesn't match what was delivered yet.",
+    "pending_approval": "This is waiting for your approval.",
+    "labor_shortfall": "Fewer workers showed up than planned.",
+    "data_quality": "Some details still need to be confirmed.",
+}
+
+
+def _humanize_detail(detail: str | None) -> str | None:
+    """Turn a leaked internal token into homeowner-safe copy; pass prose through.
+
+    A real "detail" is a full sentence (has spaces / punctuation) and is returned
+    unchanged. Only a bare single-token enum value (no spaces) is rewritten.
+    """
+    if not detail:
+        return detail
+    token = detail.strip()
+    if " " in token:  # already human prose
+        return detail
+    if token in _DECISION_REASON_LABELS:
+        return _DECISION_REASON_LABELS[token]
+    # Unknown bare token (e.g. "some_internal_kind") -> "Some internal kind".
+    if "_" in token and token == token.lower():
+        return token.replace("_", " ").capitalize()
+    return detail
 
 
 def _milestone_out(m: Milestone) -> MilestoneOut:
@@ -1453,8 +1485,14 @@ async def add_reference(
 
 
 def _reference_out(ref: DesignReference) -> ReferenceOut:
+    # Inspiration images uploaded to the private bucket are stored as bare object
+    # KEYS; serve them as short-lived presigned GET URLs (mirrors `_photo_out`).
+    # A plain http(s) URL (e.g. a legacy/stock link) is passed through unchanged
+    # by `url_for`. Without this, key-backed references render as blank thumbnails.
     return ReferenceOut(
-        id=ref.id, site_id=ref.site_id, image_url=ref.image_url, room_tag=ref.room_tag,
+        id=ref.id, site_id=ref.site_id,
+        image_url=get_storage().url_for(ref.image_url) or ref.image_url,
+        room_tag=ref.room_tag,
         source=ref.source, actor_member_id=ref.actor_member_id, created_at=ref.created_at,
     )
 
@@ -1709,7 +1747,7 @@ async def my_decisions(
     return [
         HomeownerDecisionOut(
             id=d.id, site_id=d.site_id, kind=str(d.kind), title=_strip_tag(d.title),
-            detail=d.detail, state=str(d.state), created_at=d.created_at,
+            detail=_humanize_detail(d.detail), state=str(d.state), created_at=d.created_at,
         )
         for d in rows
     ]

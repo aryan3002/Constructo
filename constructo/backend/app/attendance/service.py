@@ -152,7 +152,11 @@ async def planned_vs_actual(
                 SiteEventModel.event_type == ATTENDANCE_EVENT_TYPE,
                 SiteEventModel.occurred_on == occurred_on,
             )
-            .order_by(SiteEventModel.created_at)
+            # id is a deterministic tiebreak: created_at can now hold a back-dated
+            # message time (imports), so two same-day attendance messages may share
+            # an identical created_at — without the tiebreak "latest wins" would be
+            # non-deterministic. Mirrors the timeline query's (created_at, id) order.
+            .order_by(SiteEventModel.created_at, SiteEventModel.id)
         )
     ).scalars().all()
 

@@ -52,6 +52,9 @@ class TokenOut(BaseModel):
 class MeOut(BaseModel):
     id: UUID
     company_id: UUID
+    # Human-readable company name so clients never have to show the raw
+    # company_id UUID. Null only if the company row is somehow missing.
+    company_name: str | None = None
     name: str | None
     phone: str
     role: UserRole
@@ -177,10 +180,11 @@ async def step_up_verify(
     )
 
 
-def _me_out(user: User) -> MeOut:
+def _me_out(user: User, company_name: str | None = None) -> MeOut:
     return MeOut(
         id=user.id,
         company_id=user.company_id,
+        company_name=company_name,
         name=user.name,
         phone=user.phone,
         role=user.role,
@@ -188,9 +192,18 @@ def _me_out(user: User) -> MeOut:
     )
 
 
+async def _me_out_with_company(session: AsyncSession, user: User) -> MeOut:
+    """`_me_out` enriched with the company name (one cheap PK fetch)."""
+    company = await session.get(Company, user.company_id)
+    return _me_out(user, company_name=company.name if company else None)
+
+
 @router.get("/me", response_model=MeOut)
-async def me(user: User = Depends(get_current_user)) -> MeOut:
-    return _me_out(user)
+async def me(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeOut:
+    return await _me_out_with_company(session, user)
 
 
 @router.get("/me/landing", response_model=LandingOut)
@@ -255,7 +268,7 @@ async def update_me(
         user.language = data["language"]
     await session.commit()
     await session.refresh(user)
-    return _me_out(user)
+    return await _me_out_with_company(session, user)
 
 
 # POST /api/v1/me/push-token — register THIS device's Expo push token (C-F).

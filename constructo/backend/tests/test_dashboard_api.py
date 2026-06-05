@@ -91,6 +91,27 @@ async def test_home_surfaces_labor_shortfall_wired_to_baseline(client, db_sessio
     assert labor_tile["status"] in {"risk", "warn"}
 
 
+async def test_home_risk_evidence_carries_event_summary(client, db_session, owner):
+    """P1-12: each risk's evidence resolves to real proof rows (id + summary),
+    not just a bare event UUID — so 'Show proof' can render '32 mazdoor aaye'
+    instead of 'Event 48c24754'."""
+    site = await _site(db_session, owner.company_id)
+    db_session.add(SiteBaseline(site_id=site.id, expected_daily_headcount=10))
+    ev = await _add_event(db_session, site.id, "attendance", fields={"headcount": 3})
+
+    resp = await client.get(f"/api/v1/dashboard/home?date={DAY.isoformat()}", headers=auth(owner))
+    card = resp.json()["sites"][0]
+    risk = next(r for r in card["top_risks"] if r["kind"] == "labor_shortfall")
+    # Back-compat ids still present...
+    assert str(ev.id) in risk["evidence_event_ids"]
+    # ...plus the resolved proof rows.
+    proof = {p["id"]: p for p in risk["evidence"]}
+    assert str(ev.id) in proof
+    assert proof[str(ev.id)]["summary"] == "attendance"
+    assert proof[str(ev.id)]["event_type"] == "attendance"
+    assert proof[str(ev.id)]["occurred_on"] == DAY.isoformat()
+
+
 async def test_home_scopes_to_company(client, db_session, factory, owner):
     # Another company's site must not leak into this owner's home.
     other_company = await factory.company(name="Other Co")

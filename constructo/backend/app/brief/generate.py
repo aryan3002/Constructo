@@ -63,13 +63,31 @@ def _counts(events: list[SiteEvent]) -> dict[str, int]:
     return {"attendance": attendance, "deliveries": deliveries, "issues": issues}
 
 
-def _jsonable_risk(risk: dict) -> dict:
+def _jsonable_risk(
+    risk: dict, events_by_id: dict[UUID, SiteEvent] | None = None
+) -> dict:
+    lookup = events_by_id or {}
+    eids = risk["evidence_event_ids"]
+    evidence: list[dict] = []
+    for eid in eids:
+        ev = lookup.get(eid)
+        evidence.append(
+            {
+                "id": str(eid),
+                "summary": ev.summary if ev is not None else None,
+                "event_type": ev.event_type.value if ev is not None else None,
+                "occurred_on": ev.occurred_on.isoformat() if ev is not None else None,
+            }
+        )
     return {
         "site_id": str(risk["site_id"]),
         "kind": risk["kind"],
         "severity": risk["severity"],
         "message": risk["message"],
-        "evidence_event_ids": [str(eid) for eid in risk["evidence_event_ids"]],
+        "evidence_event_ids": [str(eid) for eid in eids],
+        # Resolved proof rows so the brief shows real evidence ("100 bori cement
+        # aaya ACC se") instead of a raw event UUID.
+        "evidence": evidence,
     }
 
 
@@ -154,7 +172,13 @@ async def build_brief(
             expected_headcount=baseline_by_site.get(site_id),
             history_events=history_by_site.get(site_id),
         )
-        top = [_jsonable_risk(r) for r in rank_risks(risks, MAX_TOP_RISKS)]
+        events_by_id = {
+            e.id: e for e in (events + (history_by_site.get(site_id) or []))
+        }
+        top = [
+            _jsonable_risk(r, events_by_id)
+            for r in rank_risks(risks, MAX_TOP_RISKS)
+        ]
         site = site_by_id[site_id]
         site_payloads.append(
             {
