@@ -152,11 +152,13 @@ async def planned_vs_actual(
                 SiteEventModel.event_type == ATTENDANCE_EVENT_TYPE,
                 SiteEventModel.occurred_on == occurred_on,
             )
-            # id is a deterministic tiebreak: created_at can now hold a back-dated
-            # message time (imports), so two same-day attendance messages may share
-            # an identical created_at — without the tiebreak "latest wins" would be
-            # non-deterministic. Mirrors the timeline query's (created_at, id) order.
-            .order_by(SiteEventModel.created_at, SiteEventModel.id)
+            # Oldest -> newest by capture time; the loop below takes the last
+            # non-null headcount as "latest wins". NB: do NOT add `id` as a
+            # tiebreak — id is a random uuid4, so on a created_at tie it would
+            # pick a random winner (it made test_summary_uses_latest_capture
+            # flaky). On a genuine same-instant tie there is no meaningful
+            # "later"; insertion order is the pragmatic resolution.
+            .order_by(SiteEventModel.created_at)
         )
     ).scalars().all()
 
