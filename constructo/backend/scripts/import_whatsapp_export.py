@@ -42,7 +42,7 @@ from collections import Counter
 from datetime import UTC, date, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.db import SessionLocal
 from app.extraction.worker import handle_ingested
@@ -52,11 +52,18 @@ from app.models import (
     HomeownerMember,
     HomeownerSubRole,
     MemberStatus,
+    Milestone,
+    MilestoneStatus,
+    Property,
     PublishedPhoto,
     RawMessageModel,
     Site,
     SiteBaseline,
     SiteEventModel,
+    Space,
+    SpaceKind,
+    Update,
+    UpdateType,
     User,
     UserRole,
     WhatsappGroup,
@@ -342,6 +349,157 @@ async def import_messages(
     return dict(counts)
 
 
+# --------------------------------------------------------------------------- #
+# Homeowner scaffold — give the homeowner app something to show.               #
+# The import otherwise only populates the contractor side (events, photos,     #
+# briefs); the homeowner Updates/Property/Milestones tabs read a separate set  #
+# of tables (Property / Space / Milestone / Update) that nobody creates. This  #
+# step publishes a homeowner view OF THE REAL DATA: a property, a room         #
+# skeleton (rooms actually discussed in the chat), inferred build milestones,  #
+# and a Project-Updates timeline mapped from the real progress/issue events.   #
+# Idempotent (uuid5 ids) — re-running upserts, never duplicates.               #
+# --------------------------------------------------------------------------- #
+
+# Ground/first-floor rooms that recur in the Tripathi chat (kids room, sitout,
+# servant bathroom, lift area, dining, granite/living). A coarse, sensible
+# skeleton — the contractor can refine it later; it just unblocks the app.
+_SCAFFOLD_FLOORS = [
+    ("ground", "Ground Floor", [
+        ("living", "Living Room"), ("kitchen", "Kitchen"), ("dining", "Dining"),
+        ("sitout", "Sitout"), ("servant-bath", "Servant Bathroom"),
+    ]),
+    ("first", "First Floor", [
+        ("master", "Master Bedroom"), ("kids", "Kids Room"), ("lift", "Lift Area"),
+    ]),
+]
+
+# Map a real site-event type to a homeowner timeline card type. Only the
+# homeowner-meaningful ones become cards (progress + issues); the rest (invoices,
+# payments, attendance) stay contractor-internal.
+_EVENT_TO_UPDATE = {
+    "progress_update": UpdateType.progress,
+    "issue": UpdateType.delay,
+}
+
+
+async def scaffold_homeowner(world: dict, session_factory=SessionLocal) -> dict[str, int]:
+    """Publish a homeowner-facing view of the imported site (idempotent).
+
+    ``session_factory`` is injectable so tests can bind it to a rolled-back test
+    session (mirrors ``handle_ingested``); defaults to the real ``SessionLocal``.
+    """
+    from datetime import timedelta
+
+    site_id = world["site_id"]
+    company_id = world["company_id"]
+    out: Counter = Counter()
+
+    async with session_factory() as s:
+        # Publisher = the company owner (homeowner cards show "by the site team").
+        owner = (
+            await s.execute(
+                select(User).where(
+                    User.company_id == company_id, User.role == UserRole.owner
+                )
+            )
+        ).scalars().first()
+        owner_id = owner.id if owner else None
+
+        # Real build window from the imported events.
+        bounds = (
+            await s.execute(
+                select(
+                    func.min(SiteEventModel.occurred_on),
+                    func.max(SiteEventModel.occurred_on),
+                ).where(SiteEventModel.site_id == site_id)
+            )
+        ).first()
+        start_on = bounds[0] if bounds else None
+        last_on = bounds[1] if bounds else None
+
+        # 1) Property — the homeowner's view of the site.
+        site = await s.get(Site, site_id)
+        await _upsert(
+            s, Property, _id("property"),
+            company_id=company_id, site_id=site_id,
+            display_name=(site.name if site else SITE_NAME),
+            type="residential", status="building",
+            started_on=start_on,
+            expected_handover_on=(last_on + timedelta(days=90)) if last_on else None,
+        )
+        out["property"] = 1
+
+        # 2) Room skeleton (floors → rooms).
+        for forder, (fkey, fname, rooms) in enumerate(_SCAFFOLD_FLOORS):
+            floor = await _upsert(
+                s, Space, _id("space", fkey),
+                site_id=site_id, parent_id=None, name=fname,
+                kind=SpaceKind.floor, order=forder,
+            )
+            await s.flush()
+            out["spaces"] += 1
+            for rorder, (rkey, rname) in enumerate(rooms):
+                await _upsert(
+                    s, Space, _id("space", fkey, rkey),
+                    site_id=site_id, parent_id=floor.id, name=rname,
+                    kind=SpaceKind.room, order=rorder,
+                )
+                out["spaces"] += 1
+
+        # 3) Build milestones — inferred from the (finishing-stage) timeline.
+        milestones = [
+            ("foundation", "Foundation", MilestoneStatus.done,
+             start_on, (start_on + timedelta(days=90)) if start_on else None),
+            ("structure", "Structure & slabs", MilestoneStatus.done,
+             None, (start_on + timedelta(days=420)) if start_on else None),
+            ("interiors", "Interiors & finishes", MilestoneStatus.now,
+             None, None),
+            ("handover", "Handover", MilestoneStatus.upcoming,
+             None, (last_on + timedelta(days=90)) if last_on else None),
+        ]
+        for order, (mkey, name, status, started, done_or_exp) in enumerate(milestones):
+            done = status == MilestoneStatus.done
+            await _upsert(
+                s, Milestone, _id("milestone", mkey),
+                site_id=site_id, name=name, status=status, order=order,
+                started_on=started,
+                completed_on=done_or_exp if done else None,
+                expected_on=None if done else done_or_exp,
+            )
+            out["milestones"] += 1
+        await s.flush()
+
+        # 4) Project-Updates timeline — real progress/issue events → cards.
+        ev_rows = (
+            await s.execute(
+                select(SiteEventModel)
+                .where(
+                    SiteEventModel.site_id == site_id,
+                    SiteEventModel.event_type.in_(list(_EVENT_TO_UPDATE.keys())),
+                )
+                .order_by(SiteEventModel.created_at)
+            )
+        ).scalars().all()
+        for ev in ev_rows:
+            summary = (ev.summary or "").strip()
+            if not summary or summary.lower().startswith("no message"):
+                continue  # skip empty/garbage extractions
+            title = summary if len(summary) <= 80 else summary[:77] + "…"
+            await _upsert(
+                s, Update, _id("update", str(ev.id)),
+                site_id=site_id,
+                type=_EVENT_TO_UPDATE[ev.event_type],
+                title=title,
+                body=summary if len(summary) > 80 else None,
+                published_by=owner_id,
+                published_at=ev.created_at,
+            )
+            out["updates"] += 1
+
+        await s.commit()
+    return dict(out)
+
+
 async def finalize(world: dict) -> dict[str, int]:
     """Build a few recent briefs + index everything for search."""
     from app.brief.generate import build_brief
@@ -506,6 +664,13 @@ async def purge() -> dict[str, int]:
 
         await s.execute(delete(PublishedPhoto).where(PublishedPhoto.site_id == site_id))
 
+        # Homeowner scaffold (property / rooms / milestones / timeline). Spaces
+        # cascade their components; delete before the Site goes.
+        await s.execute(delete(Update).where(Update.site_id == site_id))
+        await s.execute(delete(Milestone).where(Milestone.site_id == site_id))
+        await s.execute(delete(Space).where(Space.site_id == site_id))
+        await s.execute(delete(Property).where(Property.site_id == site_id))
+
         # Child → parent deletes.
         ev_ids = (
             await s.execute(select(SiteEventModel.id).where(SiteEventModel.site_id == site_id))
@@ -596,6 +761,15 @@ async def _run(opts: argparse.Namespace) -> None:
         print("Backfill:", counts)
         return
 
+    if opts.homeowner_scaffold:
+        # Backfill the homeowner view onto an ALREADY-imported site — no zip
+        # needed. Uses the deterministic ids the import always produces.
+        print("Homeowner scaffold — publishing property/rooms/milestones/timeline…")
+        world = {"site_id": _id("site"), "company_id": _id("company")}
+        counts = await scaffold_homeowner(world)
+        print("Scaffold:", counts)
+        return
+
     raw_text, zf = _read_chat_txt(opts.zip)
     messages = parse_chat(raw_text)
     participants = discover_participants(messages)
@@ -611,6 +785,8 @@ async def _run(opts: argparse.Namespace) -> None:
     print("Ingest:", counts)
     fin = await finalize(world)
     print("Finalize:", fin)
+    scaf = await scaffold_homeowner(world)
+    print("Homeowner scaffold:", scaf)
 
     print("\n✅ Import complete. Login (phone + dev OTP 000000):")
     for i, (sender, role) in enumerate(participants.items()):
@@ -643,9 +819,14 @@ def main() -> None:
         "--media-backfill", action="store_true",
         help="Second pass: upload media from --zip + attach to imported messages",
     )
+    p.add_argument(
+        "--homeowner-scaffold", action="store_true",
+        help="Backfill the homeowner view (property/rooms/milestones/timeline) onto "
+             "an already-imported site; no --zip needed",
+    )
     opts = p.parse_args()
-    if not opts.purge and not opts.zip:
-        p.error("--zip is required (unless --purge)")
+    if not opts.purge and not opts.homeowner_scaffold and not opts.zip:
+        p.error("--zip is required (unless --purge / --homeowner-scaffold)")
     asyncio.run(_run(opts))
 
 
