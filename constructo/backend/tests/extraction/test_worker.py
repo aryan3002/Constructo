@@ -58,6 +58,11 @@ async def test_handle_ingested_persists_events(db_session, factory):
     assert stored.event_type == "attendance"
     assert stored.fields["headcount"] == 24
     assert stored.source_message_ids == [msg.id]
+    # P2-7: the event is stamped with the REAL message time (sent_at), not the
+    # row-insert/import wall-clock — so a back-dated import keeps true dates.
+    assert stored.created_at.year == 2026
+    assert stored.created_at.month == 5
+    assert stored.created_at.day == 28
 
 
 async def test_handle_ingested_skips_when_no_group_mapping(db_session, factory):

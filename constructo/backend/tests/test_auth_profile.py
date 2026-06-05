@@ -25,6 +25,28 @@ async def test_me_includes_language(client):
     assert me.json()["language"] in ("en", None)
 
 
+async def test_me_includes_company_name(client):
+    """P1-2: /auth/me returns the human-readable company name so clients never
+    have to show the raw company_id UUID. A brand-new login auto-provisions the
+    'Default Company'."""
+    token = await _login(client, "+15551119001")
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    body = me.json()
+    assert "company_name" in body
+    assert body["company_name"] == "Default Company"
+
+
+async def test_patch_users_me_preserves_company_name(client):
+    """The profile PATCH response also carries company_name (regression: it used
+    the bare _me_out without the company join)."""
+    token = await _login(client, "+15551119002")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.patch("/api/v1/users/me", json={"name": "Asha"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["company_name"] == "Default Company"
+
+
 async def test_patch_users_me_sets_language(client):
     token = await _login(client, "+15551110002")
     headers = {"Authorization": f"Bearer {token}"}

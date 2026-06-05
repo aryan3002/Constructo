@@ -198,3 +198,93 @@ async def test_explicit_site_filter_narrows(client, factory, db_session, owner):
     )
     body = resp.json()
     assert {h["site_id"] for h in body["hits"]} == {str(a.id)}
+
+
+class _ConstantEmbeddings:
+    """Returns one fixed unit vector for every text — lets a test pin the cosine
+    score exactly. Index with a vector at one bucket, query with another bucket:
+    the two are orthogonal, so cosine distance = 1.0 and similarity = 0.0 (below
+    the 0.15 floor). That isolates the floor logic from FakeEmbeddings' hashing.
+    """
+
+    def __init__(self, bucket: int) -> None:
+        from app.search.embeddings import EMBEDDING_DIM
+
+        self.dim = EMBEDDING_DIM
+        self.model = "constant-test"
+        self._vec = [0.0] * EMBEDDING_DIM
+        self._vec[bucket] = 1.0
+
+    async def embed(self, texts):
+        return [list(self._vec) for _ in texts]
+
+
+async def test_structured_filter_returns_rows_even_below_similarity_floor(
+    client, factory, db_session, owner
+):
+    """P2-8: a query that resolved to a structured filter (event_type) must
+    return its rows even when the semantic score is below the floor — the filter
+    IS the relevance signal. Regression for 'Cement' wrongly abstaining despite
+    hundreds of matching delivery events."""
+    from app.models import Company
+
+    company = await db_session.get(Company, owner.company_id)
+    site = await factory.site(company=company, name="Site A")
+    # Index the event at bucket 0; query embeds at bucket 1 -> orthogonal -> 0.0.
+    ev = SiteEventModel(
+        site_id=site.id, event_type="material_delivery",
+        occurred_on=date(2026, 5, 28), summary="280 bags cement from ACC",
+        fields={"material": "cement", "quantity": 280}, confidence=0.9,
+        needs_clarification=False, source_message_ids=[], version=1,
+    )
+    db_session.add(ev)
+    await db_session.flush()
+    await index_event(db_session, ev.id, client=_ConstantEmbeddings(0))
+
+    app.dependency_overrides[_get_client] = lambda: _ConstantEmbeddings(1)
+    try:
+        # "cement deliveries" -> event_type=material_delivery (structured filter).
+        resp = await client.post(
+            "/api/v1/search", json={"q": "cement deliveries"}, headers=auth(owner)
+        )
+    finally:
+        app.dependency_overrides[_get_client] = lambda: FakeEmbeddings()
+    body = resp.json()
+    assert body["query"]["event_type"] == "material_delivery"
+    assert body["answerable"] is True
+    assert len(body["hits"]) == 1
+    assert body["hits"][0]["score"] < 0.15  # genuinely below the floor
+
+
+async def test_pure_semantic_query_still_abstains_below_floor(
+    client, factory, db_session, owner
+):
+    """P2-8 guard: with NO structured filter, the similarity floor still gates —
+    a weak/irrelevant semantic match must abstain (answerable=false), so honest
+    AI is preserved for true gibberish queries."""
+    from app.models import Company
+
+    company = await db_session.get(Company, owner.company_id)
+    site = await factory.site(company=company, name="Site A")
+    ev = SiteEventModel(
+        site_id=site.id, event_type="progress_update",
+        occurred_on=date(2026, 5, 28), summary="slab work continuing",
+        fields={}, confidence=0.9, needs_clarification=False,
+        source_message_ids=[], version=1,
+    )
+    db_session.add(ev)
+    await db_session.flush()
+    await index_event(db_session, ev.id, client=_ConstantEmbeddings(0))
+
+    app.dependency_overrides[_get_client] = lambda: _ConstantEmbeddings(1)
+    try:
+        # "zzz" parses to no event_type/date -> pure semantic -> floor applies.
+        resp = await client.post(
+            "/api/v1/search", json={"q": "zzz"}, headers=auth(owner)
+        )
+    finally:
+        app.dependency_overrides[_get_client] = lambda: FakeEmbeddings()
+    body = resp.json()
+    assert body["query"]["event_type"] is None
+    assert body["answerable"] is False
+    assert body["hits"] == []

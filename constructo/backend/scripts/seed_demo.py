@@ -498,13 +498,18 @@ async def seed() -> dict[str, int]:
             if mkey == "structure":
                 ms_struct = m
         await session.flush()
-        # Published photos (curated; one starred, one tied to the current milestone).
+        # Published photos (curated; one starred, one tied to the current
+        # milestone). NOTE: these picsum URLs are random *placeholder* images —
+        # they are NOT real construction photos, so the captions are kept generic
+        # ("Site photo — …") rather than asserting a specific activity over an
+        # unrelated stock image (founder ask #5: bundle licensed photos before
+        # release). Real imports attach genuine R2 photos with real captions.
         for pkey, url, caption, room, starred, mid in [
             ("slab", "https://picsum.photos/seed/cstk-slab/800/600",
-             "First-floor slab poured — curing now.", "Living Room", True,
+             "Site photo — first-floor structure.", "Living Room", True,
              ms_struct.id if ms_struct else None),
             ("brick", "https://picsum.photos/seed/cstk-brick/800/600",
-             "Brickwork going up on the ground floor.", None, False, None),
+             "Site photo — ground floor.", None, False, None),
         ]:
             await _upsert(
                 session, PublishedPhoto, _id("photo", pkey),

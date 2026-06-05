@@ -7,6 +7,16 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class EvidenceItemOut(BaseModel):
+    """A resolved proof row: the event id plus its human-readable summary, so the
+    UI shows real evidence ("100 bori cement aaya ACC se") not a raw UUID."""
+
+    id: str
+    summary: str | None = None
+    event_type: str | None = None
+    occurred_on: str | None = None
+
+
 class RiskOut(BaseModel):
     site_id: str
     kind: str
@@ -14,6 +24,9 @@ class RiskOut(BaseModel):
     status: str  # kit spine: ok | warn | risk | info
     message: str
     evidence_event_ids: list[str]
+    # Resolved proof rows (id + summary + type + date). Defaults empty so older
+    # callers/tests that build RiskOut without it keep working.
+    evidence: list[EvidenceItemOut] = Field(default_factory=list)
 
 
 class PulseTileOut(BaseModel):

@@ -71,6 +71,18 @@ async def search(
     if not visible:
         return SearchResponse(query=parsed_out, hits=[], answerable=False)
 
+    # A query that resolved to a structured filter ("cement deliveries",
+    # "attendance last week") has already told us *what* it wants — the SQL
+    # filter IS the relevance signal. In that case we must NOT additionally gate
+    # on the semantic similarity floor: a single residual token ("cement") embeds
+    # to a weak vector that can score below the floor even when hundreds of rows
+    # match the filter, which would make us abstain on a perfectly answerable
+    # query. The floor only guards PURE semantic queries (no structured filter),
+    # where a weak match really does mean "not sure" (P5: honest AI).
+    has_structured_filter = (
+        event_type is not None or date_from is not None or date_to is not None
+    )
+
     # --- semantic vector for the residual text ------------------------------
     [query_vector] = await client.embed([parsed.semantic_text])
 
@@ -99,7 +111,9 @@ async def search(
     hits: list[SearchHit] = []
     for event, site_name, dist in rows:
         score = 1.0 - float(dist)
-        if score < SIMILARITY_FLOOR:
+        # Pure semantic queries gate on the relevance floor; structured-filter
+        # queries trust the filter and return its rows (still ranked by score).
+        if not has_structured_filter and score < SIMILARITY_FLOOR:
             continue
         hits.append(
             SearchHit(

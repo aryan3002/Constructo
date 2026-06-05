@@ -141,6 +141,12 @@ async def handle_ingested(
                 source_message_ids=ev.source_message_ids,
                 version=ev.version,
                 supersedes_event_id=ev.supersedes_event_id,
+                # Stamp the event with the REAL message time, not the row-insert
+                # time. For live WhatsApp/app messages sent_at ≈ now (no change);
+                # for a back-dated import (replaying months of history in one run)
+                # this is what stops every imported event collapsing onto the
+                # import wall-clock. Falls back to the DB default when unknown.
+                **({"created_at": raw.sent_at} if raw.sent_at is not None else {}),
             )
             session.add(model)
             ids.append(ev.id)

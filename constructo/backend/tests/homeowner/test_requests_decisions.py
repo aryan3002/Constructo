@@ -75,6 +75,43 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
     assert second == []
 
 
+async def test_decision_detail_humanizes_leaked_enum_token(client, ctx, db_session):
+    """P2-1: a leaked internal token (e.g. 'unverified_invoice' from the real-data
+    import path) must never reach the homeowner as a raw enum string in the
+    'why this is coming up now' copy — it's rewritten to calm prose."""
+    decision = Decision(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        kind=DecisionKind.approval,
+        title="Approve the invoice?",
+        detail="unverified_invoice",  # raw token, as the import leaked it
+        state=DecisionState.pending,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+
+    pending = await client.get("/api/v1/homeowner/decisions", headers=auth(ctx.homeowner))
+    item = next(d for d in pending.json() if d["id"] == str(decision.id))
+    assert item["detail"] != "unverified_invoice"
+    assert "invoice" in item["detail"].lower()
+    assert " " in item["detail"]  # real prose, not a bare token
+
+
+async def test_decision_detail_passes_prose_through(client, ctx, db_session):
+    """Genuine prose detail is returned unchanged (humanizer only rewrites bare
+    single-token enum values)."""
+    prose = "Invoice bills 120 bags but the site logged 100. ~₹12,000 at risk."
+    decision = Decision(
+        company_id=ctx.company.id, site_id=ctx.site.id, kind=DecisionKind.approval,
+        title="Approve?", detail=prose, state=DecisionState.pending,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+    pending = await client.get("/api/v1/homeowner/decisions", headers=auth(ctx.homeowner))
+    item = next(d for d in pending.json() if d["id"] == str(decision.id))
+    assert item["detail"] == prose
+
+
 async def test_respond_to_decision_resolves_it(client, ctx, db_session):
     decision = Decision(
         company_id=ctx.company.id,

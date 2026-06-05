@@ -48,15 +48,47 @@ def _to_contract(row: SiteEventModel) -> SiteEvent:
     )
 
 
-def _jsonable_risk(risk: dict) -> dict:
+def _evidence_items(
+    event_ids: list, events_by_id: dict[UUID, SiteEvent]
+) -> list[dict]:
+    """Resolve evidence event ids → human-readable proof rows.
+
+    Each proof carries the event's ``summary`` (e.g. "100 bori cement aaya ACC
+    se") plus type/date, so the UI can show real evidence instead of a raw
+    "Event 48c24754" UUID. Ids with no loaded event are still returned (id only)
+    so nothing silently disappears.
+    """
+    items: list[dict] = []
+    for eid in event_ids:
+        ev = events_by_id.get(eid)
+        if ev is not None:
+            items.append({
+                "id": str(eid),
+                "summary": ev.summary,
+                "event_type": ev.event_type.value,
+                "occurred_on": ev.occurred_on.isoformat(),
+            })
+        else:
+            items.append({"id": str(eid), "summary": None,
+                          "event_type": None, "occurred_on": None})
+    return items
+
+
+def _jsonable_risk(
+    risk: dict, events_by_id: dict[UUID, SiteEvent] | None = None
+) -> dict:
     severity = risk["severity"]
+    eids = risk["evidence_event_ids"]
     return {
         "site_id": str(risk["site_id"]),
         "kind": risk["kind"],
         "severity": severity,
         "status": _SEVERITY_STATUS.get(severity, "info"),
         "message": risk["message"],
-        "evidence_event_ids": [str(eid) for eid in risk["evidence_event_ids"]],
+        "evidence_event_ids": [str(eid) for eid in eids],
+        # Resolved proof rows (id + summary + type + date). Empty list when no
+        # event lookup was supplied (keeps pure/unit callers working).
+        "evidence": _evidence_items(eids, events_by_id or {}),
     }
 
 
@@ -195,7 +227,14 @@ def build_site_card(
         prev_events=prev_events,
         history_events=history_events,
     )
-    ranked = [_jsonable_risk(r) for r in rank_risks(risks, max_risks)]
+    # Lookup so each risk's evidence ids resolve to real event summaries (proof
+    # rows), covering today's events plus the prev/history windows a risk may
+    # cite as evidence.
+    events_by_id: dict[UUID, SiteEvent] = {
+        e.id: e
+        for e in (events + (prev_events or []) + (history_events or []))
+    }
+    ranked = [_jsonable_risk(r, events_by_id) for r in rank_risks(risks, max_risks)]
     overflow = max(len(risks) - len(ranked), 0)
 
     return {
