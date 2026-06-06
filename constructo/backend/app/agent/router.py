@@ -27,9 +27,11 @@ from app.agent.aggregate import (
     sum_quantity,
 )
 from app.auth.deps import get_current_user
+from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import SiteEventModel, User, UserRole
+from app.publish.membrane import draft_homeowner_update
 from app.search.query import parse_query
 from app.sites.router import effective_visible_site_ids
 
@@ -40,6 +42,16 @@ _MATERIALS = (
     "cement", "steel", "sariya", "rebar", "sand", "reti", "brick", "eint",
     "aggregate", "gitti", "tile", "paint", "putty", "pipe", "wood", "ply",
 )
+
+
+class MembraneSuggestIn(BaseModel):
+    event_id: UUID
+
+
+class MembraneSuggestOut(BaseModel):
+    source_event_id: UUID
+    crosses: bool
+    draft: str | None = None
 
 
 class AskIn(BaseModel):
@@ -91,6 +103,26 @@ def _fmt(v: float | None) -> str:
     if v is None:
         return "0"
     return str(int(v)) if float(v).is_integer() else str(v)
+
+
+@router.post("/membrane/suggest", response_model=MembraneSuggestOut)
+async def membrane_suggest(
+    body: MembraneSuggestIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MembraneSuggestOut:
+    """Trust Membrane (2.4): a calm, digit-safe, price-stripped homeowner DRAFT
+    for one committed event — the silent "Nivaan suggests sending this" chip. It
+    is never published here; the contractor reviews, edits, and commits it
+    through the publish gate (raw AI never auto-reaches the homeowner)."""
+    event = await session.get(SiteEventModel, body.event_id)
+    if event is None:
+        raise AppError(404, "not_found", "Event not found")
+    visible = await effective_visible_site_ids(session, user)
+    if user.role is UserRole.homeowner or event.site_id not in visible:
+        raise AppError(403, "forbidden", "Not your site")
+    draft = draft_homeowner_update(event.event_type, event.fields, event.occurred_on)
+    return MembraneSuggestOut(source_event_id=event.id, crosses=draft is not None, draft=draft)
 
 
 @router.post("/ask", response_model=AskOut)
