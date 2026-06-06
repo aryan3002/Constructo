@@ -67,8 +67,9 @@ async def agent_turn(
     """@nivaan — one constrained turn. Deterministic-first; ends in a terminal
     tool (answer/clarify/cards), scoped at the executor, audited in agent_turns."""
     from app.agent.loop import run_turn
+    from app.extraction.llm import get_llm_client
 
-    r = await run_turn(session, user, body.utterance, site_id=body.site_id)
+    r = await run_turn(session, user, body.utterance, site_id=body.site_id, llm=get_llm_client())
     return TurnOut(
         kind=r.kind.value,
         text=r.text,
