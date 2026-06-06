@@ -10,6 +10,21 @@ import { request } from './client'
 
 export type MessageSide = 'homeowner' | 'contractor'
 
+/**
+ * The structured `SiteEvent` a message produced — rendered inline as a Card
+ * (event-type pill + key fields + "show proof") instead of a flat bubble. This
+ * is what makes "capture with a conversation around it" visible in the thread.
+ */
+export interface ChatEvent {
+  id: string
+  event_type: string
+  occurred_on: string
+  summary: string
+  fields: Record<string, unknown>
+  confidence: number
+  needs_clarification: boolean
+}
+
 export interface ChatMessage {
   id: string
   conversation_id: string
@@ -20,6 +35,8 @@ export interface ChatMessage {
   reply_to_id: string | null
   media_type: string
   created_at: string
+  /** Events this message minted; empty for plain human talk (a bubble). */
+  events: ChatEvent[]
 }
 
 export interface ChatSendBody {

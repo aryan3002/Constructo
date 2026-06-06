@@ -187,6 +187,95 @@ async def test_worker_app_chat_seam_creates_event(db_session, world):
     assert event.event_type == "attendance"
 
 
+async def test_list_messages_includes_linked_event(client, db_session, world):
+    """GET /chat/messages returns each message's linked SiteEvent (the inline
+    card the thread renders instead of a flat bubble)."""
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "50 bori cement",
+            "capture_type": "delivery",
+            "fields": {"material": "cement", "quantity": 50},
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+    raw_id = (await db_session.get(ChatMessage, resp.json()["id"])).raw_message_id
+    # Drive extraction (the inline send enqueues async; not guaranteed in tests).
+    await handle_ingested(
+        raw_id, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()
+    assert len(rows) == 1
+    events = rows[0]["events"]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["event_type"] == "material_delivery"
+    assert ev["fields"] == {"material": "cement", "quantity": 50}
+    assert ev["confidence"] == 1.0
+    assert ev["needs_clarification"] is False
+    assert ev["summary"]
+
+
+async def test_list_messages_plain_text_has_no_events(client, world):
+    """A plain human message stays a bubble — no linked event."""
+    _, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "good morning team"},
+        headers=auth(owner),
+    )
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    assert listed.json()[0]["events"] == []
+
+
+async def test_list_messages_excludes_superseded_event(client, db_session, world):
+    """latest-version-wins: a superseded event never renders as the card."""
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "45 bori cement",
+            "capture_type": "delivery",
+            "fields": {"material": "cement", "quantity": 45},
+        },
+        headers=auth(owner),
+    )
+    raw_id = (await db_session.get(ChatMessage, resp.json()["id"])).raw_message_id
+    ids = await handle_ingested(
+        raw_id, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+    original = await db_session.get(SiteEventModel, ids[0])
+    # A correction writes a NEW version superseding the original, same source msg.
+    corrected = SiteEventModel(
+        site_id=site.id,
+        event_type="material_delivery",
+        occurred_on=original.occurred_on,
+        summary="54 bori cement",
+        fields={"material": "cement", "quantity": 54},
+        confidence=1.0,
+        needs_clarification=False,
+        source_message_ids=original.source_message_ids,
+        version=2,
+        supersedes_event_id=original.id,
+    )
+    db_session.add(corrected)
+    await db_session.commit()
+
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    events = listed.json()[0]["events"]
+    assert len(events) == 1
+    assert events[0]["fields"]["quantity"] == 54  # the latest version only
+
+
 async def test_chat_structured_card_books_verbatim(db_session, world):
     """A typed card sent via chat (capture_type + fields) rides the Phase 0.1
     fast path: confidence 1.0, verbatim fields."""
