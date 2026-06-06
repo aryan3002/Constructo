@@ -17,6 +17,7 @@ from app.models.company import Company
 from app.models.company_billing import CompanyBilling
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.dpr import Dpr, DprStatus
+from app.models.event_dispute import DisputeStatus, EventDispute
 from app.models.event_embedding import EventEmbedding
 from app.models.homeowner_design import (
     DesignProfile,
@@ -87,9 +88,11 @@ __all__ = [
     "DesignProfile",
     "DesignReference",
     "DesignSelection",
+    "DisputeStatus",
     "Dpr",
     "DprStatus",
     "DrawingKind",
+    "EventDispute",
     "EventEmbedding",
     "HomeownerMember",
     "HomeownerRequest",
