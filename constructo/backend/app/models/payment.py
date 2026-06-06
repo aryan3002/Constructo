@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -63,4 +64,17 @@ class Payment(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # Proof-Locked Approval L1 (2.5): an approval physically refuses to commit
+    # without bound evidence, stamps who/when, and is reversible-until a window
+    # (undo reverts the RECORD — Constructo never moves money).
+    approved_by: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evidence_event_ids: Mapped[list[UUID]] = mapped_column(
+        ARRAY(PgUUID(as_uuid=True)), nullable=False, default=list
+    )
+    reversible_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
