@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_step_up
 from app.common.errors import AppError
+from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import (
     Decision,
@@ -179,6 +180,7 @@ async def accountant_overview(
             select(SiteEventModel).where(
                 SiteEventModel.site_id.in_(visible),
                 SiteEventModel.event_type.in_([_DELIVERY, _INVOICE]),
+                latest_event_clause(),
             )
         )
     ).scalars().all()
@@ -290,6 +292,7 @@ async def reconcile_site(
             select(SiteEventModel).where(
                 SiteEventModel.site_id == site_id,
                 SiteEventModel.event_type.in_([_DELIVERY, _INVOICE]),
+                latest_event_clause(),
             )
         )
     ).scalars().all()
@@ -630,6 +633,7 @@ async def export_tally(
             select(SiteEventModel).where(
                 SiteEventModel.site_id == site_id,
                 SiteEventModel.event_type.in_([_DELIVERY, _INVOICE]),
+                latest_event_clause(),
             )
         )
     ).scalars().all()

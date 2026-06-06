@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import EventEmbedding, Site, SiteEventModel, User
 from app.search.embeddings import EmbeddingsClient, get_embeddings_client
@@ -96,7 +97,7 @@ async def search(
         )
         .join(EventEmbedding, EventEmbedding.site_event_id == SiteEventModel.id)
         .join(Site, Site.id == SiteEventModel.site_id)
-        .where(SiteEventModel.site_id.in_(visible))
+        .where(SiteEventModel.site_id.in_(visible), latest_event_clause())
     )
     if event_type is not None:
         stmt = stmt.where(SiteEventModel.event_type == event_type)
