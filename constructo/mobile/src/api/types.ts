@@ -381,3 +381,15 @@ export interface HomeownerDecision {
   created_at: string
 }
 
+/**
+ * "Ask your home" grounded answer (POST /homeowner/ask). The engine answers ONLY
+ * from the published slice (updates/summaries/milestones/changes/photo captions),
+ * digit-guarded, and abstains (`answerable=false`) to "ask your builder" when the
+ * record doesn't hold it. `sources` = how many published items were in scope.
+ */
+export interface HomeownerAskResult {
+  answerable: boolean
+  answer: string
+  sources: number
+}
+

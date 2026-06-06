@@ -119,11 +119,12 @@ export function isDecisionResolved(state: string): boolean {
 }
 
 /**
- * Heuristic: does this question touch MONEY or STRUCTURE? There is no
- * grounded-RAG backend (H8 is gated), so the Ask screen never invents an
- * answer — but for money/structural questions we add an extra-honest note that
- * the team will weigh in, since these are the questions a homeowner most needs
- * a human (not a guess) on. Pure keyword match (EN + HI), no AI.
+ * Heuristic: does this question touch MONEY or STRUCTURE? The grounded "Ask your
+ * home" engine answers only from the published slice and naturally abstains on
+ * these (no rates cross the membrane) — and on the builder hand-off we add an
+ * extra-honest note that a human will weigh in, since these are the questions a
+ * homeowner most needs a person (not a guess) on. Pure keyword match (EN + HI),
+ * no AI.
  */
 const MONEY_STRUCTURAL_TERMS = [
   // money (en)
