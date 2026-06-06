@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.auth.jwt import create_access_token
 from app.models import ChatMessage, Conversation, ConversationKind, UserRole
 from app.search.embeddings import FakeEmbeddings
-from app.search.index_message import index_message
+from app.search.index_message import index_all_unindexed_messages, index_message
 from app.sites.models import SiteAssignment
 
 
@@ -80,6 +80,24 @@ async def test_message_search_no_visible_sites_abstains(client, factory, world):
         "/api/v1/search/messages", json={"query": "anything"}, headers=auth(stranger)
     )
     assert resp.json() == {"hits": [], "answerable": False}
+
+
+async def test_backfill_indexes_all_unindexed_then_searchable(client, db_session, world):
+    """The backfill embeds historical messages so they become searchable."""
+    _, owner, site = world
+    await _post(client, owner, site.id, "foundation waterproofing finished in the basement")
+    await _post(client, owner, site.id, "tea break")
+    n = await index_all_unindexed_messages(db_session, client=FakeEmbeddings())
+    assert n >= 2
+    # Re-run is a no-op (idempotent).
+    assert await index_all_unindexed_messages(db_session, client=FakeEmbeddings()) == 0
+
+    resp = await client.post(
+        "/api/v1/search/messages",
+        json={"query": "basement waterproofing", "site_id": str(site.id)},
+        headers=auth(owner),
+    )
+    assert resp.json()["answerable"]
 
 
 async def test_index_message_skips_empty(client, db_session, world):
