@@ -11,7 +11,7 @@
  * Strings come from the t() i18n catalog; icons are premium Feather glyphs.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, TextInput, View } from 'react-native'
+import { ScrollView, Share, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -36,8 +36,30 @@ import {
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+/** Assemble a plain-text DPR (digit-safe; no emoji) for the OS share sheet, so
+ *  the report survives outside the app (e.g. relayed to WhatsApp). */
+function buildDprText(dpr: Dpr, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const s = dpr.sections
+  const lines: string[] = [`DPR — ${dpr.report_date}`]
+  if (s.summary) lines.push('', s.summary)
+  lines.push(
+    '',
+    `${t('pm.labor')}: ${s.labor.headcount != null ? t('pm.onSite', { count: s.labor.headcount }) : t('pm.laborUnknown')}`,
+  )
+  const block = (title: string, items: string[]) => {
+    if (items.length === 0) return
+    lines.push('', `${title}:`)
+    for (const it of items) lines.push(`- ${it}`)
+  }
+  block(t('pm.materials'), s.materials.deliveries.map((d) => d.summary))
+  block(t('pm.workDone'), s.work_done.items.map((w) => w.summary))
+  block(t('pm.blockers'), s.blockers.items.map((b) => b.description))
+  block(t('pm.next'), s.next.items)
+  return lines.join('\n')
+}
+
 export default function PmDpr() {
-  const { t } = useT()
+  const { t, lang } = useT()
   const { theme } = useTheme()
   const qc = useQueryClient()
   const date = todayISO()
@@ -255,6 +277,14 @@ export default function PmDpr() {
               onPress={() => sendM.mutate()}
             />
           )}
+
+          {/* Share the DPR as plain text — survives outside the app (WhatsApp). */}
+          <Button
+            title={lang === 'hi' ? 'रिपोर्ट साझा करें' : 'Share report'}
+            variant="secondary"
+            block
+            onPress={() => void Share.share({ message: buildDprText(dpr, t) })}
+          />
         </>
       ) : null}
     </ScrollView>
