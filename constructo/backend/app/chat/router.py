@@ -12,7 +12,7 @@ a later slice; homeowner-role users are out of scope here.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.common.errors import AppError
+from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import (
     ChatMessage,
@@ -30,6 +31,7 @@ from app.models import (
     ConversationRead,
     MessageSide,
     RawMessageModel,
+    SiteEventModel,
     User,
     UserRole,
 )
@@ -57,6 +59,22 @@ class ChatReadIn(BaseModel):
     last_seq: int = Field(ge=0)
 
 
+class ChatEventOut(BaseModel):
+    """The structured ``SiteEvent`` a message produced — rendered inline as a
+    Card (event-type pill + key fields + evidence) instead of a flat bubble.
+    This is what makes "capture with a conversation around it" visible."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    event_type: str
+    occurred_on: date
+    summary: str
+    fields: dict
+    confidence: float
+    needs_clarification: bool
+
+
 class ChatMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +87,9 @@ class ChatMessageOut(BaseModel):
     reply_to_id: UUID | None
     media_type: str
     created_at: datetime
+    # The events this message minted via extraction (latest version only). Empty
+    # for plain human talk (a bubble) or before extraction has run.
+    events: list[ChatEventOut] = Field(default_factory=list)
 
 
 def _side_for(user: User) -> MessageSide:
@@ -221,7 +242,47 @@ async def list_messages(
             .limit(limit)
         )
     ).scalars().all()
-    return [ChatMessageOut.model_validate(r) for r in rows]
+
+    events_by_raw = await _events_for_messages(session, rows)
+    out: list[ChatMessageOut] = []
+    for r in rows:
+        msg_out = ChatMessageOut.model_validate(r)
+        msg_out.events = [
+            ChatEventOut.model_validate(e)
+            for e in events_by_raw.get(r.raw_message_id, [])
+        ]
+        out.append(msg_out)
+    return out
+
+
+async def _events_for_messages(
+    session: AsyncSession, rows: list[ChatMessage]
+) -> dict[UUID, list[SiteEventModel]]:
+    """Resolve each message's linked ``SiteEvent``(s) in one batched query.
+
+    A message's ``raw_message_id`` lands in the event's ``source_message_ids``
+    (the extraction bridge), so an array-overlap fetches the whole page at once
+    (no N+1). ``latest_event_clause()`` keeps it latest-version-wins, so a future
+    reply-to-card edit or promote-to-card never double-renders.
+    """
+    raw_ids = [r.raw_message_id for r in rows if r.raw_message_id is not None]
+    if not raw_ids:
+        return {}
+    events = (
+        await session.execute(
+            select(SiteEventModel)
+            .where(SiteEventModel.source_message_ids.overlap(raw_ids))
+            .where(latest_event_clause())
+            .order_by(SiteEventModel.created_at)
+        )
+    ).scalars().all()
+    raw_id_set = set(raw_ids)
+    by_raw: dict[UUID, list[SiteEventModel]] = {}
+    for ev in events:
+        for sid in ev.source_message_ids:
+            if sid in raw_id_set:
+                by_raw.setdefault(sid, []).append(ev)
+    return by_raw
 
 
 @router.post("/read", status_code=204)

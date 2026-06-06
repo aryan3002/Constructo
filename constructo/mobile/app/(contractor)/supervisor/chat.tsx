@@ -25,9 +25,9 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
-import { chatApi, newClientMsgId, type ChatMessage } from '../../../src/api/chat'
+import { chatApi, newClientMsgId, type ChatEvent, type ChatMessage } from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
-import { CalmEmpty, ErrorState, Loading } from './_components'
+import { CalmEmpty, CaptureCard, ErrorState, Loading } from './_components'
 
 const STR = {
   en: {
@@ -203,6 +203,25 @@ export default function CrewChat() {
         renderItem={({ item }) => {
           const mine =
             item.kind === 'pending' || (!!me && item.msg.sender_id === me.id)
+
+          // A message that became structured capture renders as Card(s), not a
+          // bubble — the thread is "capture with a conversation around it".
+          if (item.kind === 'server' && item.msg.events.length > 0) {
+            return (
+              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
+                {item.msg.events.map((ev: ChatEvent) => (
+                  <CaptureCard
+                    key={ev.id}
+                    event={ev}
+                    lang={lang}
+                    sourceText={item.msg.body}
+                    time={fmtTime(item.msg.created_at)}
+                  />
+                ))}
+              </View>
+            )
+          }
+
           const body = item.kind === 'pending' ? item.out.body : (item.msg.body ?? '')
           return (
             <View
