@@ -238,6 +238,7 @@ export default function CrewChat() {
         media_type: 'document',
         attachment_key: uploaded.key,
         attachment_mime: mime,
+        attachment_sha256: uploaded.sha256,
       })
       setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
       await msgsQ.refetch()

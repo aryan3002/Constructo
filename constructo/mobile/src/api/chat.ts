@@ -53,12 +53,16 @@ export interface ChatSendBody {
   attachment_key?: string
   attachment_mime?: string
   media_type?: 'text' | 'image' | 'document' | 'voice'
+  /** Content hash from the upload (1.7 dedupe). */
+  attachment_sha256?: string
 }
 
 /** The stored object's bare key returned by the media upload endpoint. */
 export interface MediaUpload {
   key: string
   media_type: string
+  /** Content hash for replay-dedupe (1.7) — passed back on send. */
+  sha256: string
 }
 
 /** RFC-4122 v4 — a valid UUID for the backend's `client_msg_id` (idempotency). */
