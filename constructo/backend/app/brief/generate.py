@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brief.risk import detect_risks, rank_risks
+from app.common.site_events import latest_event_clause
 from app.config import settings
 from app.contracts.events import EventType, SiteEvent
 from app.extraction.llm import LLMClient, get_llm_client
@@ -135,6 +136,7 @@ async def build_brief(
                         SiteEventModel.site_id.in_(site_ids),
                         SiteEventModel.occurred_on >= history_start,
                         SiteEventModel.occurred_on <= brief_date,
+                        latest_event_clause(),
                     )
                 )
             )

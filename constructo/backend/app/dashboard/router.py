@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.auth.scoping import visible_site_ids
 from app.common.errors import AppError
+from app.common.site_events import latest_event_clause
 from app.config import settings
 from app.dashboard.aggregate import build_home
 from app.dashboard.schemas import (
@@ -88,6 +89,7 @@ async def get_home(
                         SiteEventModel.site_id.in_(site_ids),
                         SiteEventModel.occurred_on >= history_start,
                         SiteEventModel.occurred_on <= brief_date,
+                        latest_event_clause(),
                     )
                 )
             )
