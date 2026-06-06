@@ -210,3 +210,70 @@ async def test_no_capture_type_is_unchanged_llm_path():
     ev = (await extract(raw, SITE_ID, llm=llm))[0]
     assert llm.calls != []
     assert ev.event_type is EventType.attendance
+
+
+# ---- Phase 0.2: multi-event extraction ------------------------------------
+
+
+async def test_compound_free_text_splits_into_two_events():
+    """A compound utterance spanning two distinct types yields two events."""
+    raw = _raw(text="12 mistri aaye aur ACC se 50 bori cement aaya")
+    events = await extract(raw, SITE_ID, llm=FakeLLMClient())
+    types = {e.event_type for e in events}
+    assert types == {EventType.attendance, EventType.material_delivery}
+    att = next(e for e in events if e.event_type is EventType.attendance)
+    deliv = next(e for e in events if e.event_type is EventType.material_delivery)
+    assert att.fields["headcount"] == 12
+    assert deliv.fields["material"] == "cement"
+    assert all(e.source_message_ids == [raw.id] for e in events)
+
+
+async def test_single_type_with_comma_stays_one_event():
+    """A sentence with an incidental comma but only one event type must NOT split
+    (guards against fragmenting a single invoice/challan)."""
+    raw = _raw(text="cement delivered, 50 bori, ACC se")
+    events = await extract(raw, SITE_ID, llm=FakeLLMClient())
+    assert len(events) == 1
+    assert events[0].event_type is EventType.material_delivery
+
+
+async def test_simple_message_is_single_event():
+    raw = _raw(text="24 mazdoor aaye")
+    events = await extract(raw, SITE_ID, llm=FakeLLMClient())
+    assert len(events) == 1
+
+
+async def test_structured_events_list_books_each_verbatim():
+    """A compound structured capture (raw['events']) → one ground-truth event per
+    entry, no LLM (e.g. a voice note that produced an attendance + a delivery card)."""
+    raw = _raw(
+        text="aaj ka update",
+        raw={
+            "events": [
+                {"capture_type": "attendance", "fields": {"headcount": 12}},
+                {"capture_type": "delivery", "fields": {"material": "cement", "quantity": 50}},
+            ]
+        },
+    )
+    llm = FakeLLMClient()
+    events = await extract(raw, SITE_ID, llm=llm)
+    assert llm.calls == []  # all entries are ground truth
+    assert len(events) == 2
+    assert {e.event_type for e in events} == {
+        EventType.attendance,
+        EventType.material_delivery,
+    }
+    assert all(e.confidence == 1.0 for e in events)
+    att = next(e for e in events if e.event_type is EventType.attendance)
+    assert att.fields == {"headcount": 12}
+
+
+async def test_declared_single_type_is_not_split():
+    """When the human declared ONE type, a comma in the text never splits it."""
+    raw = _raw(
+        text="12 mason, 3 helper",
+        raw={"capture_type": "attendance"},
+    )
+    events = await extract(raw, SITE_ID, llm=FakeLLMClient())
+    assert len(events) == 1
+    assert events[0].event_type is EventType.attendance
