@@ -322,6 +322,16 @@ export interface PackAskResult {
   answer: string
 }
 
+// ---- Advance Ledger / Advance Guard (2.5 L2) ------------------------------
+export interface SettlementResult {
+  counterparty: string
+  paid_out: number
+  invoiced: number
+  unadjusted_advance: number
+  warn: boolean
+  message: string
+}
+
 // ---- query helper ----------------------------------------------------------
 const qs = (params: Record<string, string | undefined>): string => {
   const entries = Object.entries(params).filter(([, v]) => v != null) as [
@@ -438,4 +448,8 @@ export const owner = {
       method: 'POST',
       body: JSON.stringify({ site_id: siteId, counterparty, question }),
     }),
+
+  /** Advance Guard: a counterparty's company-wide unadjusted advance (2.5 L2). */
+  settlement: (counterparty: string) =>
+    request<SettlementResult>(`/api/v1/payments/settlement${qs({ counterparty })}`),
 }

@@ -5,14 +5,16 @@
  * row taps through to its single-site detail (where per-site forecast + radar
  * live). Reached from More.
  */
-import { Pressable, View } from 'react-native'
+import { useState } from 'react'
+import { ActivityIndicator, Pressable, TextInput, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { Stack, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
-import { owner, type SiteRollup } from '../../../src/api/owner'
+import { owner, type SettlementResult, type SiteRollup } from '../../../src/api/owner'
 import { Body, BodyStrong, Card, H1, Mono, Screen, Small, StatusPill } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock } from './_components'
 
@@ -28,6 +30,10 @@ const STR = {
     err: 'Could not load your portfolio.',
     tryAgain: 'Try again',
     days: 'last 30 days',
+    advanceGuard: 'Advance Guard',
+    advanceSub: 'Check a vendor’s unadjusted advance before paying fresh',
+    vendorPh: 'Vendor name',
+    check: 'Check',
   },
   hi: {
     title: 'दूरदृष्टि',
@@ -40,6 +46,10 @@ const STR = {
     err: 'पोर्टफोलियो लोड नहीं हुआ।',
     tryAgain: 'फिर कोशिश करें',
     days: 'पिछले 30 दिन',
+    advanceGuard: 'अग्रिम गार्ड',
+    advanceSub: 'नया भुगतान करने से पहले वेंडर का बिना समायोजित अग्रिम जाँचें',
+    vendorPh: 'वेंडर का नाम',
+    check: 'जाँचें',
   },
 } as const
 
@@ -70,6 +80,23 @@ export default function Foresight() {
   const router = useRouter()
 
   const q = useQuery({ queryKey: ['owner', 'portfolio'], queryFn: () => owner.portfolio(30) })
+
+  // Advance Guard — a company-wide unadjusted-advance lookup (2.5 L2).
+  const [vendor, setVendor] = useState('')
+  const [guard, setGuard] = useState<SettlementResult | null>(null)
+  const [checking, setChecking] = useState(false)
+  async function checkGuard() {
+    const cp = vendor.trim()
+    if (!cp || checking) return
+    setChecking(true)
+    try {
+      setGuard(await owner.settlement(cp))
+    } catch {
+      setGuard(null)
+    } finally {
+      setChecking(false)
+    }
+  }
 
   const stat = (label: string, value: string, tone?: string) => (
     <View style={{ flex: 1, gap: 2 }}>
@@ -138,6 +165,62 @@ export default function Foresight() {
               </Card>
             </Pressable>
           ))}
+
+          {/* Advance Guard (2.5 L2) — company-wide unadjusted advance lookup. */}
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="shield" size={14} color={c.accentDeep} />
+              <Small muted style={{ letterSpacing: 1 }}>{t.advanceGuard.toUpperCase()}</Small>
+            </View>
+            <Small muted style={{ marginTop: 2 }}>{t.advanceSub}</Small>
+            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+              <TextInput
+                value={vendor}
+                onChangeText={setVendor}
+                placeholder={t.vendorPh}
+                placeholderTextColor={c.textMute}
+                onSubmitEditing={checkGuard}
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderRadius: theme.radii.control,
+                  backgroundColor: c.paper,
+                  paddingHorizontal: SPACE.md,
+                  color: c.text,
+                  fontSize: 15,
+                }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.check}
+                disabled={!vendor.trim() || checking}
+                onPress={checkGuard}
+                style={({ pressed }) => ({
+                  paddingHorizontal: SPACE.lg,
+                  borderRadius: theme.radii.control,
+                  backgroundColor: c.accent,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: !vendor.trim() || checking ? 0.5 : pressed ? 0.9 : 1,
+                })}
+              >
+                {checking ? <ActivityIndicator color={c.onAccent} /> : <BodyStrong color={c.onAccent}>{t.check}</BodyStrong>}
+              </Pressable>
+            </View>
+            {guard ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, marginTop: SPACE.sm }}>
+                <Feather
+                  name={guard.warn ? 'alert-triangle' : 'check-circle'}
+                  size={16}
+                  color={guard.warn ? c.risk : c.ok}
+                  style={{ marginTop: 2 }}
+                />
+                <Body style={{ flex: 1, color: guard.warn ? c.risk : c.text }}>{guard.message}</Body>
+              </View>
+            ) : null}
+          </Card>
         </>
       )}
     </Screen>
