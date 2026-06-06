@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.chat.reply_interpreter import apply_correction, parse_correction
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
@@ -41,6 +42,10 @@ from app.models import (
 from app.queue import enqueue_extraction
 from app.sites.router import effective_visible_site_ids
 from app.storage import get_storage
+
+# Roles that may directly commit a correction; others' corrections raise a
+# dispute (1.7) — they can flag, an authority resolves.
+_CORRECTION_AUTHORITY = {UserRole.owner, UserRole.pm}
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
@@ -176,6 +181,80 @@ async def _get_or_create_site_conversation(
     return conv
 
 
+async def _parent_event(session: AsyncSession, reply_to_id: UUID | None) -> SiteEventModel | None:
+    """The latest ``SiteEvent`` the reply's parent message produced (or None)."""
+    if reply_to_id is None:
+        return None
+    parent = await session.get(ChatMessage, reply_to_id)
+    if parent is None or parent.raw_message_id is None:
+        return None
+    return (
+        await session.execute(
+            select(SiteEventModel)
+            .where(SiteEventModel.source_message_ids.overlap([parent.raw_message_id]))
+            .where(latest_event_clause())
+            .order_by(SiteEventModel.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _apply_reply_correction(
+    session: AsyncSession,
+    user: User,
+    reply_to_id: UUID | None,
+    body: str | None,
+) -> dict | None:
+    """Reply-to-Card (1.4): a deterministic numeric correction ("45 nahi 54")
+    against a card. An authority (owner/PM) supersedes the field in place
+    (append-only new version); anyone else raises a dispute (1.7) — never a
+    silent overwrite. Returns a small outcome dict, or None when the reply isn't
+    a recognised correction."""
+    if not body:
+        return None
+    event = await _parent_event(session, reply_to_id)
+    if event is None:
+        return None
+    corr = parse_correction(body)
+    if corr is None:
+        return None
+    applied = apply_correction(event.fields, corr)
+    if applied is None:
+        return None
+    new_fields, changed_key = applied
+
+    if user.role in _CORRECTION_AUTHORITY:
+        superseding = SiteEventModel(
+            site_id=event.site_id,
+            event_type=event.event_type,
+            occurred_on=event.occurred_on,
+            summary=event.summary,
+            fields=new_fields,
+            confidence=1.0,
+            needs_clarification=False,
+            source_message_ids=event.source_message_ids,
+            version=event.version + 1,
+            supersedes_event_id=event.id,
+        )
+        session.add(superseding)
+        await session.flush()
+        return {"action": "corrected", "field": changed_key, "event_id": str(superseding.id)}
+
+    dispute = EventDispute(
+        company_id=user.company_id,
+        site_id=event.site_id,
+        event_id=event.id,
+        raised_by=user.id,
+        raised_by_role=user.role.value,
+        reason=(body or "").strip()[:2000],
+        proposed_fields=new_fields,
+        status=DisputeStatus.open,
+    )
+    session.add(dispute)
+    await session.flush()
+    return {"action": "disputed", "field": changed_key, "dispute_id": str(dispute.id)}
+
+
 async def _reply_context(
     session: AsyncSession, conversation_id: UUID, reply_to_id: UUID | None
 ) -> dict | None:
@@ -303,6 +382,15 @@ async def send_message(
         out = ChatMessageOut.model_validate(msg)
         out.attachment_url = _safe_attachment_url(msg.attachment_key)
         return out
+
+    # Reply-to-Card (1.4): a deterministic correction ("45 nahi 54") acts on the
+    # parent card — it supersedes the value (authority) or raises a dispute — and
+    # is NOT itself re-extracted as a new capture.
+    correction = await _apply_reply_correction(session, user, body.reply_to_id, body.body)
+    if correction is not None:
+        await session.commit()
+        await session.refresh(msg)
+        return ChatMessageOut.model_validate(msg)
 
     # Extraction seam — mint a RawMessage(source="app_chat") and bridge it. The
     # capture_type/fields hints ride the Phase 0.1 fast path; a media attachment

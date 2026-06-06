@@ -327,8 +327,8 @@ const EVENT_META: Record<string, EvMeta> = {
 }
 
 const CARD_STR = {
-  en: { show: 'Show proof ▾', hide: 'Hide proof ▴', review: 'Check this', captured: 'Captured', conf: 'sure', workers: 'workers' },
-  hi: { show: 'सबूत देखें ▾', hide: 'सबूत छिपाएँ ▴', review: 'जाँचें', captured: 'दर्ज हुआ', conf: 'पक्का', workers: 'मज़दूर' },
+  en: { show: 'Show proof ▾', hide: 'Hide proof ▴', review: 'Check this', captured: 'Captured', conf: 'sure', workers: 'workers', disputed: 'Disputed' },
+  hi: { show: 'सबूत देखें ▾', hide: 'सबूत छिपाएँ ▴', review: 'जाँचें', captured: 'दर्ज हुआ', conf: 'पक्का', workers: 'मज़दूर', disputed: 'विवादित' },
 } as const
 
 /** Indian-grouped rupee formatting (no reliance on Hermes Intl). */
@@ -445,7 +445,10 @@ export function CaptureCard({
           <Feather name={meta.icon} size={13} color={c.text} />
           <Small style={{ fontWeight: '600' }}>{lang === 'hi' ? meta.hi : meta.en}</Small>
         </View>
-        {event.needs_clarification ? <StatusPill status="warn" label={str.review} size="sm" /> : null}
+        {event.contested ? <StatusPill status="risk" label={str.disputed} size="sm" /> : null}
+        {event.needs_clarification && !event.contested ? (
+          <StatusPill status="warn" label={str.review} size="sm" />
+        ) : null}
       </View>
 
       {/* Key fields (Mono ledger numerals) and/or the human-readable summary. */}

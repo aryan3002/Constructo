@@ -228,6 +228,85 @@ async def test_reply_stores_parent_context_for_extraction(client, db_session, wo
     assert ctx["parent_event_type"] == "material_delivery"
 
 
+async def _send_card_and_extract(client, db_session, owner, site, fields):
+    sent = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": f"{fields.get('quantity', '')} bori cement",
+            "capture_type": "delivery",
+            "fields": fields,
+        },
+        headers=auth(owner),
+    )
+    raw_id = (await db_session.get(ChatMessage, sent.json()["id"])).raw_message_id
+    await handle_ingested(
+        raw_id, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+    return sent.json()["id"]
+
+
+async def test_owner_reply_corrects_card_in_place(client, db_session, world):
+    """An owner's "45 nahi 54" reply supersedes the card's value (1.4) — the
+    original card now renders 54, and the reply mints no new event."""
+    _, owner, site = world
+    parent_id = await _send_card_and_extract(
+        client, db_session, owner, site, {"material": "cement", "quantity": 45}
+    )
+    before = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    msg_count_before = len(before.json())
+
+    reply = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "45 nahi 54",
+            "reply_to_id": parent_id,
+        },
+        headers=auth(owner),
+    )
+    assert reply.status_code == 201
+    # The reply has no event of its own (it acted on the parent).
+    assert reply.json()["events"] == []
+
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    rows = listed.json()
+    assert len(rows) == msg_count_before + 1
+    parent_row = next(r for r in rows if r["id"] == parent_id)
+    assert parent_row["events"][0]["fields"]["quantity"] == 54  # the receipt flipped
+    assert parent_row["events"][0]["contested"] is False
+
+
+async def test_nonauthority_reply_raises_dispute(client, db_session, factory, world):
+    """A supervisor can't silently overwrite — "45 nahi 54" raises a dispute, and
+    the card shows contested (1.4 × 1.7)."""
+    company, owner, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor)
+    db_session.add(SiteAssignment(site_id=site.id, user_id=sup.id))
+    await db_session.flush()
+    parent_id = await _send_card_and_extract(
+        client, db_session, owner, site, {"material": "cement", "quantity": 45}
+    )
+    reply = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "45 nahi 54",
+            "reply_to_id": parent_id,
+        },
+        headers=auth(sup),
+    )
+    assert reply.status_code == 201
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    parent_row = next(r for r in listed.json() if r["id"] == parent_id)
+    # Value unchanged (no silent overwrite); the card is contested.
+    assert parent_row["events"][0]["fields"]["quantity"] == 45
+    assert parent_row["events"][0]["contested"] is True
+
+
 async def test_reply_across_conversations_rejected(client, db_session, factory, world):
     """A reply_to pointing at another site's thread is refused (no leak)."""
     company, owner, site = world
