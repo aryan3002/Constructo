@@ -13,6 +13,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   TextInput,
@@ -22,7 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -41,6 +42,7 @@ import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
 import { CalmEmpty, CaptureCard, ErrorState, Loading } from './_components'
+import { DisputeSheet } from './_dispute'
 
 /** A structured capture to ride the `capture_type`/`fields` fast path. */
 type Capture = { capture_type: string; fields: Record<string, unknown> }
@@ -62,6 +64,8 @@ const STR = {
     cmdHint: 'Command format',
     replyingTo: 'Replying to',
     reply: 'Reply',
+    dispute: 'Dispute',
+    resolve: 'Resolve dispute',
     cancel: 'Cancel',
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
@@ -91,6 +95,8 @@ const STR = {
     cmdHint: 'कमांड का तरीका',
     replyingTo: 'जवाब:',
     reply: 'जवाब दें',
+    dispute: 'आपत्ति',
+    resolve: 'विवाद सुलझाएँ',
     cancel: 'रद्द करें',
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
@@ -133,9 +139,11 @@ export default function CrewChat() {
   const str = STR[lang]
   const { theme } = useTheme()
   const c = theme.colors
-  const { me } = useAuth()
+  const { me, role } = useAuth()
   const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList>(null)
+  const qc = useQueryClient()
+  const canResolve = role === 'owner' || role === 'pm'
 
   const [text, setText] = useState('')
   const [pending, setPending] = useState<Outgoing[]>([])
@@ -143,6 +151,14 @@ export default function CrewChat() {
   const [answers, setAnswers] = useState<{ id: string; question: string; result: AskResult }[]>([])
   // The message being quote-replied to (1.5 threading), or null.
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  // Long-press action menu over a card (Reply / Dispute / Resolve) — 1.7.
+  const [cardMenu, setCardMenu] = useState<{ msg: ChatMessage; event: ChatEvent } | null>(null)
+  // The open contested-truth sheet (raise/resolve), or null.
+  const [disputeSheet, setDisputeSheet] = useState<{
+    mode: 'raise' | 'resolve'
+    event: ChatEvent
+    summary: string
+  } | null>(null)
 
   // The supervisor's assigned site(s); v1 chats the first one.
   const sitesQ = useQuery({ queryKey: ['supervisor', 'sites'], queryFn: () => supervisorApi.sites() })
@@ -532,7 +548,7 @@ export default function CrewChat() {
               <View style={{ gap: 2 }}>
                 {quoted}
                 <Pressable
-                  onLongPress={() => setReplyTo(msg)}
+                  onLongPress={() => setCardMenu({ msg, event: cardEvents[0] })}
                   delayLongPress={250}
                   style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
                 >
@@ -590,6 +606,87 @@ export default function CrewChat() {
               </Pressable>
             </View>
           )
+        }}
+      />
+
+      {/* Long-press card menu — Reply / Dispute / Resolve (1.7 contested-truth). */}
+      <Modal
+        visible={!!cardMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCardMenu(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
+          onPress={() => setCardMenu(null)}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: theme.radii.sheet,
+              borderTopRightRadius: theme.radii.sheet,
+              padding: SPACE.sm,
+              paddingBottom: insets.bottom + SPACE.md,
+            }}
+          >
+            {[
+              { key: 'reply', icon: 'corner-up-left' as const, label: str.reply, show: true },
+              { key: 'dispute', icon: 'flag' as const, label: str.dispute, show: true },
+              {
+                key: 'resolve',
+                icon: 'check-circle' as const,
+                label: str.resolve,
+                show: canResolve && !!cardMenu?.event.contested,
+              },
+            ]
+              .filter((o) => o.show)
+              .map((o) => (
+                <Pressable
+                  key={o.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={o.label}
+                  onPress={() => {
+                    const cm = cardMenu
+                    setCardMenu(null)
+                    if (!cm) return
+                    if (o.key === 'reply') setReplyTo(cm.msg)
+                    else
+                      setDisputeSheet({
+                        mode: o.key === 'resolve' ? 'resolve' : 'raise',
+                        event: cm.event,
+                        summary: cm.event.summary || msgSnippet(cm.msg),
+                      })
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.md,
+                    minHeight: 52,
+                    paddingHorizontal: SPACE.md,
+                    borderRadius: theme.radii.control,
+                    backgroundColor: pressed ? c.paper : 'transparent',
+                  })}
+                >
+                  <Feather name={o.icon} size={20} color={c.text} />
+                  <BodyStrong>{o.label}</BodyStrong>
+                </Pressable>
+              ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Contested-truth sheet (raise / resolve). */}
+      <DisputeSheet
+        visible={!!disputeSheet}
+        mode={disputeSheet?.mode ?? 'raise'}
+        event={disputeSheet?.event ?? null}
+        eventSummary={disputeSheet?.summary ?? ''}
+        lang={lang}
+        onClose={() => setDisputeSheet(null)}
+        onDone={() => {
+          setDisputeSheet(null)
+          void qc.invalidateQueries({ queryKey: ['chat', site?.id] })
         }}
       />
 
