@@ -22,6 +22,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,6 +40,7 @@ import {
   type ChatMessage,
 } from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
+import { actionItemsApi } from '../../../src/api/actionItems'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
@@ -74,6 +76,8 @@ const STR = {
     radar: 'Radar',
     radarTitle: 'What’s slipping',
     radarClear: 'All clear — nothing’s slipping.',
+    todos: 'To-dos',
+    makeTodo: 'Make a to-do',
     cancel: 'Cancel',
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
@@ -112,6 +116,8 @@ const STR = {
     radar: 'रडार',
     radarTitle: 'क्या अटक रहा है',
     radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
+    todos: 'काम',
+    makeTodo: 'काम बनाएँ',
     cancel: 'रद्द करें',
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
@@ -158,6 +164,7 @@ export default function CrewChat() {
   const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList>(null)
   const qc = useQueryClient()
+  const router = useRouter()
   const canResolve = role === 'owner' || role === 'pm'
 
   const [text, setText] = useState('')
@@ -459,46 +466,43 @@ export default function CrewChat() {
           <BodyStrong>{str.title}</BodyStrong>
           <Small style={{ color: c.textMute }}>{site.name}</Small>
         </View>
-        {/* Radar (3.1) — what's slipping (absence + stuck-thing). */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={str.radar}
-          onPress={() => setRadarOpen(true)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            minHeight: 40,
-            paddingHorizontal: SPACE.md,
-            borderRadius: 9999,
-            borderWidth: 1,
-            borderColor: c.line,
-            backgroundColor: pressed ? c.paper : c.card,
-          })}
-        >
-          <Feather name="radio" size={15} color={c.accentDeep} />
-          <Small style={{ fontWeight: '600', color: c.text }}>{str.radar}</Small>
-        </Pressable>
-        {/* Catch me up (2.6) — deterministic recap of the last 24h. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={str.catchUp}
-          onPress={() => setRecapOpen(true)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            minHeight: 40,
-            paddingHorizontal: SPACE.md,
-            borderRadius: 9999,
-            borderWidth: 1,
-            borderColor: c.line,
-            backgroundColor: pressed ? c.paper : c.card,
-          })}
-        >
-          <Feather name="sunrise" size={15} color={c.accentDeep} />
-          <Small style={{ fontWeight: '600', color: c.text }}>{str.catchUp}</Small>
-        </Pressable>
+        {/* Compact tool buttons (secondary nav) — each keeps an a11y label;
+            the panels they open are clearly titled. */}
+        {(
+          [
+            { key: 'radar', icon: 'radio' as const, label: str.radar, onPress: () => setRadarOpen(true) },
+            {
+              key: 'todos',
+              icon: 'check-square' as const,
+              label: str.todos,
+              onPress: () =>
+                router.push({
+                  pathname: '/(contractor)/supervisor/action-items',
+                  params: { site_id: site.id },
+                }),
+            },
+            { key: 'recap', icon: 'sunrise' as const, label: str.catchUp, onPress: () => setRecapOpen(true) },
+          ] as const
+        ).map((tool) => (
+          <Pressable
+            key={tool.key}
+            accessibilityRole="button"
+            accessibilityLabel={tool.label}
+            onPress={tool.onPress}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 9999,
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: pressed ? c.paper : c.card,
+            })}
+          >
+            <Feather name={tool.icon} size={18} color={c.accentDeep} />
+          </Pressable>
+        ))}
       </View>
 
       {/* Pinned brief (1.8) — exceptions-first; shown only when something needs
@@ -710,6 +714,7 @@ export default function CrewChat() {
           >
             {[
               { key: 'reply', icon: 'corner-up-left' as const, label: str.reply, show: true },
+              { key: 'todo', icon: 'check-square' as const, label: str.makeTodo, show: true },
               { key: 'dispute', icon: 'flag' as const, label: str.dispute, show: true },
               {
                 key: 'resolve',
@@ -728,13 +733,26 @@ export default function CrewChat() {
                     const cm = cardMenu
                     setCardMenu(null)
                     if (!cm) return
-                    if (o.key === 'reply') setReplyTo(cm.msg)
-                    else
+                    if (o.key === 'reply') {
+                      setReplyTo(cm.msg)
+                    } else if (o.key === 'todo') {
+                      const title = cm.event.summary || msgSnippet(cm.msg)
+                      if (site && title) {
+                        actionItemsApi
+                          .create({ site_id: site.id, title, source_message_id: cm.msg.id })
+                          .then(() => router.push({
+                            pathname: '/(contractor)/supervisor/action-items',
+                            params: { site_id: site.id },
+                          }))
+                          .catch(() => Alert.alert(str.makeTodo, str.askFailed))
+                      }
+                    } else {
                       setDisputeSheet({
                         mode: o.key === 'resolve' ? 'resolve' : 'raise',
                         event: cm.event,
                         summary: cm.event.summary || msgSnippet(cm.msg),
                       })
+                    }
                   }}
                   style={({ pressed }) => ({
                     flexDirection: 'row',

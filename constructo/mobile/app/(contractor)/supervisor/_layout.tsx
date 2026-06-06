@@ -48,6 +48,8 @@ export default function SupervisorLayout() {
       <Tabs.Screen name="chat" options={{ title: str.chat, tabBarIcon: icon('💬') }} />
       <Tabs.Screen name="my-sites" options={{ title: str.sites, tabBarIcon: icon('🏗') }} />
       <Tabs.Screen name="tasks-asks" options={{ title: str.tasks, tabBarIcon: icon('✅') }} />
+      {/* Pushed from the chat header — no tab entry. */}
+      <Tabs.Screen name="action-items" options={{ href: null }} />
     </Tabs>
   )
 }
