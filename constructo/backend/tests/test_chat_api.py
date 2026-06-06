@@ -564,6 +564,45 @@ async def test_worker_ocrs_document_attachment(db_session, world):
     assert event.site_id == site.id
 
 
+async def test_chat_assignment_spawns_ai_action_item(client, db_session, world):
+    """A plain-text assignment auto-creates a badged Nivaan to-do (2.7)."""
+    from app.models import ActionItem
+
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "Ramesh ko kal tak cement order karne bolo",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201
+    items = (
+        await db_session.execute(select(ActionItem).where(ActionItem.site_id == site.id))
+    ).scalars().all()
+    assert len(items) == 1
+    assert items[0].created_by_ai is True
+    assert items[0].created_by is None
+    assert items[0].source_message_id is not None
+
+
+async def test_plain_chatter_spawns_no_action_item(client, db_session, world):
+    from app.models import ActionItem
+
+    _, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "good morning team"},
+        headers=auth(owner),
+    )
+    items = (
+        await db_session.execute(select(ActionItem).where(ActionItem.site_id == site.id))
+    ).scalars().all()
+    assert items == []
+
+
 async def test_site_brief_surfaces_labor_shortfall(client, db_session, world):
     """The pinned brief (1.8) surfaces a ranked risk from the deterministic
     engine — here a labour shortfall vs the learned baseline."""

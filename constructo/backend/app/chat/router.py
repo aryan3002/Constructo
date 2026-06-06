@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.action_items.detector import detect_action_item
 from app.auth.deps import get_current_user
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
@@ -29,6 +30,10 @@ from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import (
+    ActionItem,
+    ActionItemEvent,
+    ActionItemEventKind,
+    ActionItemStatus,
     ChatMessage,
     Conversation,
     ConversationKind,
@@ -257,6 +262,34 @@ async def _apply_reply_correction(
     return {"action": "disputed", "field": changed_key, "dispute_id": str(dispute.id)}
 
 
+async def _propose_action_item(
+    session: AsyncSession, user: User, site_id: UUID, message_id: UUID, body: str
+) -> None:
+    """AI-detect a to-do in a chat message and stage a badged Action Item (2.7).
+    created_by_ai (Nivaan), no assignee — the user keeps or dismisses it. The
+    add is staged on the session and committed with the message."""
+    proposal = detect_action_item(body)
+    if proposal is None:
+        return
+    item = ActionItem(
+        company_id=user.company_id,
+        site_id=site_id,
+        title=proposal.title,
+        created_by=None,
+        created_by_ai=True,
+        due_on=proposal.due_on,
+        source_message_id=message_id,
+        status=ActionItemStatus.open,
+    )
+    session.add(item)
+    await session.flush()
+    session.add(
+        ActionItemEvent(
+            action_item_id=item.id, kind=ActionItemEventKind.created, actor_is_ai=True
+        )
+    )
+
+
 async def _reply_context(
     session: AsyncSession, conversation_id: UUID, reply_to_id: UUID | None
 ) -> dict | None:
@@ -393,6 +426,12 @@ async def send_message(
         await session.commit()
         await session.refresh(msg)
         return ChatMessageOut.model_validate(msg)
+
+    # AI-detected Action Item (2.7): a plain-text assignment ("Ramesh ko Friday
+    # tak bolo") spawns a badged, dismissable to-do. Only on free text (a typed
+    # capture / media is a capture, not a task). Best-effort: never fails a send.
+    if body.body and not body.capture_type and not body.fields and not body.attachment_key:
+        await _propose_action_item(session, user, body.site_id, msg.id, body.body)
 
     # Extraction seam — mint a RawMessage(source="app_chat") and bridge it. The
     # capture_type/fields hints ride the Phase 0.1 fast path; a media attachment
