@@ -10,10 +10,12 @@ Reads and writes are always company-scoped. A ledger endpoint exposes running
 in/out/net totals per site or across all visible sites, and any payment can be
 linked to the SiteEvent (e.g. a payment_request) it settles.
 """
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,7 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
+from app.disputes.router import event_is_contested
 from app.models import (
     Payment,
     PaymentDirection,
@@ -121,6 +124,99 @@ def _payment_out(p: Payment) -> PaymentOut:
         created_by=p.created_by,
         created_at=p.created_at,
     )
+
+
+# Proof-Locked Approval L1 (2.5).
+_APPROVE_ROLES = {UserRole.owner, UserRole.pm}
+REVERSIBLE_WINDOW_HOURS = 24
+
+
+class ApproveIn(BaseModel):
+    evidence_event_ids: list[UUID] = []
+
+
+class ProofApprovalOut(BaseModel):
+    id: UUID
+    status: PaymentStatus
+    approved_by: UUID | None
+    approved_at: datetime | None
+    evidence_event_ids: list[UUID]
+    reversible_until: datetime | None
+
+
+def _approval_out(p: Payment) -> ProofApprovalOut:
+    return ProofApprovalOut(
+        id=p.id,
+        status=p.status,
+        approved_by=p.approved_by,
+        approved_at=p.approved_at,
+        evidence_event_ids=list(p.evidence_event_ids or []),
+        reversible_until=p.reversible_until,
+    )
+
+
+@router.post("/{payment_id}/approve", response_model=ProofApprovalOut)
+async def approve_payment(
+    payment_id: UUID,
+    body: ApproveIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProofApprovalOut:
+    """Proof-Locked Approval (2.5 L1): physically REFUSE to confirm a payment
+    without bound evidence, and refuse if any evidence event is contested (1.7).
+    On approve, stamp approver + time + evidence and a reversible-until window.
+    Constructo never moves money — this approves the RECORD."""
+    payment = await _scoped_payment_or_error(session, user, payment_id)
+    if user.role not in _APPROVE_ROLES:
+        raise AppError(403, "forbidden", "Only an owner or PM can approve a payment")
+    if payment.status is PaymentStatus.confirmed:
+        raise AppError(409, "already_approved", "Payment is already approved")
+
+    evidence: list[UUID] = list(payment.evidence_event_ids or []) + list(body.evidence_event_ids)
+    if payment.source_event_id is not None:
+        evidence.append(payment.source_event_id)
+    evidence = list(dict.fromkeys(evidence))  # de-dupe, keep order
+    if not evidence:
+        raise AppError(
+            422, "missing_proof", "No evidence bound — attach a source event before approving"
+        )
+    for eid in evidence:
+        if await event_is_contested(session, eid):
+            raise AppError(409, "contested", "An evidence event is contested — resolve it first")
+
+    now = datetime.now(UTC)
+    payment.status = PaymentStatus.confirmed
+    payment.approved_by = user.id
+    payment.approved_at = now
+    payment.evidence_event_ids = evidence
+    payment.reversible_until = now + timedelta(hours=REVERSIBLE_WINDOW_HOURS)
+    await session.commit()
+    await session.refresh(payment)
+    return _approval_out(payment)
+
+
+@router.post("/{payment_id}/undo", response_model=ProofApprovalOut)
+async def undo_approval(
+    payment_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProofApprovalOut:
+    """Undo a proof-locked approval within its reversible window — reverts the
+    RECORD to 'recorded' (Constructo never moved money)."""
+    payment = await _scoped_payment_or_error(session, user, payment_id)
+    if user.role not in _APPROVE_ROLES:
+        raise AppError(403, "forbidden", "Only an owner or PM can undo an approval")
+    if payment.status is not PaymentStatus.confirmed:
+        raise AppError(409, "not_approved", "Payment is not approved")
+    if payment.reversible_until is None or datetime.now(UTC) > payment.reversible_until:
+        raise AppError(409, "window_closed", "The reversible window has passed")
+    payment.status = PaymentStatus.recorded
+    payment.approved_by = None
+    payment.approved_at = None
+    payment.reversible_until = None
+    await session.commit()
+    await session.refresh(payment)
+    return _approval_out(payment)
 
 
 async def _base_scoped_stmt(session: AsyncSession, user: User):
