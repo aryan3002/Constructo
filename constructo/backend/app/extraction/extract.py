@@ -14,6 +14,7 @@ network. The ``fields`` shapes follow the construction domain conventions in
 """
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any
 from uuid import UUID
@@ -167,20 +168,103 @@ _CAPTURE_TYPE_ALIASES: dict[str, EventType] = {
 }
 
 
+def _alias_to_type(hint: Any) -> EventType | None:
+    """Resolve a capture-type hint (alias or canonical value) to an EventType.
+
+    Returns ``None`` for missing / blank / ``unknown`` / unrecognized hints.
+    """
+    if not isinstance(hint, str) or not hint.strip():
+        return None
+    key = hint.strip().lower()
+    declared = _CAPTURE_TYPE_ALIASES.get(key) or _coerce_event_type(key)
+    return declared if declared is not None and declared is not EventType.unknown else None
+
+
 def _declared_event_type(raw: RawMessage) -> EventType | None:
     """The human-declared event type from a structured capture (``capture_type``).
 
     Returns the canonical :class:`EventType` when the app/composer told us what
     this is (a typed card, slash-command, or promoted message), else ``None``.
-    ``unknown`` is treated as "not declared" so it never short-circuits the LLM.
     """
-    hint = (raw.raw or {}).get("capture_type")
-    if not isinstance(hint, str) or not hint.strip():
-        return None
-    declared = _CAPTURE_TYPE_ALIASES.get(hint.strip().lower())
-    if declared is None:
-        declared = _coerce_event_type(hint.strip().lower())
-    return declared if declared is not None and declared is not EventType.unknown else None
+    return _alias_to_type((raw.raw or {}).get("capture_type"))
+
+
+def _deterministic_event(
+    raw: RawMessage,
+    site_id: UUID,
+    event_type: EventType,
+    fields: dict,
+    summary: Any = None,
+) -> SiteEvent:
+    """Build a ground-truth event from human-entered structured input (no LLM,
+    confidence 1.0). Shared by the single-card and compound-events paths."""
+    text = (raw.text or "").strip()
+    out_summary = (
+        (summary if isinstance(summary, str) else None)
+        or text
+        or event_type.value.replace("_", " ")
+    )
+    return SiteEvent(
+        site_id=site_id,
+        event_type=event_type,
+        occurred_on=raw.sent_at.date() if raw.sent_at else date.today(),
+        summary=out_summary.strip()[:500] or "(no content)",
+        fields=dict(fields),
+        confidence=1.0,
+        needs_clarification=False,
+        source_message_ids=[raw.id],
+    )
+
+
+def _structured_events(raw: RawMessage, site_id: UUID) -> list[SiteEvent] | None:
+    """Deterministic events from structured capture, or ``None`` if there isn't
+    enough structure to skip the LLM.
+
+    Two shapes (Phase 0.1 single-card + Phase 0.2 compound):
+    - ``raw["events"]`` = a list of ``{capture_type, fields, summary?}`` (e.g. a
+      voice note that yielded an attendance card AND a delivery card).
+    - ``raw["capture_type"]`` + ``raw["fields"]`` = one typed card.
+    """
+    payload = raw.raw or {}
+    entries = payload.get("events")
+    if isinstance(entries, list) and entries:
+        out: list[SiteEvent] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            etype = _alias_to_type(entry.get("capture_type"))
+            fields = entry.get("fields")
+            if etype is not None and isinstance(fields, dict):
+                out.append(
+                    _deterministic_event(raw, site_id, etype, fields, entry.get("summary"))
+                )
+        if out:
+            return out
+
+    declared = _alias_to_type(payload.get("capture_type"))
+    fields = payload.get("fields")
+    if declared is not None and isinstance(fields, dict):
+        return [_deterministic_event(raw, site_id, declared, fields, payload.get("summary"))]
+    return None
+
+
+# Clause separators for splitting a compound free-text/voice utterance into
+# candidate events ("12 mistri aur ACC se 50 bori cement" -> two events).
+_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|\n|।|\band\b|\baur\b|और)\s*", re.IGNORECASE)
+
+
+def _segment_multi(text: str) -> list[str]:
+    """Split a compound utterance into clauses, but ONLY when the clauses clearly
+    span ≥2 distinct event types. This is conservative on purpose: a single
+    invoice/challan or a sentence with an incidental comma must stay one event,
+    so we never fragment it. Falls back to ``[text]`` otherwise."""
+    parts = [p.strip() for p in _CLAUSE_SPLIT.split(text) if p and p.strip()]
+    if len(parts) < 2:
+        return [text]
+    distinct = {
+        t for t, _ in (classify(p, MediaType.text) for p in parts) if t is not EventType.unknown
+    }
+    return parts if len(distinct) >= 2 else [text]
 
 
 async def extract(
@@ -200,7 +284,9 @@ async def extract(
             env-selected clients are used (which themselves fall back to Fakes
             when no API key is configured).
 
-    Returns a list (currently 0 or 1 events) of validated ``SiteEvent`` objects.
+    Returns a list of validated ``SiteEvent`` objects — usually one, but a
+    compound capture ("12 mistri aur 50 bori cement", or a structured
+    ``raw["events"]`` list) yields several (Phase 0.2).
 
     **Structured-capture fast path (Phase 0.1).** When the human already told us
     the event type via ``capture_type`` (a typed card / slash-command / promoted
@@ -210,56 +296,50 @@ async def extract(
     the data. This is what kills the "unknown" flood and the cement→putty
     mis-classification for every carded message.
     """
+    # 1) Structured-capture fast path (Phase 0.1 single card + 0.2 compound):
+    #    the human already gave us typed values — book verbatim, no LLM.
+    structured = _structured_events(raw, site_id)
+    if structured is not None:
+        return structured
+
+    # 2) Free text / media. Resolve once (STT/OCR + numeral repair), then either
+    #    type-anchor on a declared type, or segment a compound utterance into
+    #    multiple events (Phase 0.2).
+    llm = llm or get_llm_client()
+    text = await _resolve_text(raw, stt, ocr)
     declared = _declared_event_type(raw)
 
-    # Fully-deterministic path: declared type + human-entered field values.
-    provided_fields = (raw.raw or {}).get("fields")
-    if declared is not None and isinstance(provided_fields, dict):
-        text = (raw.text or "").strip()
-        summary = (
-            (raw.raw or {}).get("summary")
-            or text
-            or declared.value.replace("_", " ")
-        )
-        summary = summary.strip()[:500] or "(no content)"
-        return [
-            SiteEvent(
-                site_id=site_id,
-                event_type=declared,
-                occurred_on=raw.sent_at.date() if raw.sent_at else date.today(),
-                summary=summary,
-                fields=dict(provided_fields),
-                confidence=1.0,
-                needs_clarification=False,
-                source_message_ids=[raw.id],
-            )
-        ]
+    if declared is not None:
+        # The human declared one typed thing — don't auto-split it.
+        return [await _build_event(text, raw, site_id, llm=llm, forced_type=declared)]
 
-    # LLM path — either fully open (no declaration) or type-anchored (declared
-    # type, but the field values still come from free text / media).
+    # Only auto-split PLAIN TEXT messages. Never an OCR'd document/photo (a
+    # challan/invoice is one event) or a voice transcript (a single dictated note
+    # must stay whole — compound voice produces a structured raw["events"] list).
+    if raw.media_type is MediaType.text:
+        segments = _segment_multi(text)
+    else:
+        segments = [text]
     return [
-        await _extract_via_llm(
-            raw, site_id, llm=llm, stt=stt, ocr=ocr, forced_type=declared
-        )
+        await _build_event(seg, raw, site_id, llm=llm, forced_type=None)
+        for seg in segments
     ]
 
 
-async def _extract_via_llm(
+async def _build_event(
+    text: str,
     raw: RawMessage,
     site_id: UUID,
     *,
     llm: LLMClient | None,
-    stt: STTClient | None,
-    ocr: OCRClient | None,
     forced_type: EventType | None = None,
 ) -> SiteEvent:
-    """Classify + LLM-fill one event. When ``forced_type`` is set the type is
-    locked (the human declared it) — the classifier and the LLM's type guess are
-    ignored, and the human's assertion seeds a high type-confidence prior so a
-    carded message never lands as ``unknown``."""
+    """Classify + LLM-fill one event from already-resolved ``text``. When
+    ``forced_type`` is set the type is locked (the human declared it) — the
+    classifier and the LLM's type guess are ignored, and the human's assertion
+    seeds a high type-confidence prior so a carded message never lands as
+    ``unknown``."""
     llm = llm or get_llm_client()
-
-    text = await _resolve_text(raw, stt, ocr)
 
     if forced_type is not None:
         event_type = forced_type
