@@ -10,12 +10,12 @@ the fuzzy long tail via the LLM agent is a later slice.
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.aggregate import (
@@ -30,7 +30,7 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
-from app.models import SiteEventModel, User, UserRole
+from app.models import DisputeStatus, EventDispute, SiteEventModel, User, UserRole
 from app.publish.membrane import draft_homeowner_update
 from app.search.query import parse_query
 from app.sites.router import effective_visible_site_ids
@@ -103,6 +103,99 @@ def _fmt(v: float | None) -> str:
     if v is None:
         return "0"
     return str(int(v)) if float(v).is_integer() else str(v)
+
+
+class RecapOut(BaseModel):
+    """A deterministic Catch-me-up over a site's recent thread (2.6) — chatter
+    distilled into structured objects, never an LLM guess."""
+
+    site_id: UUID
+    days: int
+    event_counts: dict[str, int] = {}
+    material_totals: dict[str, float] = {}  # "cement: bori" -> qty
+    worker_days: float | None = None
+    amount_total: float | None = None
+    open_disputes: int = 0
+    summary: str
+
+
+@router.get("/recap", response_model=RecapOut)
+async def recap(
+    site_id: UUID = Query(...),
+    days: int = Query(1, ge=1, le=30),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RecapOut:
+    """Distill the last ``days`` of a site's thread into structured totals — the
+    deterministic ``recap_thread``: event counts, material/attendance/amount
+    totals (computed by the reducers, never a model), and open disputes."""
+    visible = await effective_visible_site_ids(session, user)
+    if user.role is UserRole.homeowner or site_id not in visible:
+        raise AppError(403, "forbidden", "Not your site")
+
+    since = date.today() - timedelta(days=days - 1)
+    rows = (
+        await session.execute(
+            select(SiteEventModel)
+            .where(SiteEventModel.site_id == site_id, SiteEventModel.occurred_on >= since)
+            .where(latest_event_clause())
+        )
+    ).scalars().all()
+    events = [
+        EventLike(id=str(e.id), event_type=e.event_type, fields=e.fields, confidence=e.confidence)
+        for e in rows
+    ]
+
+    counts: dict[str, int] = {}
+    for e in events:
+        counts[e.event_type] = counts.get(e.event_type, 0) + 1
+
+    # Material totals per (material, canonical unit).
+    materials = sorted(
+        {
+            (e.fields.get("material") or "").lower()
+            for e in events
+            if e.event_type == "material_delivery"
+        }
+        - {""}
+    )
+    material_totals: dict[str, float] = {}
+    for m in materials:
+        r = sum_quantity(events, material=m)
+        if r.answerable and r.total is not None and r.unit is not None:
+            material_totals[f"{m}: {r.unit}"] = r.total
+
+    head = sum_headcount(events)
+    amount = sum_amount(events)
+    open_disputes = (
+        await session.execute(
+            select(func.count())
+            .select_from(EventDispute)
+            .where(EventDispute.site_id == site_id, EventDispute.status == DisputeStatus.open)
+        )
+    ).scalar_one()
+
+    parts: list[str] = []
+    if head.answerable:
+        parts.append(f"{_fmt(head.total)} worker-days")
+    for label, qty in material_totals.items():
+        parts.append(f"{_fmt(qty)} {label.split(': ')[1]} {label.split(':')[0]}")
+    if amount.answerable:
+        parts.append(f"₹{_fmt(amount.total)} billed/paid")
+    if open_disputes:
+        parts.append(f"{open_disputes} open dispute{'s' if open_disputes != 1 else ''}")
+    summary = "; ".join(parts) if parts else "Nothing logged in this window."
+
+    return RecapOut(
+        site_id=site_id,
+        days=days,
+        event_counts=counts,
+        material_totals=material_totals,
+        worker_days=head.total if head.answerable else None,
+        amount_total=amount.total if amount.answerable else None,
+        open_disputes=open_disputes,
+        summary=summary,
+    )
 
 
 @router.post("/membrane/suggest", response_model=MembraneSuggestOut)
