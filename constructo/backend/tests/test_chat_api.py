@@ -564,6 +564,56 @@ async def test_worker_ocrs_document_attachment(db_session, world):
     assert event.site_id == site.id
 
 
+async def test_site_brief_surfaces_labor_shortfall(client, db_session, world):
+    """The pinned brief (1.8) surfaces a ranked risk from the deterministic
+    engine — here a labour shortfall vs the learned baseline."""
+    from datetime import date, timedelta
+
+    from app.models import SiteEventModel
+
+    _, owner, site = world
+    today = date.today()
+    # A history of ~20 workers/day, then a sharp drop today → shortfall risk.
+    for i in range(1, 6):
+        db_session.add(
+            SiteEventModel(
+                site_id=site.id, event_type="attendance", occurred_on=today - timedelta(days=i),
+                summary="att", fields={"headcount": 20}, confidence=1.0,
+                needs_clarification=False, source_message_ids=[],
+            )
+        )
+    db_session.add(
+        SiteEventModel(
+            site_id=site.id, event_type="attendance", occurred_on=today,
+            summary="att", fields={"headcount": 6}, confidence=1.0,
+            needs_clarification=False, source_message_ids=[],
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get(f"/api/v1/chat/brief?site_id={site.id}", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["risk_count"] >= 1
+    assert any(r["kind"] == "labor_shortfall" for r in body["risks"])
+    assert "need you" in body["headline"]
+
+
+async def test_site_brief_all_clear_when_no_risks(client, world):
+    _, owner, site = world
+    resp = await client.get(f"/api/v1/chat/brief?site_id={site.id}", headers=auth(owner))
+    assert resp.status_code == 200
+    assert resp.json()["risk_count"] == 0
+    assert resp.json()["headline"] == "All caught up"
+
+
+async def test_site_brief_scoped(client, factory, world):
+    company, _, site = world
+    other = await factory.user(company=company, role=UserRole.supervisor)  # unassigned
+    resp = await client.get(f"/api/v1/chat/brief?site_id={site.id}", headers=auth(other))
+    assert resp.status_code == 403
+
+
 async def test_chat_structured_card_books_verbatim(db_session, world):
     """A typed card sent via chat (capture_type + fields) rides the Phase 0.1
     fast path: confidence 1.0, verbatim fields."""

@@ -145,6 +145,14 @@ export default function CrewChat() {
     refetchInterval: 8000,
   })
 
+  // The pinned owner brief (1.8) — exceptions-first; hidden when all clear.
+  const briefQ = useQuery({
+    queryKey: ['chat', 'brief', site?.id],
+    queryFn: () => chatApi.brief(site!.id),
+    enabled: !!site,
+    refetchInterval: 30000,
+  })
+
   // Lookup for rendering a quoted parent above a reply (1.5 threading).
   const byId = useMemo(() => {
     const m = new Map<string, ChatMessage>()
@@ -353,6 +361,44 @@ export default function CrewChat() {
         <BodyStrong>{str.title}</BodyStrong>
         <Small style={{ color: c.textMute }}>{site.name}</Small>
       </View>
+
+      {/* Pinned brief (1.8) — exceptions-first; shown only when something needs
+          attention (empty = calm = good). */}
+      {briefQ.data && briefQ.data.risk_count > 0 ? (
+        <View
+          style={{
+            marginHorizontal: SPACE.lg,
+            marginTop: SPACE.sm,
+            padding: SPACE.md,
+            borderRadius: theme.radii.card,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: c.card,
+            gap: SPACE.xs,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Feather name="sunrise" size={14} color={c.accentDeep} />
+            <BodyStrong>{briefQ.data.headline}</BodyStrong>
+          </View>
+          {briefQ.data.risks.map((r, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor:
+                    r.severity === 'high' ? c.risk : r.severity === 'medium' ? c.warn : c.info,
+                }}
+              />
+              <Small style={{ flex: 1, color: c.text }} numberOfLines={2}>
+                {r.message}
+              </Small>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {/* Messages */}
       <FlatList

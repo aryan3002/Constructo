@@ -13,7 +13,7 @@ a later slice; homeowner-role users are out of scope here.
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
@@ -22,6 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.brief.generate import _to_contract
+from app.brief.risk import detect_risks, rank_risks
 from app.chat.reply_interpreter import apply_correction, parse_correction
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
@@ -548,6 +550,83 @@ async def _events_for_messages(
             if sid in raw_id_set:
                 by_raw.setdefault(sid, []).append(ev)
     return by_raw
+
+
+class BriefRiskOut(BaseModel):
+    kind: str
+    severity: str
+    message: str
+    evidence_event_ids: list[UUID]
+
+
+class ChatBriefOut(BaseModel):
+    """The owner's brief, pinned in the site thread (1.8). Exceptions-first:
+    the top ranked risks, each with its evidence, or 'all caught up'."""
+
+    site_id: UUID
+    risk_count: int
+    headline: str
+    risks: list[BriefRiskOut]
+
+
+_BRIEF_HISTORY_DAYS = 14
+
+
+@router.get("/brief", response_model=ChatBriefOut)
+async def site_brief(
+    site_id: UUID = Query(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ChatBriefOut:
+    """The site's ranked risks for today — the brief as a pinned thread card.
+    Reuses the deterministic risk engine (labour shortfall, unverified invoices,
+    pending approvals, data quality); abstains honestly when there's nothing."""
+    await _require_site(session, user, site_id)
+    today = date.today()
+
+    today_rows = (
+        await session.execute(
+            select(SiteEventModel)
+            .where(SiteEventModel.site_id == site_id, SiteEventModel.occurred_on == today)
+            .where(latest_event_clause())
+        )
+    ).scalars().all()
+    history_rows = (
+        await session.execute(
+            select(SiteEventModel)
+            .where(
+                SiteEventModel.site_id == site_id,
+                SiteEventModel.event_type == "attendance",
+                SiteEventModel.occurred_on >= today - timedelta(days=_BRIEF_HISTORY_DAYS),
+                SiteEventModel.occurred_on < today,
+            )
+            .where(latest_event_clause())
+        )
+    ).scalars().all()
+
+    risks = detect_risks(
+        [_to_contract(r) for r in today_rows],
+        site_id=site_id,
+        history_events=[_to_contract(r) for r in history_rows],
+    )
+    top = rank_risks(risks, 3)
+    headline = (
+        "All caught up" if not top else f"{len(top)} thing{'s' if len(top) != 1 else ''} need you"
+    )
+    return ChatBriefOut(
+        site_id=site_id,
+        risk_count=len(top),
+        headline=headline,
+        risks=[
+            BriefRiskOut(
+                kind=r["kind"],
+                severity=r["severity"],
+                message=r["message"],
+                evidence_event_ids=r.get("evidence_event_ids", []),
+            )
+            for r in top
+        ],
+    )
 
 
 @router.post("/read", status_code=204)
