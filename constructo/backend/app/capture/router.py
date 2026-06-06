@@ -12,6 +12,7 @@ The caller must be assigned to ``site_id`` (owner/PM see all company sites). Wit
 """
 from __future__ import annotations
 
+import json
 import mimetypes
 import os
 from datetime import UTC, datetime
@@ -87,6 +88,7 @@ async def capture(
     site_id: UUID = Form(...),
     type: str | None = Form(default=None),
     text: str | None = Form(default=None),
+    fields: str | None = Form(default=None),
     media: UploadFile | None = File(default=None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -94,16 +96,32 @@ async def capture(
     """Capture a site update from the app and feed it to extraction.
 
     Multipart form: ``site_id`` (required), optional ``type`` hint
-    (attendance|delivery|progress|issue|…), optional ``text``, optional ``media``
-    file. At least one of ``text`` / ``media`` must be present.
+    (attendance|delivery|progress|issue|…), optional ``text``, optional ``fields``
+    (a JSON object of structured field values from a typed card), optional
+    ``media`` file. At least one of ``text`` / ``media`` / ``fields`` must be
+    present.
+
+    When ``type`` **and** ``fields`` are both provided (a typed card), extraction
+    skips the LLM and books the event verbatim at confidence 1.0 (Phase 0.1).
     """
     # Permission: the caller must be able to see (be assigned to) the site.
     visible = await effective_visible_site_ids(session, user)
     if site_id not in visible:
         raise AppError(403, "forbidden", "You are not assigned to this site")
 
-    if media is None and not (text and text.strip()):
-        raise AppError(422, "empty_capture", "Provide text or a media file")
+    # Parse the optional structured field payload from a typed card.
+    parsed_fields: dict | None = None
+    if fields and fields.strip():
+        try:
+            loaded = json.loads(fields)
+        except json.JSONDecodeError as exc:
+            raise AppError(422, "invalid_fields", "fields must be valid JSON") from exc
+        if not isinstance(loaded, dict):
+            raise AppError(422, "invalid_fields", "fields must be a JSON object")
+        parsed_fields = loaded
+
+    if media is None and not (text and text.strip()) and parsed_fields is None:
+        raise AppError(422, "empty_capture", "Provide text, fields, or a media file")
 
     media_url: str | None = None
     media_mime: str | None = None
@@ -112,6 +130,9 @@ async def capture(
         media_url, media_mime, media_type = await _store_media(media)
 
     now = datetime.now(UTC)
+    raw_payload: dict = {"client": "app", "capture_type": type, "site_id": str(site_id)}
+    if parsed_fields is not None:
+        raw_payload["fields"] = parsed_fields
     row = RawMessageModel(
         source="app",
         external_group_id=f"app:{site_id}",
@@ -123,7 +144,7 @@ async def capture(
         media_mime=media_mime,
         sent_at=now,
         received_at=now,
-        raw={"client": "app", "capture_type": type, "site_id": str(site_id)},
+        raw=raw_payload,
     )
     session.add(row)
     await session.commit()
