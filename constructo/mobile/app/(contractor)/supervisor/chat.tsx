@@ -929,6 +929,7 @@ export default function CrewChat() {
         event={disputeSheet?.event ?? null}
         eventSummary={disputeSheet?.summary ?? ''}
         lang={lang}
+        meId={me?.id}
         onClose={() => setDisputeSheet(null)}
         onDone={() => {
           setDisputeSheet(null)

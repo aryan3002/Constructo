@@ -42,6 +42,8 @@ const STR = {
     cancel: 'Cancel',
     failed: 'Could not save — try again.',
     already: 'You already have an open dispute on this card.',
+    yourDispute: 'Your open dispute',
+    withdraw: 'Withdraw it',
   },
   hi: {
     raiseTitle: 'इस पर आपत्ति',
@@ -58,6 +60,8 @@ const STR = {
     cancel: 'रद्द करें',
     failed: 'सेव नहीं हुआ — फिर कोशिश करें।',
     already: 'इस कार्ड पर आपका विवाद पहले से खुला है।',
+    yourDispute: 'आपका खुला विवाद',
+    withdraw: 'वापस लें',
   },
 } as const
 
@@ -68,6 +72,8 @@ export interface DisputeSheetProps {
   /** A human gist of the card for the sheet header. */
   eventSummary: string
   lang: Lang
+  /** The current user's id — to detect (and offer to withdraw) their own dispute. */
+  meId?: string
   onClose: () => void
   /** Success → the caller refetches messages so the contested flag flips. */
   onDone: () => void
@@ -86,6 +92,7 @@ export function DisputeSheet({
   event,
   eventSummary,
   lang,
+  meId,
   onClose,
   onDone,
 }: DisputeSheetProps) {
@@ -98,13 +105,18 @@ export function DisputeSheet({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // resolve mode: find the OPEN dispute on this event.
+  // resolve mode: find the OPEN dispute to settle. raise mode: detect MY own
+  // open dispute (so I can withdraw it instead of raising a duplicate).
   const disputesQ = useQuery({
     queryKey: ['disputes', event?.id],
     queryFn: () => disputesApi.list(event!.id),
-    enabled: visible && mode === 'resolve' && !!event,
+    enabled: visible && !!event && (mode === 'resolve' || (mode === 'raise' && !!meId)),
   })
-  const open: Dispute | undefined = (disputesQ.data ?? []).find((d) => d.status === 'open')
+  const data = disputesQ.data ?? []
+  const open: Dispute | undefined = data.find((d) => d.status === 'open')
+  const myOpen: Dispute | undefined = data.find(
+    (d) => d.status === 'open' && !!meId && d.raised_by === meId,
+  )
 
   const reset = () => {
     setReason('')
@@ -131,6 +143,19 @@ export function DisputeSheet({
     } catch (e) {
       const code = (e as { code?: string })?.code
       setError(code === 'already_open' ? t.already : t.failed)
+      setBusy(false)
+    }
+  }
+
+  async function onWithdraw() {
+    if (!myOpen || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await disputesApi.withdraw(myOpen.id)
+      done()
+    } catch {
+      setError(t.failed)
       setBusy(false)
     }
   }
@@ -190,6 +215,32 @@ export function DisputeSheet({
           ) : null}
 
           {mode === 'raise' ? (
+            myOpen ? (
+              <View style={{ gap: SPACE.md }}>
+                <Small muted style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {t.yourDispute}
+                </Small>
+                <Body style={{ color: c.text }}>{myOpen.reason}</Body>
+                {error ? <Small color={STATUS.risk}>{error}</Small> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t.withdraw}
+                  disabled={busy}
+                  onPress={onWithdraw}
+                  style={({ pressed }) => ({
+                    minHeight: TAP,
+                    borderRadius: theme.radii.control,
+                    borderWidth: 1,
+                    borderColor: c.line,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: busy ? 0.5 : pressed ? 0.9 : 1,
+                  })}
+                >
+                  {busy ? <ActivityIndicator color={c.accent} /> : <BodyStrong>{t.withdraw}</BodyStrong>}
+                </Pressable>
+              </View>
+            ) : (
             <>
               <Small muted>{t.raiseHint}</Small>
               <TextInput
@@ -229,6 +280,7 @@ export function DisputeSheet({
                 {busy ? <ActivityIndicator color="#fff" /> : <BodyStrong color="#fff">{t.raise}</BodyStrong>}
               </Pressable>
             </>
+            )
           ) : disputesQ.isLoading ? (
             <View style={{ paddingVertical: SPACE.lg, alignItems: 'center' }}>
               <ActivityIndicator color={c.accent} />
