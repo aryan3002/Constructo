@@ -37,6 +37,7 @@ import {
   type ChatMessage,
 } from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
+import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
 import { CalmEmpty, CaptureCard, ErrorState, Loading } from './_components'
@@ -68,6 +69,11 @@ const STR = {
     nivaan: 'Nivaan',
     askFailed: "Couldn't reach Nivaan — try again.",
     evidence: 'events',
+    holdToTalk: 'Hold to talk',
+    recording: 'Recording… release to send',
+    tooShort: 'Too short — hold a bit longer',
+    micPerm: 'Microphone access is needed to record',
+    voiceHint: 'e.g. "barah mistri, pachaas bori cement"',
   },
   hi: {
     title: 'टीम चैट',
@@ -92,6 +98,11 @@ const STR = {
     nivaan: 'निवान',
     askFailed: 'निवान से जवाब नहीं मिला — फिर कोशिश करें।',
     evidence: 'इवेंट',
+    holdToTalk: 'दबाकर बोलो',
+    recording: 'रिकॉर्ड हो रहा… छोड़ें भेजने के लिए',
+    tooShort: 'बहुत छोटा — थोड़ा और देर दबाएँ',
+    micPerm: 'रिकॉर्ड के लिए माइक की अनुमति चाहिए',
+    voiceHint: 'जैसे "बारह मिस्त्री, पचास बोरी सीमेंट"',
   },
 } as const
 
@@ -297,6 +308,40 @@ export default function CrewChat() {
       )
     }
   }, [site, msgsQ, scrollToEnd, str])
+
+  // Voice-to-Card (1.3): hold-to-talk → upload the .m4a as voice media → send;
+  // the worker runs STT + numeral-repair into a card (the mukadam's primary input).
+  const onVoice = useCallback(
+    async (audio: RecordedAudio) => {
+      if (!site) return
+      const clientMsgId = newClientMsgId()
+      setPending((p) => [...p, { clientMsgId, body: '🎙', status: 'sending', captured: true }])
+      scrollToEnd()
+      try {
+        const uploaded = await chatApi.uploadMedia(
+          site.id,
+          { uri: audio.uri, name: audio.name, type: audio.mime },
+          'voice',
+        )
+        await chatApi.send({
+          site_id: site.id,
+          client_msg_id: clientMsgId,
+          media_type: 'voice',
+          attachment_key: uploaded.key,
+          attachment_mime: audio.mime,
+          attachment_sha256: uploaded.sha256,
+        })
+        setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
+        await msgsQ.refetch()
+        scrollToEnd()
+      } catch {
+        setPending((p) =>
+          p.map((m) => (m.clientMsgId === clientMsgId ? { ...m, status: 'failed' } : m)),
+        )
+      }
+    },
+    [site, msgsQ, scrollToEnd],
+  )
 
   type Row =
     | { kind: 'server'; key: string; msg: ChatMessage }
@@ -609,6 +654,19 @@ export default function CrewChat() {
           <Feather name="arrow-up-circle" size={20} color={c.accent} />
         </Pressable>
       ) : null}
+
+      {/* Voice-to-Card (1.3): hold-to-talk — the mukadam's primary input. */}
+      <View style={{ marginHorizontal: SPACE.lg, marginBottom: SPACE.xs }}>
+        <HoldToTalk
+          label={str.holdToTalk}
+          hint={str.voiceHint}
+          recordingLabel={str.recording}
+          tooShortLabel={str.tooShort}
+          permLabel={str.micPerm}
+          minHeight={72}
+          onRecorded={(a) => void onVoice(a)}
+        />
+      </View>
 
       {/* Composer */}
       <View
