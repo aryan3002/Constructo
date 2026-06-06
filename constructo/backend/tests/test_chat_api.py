@@ -247,6 +247,73 @@ async def _send_card_and_extract(client, db_session, owner, site, fields):
     return sent.json()["id"]
 
 
+async def _send_decision_and_extract(client, db_session, user, site):
+    sent = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "approve cement PO?",
+            "capture_type": "decision",
+            "fields": {"question": "approve cement PO?"},
+        },
+        headers=auth(user),
+    )
+    raw_id = (await db_session.get(ChatMessage, sent.json()["id"])).raw_message_id
+    await handle_ingested(
+        raw_id, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+    return sent.json()["id"]
+
+
+async def test_owner_reply_approves_decision_card(client, db_session, world):
+    """An owner's "haan theek hai" under a Decision card flips it to Approved
+    (1.4) — a superseding, attributed event; the reply mints no event."""
+    _, owner, site = world
+    parent_id = await _send_decision_and_extract(client, db_session, owner, site)
+    reply = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "haan theek hai",
+            "reply_to_id": parent_id,
+        },
+        headers=auth(owner),
+    )
+    assert reply.status_code == 201
+    assert reply.json()["events"] == []
+
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    parent_row = next(r for r in listed.json() if r["id"] == parent_id)
+    fields = parent_row["events"][0]["fields"]
+    assert fields["status"] == "approved"
+    assert fields["approved_by_role"] == "owner"
+
+
+async def test_supervisor_cannot_approve_owner_decision(client, db_session, factory, world):
+    """The authority gate holds on the crew side — a supervisor's "haan" doesn't
+    approve an owner Decision (it just posts as a message)."""
+    company, owner, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor)
+    db_session.add(SiteAssignment(site_id=site.id, user_id=sup.id))
+    await db_session.flush()
+    parent_id = await _send_decision_and_extract(client, db_session, owner, site)
+    await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "haan theek hai",
+            "reply_to_id": parent_id,
+        },
+        headers=auth(sup),
+    )
+    listed = await client.get(f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner))
+    parent_row = next(r for r in listed.json() if r["id"] == parent_id)
+    assert parent_row["events"][0]["fields"].get("status") != "approved"
+
+
 async def test_owner_reply_corrects_card_in_place(client, db_session, world):
     """An owner's "45 nahi 54" reply supersedes the card's value (1.4) — the
     original card now renders 54, and the reply mints no new event."""
