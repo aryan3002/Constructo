@@ -31,6 +31,7 @@ from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
 from app.disputes.router import router as disputes_router
 from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
+from app.forecast.router import router as forecast_router
 from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
@@ -117,3 +118,4 @@ app.include_router(chat_router)  # Phase 1.0 in-app chat (crew site thread)
 app.include_router(action_items_router)  # Phase 1.6 action items / to-dos
 app.include_router(disputes_router)  # Phase 1.7 contested-truth (disputes)
 app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggregation)
+app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
