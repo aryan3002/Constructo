@@ -12,6 +12,7 @@ a later slice; homeowner-role users are out of scope here.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
@@ -60,11 +61,13 @@ class ChatSendIn(BaseModel):
     # Structured-capture hints (Phase 0.1 fast path) — a typed card / slash-cmd.
     capture_type: str | None = None
     fields: dict | None = None
-    # Media (1.2 Camera-as-Sensor): a bare R2 key the client uploaded to via the
-    # presign ticket, plus its mime and kind. Extraction OCRs/STTs it.
+    # Media (1.2 Camera-as-Sensor): a bare R2 key the client uploaded to, plus its
+    # mime and kind. Extraction OCRs/STTs it.
     attachment_key: str | None = None
     attachment_mime: str | None = None
     media_type: str = "text"
+    # Content hash from the upload (1.7 dedupe) — a replayed challan is caught.
+    attachment_sha256: str | None = None
 
 
 class ChatReadIn(BaseModel):
@@ -74,10 +77,11 @@ class ChatReadIn(BaseModel):
 
 class MediaUploadOut(BaseModel):
     """The stored object's bare key — the client then sends a message carrying
-    it as ``attachment_key``."""
+    it as ``attachment_key`` (and ``attachment_sha256`` for dedupe)."""
 
     key: str
     media_type: str
+    sha256: str
 
 
 class ChatEventOut(BaseModel):
@@ -113,6 +117,9 @@ class ChatMessageOut(BaseModel):
     # A short-lived presigned GET URL for the attachment (None for text). The DB
     # stores only the bare key; reads resolve it through storage.url_for.
     attachment_url: str | None = None
+    # Set when this attachment duplicates an earlier one (1.7) — the UI flags it
+    # and it never books a second event.
+    duplicate_of_id: UUID | None = None
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
@@ -222,6 +229,25 @@ async def send_message(
 
     conv = await _get_or_create_site_conversation(session, user, body.site_id)
 
+    # Adversarial-capture dedupe (1.7): a replayed attachment (same content hash
+    # already in this thread) is recorded as a duplicate and NOT extracted, so it
+    # can't double-book a delivery. client_msg_id can't catch this.
+    duplicate_of_id: UUID | None = None
+    if body.attachment_sha256:
+        prior = (
+            await session.execute(
+                select(ChatMessage.id)
+                .where(
+                    ChatMessage.conversation_id == conv.id,
+                    ChatMessage.media_sha256 == body.attachment_sha256,
+                    ChatMessage.duplicate_of_id.is_(None),
+                )
+                .order_by(ChatMessage.seq)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        duplicate_of_id = prior
+
     # Threading (1.5): a quote-reply must target a message in THIS thread, and we
     # stash the parent's text + type so extraction can read a terse reply in its
     # parent's context ("haan theek hai" under a Decision, "45 nahi 54" under a
@@ -263,9 +289,20 @@ async def send_message(
         media_type=body.media_type,
         attachment_key=body.attachment_key,
         attachment_mime=body.attachment_mime,
+        media_sha256=body.attachment_sha256,
+        duplicate_of_id=duplicate_of_id,
     )
     session.add(msg)
     await session.flush()
+
+    # A duplicate capture is persisted (the thread shows it, flagged) but never
+    # extracted — it must not mint a second event.
+    if duplicate_of_id is not None:
+        await session.commit()
+        await session.refresh(msg)
+        out = ChatMessageOut.model_validate(msg)
+        out.attachment_url = _safe_attachment_url(msg.attachment_key)
+        return out
 
     # Extraction seam — mint a RawMessage(source="app_chat") and bridge it. The
     # capture_type/fields hints ride the Phase 0.1 fast path; a media attachment
@@ -329,7 +366,7 @@ async def upload_media(
     key = f"chat/{site_id}/{uuid4().hex}.{ext}"
     get_storage().put_bytes(key, data, file.content_type or "application/octet-stream")
     media_type = kind if kind in _CHAT_MEDIA_TYPES else "document"
-    return MediaUploadOut(key=key, media_type=media_type)
+    return MediaUploadOut(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest())
 
 
 @router.get("/messages", response_model=list[ChatMessageOut])

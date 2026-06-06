@@ -403,6 +403,58 @@ async def test_upload_media_requires_site(client, factory, world):
     assert resp.status_code == 403
 
 
+async def test_upload_returns_content_hash(client, world):
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/media",
+        data={"site_id": str(site.id), "kind": "document"},
+        files={"file": ("challan.jpg", b"same-challan-bytes", "image/jpeg")},
+        headers=auth(owner),
+    )
+    import hashlib
+
+    assert resp.json()["sha256"] == hashlib.sha256(b"same-challan-bytes").hexdigest()
+
+
+async def test_replayed_attachment_is_deduped(client, db_session, world):
+    """The same challan re-sent (same content hash) is flagged a duplicate and
+    never books a second event (1.7 adversarial-capture dedupe)."""
+    import hashlib
+
+    _, owner, site = world
+    digest = hashlib.sha256(b"challan-xyz").hexdigest()
+    first = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "media_type": "document",
+            "attachment_key": "chat/site/a.jpg",
+            "attachment_sha256": digest,
+        },
+        headers=auth(owner),
+    )
+    assert first.json()["duplicate_of_id"] is None
+    first_raw = (await db_session.get(ChatMessage, first.json()["id"])).raw_message_id
+    assert first_raw is not None  # the original IS bridged to extraction
+
+    second = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "media_type": "document",
+            "attachment_key": "chat/site/b.jpg",
+            "attachment_sha256": digest,
+        },
+        headers=auth(owner),
+    )
+    assert second.json()["duplicate_of_id"] == first.json()["id"]
+    # The duplicate is NOT bridged to extraction — it can't double-book.
+    second_msg = await db_session.get(ChatMessage, second.json()["id"])
+    assert second_msg.raw_message_id is None
+
+
 async def test_worker_ocrs_document_attachment(db_session, world):
     """A document message runs OCR (Camera-as-Sensor) → a structured event."""
     from app.extraction.ocr import FakeOCR

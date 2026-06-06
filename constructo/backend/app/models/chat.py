@@ -108,6 +108,14 @@ class ChatMessage(Base):
     raw_message_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     attachment_key: Mapped[str | None] = mapped_column(String, nullable=True)
     attachment_mime: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Adversarial-capture dedupe (1.7): a content hash of the attachment. The same
+    # physical challan re-sent (a replayed JPEG) is caught here — client_msg_id
+    # can't see it. A duplicate is recorded and NOT extracted, so it can't
+    # double-book a delivery.
+    media_sha256: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    duplicate_of_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
+    )
     media_type: Mapped[str] = mapped_column(String, nullable=False, server_default="text")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
