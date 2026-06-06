@@ -15,6 +15,7 @@ import { Sites } from './pages/Sites'
 import { Login } from './pages/auth/Login'
 import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
 import { Join } from './pages/auth/Join'
+import { VendorConfirm } from './pages/VendorConfirm'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RoleLanding } from './pages/auth/RoleLanding'
 import { Settings } from './pages/settings/Settings'
@@ -81,6 +82,8 @@ export function App() {
       <Route path="/login" element={<Login />} />
       {/* === auth/settings (feature: auth) === */}
       <Route path="/join/:token" element={<Join />} />
+      {/* Public vendor confirm-loop (Phase 3.8) — no auth; token is the capability. */}
+      <Route path="/vendor-confirm/:token" element={<VendorConfirm />} />
       <Route path="/welcome" element={<Guarded><OwnerFirstRun /></Guarded>} />
       <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
       {/* Setup & Administration control plane (W4.1). */}
