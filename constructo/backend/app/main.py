@@ -47,6 +47,7 @@ from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
 from app.sites.router import router as sites_router
+from app.vendor_confirm.router import router as vendor_confirm_router
 from app.vendors.router import router as vendors_router
 
 
@@ -125,3 +126,4 @@ app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
 app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
+app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop

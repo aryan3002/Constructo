@@ -68,6 +68,7 @@ from app.models.site_financials import SiteFinancials
 from app.models.translation_cache import TranslationCache
 from app.models.user import User, UserRole
 from app.models.vendor import Vendor
+from app.models.vendor_confirmation import VendorConfirmation, VendorConfirmStatus
 from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
@@ -138,6 +139,8 @@ __all__ = [
     "User",
     "UserRole",
     "Vendor",
+    "VendorConfirmation",
+    "VendorConfirmStatus",
     "WeeklySummary",
     "WhatsappGroup",
 ]
