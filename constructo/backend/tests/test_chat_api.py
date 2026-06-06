@@ -339,6 +339,100 @@ async def test_list_messages_excludes_superseded_event(client, db_session, world
     assert events[0]["fields"]["quantity"] == 54  # the latest version only
 
 
+async def test_send_with_attachment_stores_media(client, db_session, world):
+    """A challan photo send (1.2) stores the media + bridges it to extraction."""
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "media_type": "document",
+            "attachment_key": "chat/site/challan-1.jpg",
+            "attachment_mime": "image/jpeg",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["media_type"] == "document"
+    stored = await db_session.get(ChatMessage, resp.json()["id"])
+    assert stored.attachment_key == "chat/site/challan-1.jpg"
+    raw = await db_session.get(RawMessageModel, stored.raw_message_id)
+    assert raw.media_type == "document"
+    assert raw.media_url == "chat/site/challan-1.jpg"
+
+
+async def test_send_bad_media_type_rejected(client, world):
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "media_type": "hologram",
+            "attachment_key": "k",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 422
+
+
+async def test_upload_media_stores_and_returns_key(client, world):
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/media",
+        data={"site_id": str(site.id), "kind": "document"},
+        files={"file": ("challan.jpg", b"\xff\xd8\xff fake jpeg bytes", "image/jpeg")},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["key"].startswith(f"chat/{site.id}/")
+    assert body["media_type"] == "document"
+
+
+async def test_upload_media_requires_site(client, factory, world):
+    company, _, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor)  # unassigned
+    resp = await client.post(
+        "/api/v1/chat/media",
+        data={"site_id": str(site.id), "kind": "document"},
+        files={"file": ("x.jpg", b"abc", "image/jpeg")},
+        headers=auth(sup),
+    )
+    assert resp.status_code == 403
+
+
+async def test_worker_ocrs_document_attachment(db_session, world):
+    """A document message runs OCR (Camera-as-Sensor) → a structured event."""
+    from app.extraction.ocr import FakeOCR
+
+    _, owner, site = world
+    raw = RawMessageModel(
+        source="app_chat",
+        external_group_id=f"app:{site.id}",
+        sender_id=str(owner.id),
+        sender_name=owner.name,
+        media_type="document",
+        text=None,
+        media_url="http://example.test/challan.jpg",  # http passes through url_for
+        media_mime="image/jpeg",
+        sent_at=datetime.now(UTC),
+        raw={"client": "app_chat", "site_id": str(site.id)},
+    )
+    db_session.add(raw)
+    await db_session.flush()
+    ids = await handle_ingested(
+        raw.id,
+        session_factory=_session_factory(db_session),
+        llm=FakeLLMClient(),
+        ocr=FakeOCR(default="Sharma Traders\nCement 50 bori\nInvoice 85000"),
+    )
+    assert len(ids) >= 1
+    event = await db_session.get(SiteEventModel, ids[0])
+    assert event.site_id == site.id
+
+
 async def test_chat_structured_card_books_verbatim(db_session, world):
     """A typed card sent via chat (capture_type + fields) rides the Phase 0.1
     fast path: confidence 1.0, verbatim fields."""

@@ -6,7 +6,7 @@
  * — a typed card rides `capture_type`/`fields`. `client_msg_id` makes a send
  * idempotent so the optimistic UI / offline retry never double-posts.
  */
-import { request } from './client'
+import { request, uploadMultipart, type UploadFile } from './client'
 
 export type MessageSide = 'homeowner' | 'contractor'
 
@@ -35,6 +35,8 @@ export interface ChatMessage {
   reply_to_id: string | null
   media_type: string
   created_at: string
+  /** Short-lived presigned GET for an attachment (challan photo), else null. */
+  attachment_url: string | null
   /** Events this message minted; empty for plain human talk (a bubble). */
   events: ChatEvent[]
 }
@@ -47,6 +49,16 @@ export interface ChatSendBody {
   /** Structured-capture hint (a typed card / slash-command) — Phase 0.1 path. */
   capture_type?: string
   fields?: Record<string, unknown>
+  /** Media (1.2 Camera-as-Sensor): the bare R2 key the client uploaded to. */
+  attachment_key?: string
+  attachment_mime?: string
+  media_type?: 'text' | 'image' | 'document' | 'voice'
+}
+
+/** The stored object's bare key returned by the media upload endpoint. */
+export interface MediaUpload {
+  key: string
+  media_type: string
 }
 
 /** RFC-4122 v4 — a valid UUID for the backend's `client_msg_id` (idempotency). */
@@ -72,6 +84,19 @@ export const chatApi = {
       method: 'POST',
       body: JSON.stringify(body),
     })
+  },
+
+  /** Upload chat media (1.2 Camera-as-Sensor); returns the stored bare key. */
+  uploadMedia(
+    siteId: string,
+    file: UploadFile,
+    kind: 'image' | 'document' | 'voice' = 'document',
+  ): Promise<MediaUpload> {
+    const form = new FormData()
+    form.append('file', file as unknown as Blob)
+    form.append('site_id', siteId)
+    form.append('kind', kind)
+    return uploadMultipart<MediaUpload>('/api/v1/chat/media', form)
   },
 
   /** Advance the read cursor (returns 204). */

@@ -10,6 +10,7 @@
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import {
   ActivityIndicator,
+  Image,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -387,12 +388,15 @@ export function CaptureCard({
   event,
   lang,
   sourceText,
+  attachmentUrl,
   time,
 }: {
   event: ChatEvent
   lang: EvLang
   /** The original message text — the proof, revealed on tap. */
   sourceText?: string | null
+  /** The captured photo/challan (1.2) — shown in the proof reveal. */
+  attachmentUrl?: string | null
   time: string
 }) {
   const { theme } = useTheme()
@@ -474,6 +478,13 @@ export function CaptureCard({
           <Micro muted style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
             {str.captured}
           </Micro>
+          {attachmentUrl ? (
+            <Image
+              source={{ uri: attachmentUrl }}
+              style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 2 }}
+              resizeMode="cover"
+            />
+          ) : null}
           {sourceText ? <Body style={{ color: c.text }}>{sourceText}</Body> : null}
           <Mono muted style={{ fontSize: 12 }}>
             {[time, `${pct}% ${str.conf}`].filter(Boolean).join('  ·  ')}
