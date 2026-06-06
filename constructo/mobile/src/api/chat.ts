@@ -97,6 +97,23 @@ export interface RecapResult {
   summary: string
 }
 
+/** One Standing-Sentinel signal (3.1) — what's slipping (absence / overdue). */
+export interface SentinelSignal {
+  kind: string // attendance_absence | action_item_overdue | material_overdue
+  severity: 'high' | 'medium' | 'low' | string
+  message: string
+  evidence_event_ids: string[]
+}
+
+/** The absence + stuck-thing radar for a site (3.1) — deterministic, abstains. */
+export interface SentinelResult {
+  site_id: string
+  window_days: number
+  signals: SentinelSignal[]
+  count: number
+  summary: string
+}
+
 /** A grounded answer from Ask-the-Project (2.2). The total is computed in the
  *  backend reducers, never a model; `unconfirmed` is the honest caveat. */
 export interface AskResult {
@@ -165,6 +182,13 @@ export const chatApi = {
   recap(siteId: string, days = 1): Promise<RecapResult> {
     return request<RecapResult>(
       `/api/v1/recap?site_id=${encodeURIComponent(siteId)}&days=${days}`,
+    )
+  },
+
+  /** Standing Sentinel (3.1): the absence + stuck-thing radar for a site. */
+  sentinel(siteId: string, windowDays = 14): Promise<SentinelResult> {
+    return request<SentinelResult>(
+      `/api/v1/sentinel?site_id=${encodeURIComponent(siteId)}&window_days=${windowDays}`,
     )
   },
 

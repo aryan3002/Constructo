@@ -71,6 +71,9 @@ const STR = {
     recapTitle: 'Last 24 hours',
     recapNothing: 'Nothing logged in this window.',
     recapDisputes: 'open disputes',
+    radar: 'Radar',
+    radarTitle: 'What’s slipping',
+    radarClear: 'All clear — nothing’s slipping.',
     cancel: 'Cancel',
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
@@ -106,6 +109,9 @@ const STR = {
     recapTitle: 'पिछले 24 घंटे',
     recapNothing: 'इस अवधि में कुछ दर्ज नहीं।',
     recapDisputes: 'खुले विवाद',
+    radar: 'रडार',
+    radarTitle: 'क्या अटक रहा है',
+    radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
     cancel: 'रद्द करें',
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
@@ -170,6 +176,8 @@ export default function CrewChat() {
   } | null>(null)
   // The "Catch me up" recap sheet (2.6).
   const [recapOpen, setRecapOpen] = useState(false)
+  // The Standing-Sentinel "Radar" sheet (3.1).
+  const [radarOpen, setRadarOpen] = useState(false)
 
   // The supervisor's assigned site(s); v1 chats the first one.
   const sitesQ = useQuery({ queryKey: ['supervisor', 'sites'], queryFn: () => supervisorApi.sites() })
@@ -196,6 +204,13 @@ export default function CrewChat() {
     queryKey: ['chat', 'recap', site?.id],
     queryFn: () => chatApi.recap(site!.id, 1),
     enabled: !!site && recapOpen,
+  })
+
+  // Standing-Sentinel radar (3.1) — fetched only when the sheet is opened.
+  const radarQ = useQuery({
+    queryKey: ['chat', 'sentinel', site?.id],
+    queryFn: () => chatApi.sentinel(site!.id),
+    enabled: !!site && radarOpen,
   })
 
   // Lookup for rendering a quoted parent above a reply (1.5 threading).
@@ -444,6 +459,26 @@ export default function CrewChat() {
           <BodyStrong>{str.title}</BodyStrong>
           <Small style={{ color: c.textMute }}>{site.name}</Small>
         </View>
+        {/* Radar (3.1) — what's slipping (absence + stuck-thing). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={str.radar}
+          onPress={() => setRadarOpen(true)}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            minHeight: 40,
+            paddingHorizontal: SPACE.md,
+            borderRadius: 9999,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: pressed ? c.paper : c.card,
+          })}
+        >
+          <Feather name="radio" size={15} color={c.accentDeep} />
+          <Small style={{ fontWeight: '600', color: c.text }}>{str.radar}</Small>
+        </Pressable>
         {/* Catch me up (2.6) — deterministic recap of the last 24h. */}
         <Pressable
           accessibilityRole="button"
@@ -772,6 +807,57 @@ export default function CrewChat() {
               </View>
             ) : (
               <Small muted>{str.recapNothing}</Small>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Standing-Sentinel radar (3.1) — what's slipping, deterministic. */}
+      <Modal visible={radarOpen} transparent animationType="slide" onRequestClose={() => setRadarOpen(false)}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
+          onPress={() => setRadarOpen(false)}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: theme.radii.sheet,
+              borderTopRightRadius: theme.radii.sheet,
+              padding: SPACE.lg,
+              paddingBottom: insets.bottom + SPACE.lg,
+              gap: SPACE.md,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Feather name="radio" size={18} color={c.accentDeep} />
+              <BodyStrong style={{ flex: 1 }}>{str.radarTitle}</BodyStrong>
+              <Pressable accessibilityRole="button" accessibilityLabel={str.cancel} hitSlop={10} onPress={() => setRadarOpen(false)}>
+                <Feather name="x" size={22} color={c.textMute} />
+              </Pressable>
+            </View>
+
+            {radarQ.isLoading ? (
+              <View style={{ paddingVertical: SPACE.lg, alignItems: 'center' }}>
+                <ActivityIndicator color={c.accent} />
+              </View>
+            ) : radarQ.data && radarQ.data.signals.length > 0 ? (
+              <View style={{ gap: SPACE.sm }}>
+                {radarQ.data.signals.map((s, i) => {
+                  const tone =
+                    s.severity === 'high' ? c.risk : s.severity === 'medium' ? c.warn : c.info
+                  return (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+                      <View
+                        style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: tone }}
+                      />
+                      <Body style={{ flex: 1, color: c.text }}>{s.message}</Body>
+                    </View>
+                  )
+                })}
+              </View>
+            ) : (
+              <Body muted>{str.radarClear}</Body>
             )}
           </Pressable>
         </Pressable>
