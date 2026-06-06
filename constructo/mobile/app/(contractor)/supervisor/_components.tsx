@@ -327,8 +327,8 @@ const EVENT_META: Record<string, EvMeta> = {
 }
 
 const CARD_STR = {
-  en: { show: 'Show proof ▾', hide: 'Hide proof ▴', review: 'Check this', captured: 'Captured', conf: 'sure', workers: 'workers', disputed: 'Disputed' },
-  hi: { show: 'सबूत देखें ▾', hide: 'सबूत छिपाएँ ▴', review: 'जाँचें', captured: 'दर्ज हुआ', conf: 'पक्का', workers: 'मज़दूर', disputed: 'विवादित' },
+  en: { show: 'Show proof ▾', hide: 'Hide proof ▴', review: 'Check this', captured: 'Captured', conf: 'sure', workers: 'workers', disputed: 'Disputed', approved: 'Approved' },
+  hi: { show: 'सबूत देखें ▾', hide: 'सबूत छिपाएँ ▴', review: 'जाँचें', captured: 'दर्ज हुआ', conf: 'पक्का', workers: 'मज़दूर', disputed: 'विवादित', approved: 'मंज़ूर' },
 } as const
 
 /** Indian-grouped rupee formatting (no reliance on Hermes Intl). */
@@ -446,6 +446,9 @@ export function CaptureCard({
           <Small style={{ fontWeight: '600' }}>{lang === 'hi' ? meta.hi : meta.en}</Small>
         </View>
         {event.contested ? <StatusPill status="risk" label={str.disputed} size="sm" /> : null}
+        {(event.fields as { status?: string })?.status === 'approved' ? (
+          <StatusPill status="ok" label={str.approved} size="sm" />
+        ) : null}
         {event.needs_clarification && !event.contested ? (
           <StatusPill status="warn" label={str.review} size="sm" />
         ) : null}

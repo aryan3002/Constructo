@@ -25,7 +25,7 @@ from app.action_items.detector import detect_action_item
 from app.auth.deps import get_current_user
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
-from app.chat.reply_interpreter import apply_correction, parse_correction
+from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
@@ -292,6 +292,48 @@ async def _propose_action_item(
     )
 
 
+async def _apply_reply_approval(
+    session: AsyncSession,
+    user: User,
+    reply_to_id: UUID | None,
+    body: str | None,
+) -> dict | None:
+    """Reply-to-Card approve (1.4): "haan theek hai" under an approval/Decision
+    card flips it to "Approved by <role> · v2" — a logged, attributed,
+    superseding event. Authority-gated: only an owner/PM can approve (a
+    supervisor can't approve an owner-only Decision). Returns the outcome, or
+    None when the reply isn't an approval of a Decision card."""
+    if not body or not is_approval(body):
+        return None
+    event = await _parent_event(session, reply_to_id)
+    if event is None or event.event_type != "approval":
+        return None
+    if user.role not in _CORRECTION_AUTHORITY:
+        return None  # not the deciding authority — let it send as a plain message
+    now = datetime.now(UTC)
+    superseding = SiteEventModel(
+        site_id=event.site_id,
+        event_type="approval",
+        occurred_on=event.occurred_on,
+        summary=event.summary,
+        fields={
+            **(event.fields or {}),
+            "status": "approved",
+            "approved_by": str(user.id),
+            "approved_by_role": user.role.value,
+            "approved_at": now.isoformat(),
+        },
+        confidence=1.0,
+        needs_clarification=False,
+        source_message_ids=event.source_message_ids,
+        version=event.version + 1,
+        supersedes_event_id=event.id,
+    )
+    session.add(superseding)
+    await session.flush()
+    return {"action": "approved", "event_id": str(superseding.id)}
+
+
 async def _reply_context(
     session: AsyncSession, conversation_id: UUID, reply_to_id: UUID | None
 ) -> dict | None:
@@ -425,6 +467,14 @@ async def send_message(
     # is NOT itself re-extracted as a new capture.
     correction = await _apply_reply_correction(session, user, body.reply_to_id, body.body)
     if correction is not None:
+        await session.commit()
+        await session.refresh(msg)
+        return ChatMessageOut.model_validate(msg)
+
+    # Reply-to-Card (1.4): "haan theek hai" under an approval card commits the
+    # approval (authority-gated) and is not itself re-extracted.
+    approval = await _apply_reply_approval(session, user, body.reply_to_id, body.body)
+    if approval is not None:
         await session.commit()
         await session.refresh(msg)
         return ChatMessageOut.model_validate(msg)
