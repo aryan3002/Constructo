@@ -13,8 +13,8 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 
 const STR = {
-  en: { capture: 'Capture', sites: 'My Sites', tasks: 'Tasks/Asks' },
-  hi: { capture: 'भेजो', sites: 'मेरी साइट', tasks: 'काम/सवाल' },
+  en: { capture: 'Capture', chat: 'Chat', sites: 'My Sites', tasks: 'Tasks/Asks' },
+  hi: { capture: 'भेजो', chat: 'चैट', sites: 'मेरी साइट', tasks: 'काम/सवाल' },
 } as const
 
 function icon(glyph: string) {
@@ -45,6 +45,7 @@ export default function SupervisorLayout() {
       }}
     >
       <Tabs.Screen name="capture" options={{ title: str.capture, tabBarIcon: icon('📷') }} />
+      <Tabs.Screen name="chat" options={{ title: str.chat, tabBarIcon: icon('💬') }} />
       <Tabs.Screen name="my-sites" options={{ title: str.sites, tabBarIcon: icon('🏗') }} />
       <Tabs.Screen name="tasks-asks" options={{ title: str.tasks, tabBarIcon: icon('✅') }} />
     </Tabs>
