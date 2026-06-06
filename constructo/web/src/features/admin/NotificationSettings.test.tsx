@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LanguageProvider } from '../../i18n'
@@ -20,10 +20,20 @@ function settings(over: Partial<Settings> = {}): Settings {
   return { sla_hours: 24, escalate_overdue: true, daily_digest: true, ...over }
 }
 
+// Track the per-test QueryClient so we can tear it down deterministically —
+// otherwise a query/mutation that resolves AFTER a test unmounts re-renders into
+// a torn-down tree and throws "useT must be used within a <LanguageProvider>",
+// which then flakes the next test (the spy-not-called failure seen in CI).
+let activeQc: QueryClient | null = null
+
 function renderSettings(role = 'owner') {
   const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
   })
+  activeQc = qc
   qc.setQueryData(['me'], { id: 'u1', role })
   return render(
     <QueryClientProvider client={qc}>
@@ -40,6 +50,14 @@ describe('NotificationSettings', () => {
     updateSettings.mockReset()
     getSettings.mockResolvedValue(settings())
     updateSettings.mockImplementation((patch) => Promise.resolve(settings(patch)))
+  })
+
+  afterEach(() => {
+    // Unmount first, then cancel/clear any in-flight async so nothing fires into
+    // a dead tree between tests.
+    cleanup()
+    activeQc?.clear()
+    activeQc = null
   })
 
   it('prefills the current SLA hours', async () => {
