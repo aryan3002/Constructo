@@ -141,3 +141,72 @@ async def test_various_event_types(text, expected):
     raw = _raw(text=text)
     events = await extract(raw, SITE_ID, llm=FakeLLMClient())
     assert events[0].event_type is expected
+
+
+# ---- Phase 0.1: structured-capture ground-truth fast path -----------------
+
+
+async def test_capture_type_with_fields_skips_llm_and_is_certain():
+    """A typed card (capture_type + fields) books verbatim at confidence 1.0 and
+    NEVER calls the LLM — the human's submission is the data."""
+    raw = _raw(
+        text="50 bori cement ACC",
+        raw={
+            "capture_type": "delivery",
+            "fields": {"material": "cement", "quantity": 50, "vendor": "ACC"},
+        },
+    )
+    llm = FakeLLMClient()
+    events = await extract(raw, SITE_ID, llm=llm)
+    assert llm.calls == []  # the LLM was never invoked
+    ev = events[0]
+    assert ev.event_type is EventType.material_delivery  # alias "delivery" coerced
+    assert ev.fields == {"material": "cement", "quantity": 50, "vendor": "ACC"}
+    assert ev.confidence == 1.0
+    assert ev.needs_clarification is False
+    assert ev.source_message_ids == [raw.id]
+
+
+async def test_capture_type_canonical_value_also_works():
+    raw = _raw(raw={"capture_type": "material_delivery", "fields": {"material": "steel"}})
+    llm = FakeLLMClient()
+    ev = (await extract(raw, SITE_ID, llm=llm))[0]
+    assert llm.calls == []
+    assert ev.event_type is EventType.material_delivery
+    assert ev.fields == {"material": "steel"}
+
+
+async def test_capture_type_without_fields_anchors_type_but_uses_llm_for_fields():
+    """Declared type, no field values: the type is LOCKED (even if the LLM guesses
+    a different one), the LLM still fills the fields, and it never lands unknown."""
+    # The canned LLM tries to override the type to 'issue' — must be ignored.
+    canned = {
+        "event_type": "issue",
+        "summary": "x",
+        "fields": {"material": "cement"},
+        "confidence": 0.4,
+    }
+    raw = _raw(text="cement ka kuch chakkar hai", raw={"capture_type": "delivery"})
+    llm = FakeLLMClient(canned=canned)
+    ev = (await extract(raw, SITE_ID, llm=llm))[0]
+    assert llm.calls != []  # LLM WAS used (for fields)
+    assert ev.event_type is EventType.material_delivery  # type stayed locked
+    assert ev.fields == {"material": "cement"}
+    assert ev.needs_clarification is False  # human-asserted type keeps it confident
+
+
+async def test_unknown_or_invalid_capture_type_falls_back_to_llm():
+    for hint in ("unknown", "  ", "totally_not_a_type"):
+        raw = _raw(text="24 mazdoor aaye", raw={"capture_type": hint})
+        llm = FakeLLMClient()
+        ev = (await extract(raw, SITE_ID, llm=llm))[0]
+        assert llm.calls != []  # normal LLM path
+        assert ev.event_type is EventType.attendance  # classified from text
+
+
+async def test_no_capture_type_is_unchanged_llm_path():
+    raw = _raw(text="24 mazdoor aaye")
+    llm = FakeLLMClient()
+    ev = (await extract(raw, SITE_ID, llm=llm))[0]
+    assert llm.calls != []
+    assert ev.event_type is EventType.attendance

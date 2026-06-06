@@ -145,6 +145,44 @@ def _coerce_event_type(value: Any) -> EventType | None:
         return None
 
 
+# Friendly capture-type aliases the app/composer (and slash-commands) may send,
+# mapped to the canonical EventType. The canonical values themselves also resolve
+# (EventType(...) below), so both "delivery" and "material_delivery" work.
+_CAPTURE_TYPE_ALIASES: dict[str, EventType] = {
+    "attendance": EventType.attendance,
+    "delivery": EventType.material_delivery,
+    "material": EventType.material_delivery,
+    "material_delivery": EventType.material_delivery,
+    "invoice": EventType.invoice_received,
+    "invoice_received": EventType.invoice_received,
+    "payment": EventType.payment_request,
+    "payment_request": EventType.payment_request,
+    "progress": EventType.progress_update,
+    "progress_update": EventType.progress_update,
+    "issue": EventType.issue,
+    "drawing": EventType.drawing_shared,
+    "drawing_shared": EventType.drawing_shared,
+    "approval": EventType.approval,
+    "decision": EventType.approval,
+}
+
+
+def _declared_event_type(raw: RawMessage) -> EventType | None:
+    """The human-declared event type from a structured capture (``capture_type``).
+
+    Returns the canonical :class:`EventType` when the app/composer told us what
+    this is (a typed card, slash-command, or promoted message), else ``None``.
+    ``unknown`` is treated as "not declared" so it never short-circuits the LLM.
+    """
+    hint = (raw.raw or {}).get("capture_type")
+    if not isinstance(hint, str) or not hint.strip():
+        return None
+    declared = _CAPTURE_TYPE_ALIASES.get(hint.strip().lower())
+    if declared is None:
+        declared = _coerce_event_type(hint.strip().lower())
+    return declared if declared is not None and declared is not EventType.unknown else None
+
+
 async def extract(
     raw: RawMessage,
     site_id: UUID,
@@ -163,13 +201,72 @@ async def extract(
             when no API key is configured).
 
     Returns a list (currently 0 or 1 events) of validated ``SiteEvent`` objects.
+
+    **Structured-capture fast path (Phase 0.1).** When the human already told us
+    the event type via ``capture_type`` (a typed card / slash-command / promoted
+    message), we trust it as ground truth — no classifier override, no LLM type
+    guess. If the capture also carried its field values (``raw.raw["fields"]``),
+    we skip the LLM entirely and stamp confidence 1.0: the human's submission IS
+    the data. This is what kills the "unknown" flood and the cement→putty
+    mis-classification for every carded message.
     """
+    declared = _declared_event_type(raw)
+
+    # Fully-deterministic path: declared type + human-entered field values.
+    provided_fields = (raw.raw or {}).get("fields")
+    if declared is not None and isinstance(provided_fields, dict):
+        text = (raw.text or "").strip()
+        summary = (
+            (raw.raw or {}).get("summary")
+            or text
+            or declared.value.replace("_", " ")
+        )
+        summary = summary.strip()[:500] or "(no content)"
+        return [
+            SiteEvent(
+                site_id=site_id,
+                event_type=declared,
+                occurred_on=raw.sent_at.date() if raw.sent_at else date.today(),
+                summary=summary,
+                fields=dict(provided_fields),
+                confidence=1.0,
+                needs_clarification=False,
+                source_message_ids=[raw.id],
+            )
+        ]
+
+    # LLM path — either fully open (no declaration) or type-anchored (declared
+    # type, but the field values still come from free text / media).
+    return [
+        await _extract_via_llm(
+            raw, site_id, llm=llm, stt=stt, ocr=ocr, forced_type=declared
+        )
+    ]
+
+
+async def _extract_via_llm(
+    raw: RawMessage,
+    site_id: UUID,
+    *,
+    llm: LLMClient | None,
+    stt: STTClient | None,
+    ocr: OCRClient | None,
+    forced_type: EventType | None = None,
+) -> SiteEvent:
+    """Classify + LLM-fill one event. When ``forced_type`` is set the type is
+    locked (the human declared it) — the classifier and the LLM's type guess are
+    ignored, and the human's assertion seeds a high type-confidence prior so a
+    carded message never lands as ``unknown``."""
     llm = llm or get_llm_client()
 
     text = await _resolve_text(raw, stt, ocr)
 
-    # 2) Classify (deterministic).
-    event_type, classifier_conf = classify(text, raw.media_type)
+    if forced_type is not None:
+        event_type = forced_type
+        classifier_conf = 0.9  # the human asserted the type
+    else:
+        # 2) Classify (deterministic).
+        event_type, classifier_conf = classify(text, raw.media_type)
 
     # 3) LLM fills the type-specific fields.
     llm_out = await llm.complete(
@@ -178,10 +275,12 @@ async def extract(
         json_schema=_llm_schema(event_type),
     )
 
-    # The LLM may disagree on the type; trust it when it returns a valid one.
-    llm_type = _coerce_event_type(llm_out.get("event_type"))
-    if llm_type is not None and llm_type is not EventType.unknown:
-        event_type = llm_type
+    # The LLM may disagree on the type; trust it when it returns a valid one —
+    # but only when the human did NOT declare the type.
+    if forced_type is None:
+        llm_type = _coerce_event_type(llm_out.get("event_type"))
+        if llm_type is not None and llm_type is not EventType.unknown:
+            event_type = llm_type
 
     fields = llm_out.get("fields") or {}
     summary = (llm_out.get("summary") or text or "").strip()[:500] or "(no content)"
@@ -197,7 +296,7 @@ async def extract(
     # 5) Low confidence -> ask a human.
     needs_clarification = confidence < CLARIFY_THRESHOLD
 
-    event = SiteEvent(
+    return SiteEvent(
         site_id=site_id,
         event_type=event_type,
         occurred_on=raw.sent_at.date() if raw.sent_at else date.today(),
@@ -207,4 +306,3 @@ async def extract(
         needs_clarification=needs_clarification,
         source_message_ids=[raw.id],
     )
-    return [event]
