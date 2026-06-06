@@ -112,6 +112,20 @@ async def _run_quiet_period_sweep_job() -> None:
         logger.exception("quiet-period sweep job failed")
 
 
+async def _run_sentinel_sweep_job() -> None:
+    """Raise one Standing-Sentinel nudge per site that has something slipping
+    (one/site/day). Owns its session; never crashes the loop."""
+    from app.db import SessionLocal
+    from app.sentinel.nudge import run_sentinel_sweep
+
+    try:
+        async with SessionLocal() as session:
+            nudged = await run_sentinel_sweep(session)
+        logger.info("sentinel sweep job complete: %d site(s) nudged", len(nudged))
+    except Exception:
+        logger.exception("sentinel sweep job failed")
+
+
 def start_scheduler():
     """Create and start the AsyncIO scheduler if enabled. Returns it (or None)."""
     global _scheduler
@@ -164,6 +178,16 @@ def start_scheduler():
             hour=settings.quiet_sweep_hour, minute=0, timezone=settings.brief_timezone
         ),
         id="quiet_period_sweep",
+        replace_existing=True,
+    )
+    # Standing Sentinel: once daily (with the permit sweep) — one nudge/site/day
+    # for whatever's slipping (absence / overdue / reorder). Phase 3.1.
+    scheduler.add_job(
+        _run_sentinel_sweep_job,
+        CronTrigger(
+            hour=settings.permit_sweep_hour, minute=30, timezone=settings.brief_timezone
+        ),
+        id="sentinel_sweep",
         replace_existing=True,
     )
     scheduler.start()

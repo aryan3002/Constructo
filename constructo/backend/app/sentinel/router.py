@@ -8,21 +8,18 @@ side-effect-free (the proactive one-nudge/day delivery is a separate concern).
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.common.errors import AppError
-from app.common.site_events import latest_event_clause
 from app.db import get_session
-from app.forecast.forecast import material_reorder_forecasts
-from app.models import ActionItem, ActionItemStatus, SiteEventModel, User, UserRole
-from app.sentinel.sentinel import build_signals
+from app.models import User, UserRole
+from app.sentinel.nudge import gather_signals
 from app.sites.router import effective_visible_site_ids
 
 router = APIRouter(prefix="/api/v1", tags=["sentinel"])
@@ -57,46 +54,7 @@ async def sentinel(
         raise AppError(403, "forbidden", "Not your site")
 
     today = date.today()
-    since = today - timedelta(days=window_days - 1)
-    rows = (
-        await session.execute(
-            select(SiteEventModel)
-            .where(SiteEventModel.site_id == site_id, SiteEventModel.occurred_on >= since)
-            .where(latest_event_clause())
-        )
-    ).scalars().all()
-
-    attendance_days = {e.occurred_on for e in rows if e.event_type == "attendance"}
-    delivery_rows = [
-        (e.occurred_on, (e.fields.get("material") or "").strip().lower(),
-         _num(e.fields.get("quantity")), e.fields.get("unit"))
-        for e in rows
-        if e.event_type == "material_delivery"
-    ]
-    overdue_materials = [
-        (f.material, f.days_since_last, f.avg_interval_days)
-        for f in material_reorder_forecasts(delivery_rows, today=today)
-        if f.overdue
-    ]
-
-    items = (
-        await session.execute(
-            select(ActionItem.title, ActionItem.due_on).where(
-                ActionItem.site_id == site_id,
-                ActionItem.status == ActionItemStatus.open,
-                ActionItem.due_on.is_not(None),
-                ActionItem.due_on < today,
-            )
-        )
-    ).all()
-    overdue_action_items = [(title, due_on) for title, due_on in items]
-
-    signals = build_signals(
-        today=today,
-        attendance_days=attendance_days,
-        overdue_action_items=overdue_action_items,
-        overdue_materials=overdue_materials,
-    )
+    signals = await gather_signals(session, site_id, today, window_days=window_days)
 
     high = sum(1 for s in signals if s.severity == "high")
     if not signals:
@@ -115,16 +73,3 @@ async def sentinel(
         count=len(signals),
         summary=summary,
     )
-
-
-def _num(v) -> float | None:
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        return float(v)
-    if isinstance(v, str):
-        try:
-            return float(v.replace(",", "").strip())
-        except ValueError:
-            return None
-    return None

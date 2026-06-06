@@ -50,6 +50,19 @@ async def run_permit_sweep_now(
     return {"created": [str(i) for i in created], "count": len(created)}
 
 
+@router.post("/run-sentinel-sweep")
+async def run_sentinel_sweep_now(
+    user: User = Depends(_require_owner),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, object]:
+    """Raise one Standing-Sentinel nudge per site that has something slipping
+    (one/site/day), across all tenants now (Phase 3.1)."""
+    from app.sentinel.nudge import run_sentinel_sweep
+
+    nudged = await run_sentinel_sweep(session)
+    return {"nudged": [str(i) for i in nudged], "count": len(nudged)}
+
+
 @router.post("/run-nightly")
 async def run_nightly_now(
     user: User = Depends(_require_owner),
