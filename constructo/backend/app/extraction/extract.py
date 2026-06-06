@@ -326,6 +326,20 @@ async def extract(
     ]
 
 
+def _with_reply_context(text: str, raw: RawMessage) -> str:
+    """Prefix a quote-reply's parent context (1.5 threading) so the LLM reads a
+    terse reply in its parent's schema. No-op when the message isn't a reply."""
+    ctx = (raw.raw or {}).get("reply_context")
+    if not isinstance(ctx, dict):
+        return text
+    parent = str(ctx.get("parent_text") or "").strip()
+    if not parent:
+        return text
+    etype = ctx.get("parent_event_type")
+    tag = f" [{etype}]" if isinstance(etype, str) and etype else ""
+    return f'(In reply to{tag}: "{parent[:200]}")\n{text}'
+
+
 async def _build_event(
     text: str,
     raw: RawMessage,
@@ -348,10 +362,12 @@ async def _build_event(
         # 2) Classify (deterministic).
         event_type, classifier_conf = classify(text, raw.media_type)
 
-    # 3) LLM fills the type-specific fields.
+    # 3) LLM fills the type-specific fields. A quote-reply (1.5) carries its
+    #    parent's text/type so a terse reply ("haan theek hai", "45 nahi 54") is
+    #    read in context instead of cold-classified.
     llm_out = await llm.complete(
         system=_SYSTEM_PROMPT,
-        user=text,
+        user=_with_reply_context(text, raw),
         json_schema=_llm_schema(event_type),
     )
 
