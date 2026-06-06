@@ -232,6 +232,73 @@ export interface SearchResponse {
 // ============================================================================
 export type { Paginated, Role, Site }
 
+// ---- Foresight: forecasting (3.3) · portfolio (3.4) · sentinel (3.1) --------
+export interface MaterialForecast {
+  material: string
+  unit: string
+  deliveries: number
+  avg_qty_per_delivery: number
+  avg_interval_days: number
+  days_since_last: number
+  expected_next_on: string
+  overdue: boolean
+  assumptions: string[]
+}
+export interface CashflowForecast {
+  answerable: boolean
+  daily_run_rate: number
+  projected_next_30d: number
+  assumptions: string[]
+}
+export interface ForecastResult {
+  site_id: string
+  window_days: number
+  reorder: MaterialForecast[]
+  overdue_count: number
+  materials_skipped_thin: number
+  cashflow: CashflowForecast
+  summary: string
+}
+
+export interface SiteRollup {
+  site_id: string
+  site_name: string
+  worker_days: number | null
+  amount_total: number | null
+  deliveries: number
+  open_disputes: number
+  material_qty: number | null
+  material_unit: string | null
+}
+export interface PortfolioResult {
+  days: number
+  site_count: number
+  material: string | null
+  sites: SiteRollup[]
+  totals: {
+    worker_days: number | null
+    amount_total: number | null
+    deliveries: number
+    open_disputes: number
+    material_qty: number | null
+    material_unit: string | null
+  }
+  summary: string
+}
+
+export interface SentinelSignal {
+  kind: string
+  severity: 'high' | 'medium' | 'low' | string
+  message: string
+}
+export interface SentinelResult {
+  site_id: string
+  window_days: number
+  signals: SentinelSignal[]
+  count: number
+  summary: string
+}
+
 // ---- query helper ----------------------------------------------------------
 const qs = (params: Record<string, string | undefined>): string => {
   const entries = Object.entries(params).filter(([, v]) => v != null) as [
@@ -318,4 +385,21 @@ export const owner = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // --- Foresight (Phase 3) ---
+  /** Portfolio exact-math rollup across the owner's sites (3.4). */
+  portfolio: (days = 30, material?: string) =>
+    request<PortfolioResult>(`/api/v1/portfolio/summary${qs({ days: String(days), material })}`),
+
+  /** Per-site deterministic forecast — reorder cadence + cash-flow (3.3). */
+  forecast: (siteId: string, windowDays = 60) =>
+    request<ForecastResult>(
+      `/api/v1/forecast${qs({ site_id: siteId, window_days: String(windowDays) })}`,
+    ),
+
+  /** Per-site absence + stuck-thing radar (3.1). */
+  sentinel: (siteId: string, windowDays = 14) =>
+    request<SentinelResult>(
+      `/api/v1/sentinel${qs({ site_id: siteId, window_days: String(windowDays) })}`,
+    ),
 }
