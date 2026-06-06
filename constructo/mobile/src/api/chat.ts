@@ -23,6 +23,8 @@ export interface ChatEvent {
   fields: Record<string, unknown>
   confidence: number
   needs_clarification: boolean
+  /** An open dispute contests this event (1.7) — the card flags it. */
+  contested: boolean
 }
 
 export interface ChatMessage {
