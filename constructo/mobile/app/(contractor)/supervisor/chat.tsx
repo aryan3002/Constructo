@@ -9,6 +9,7 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +19,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -27,7 +29,12 @@ import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
 import { chatApi, newClientMsgId, type ChatEvent, type ChatMessage } from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
+import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
+import { suggestCapture } from '../../../src/capture/suggest'
 import { CalmEmpty, CaptureCard, ErrorState, Loading } from './_components'
+
+/** A structured capture to ride the `capture_type`/`fields` fast path. */
+type Capture = { capture_type: string; fields: Record<string, unknown> }
 
 const STR = {
   en: {
@@ -41,7 +48,9 @@ const STR = {
     err: 'Could not load the chat.',
     retry: 'Try again',
     sending: 'sending…',
+    booked: 'booked ✓',
     failed: 'tap to retry',
+    cmdHint: 'Command format',
   },
   hi: {
     title: 'टीम चैट',
@@ -54,7 +63,9 @@ const STR = {
     err: 'चैट लोड नहीं हो सकी।',
     retry: 'फिर कोशिश करें',
     sending: 'भेज रहे…',
+    booked: 'दर्ज ✓',
     failed: 'फिर भेजने के लिए दबाएँ',
+    cmdHint: 'कमांड का तरीका',
   },
 } as const
 
@@ -62,6 +73,8 @@ type Outgoing = {
   clientMsgId: string
   body: string
   status: 'sending' | 'failed'
+  /** A structured-capture send (slash / chip) — shows a "booked ✓" receipt. */
+  captured?: boolean
 }
 
 function fmtTime(iso: string): string {
@@ -99,10 +112,15 @@ export default function CrewChat() {
   }, [])
 
   const doSend = useCallback(
-    async (clientMsgId: string, bodyText: string) => {
+    async (clientMsgId: string, bodyText: string, capture?: Capture) => {
       if (!site) return
       try {
-        await chatApi.send({ site_id: site.id, client_msg_id: clientMsgId, body: bodyText })
+        await chatApi.send({
+          site_id: site.id,
+          client_msg_id: clientMsgId,
+          body: bodyText,
+          ...(capture ?? {}),
+        })
         // Confirmed — drop the optimistic bubble and pull the server copy.
         setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
         await msgsQ.refetch()
@@ -116,15 +134,44 @@ export default function CrewChat() {
     [site, msgsQ, scrollToEnd],
   )
 
+  // Optimistically enqueue a send (plain text or a structured capture) and clear
+  // the composer. Shared by the Send button, slash-commands, and the chip.
+  const dispatch = useCallback(
+    (bodyText: string, capture?: Capture) => {
+      if (!bodyText || !site) return
+      const clientMsgId = newClientMsgId()
+      setPending((p) => [...p, { clientMsgId, body: bodyText, status: 'sending', captured: !!capture }])
+      setText('')
+      scrollToEnd()
+      void doSend(clientMsgId, bodyText, capture)
+    },
+    [site, doSend, scrollToEnd],
+  )
+
   const onSend = useCallback(() => {
     const bodyText = text.trim()
     if (!bodyText || !site) return
-    const clientMsgId = newClientMsgId()
-    setPending((p) => [...p, { clientMsgId, body: bodyText, status: 'sending' }])
-    setText('')
-    scrollToEnd()
-    void doSend(clientMsgId, bodyText)
-  }, [text, site, doSend, scrollToEnd])
+    // Slash-commands book a card client-side (offline, no model) via the fast
+    // path; a malformed one shows its usage instead of sending noise.
+    if (isSlash(bodyText)) {
+      const parsed = parseSlash(bodyText)
+      if (parsed && 'error' in parsed) {
+        Alert.alert(str.cmdHint, SLASH_USAGE[parsed.command as SlashCommand])
+        return
+      }
+      if (parsed) {
+        dispatch(bodyText, { capture_type: parsed.capture_type, fields: parsed.fields })
+        return
+      }
+    }
+    dispatch(bodyText)
+  }, [text, site, dispatch, str])
+
+  // A single live smart-suggest chip (never while typing a slash-command).
+  const suggestion = useMemo(
+    () => (isSlash(text) ? null : suggestCapture(text, lang)),
+    [text, lang],
+  )
 
   type Row =
     | { kind: 'server'; key: string; msg: ChatMessage }
@@ -205,11 +252,17 @@ export default function CrewChat() {
             item.kind === 'pending' || (!!me && item.msg.sender_id === me.id)
 
           // A message that became structured capture renders as Card(s), not a
-          // bubble — the thread is "capture with a conversation around it".
-          if (item.kind === 'server' && item.msg.events.length > 0) {
+          // bubble — the thread is "capture with a conversation around it". An
+          // `unknown` event isn't a confident capture (a greeting, a sticker),
+          // so it stays a bubble rather than cluttering the feed with a Note.
+          const cardEvents =
+            item.kind === 'server'
+              ? item.msg.events.filter((e: ChatEvent) => e.event_type !== 'unknown')
+              : []
+          if (item.kind === 'server' && cardEvents.length > 0) {
             return (
               <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
-                {item.msg.events.map((ev: ChatEvent) => (
+                {cardEvents.map((ev: ChatEvent) => (
                   <CaptureCard
                     key={ev.id}
                     event={ev}
@@ -241,13 +294,42 @@ export default function CrewChat() {
                 {item.kind === 'pending'
                   ? item.out.status === 'failed'
                     ? str.failed
-                    : str.sending
+                    : item.out.captured
+                      ? str.booked
+                      : str.sending
                   : fmtTime(item.msg.created_at)}
               </Mono>
             </View>
           )
         }}
       />
+
+      {/* Smart-suggest chip — one tap turns the free text into a typed Card.
+          Ignore it and the text sends as a plain bubble (90% stays fast). */}
+      {suggestion ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={suggestion.label}
+          onPress={() => dispatch(text.trim(), { capture_type: suggestion.capture_type, fields: suggestion.fields })}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
+            minHeight: 44,
+            marginHorizontal: SPACE.lg,
+            marginBottom: SPACE.xs,
+            paddingHorizontal: SPACE.md,
+            borderRadius: theme.radii.control,
+            borderWidth: 1,
+            borderColor: 'rgba(242,161,0,0.45)',
+            backgroundColor: 'rgba(242,161,0,0.12)',
+          }}
+        >
+          <Feather name="zap" size={15} color={c.accentDeep} />
+          <Small style={{ flex: 1, fontWeight: '600', color: c.text }}>{suggestion.label}</Small>
+          <Feather name="arrow-up-circle" size={20} color={c.accent} />
+        </Pressable>
+      ) : null}
 
       {/* Composer */}
       <View
