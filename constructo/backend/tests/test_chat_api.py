@@ -187,6 +187,69 @@ async def test_worker_app_chat_seam_creates_event(db_session, world):
     assert event.event_type == "attendance"
 
 
+async def test_reply_stores_parent_context_for_extraction(client, db_session, world):
+    """A quote-reply stashes the parent's text (+ type) so extraction reads the
+    reply in context (1.5 threading-light)."""
+    _, owner, site = world
+    parent = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "50 bori cement",
+            "capture_type": "delivery",
+            "fields": {"material": "cement", "quantity": 50},
+        },
+        headers=auth(owner),
+    )
+    parent_id = parent.json()["id"]
+    # Book the parent's event so parent_event_type resolves.
+    parent_raw = (await db_session.get(ChatMessage, parent_id)).raw_message_id
+    await handle_ingested(
+        parent_raw, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+
+    reply = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "45 nahi 54",
+            "reply_to_id": parent_id,
+        },
+        headers=auth(owner),
+    )
+    assert reply.status_code == 201, reply.text
+    assert reply.json()["reply_to_id"] == parent_id
+    reply_msg = await db_session.get(ChatMessage, reply.json()["id"])
+    reply_raw = await db_session.get(RawMessageModel, reply_msg.raw_message_id)
+    ctx = reply_raw.raw["reply_context"]
+    assert ctx["parent_text"] == "50 bori cement"
+    assert ctx["parent_event_type"] == "material_delivery"
+
+
+async def test_reply_across_conversations_rejected(client, db_session, factory, world):
+    """A reply_to pointing at another site's thread is refused (no leak)."""
+    company, owner, site = world
+    other = await factory.site(company, name="Other Site")
+    parent = await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(other.id), "client_msg_id": str(uuid4()), "body": "hi there"},
+        headers=auth(owner),
+    )
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "ok",
+            "reply_to_id": parent.json()["id"],
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 422
+
+
 async def test_list_messages_includes_linked_event(client, db_session, world):
     """GET /chat/messages returns each message's linked SiteEvent (the inline
     card the thread renders instead of a flat bubble)."""

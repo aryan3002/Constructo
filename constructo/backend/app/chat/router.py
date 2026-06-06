@@ -132,6 +132,36 @@ async def _get_or_create_site_conversation(
     return conv
 
 
+async def _reply_context(
+    session: AsyncSession, conversation_id: UUID, reply_to_id: UUID | None
+) -> dict | None:
+    """Resolve a quote-reply's parent into a small context dict for extraction.
+
+    Validates the parent is in the same conversation (no cross-thread leak) and
+    returns ``{parent_text, parent_event_type?}`` — the signal that lets a terse
+    reply be read in its parent's schema. ``None`` when there is no/invalid parent.
+    """
+    if reply_to_id is None:
+        return None
+    parent = await session.get(ChatMessage, reply_to_id)
+    if parent is None or parent.conversation_id != conversation_id:
+        raise AppError(422, "bad_reply_to", "reply_to is not in this conversation")
+    ctx: dict = {"parent_text": parent.body or ""}
+    if parent.raw_message_id is not None:
+        ev_type = (
+            await session.execute(
+                select(SiteEventModel.event_type)
+                .where(SiteEventModel.source_message_ids.overlap([parent.raw_message_id]))
+                .where(latest_event_clause())
+                .order_by(SiteEventModel.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if ev_type:
+            ctx["parent_event_type"] = ev_type
+    return ctx
+
+
 @router.post("/messages", response_model=ChatMessageOut, status_code=201)
 async def send_message(
     body: ChatSendIn,
@@ -146,6 +176,12 @@ async def send_message(
         raise AppError(422, "empty_message", "Provide body text or structured fields")
 
     conv = await _get_or_create_site_conversation(session, user, body.site_id)
+
+    # Threading (1.5): a quote-reply must target a message in THIS thread, and we
+    # stash the parent's text + type so extraction can read a terse reply in its
+    # parent's context ("haan theek hai" under a Decision, "45 nahi 54" under a
+    # Delivery). Scoping: never let a reply_to point across conversations.
+    reply_context = await _reply_context(session, conv.id, body.reply_to_id)
 
     # Idempotency: a retried send (offline outbox) returns the existing row.
     existing = (
@@ -201,6 +237,7 @@ async def send_message(
             "fields": body.fields,
             "site_id": str(body.site_id),
             "chat_message_id": str(msg.id),
+            **({"reply_context": reply_context} if reply_context else {}),
         },
     )
     session.add(raw)

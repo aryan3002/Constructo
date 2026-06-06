@@ -51,6 +51,9 @@ const STR = {
     booked: 'booked ✓',
     failed: 'tap to retry',
     cmdHint: 'Command format',
+    replyingTo: 'Replying to',
+    reply: 'Reply',
+    cancel: 'Cancel',
   },
   hi: {
     title: 'टीम चैट',
@@ -66,6 +69,9 @@ const STR = {
     booked: 'दर्ज ✓',
     failed: 'फिर भेजने के लिए दबाएँ',
     cmdHint: 'कमांड का तरीका',
+    replyingTo: 'जवाब:',
+    reply: 'जवाब दें',
+    cancel: 'रद्द करें',
   },
 } as const
 
@@ -83,6 +89,14 @@ function fmtTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+/** A one-line gist of a message — its card's summary, else its text. */
+function msgSnippet(m: ChatMessage | undefined): string {
+  if (!m) return ''
+  const ev = m.events?.find((e) => e.event_type !== 'unknown')
+  if (ev) return ev.summary || ev.event_type
+  return m.body ?? ''
+}
+
 export default function CrewChat() {
   const { lang } = useT()
   const str = STR[lang]
@@ -94,6 +108,8 @@ export default function CrewChat() {
 
   const [text, setText] = useState('')
   const [pending, setPending] = useState<Outgoing[]>([])
+  // The message being quote-replied to (1.5 threading), or null.
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
 
   // The supervisor's assigned site(s); v1 chats the first one.
   const sitesQ = useQuery({ queryKey: ['supervisor', 'sites'], queryFn: () => supervisorApi.sites() })
@@ -107,18 +123,26 @@ export default function CrewChat() {
     refetchInterval: 8000,
   })
 
+  // Lookup for rendering a quoted parent above a reply (1.5 threading).
+  const byId = useMemo(() => {
+    const m = new Map<string, ChatMessage>()
+    for (const x of msgsQ.data ?? []) m.set(x.id, x)
+    return m
+  }, [msgsQ.data])
+
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
   }, [])
 
   const doSend = useCallback(
-    async (clientMsgId: string, bodyText: string, capture?: Capture) => {
+    async (clientMsgId: string, bodyText: string, capture?: Capture, replyToId?: string) => {
       if (!site) return
       try {
         await chatApi.send({
           site_id: site.id,
           client_msg_id: clientMsgId,
           body: bodyText,
+          ...(replyToId ? { reply_to_id: replyToId } : {}),
           ...(capture ?? {}),
         })
         // Confirmed — drop the optimistic bubble and pull the server copy.
@@ -140,12 +164,14 @@ export default function CrewChat() {
     (bodyText: string, capture?: Capture) => {
       if (!bodyText || !site) return
       const clientMsgId = newClientMsgId()
+      const replyToId = replyTo?.id
       setPending((p) => [...p, { clientMsgId, body: bodyText, status: 'sending', captured: !!capture }])
       setText('')
+      setReplyTo(null)
       scrollToEnd()
-      void doSend(clientMsgId, bodyText, capture)
+      void doSend(clientMsgId, bodyText, capture, replyToId)
     },
-    [site, doSend, scrollToEnd],
+    [site, doSend, scrollToEnd, replyTo],
   )
 
   const onSend = useCallback(() => {
@@ -259,50 +285,121 @@ export default function CrewChat() {
             item.kind === 'server'
               ? item.msg.events.filter((e: ChatEvent) => e.event_type !== 'unknown')
               : []
+
+          // A quoted-parent strip shown above a reply (server messages only).
+          const parentSnippet =
+            item.kind === 'server' && item.msg.reply_to_id
+              ? msgSnippet(byId.get(item.msg.reply_to_id))
+              : ''
+          const quoted = parentSnippet ? (
+            <View
+              style={{
+                alignSelf: mine ? 'flex-end' : 'flex-start',
+                maxWidth: '92%',
+                borderLeftWidth: 2,
+                borderLeftColor: c.accent,
+                paddingLeft: SPACE.sm,
+              }}
+            >
+              <Small numberOfLines={1} style={{ color: c.textMute }}>
+                ↩ {parentSnippet}
+              </Small>
+            </View>
+          ) : null
+
           if (item.kind === 'server' && cardEvents.length > 0) {
+            const msg = item.msg
             return (
-              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
-                {cardEvents.map((ev: ChatEvent) => (
-                  <CaptureCard
-                    key={ev.id}
-                    event={ev}
-                    lang={lang}
-                    sourceText={item.msg.body}
-                    time={fmtTime(item.msg.created_at)}
-                  />
-                ))}
+              <View style={{ gap: 2 }}>
+                {quoted}
+                <Pressable
+                  onLongPress={() => setReplyTo(msg)}
+                  delayLongPress={250}
+                  style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
+                >
+                  {cardEvents.map((ev: ChatEvent) => (
+                    <CaptureCard
+                      key={ev.id}
+                      event={ev}
+                      lang={lang}
+                      sourceText={msg.body}
+                      time={fmtTime(msg.created_at)}
+                    />
+                  ))}
+                </Pressable>
               </View>
             )
           }
 
           const body = item.kind === 'pending' ? item.out.body : (item.msg.body ?? '')
+          const serverMsg = item.kind === 'server' ? item.msg : null
           return (
-            <View
-              style={[
-                {
-                  maxWidth: '82%',
-                  borderRadius: theme.radii.card,
-                  paddingVertical: SPACE.sm,
-                  paddingHorizontal: SPACE.md,
-                  gap: 2,
-                },
-                mine ? ownBubble : otherBubble,
-              ]}
-            >
-              <Body style={{ color: c.text }}>{body}</Body>
-              <Mono style={{ color: c.textMute, fontSize: 11 }}>
-                {item.kind === 'pending'
-                  ? item.out.status === 'failed'
-                    ? str.failed
-                    : item.out.captured
-                      ? str.booked
-                      : str.sending
-                  : fmtTime(item.msg.created_at)}
-              </Mono>
+            <View style={{ gap: 2 }}>
+              {quoted}
+              <Pressable
+                onLongPress={serverMsg ? () => setReplyTo(serverMsg) : undefined}
+                delayLongPress={250}
+                style={[
+                  {
+                    maxWidth: '82%',
+                    borderRadius: theme.radii.card,
+                    paddingVertical: SPACE.sm,
+                    paddingHorizontal: SPACE.md,
+                    gap: 2,
+                  },
+                  mine ? ownBubble : otherBubble,
+                ]}
+              >
+                <Body style={{ color: c.text }}>{body}</Body>
+                <Mono style={{ color: c.textMute, fontSize: 11 }}>
+                  {item.kind === 'pending'
+                    ? item.out.status === 'failed'
+                      ? str.failed
+                      : item.out.captured
+                        ? str.booked
+                        : str.sending
+                    : fmtTime(item.msg.created_at)}
+                </Mono>
+              </Pressable>
             </View>
           )
         }}
       />
+
+      {/* Quote-reply banner — the parent being replied to, with a cancel. */}
+      {replyTo ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
+            marginHorizontal: SPACE.lg,
+            marginBottom: SPACE.xs,
+            paddingVertical: SPACE.xs,
+            paddingHorizontal: SPACE.md,
+            borderRadius: theme.radii.control,
+            borderLeftWidth: 3,
+            borderLeftColor: c.accent,
+            backgroundColor: c.paper,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Small style={{ color: c.textMute, fontWeight: '600' }}>{str.replyingTo}</Small>
+            <Small numberOfLines={1} style={{ color: c.text }}>
+              {msgSnippet(replyTo)}
+            </Small>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={str.cancel}
+            onPress={() => setReplyTo(null)}
+            hitSlop={8}
+            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Feather name="x" size={20} color={c.textMute} />
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* Smart-suggest chip — one tap turns the free text into a typed Card.
           Ignore it and the text sends as a plain bubble (90% stays fast). */}
