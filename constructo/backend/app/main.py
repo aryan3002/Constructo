@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
+from app.action_items.router import router as action_items_router
 from app.admin.router import router as admin_router
 from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
@@ -111,3 +112,4 @@ app.include_router(homeowner_router)  # H0 homeowner-facing app API
 app.include_router(publish_router)  # H0 contractor-side publisher controls
 app.include_router(capture_router)  # app-authenticated field capture → extraction
 app.include_router(chat_router)  # Phase 1.0 in-app chat (crew site thread)
+app.include_router(action_items_router)  # Phase 1.6 action items / to-dos

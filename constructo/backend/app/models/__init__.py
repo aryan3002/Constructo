@@ -1,5 +1,11 @@
 """SQLAlchemy ORM models. Importing this package registers every table on Base.metadata."""
 
+from app.models.action_item import (
+    ActionItem,
+    ActionItemEvent,
+    ActionItemEventKind,
+    ActionItemStatus,
+)
 from app.models.chat import (
     ChatMessage,
     Conversation,
@@ -61,6 +67,10 @@ from app.models.vendor import Vendor
 from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
+    "ActionItem",
+    "ActionItemEvent",
+    "ActionItemEventKind",
+    "ActionItemStatus",
     "Change",
     "ChatMessage",
     "Company",
