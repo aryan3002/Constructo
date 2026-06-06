@@ -6,6 +6,7 @@ from app.models.action_item import (
     ActionItemEventKind,
     ActionItemStatus,
 )
+from app.models.agent_turn import AgentResultKind, AgentTurn
 from app.models.chat import (
     ChatMessage,
     Conversation,
@@ -73,6 +74,8 @@ __all__ = [
     "ActionItemEvent",
     "ActionItemEventKind",
     "ActionItemStatus",
+    "AgentResultKind",
+    "AgentTurn",
     "Change",
     "ChatMessage",
     "Company",
