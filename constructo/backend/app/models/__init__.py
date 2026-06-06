@@ -1,5 +1,12 @@
 """SQLAlchemy ORM models. Importing this package registers every table on Base.metadata."""
 
+from app.models.chat import (
+    ChatMessage,
+    Conversation,
+    ConversationKind,
+    ConversationRead,
+    MessageSide,
+)
 from app.models.company import Company
 from app.models.company_billing import CompanyBilling
 from app.models.decision import Decision, DecisionKind, DecisionState
@@ -55,11 +62,15 @@ from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
     "Change",
+    "ChatMessage",
     "Company",
     "CompanyBilling",
     "CompanyNotificationSettings",
     "Component",
     "ComponentStatus",
+    "Conversation",
+    "ConversationKind",
+    "ConversationRead",
     "Decision",
     "DecisionKind",
     "DecisionState",
@@ -75,6 +86,7 @@ __all__ = [
     "HomeownerRequestStatus",
     "HomeownerSubRole",
     "MemberStatus",
+    "MessageSide",
     "Milestone",
     "MilestoneStatus",
     "OwnerBrief",

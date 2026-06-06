@@ -33,9 +33,11 @@ logger = logging.getLogger(__name__)
 # A zero-arg callable returning an async-session context manager (e.g. SessionLocal).
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
-# App captures (source="app") carry their site directly in external_group_id as
-# "app:{site_id}" — there is no WhatsApp group to map them through.
+# App captures (source="app") and in-app chat messages (source="app_chat") carry
+# their site directly in external_group_id as "app:{site_id}" — there is no
+# WhatsApp group to map them through.
 APP_SOURCE = "app"
+APP_CHAT_SOURCE = "app_chat"
 APP_GROUP_PREFIX = "app:"
 
 
@@ -49,7 +51,7 @@ async def _resolve_site_id(session: AsyncSession, raw_row: RawMessageModel) -> U
         source) mapping, as before.
     Returns ``None`` (caller skips, never invents site data) when unresolved.
     """
-    if raw_row.source == APP_SOURCE:
+    if raw_row.source in (APP_SOURCE, APP_CHAT_SOURCE):
         if not raw_row.external_group_id.startswith(APP_GROUP_PREFIX):
             return None
         try:

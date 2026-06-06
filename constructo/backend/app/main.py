@@ -23,6 +23,7 @@ from app.billing.router import router as billing_router
 from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.capture.router import router as capture_router
+from app.chat.router import router as chat_router
 from app.common.errors import install_error_handlers
 from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
@@ -109,3 +110,4 @@ app.include_router(bot_router)  # W2 WhatsApp bot brain (Nivaan)
 app.include_router(homeowner_router)  # H0 homeowner-facing app API
 app.include_router(publish_router)  # H0 contractor-side publisher controls
 app.include_router(capture_router)  # app-authenticated field capture → extraction
+app.include_router(chat_router)  # Phase 1.0 in-app chat (crew site thread)
