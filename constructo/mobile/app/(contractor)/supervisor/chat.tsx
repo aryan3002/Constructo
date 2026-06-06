@@ -29,7 +29,13 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
-import { chatApi, newClientMsgId, type ChatEvent, type ChatMessage } from '../../../src/api/chat'
+import {
+  chatApi,
+  newClientMsgId,
+  type AskResult,
+  type ChatEvent,
+  type ChatMessage,
+} from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
@@ -59,6 +65,9 @@ const STR = {
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
     uploadFailed: 'Upload failed — tap to retry',
+    nivaan: 'Nivaan',
+    askFailed: "Couldn't reach Nivaan — try again.",
+    evidence: 'events',
   },
   hi: {
     title: 'टीम चैट',
@@ -80,6 +89,9 @@ const STR = {
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
     uploadFailed: 'अपलोड फेल — फिर दबाएँ',
+    nivaan: 'निवान',
+    askFailed: 'निवान से जवाब नहीं मिला — फिर कोशिश करें।',
+    evidence: 'इवेंट',
   },
 } as const
 
@@ -116,6 +128,8 @@ export default function CrewChat() {
 
   const [text, setText] = useState('')
   const [pending, setPending] = useState<Outgoing[]>([])
+  // Local @ask answers from Nivaan (2.2) — grounded, not persisted messages.
+  const [answers, setAnswers] = useState<{ id: string; question: string; result: AskResult }[]>([])
   // The message being quote-replied to (1.5 threading), or null.
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
 
@@ -182,9 +196,35 @@ export default function CrewChat() {
     [site, doSend, scrollToEnd, replyTo],
   )
 
+  // @ask Nivaan (2.2): a grounded one-line answer, scoped, computed server-side.
+  const onAsk = useCallback(
+    async (question: string) => {
+      if (!site || !question) return
+      const id = newClientMsgId()
+      setText('')
+      scrollToEnd()
+      try {
+        const result = await chatApi.ask(site.id, question)
+        setAnswers((a) => [...a, { id, question, result }])
+      } catch {
+        setAnswers((a) => [
+          ...a,
+          { id, question, result: { answerable: false, answer: str.askFailed, total: null, unit: null, breakdown: {}, evidence_event_ids: [], contributors: 0, unconfirmed: 0 } },
+        ])
+      }
+      scrollToEnd()
+    },
+    [site, scrollToEnd, str],
+  )
+
   const onSend = useCallback(() => {
     const bodyText = text.trim()
     if (!bodyText || !site) return
+    // "@ ..." asks Nivaan a grounded question instead of posting a message.
+    if (bodyText.startsWith('@')) {
+      void onAsk(bodyText.replace(/^@\s*(ask|nivaan)?\s*/i, '').trim())
+      return
+    }
     // Slash-commands book a card client-side (offline, no model) via the fast
     // path; a malformed one shows its usage instead of sending noise.
     if (isSlash(bodyText)) {
@@ -199,7 +239,7 @@ export default function CrewChat() {
       }
     }
     dispatch(bodyText)
-  }, [text, site, dispatch, str])
+  }, [text, site, dispatch, str, onAsk])
 
   // A single live smart-suggest chip (never while typing a slash-command).
   const suggestion = useMemo(
@@ -253,12 +293,16 @@ export default function CrewChat() {
   type Row =
     | { kind: 'server'; key: string; msg: ChatMessage }
     | { kind: 'pending'; key: string; out: Outgoing }
+    | { kind: 'nivaan'; key: string; question: string; result: AskResult }
 
   const rows: Row[] = useMemo(() => {
     const server: Row[] = (msgsQ.data ?? []).map((m) => ({ kind: 'server', key: m.id, msg: m }))
     const out: Row[] = pending.map((o) => ({ kind: 'pending', key: o.clientMsgId, out: o }))
-    return [...server, ...out]
-  }, [msgsQ.data, pending])
+    const ans: Row[] = answers.map((a) => ({
+      kind: 'nivaan', key: a.id, question: a.question, result: a.result,
+    }))
+    return [...server, ...out, ...ans]
+  }, [msgsQ.data, pending, answers])
 
   // --- guard states -------------------------------------------------------
   if (sitesQ.isLoading) return <Loading />
@@ -325,6 +369,39 @@ export default function CrewChat() {
           )
         }
         renderItem={({ item }) => {
+          // A Nivaan @ask answer — info-toned, grounded, with an evidence count.
+          if (item.kind === 'nivaan') {
+            const r = item.result
+            return (
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  maxWidth: '92%',
+                  backgroundColor: c.card,
+                  borderRadius: theme.radii.card,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderLeftWidth: 3,
+                  borderLeftColor: c.info,
+                  padding: SPACE.md,
+                  gap: 4,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name="zap" size={13} color={c.info} />
+                  <Small style={{ color: c.info, fontWeight: '600' }}>{str.nivaan}</Small>
+                </View>
+                <Small muted numberOfLines={1}>{item.question}</Small>
+                <BodyStrong style={{ color: c.text }}>{r.answer}</BodyStrong>
+                {r.evidence_event_ids.length > 0 ? (
+                  <Mono muted style={{ fontSize: 11 }}>
+                    {r.evidence_event_ids.length} {str.evidence}
+                  </Mono>
+                ) : null}
+              </View>
+            )
+          }
+
           const mine =
             item.kind === 'pending' || (!!me && item.msg.sender_id === me.id)
 

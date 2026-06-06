@@ -67,6 +67,19 @@ export interface MediaUpload {
   sha256: string
 }
 
+/** A grounded answer from Ask-the-Project (2.2). The total is computed in the
+ *  backend reducers, never a model; `unconfirmed` is the honest caveat. */
+export interface AskResult {
+  answerable: boolean
+  answer: string
+  total: number | null
+  unit: string | null
+  breakdown: Record<string, number>
+  evidence_event_ids: string[]
+  contributors: number
+  unconfirmed: number
+}
+
 /** RFC-4122 v4 — a valid UUID for the backend's `client_msg_id` (idempotency). */
 export function newClientMsgId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -103,6 +116,14 @@ export const chatApi = {
     form.append('site_id', siteId)
     form.append('kind', kind)
     return uploadMultipart<MediaUpload>('/api/v1/chat/media', form)
+  },
+
+  /** Ask-the-Project (2.2): a grounded, scoped, deterministic total. */
+  ask(siteId: string, question: string): Promise<AskResult> {
+    return request<AskResult>('/api/v1/ask', {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId, question }),
+    })
   },
 
   /** Advance the read cursor (returns 204). */
