@@ -39,6 +39,7 @@ from app.materials.router import router as materials_router
 from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.permits.router import router as permits_router
+from app.portfolio.router import router as portfolio_router
 from app.publish.router import router as publish_router
 from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
@@ -119,3 +120,4 @@ app.include_router(action_items_router)  # Phase 1.6 action items / to-dos
 app.include_router(disputes_router)  # Phase 1.7 contested-truth (disputes)
 app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggregation)
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
+app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
