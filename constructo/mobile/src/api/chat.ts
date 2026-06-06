@@ -67,6 +67,22 @@ export interface MediaUpload {
   sha256: string
 }
 
+/** A ranked risk in the pinned brief (1.8). */
+export interface BriefRisk {
+  kind: string
+  severity: 'low' | 'medium' | 'high' | string
+  message: string
+  evidence_event_ids: string[]
+}
+
+/** The owner's brief pinned in the thread (1.8) — exceptions-first. */
+export interface SiteBrief {
+  site_id: string
+  risk_count: number
+  headline: string
+  risks: BriefRisk[]
+}
+
 /** A grounded answer from Ask-the-Project (2.2). The total is computed in the
  *  backend reducers, never a model; `unconfirmed` is the honest caveat. */
 export interface AskResult {
@@ -116,6 +132,11 @@ export const chatApi = {
     form.append('site_id', siteId)
     form.append('kind', kind)
     return uploadMultipart<MediaUpload>('/api/v1/chat/media', form)
+  },
+
+  /** The site's pinned brief — ranked risks for today (1.8). */
+  brief(siteId: string): Promise<SiteBrief> {
+    return request<SiteBrief>(`/api/v1/chat/brief?site_id=${encodeURIComponent(siteId)}`)
   },
 
   /** Ask-the-Project (2.2): a grounded, scoped, deterministic total. */
