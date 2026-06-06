@@ -16,15 +16,26 @@ import hashlib
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.action_items.detector import detect_action_item
 from app.auth.deps import get_current_user
+from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
+from app.chat.realtime import broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
@@ -518,6 +529,9 @@ async def send_message(
     await enqueue_extraction(raw.id)
     out = ChatMessageOut.model_validate(msg)
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
+    # Push the new message live to any subscribed clients (2.0). The card upgrade
+    # arrives on the client's next refetch once extraction runs; the bubble is live.
+    await broadcaster.publish(conv.id, out.model_dump(mode="json"))
     return out
 
 
@@ -787,6 +801,52 @@ async def resolve_thread(
         )
     await session.commit()
     return ResolveOut(closed_action_items=len(items))
+
+
+@router.websocket("/ws")
+async def chat_ws(
+    websocket: WebSocket,
+    site_id: UUID = Query(...),
+    token: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Live message stream for a site thread (2.0). Auth is a query ``token``
+    (WS can't carry an Authorization header cleanly); scoping reuses the REST
+    rules. The seq-authoritative store is still Neon and the client backfills
+    anything missed via ``after_seq`` — this only pushes new messages live."""
+    try:
+        user = await session.get(User, UUID(decode_token(token)["sub"]))
+    except Exception:
+        await websocket.close(code=1008)
+        return
+    if user is None or user.role is UserRole.homeowner:
+        await websocket.close(code=1008)
+        return
+    visible = await effective_visible_site_ids(session, user)
+    if site_id not in visible:
+        await websocket.close(code=1008)
+        return
+    conv = (
+        await session.execute(
+            select(Conversation).where(
+                Conversation.site_id == site_id, Conversation.kind == ConversationKind.site
+            )
+        )
+    ).scalar_one_or_none()
+    if conv is None:
+        await websocket.close(code=1011)
+        return
+
+    await websocket.accept()
+    try:
+        async with broadcaster.subscribe(conv.id) as queue:
+            while True:
+                payload = await queue.get()
+                await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        return
+    except Exception:  # pragma: no cover - defensive (client gone)
+        return
 
 
 @router.post("/read", status_code=204)

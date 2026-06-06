@@ -670,6 +670,36 @@ async def test_plain_chatter_spawns_no_action_item(client, db_session, world):
     assert items == []
 
 
+async def test_send_publishes_to_live_subscribers(client, db_session, world):
+    """A send pushes the new message to the realtime broadcaster (2.0) — a live
+    subscriber receives it without polling."""
+    import asyncio
+
+    from app.chat.realtime import broadcaster
+    from app.models import Conversation
+
+    _, owner, site = world
+    # Ensure the conversation exists, then subscribe before sending.
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "first"},
+        headers=auth(owner),
+    )
+    conv = (
+        await db_session.execute(select(Conversation).where(Conversation.site_id == site.id))
+    ).scalar_one()
+
+    async with broadcaster.subscribe(conv.id) as queue:
+        await client.post(
+            "/api/v1/chat/messages",
+            json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "live one"},
+            headers=auth(owner),
+        )
+        payload = await asyncio.wait_for(queue.get(), 1)
+        assert payload["body"] == "live one"
+        assert payload["seq"] == 2
+
+
 async def test_site_brief_surfaces_labor_shortfall(client, db_session, world):
     """The pinned brief (1.8) surfaces a ranked risk from the deterministic
     engine — here a labour shortfall vs the learned baseline."""
