@@ -29,6 +29,8 @@ from app.models import (
     Conversation,
     ConversationKind,
     ConversationRead,
+    DisputeStatus,
+    EventDispute,
     MessageSide,
     RawMessageModel,
     SiteEventModel,
@@ -92,6 +94,8 @@ class ChatEventOut(BaseModel):
     fields: dict
     confidence: float
     needs_clarification: bool
+    # True when an open dispute contests this event (1.7) — the card shows it.
+    contested: bool = False
 
 
 class ChatMessageOut(BaseModel):
@@ -358,17 +362,37 @@ async def list_messages(
     ).scalars().all()
 
     events_by_raw = await _events_for_messages(session, rows)
+    contested = await _contested_event_ids(
+        session, [e.id for evs in events_by_raw.values() for e in evs]
+    )
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
         msg_out = ChatMessageOut.model_validate(r)
         msg_out.attachment_url = _safe_attachment_url(r.attachment_key, storage)
-        msg_out.events = [
-            ChatEventOut.model_validate(e)
-            for e in events_by_raw.get(r.raw_message_id, [])
-        ]
+        events = []
+        for e in events_by_raw.get(r.raw_message_id, []):
+            eo = ChatEventOut.model_validate(e)
+            eo.contested = e.id in contested
+            events.append(eo)
+        msg_out.events = events
         out.append(msg_out)
     return out
+
+
+async def _contested_event_ids(session: AsyncSession, event_ids: list[UUID]) -> set[UUID]:
+    """Event ids with an OPEN dispute (1.7), batched. Empty when there are none."""
+    if not event_ids:
+        return set()
+    rows = (
+        await session.execute(
+            select(EventDispute.event_id).where(
+                EventDispute.event_id.in_(event_ids),
+                EventDispute.status == DisputeStatus.open,
+            )
+        )
+    ).scalars().all()
+    return set(rows)
 
 
 async def _events_for_messages(
