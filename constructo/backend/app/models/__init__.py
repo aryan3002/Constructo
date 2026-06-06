@@ -52,6 +52,7 @@ from app.models.homeowner_property import (
 from app.models.homeowner_quiet import QuietPeriod, QuietStatus
 from app.models.homeowner_visit import HomeownerVisitPhoto
 from app.models.material import Material
+from app.models.message_embedding import MessageEmbedding
 from app.models.notification_settings import CompanyNotificationSettings
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
@@ -94,6 +95,7 @@ __all__ = [
     "DrawingKind",
     "EventDispute",
     "EventEmbedding",
+    "MessageEmbedding",
     "HomeownerMember",
     "HomeownerRequest",
     "HomeownerRequestStatus",

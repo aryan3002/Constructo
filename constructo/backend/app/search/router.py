@@ -8,16 +8,26 @@ weak guesses as fact (P5: honest AI).
 """
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.common.site_events import latest_event_clause
 from app.db import get_session
-from app.models import EventEmbedding, Site, SiteEventModel, User
+from app.models import (
+    ChatMessage,
+    Conversation,
+    EventEmbedding,
+    MessageEmbedding,
+    Site,
+    SiteEventModel,
+    User,
+)
 from app.search.embeddings import EmbeddingsClient, get_embeddings_client
 from app.search.query import parse_query
 from app.search.schemas import (
@@ -40,6 +50,68 @@ SIMILARITY_FLOOR = 0.15
 def _get_client() -> EmbeddingsClient:
     """FastAPI dependency; overridable in tests with a FakeEmbeddings."""
     return get_embeddings_client()
+
+
+class MessageSearchRequest(BaseModel):
+    query: str
+    site_id: UUID | None = None
+    limit: int = 10
+
+
+class MessageHit(BaseModel):
+    message_id: UUID
+    site_id: UUID
+    body: str
+    seq: int
+    score: float
+    created_at: datetime
+
+
+class MessageSearchResponse(BaseModel):
+    hits: list[MessageHit]
+    answerable: bool
+
+
+@router.post("/search/messages", response_model=MessageSearchResponse)
+async def search_messages(
+    body: MessageSearchRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    client: EmbeddingsClient = Depends(_get_client),
+) -> MessageSearchResponse:
+    """Semantic search over the chat thread (2.3 RAG). Scoped to the caller's
+    visible sites (narrow-never-widen); abstains below the relevance floor."""
+    visible = list(await effective_visible_site_ids(session, user))
+    if body.site_id is not None:
+        visible = [sid for sid in visible if sid == body.site_id]
+    if not visible:
+        return MessageSearchResponse(hits=[], answerable=False)
+
+    [query_vector] = await client.embed([body.query])
+    distance = MessageEmbedding.embedding.cosine_distance(query_vector).label("distance")
+    rows = (
+        await session.execute(
+            select(ChatMessage, Conversation.site_id, distance)
+            .join(MessageEmbedding, MessageEmbedding.chat_message_id == ChatMessage.id)
+            .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+            .where(Conversation.site_id.in_(visible))
+            .order_by(distance)
+            .limit(max(1, min(body.limit, 50)))
+        )
+    ).all()
+
+    hits: list[MessageHit] = []
+    for msg, site_id, dist in rows:
+        score = 1.0 - float(dist)
+        if score < SIMILARITY_FLOOR:
+            continue
+        hits.append(
+            MessageHit(
+                message_id=msg.id, site_id=site_id, body=msg.body or "",
+                seq=msg.seq, score=score, created_at=msg.created_at,
+            )
+        )
+    return MessageSearchResponse(hits=hits, answerable=bool(hits))
 
 
 @router.post("/search", response_model=SearchResponse)

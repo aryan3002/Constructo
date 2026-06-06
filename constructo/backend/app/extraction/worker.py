@@ -162,6 +162,11 @@ async def handle_ingested(
         # this stays network-free in dev/tests.
         await _index_events(session, ids)
 
+        # Also index the chat message TEXT itself (2.3 message RAG) — the chatter
+        # graveyard becomes searchable. Best-effort; never fails ingestion.
+        if raw_row.source == APP_CHAT_SOURCE:
+            await _index_chat_message(session, (raw_row.raw or {}).get("chat_message_id"))
+
         # Hand the inbound message to the bot (Nivaan) for a Guest-Rule
         # reaction/reply. Best-effort: a bot failure must NEVER fail ingestion.
         await _bot_handle(session, raw_message_id, llm=llm)
@@ -186,6 +191,19 @@ async def _bot_handle(
         await handle_inbound(session, raw_message_id, llm=llm)
     except Exception:
         logger.exception("handle_ingested: bot handling failed for %s", raw_message_id)
+
+
+async def _index_chat_message(session: AsyncSession, chat_message_id: str | None) -> None:
+    """Best-effort: embed the chat message's text for RAG (2.3). Never raises."""
+    if not chat_message_id:
+        return
+    try:
+        from app.search.index_message import index_message
+
+        await index_message(session, UUID(str(chat_message_id)))
+        await session.commit()
+    except Exception:
+        logger.exception("handle_ingested: failed to index chat message %s", chat_message_id)
 
 
 async def _index_events(session: AsyncSession, event_ids: list[UUID]) -> None:
