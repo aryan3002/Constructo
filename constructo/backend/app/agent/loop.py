@@ -23,11 +23,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.aggregate import EventLike, reducer_for, sum_amount, sum_headcount, sum_quantity
 from app.common.site_events import latest_event_clause
-from app.models import AgentResultKind, AgentTurn, SiteEventModel, User, UserRole
+from app.extraction.llm import LLMClient
+from app.models import (
+    AgentResultKind,
+    AgentTurn,
+    ChatMessage,
+    Conversation,
+    MessageEmbedding,
+    SiteEventModel,
+    User,
+    UserRole,
+)
+from app.search.embeddings import get_embeddings_client
 from app.search.query import parse_query
+from app.search.router import SIMILARITY_FLOOR
 from app.sites.router import effective_visible_site_ids
 
 MAX_STEPS = 4  # the loop cap (the deterministic router uses a single step)
+
+# The router decision the LLM returns — it picks a green-tier tool to GROUND the
+# answer (or "none"); it never writes the number itself (a tool produces it).
+_DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tool": {"type": "string", "enum": ["search_messages", "none"]},
+        "query": {"type": "string"},
+    },
+    "required": ["tool"],
+}
+_AGENT_SYSTEM = (
+    "You are Nivaan's router. Pick ONE green-tier tool to ground the user's "
+    "question, or 'none'. You never write the answer yourself — a tool produces "
+    "it. Tools: search_messages (semantic search over this site's thread)."
+)
 
 _MATERIALS = (
     "cement", "steel", "sariya", "rebar", "sand", "reti", "brick", "eint",
@@ -62,9 +90,21 @@ async def run_turn(
     utterance: str,
     *,
     site_id: UUID | None = None,
+    llm: LLMClient | None = None,
 ) -> AgentResult:
-    """Resolve one Nivaan turn to a terminal result and log the audit row."""
+    """Resolve one Nivaan turn to a terminal result and log the audit row.
+
+    Deterministic-first: the common question templates route straight to the
+    reducers (₹0, ``model="deterministic"``). When that abstains AND an ``llm`` is
+    provided, the constrained tool-loop runs (the fuzzy tail), still ending in a
+    terminal tool and still never producing the number itself."""
     result = await _resolve(session, user, utterance, site_id)
+    model = "deterministic"
+    if result.kind is AgentResultKind.clarify and llm is not None:
+        looped = await _run_llm_loop(session, user, utterance, site_id, llm)
+        if looped is not None:
+            result = looped
+            model = getattr(llm, "model", "llm")
     session.add(
         AgentTurn(
             company_id=user.company_id,
@@ -73,12 +113,66 @@ async def run_turn(
             utterance=utterance[:2000],
             result_kind=result.kind,
             tool=result.tool,
-            model="deterministic",
+            model=model,
             token_cost=0,
         )
     )
     await session.commit()
     return result
+
+
+async def _search_messages_top(
+    session: AsyncSession, user: User, query: str, site_id: UUID | None
+) -> ChatMessage | None:
+    """Top semantic message hit above the relevance floor, scoped (a green-tier
+    tool). Abstains (None) below the floor rather than guess."""
+    visible = list(await effective_visible_site_ids(session, user))
+    if site_id is not None:
+        visible = [s for s in visible if s == site_id]
+    if not visible:
+        return None
+    [vec] = await get_embeddings_client().embed([query])
+    distance = MessageEmbedding.embedding.cosine_distance(vec).label("d")
+    row = (
+        await session.execute(
+            select(ChatMessage, distance)
+            .join(MessageEmbedding, MessageEmbedding.chat_message_id == ChatMessage.id)
+            .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+            .where(Conversation.site_id.in_(visible))
+            .order_by(distance)
+            .limit(1)
+        )
+    ).first()
+    if row is None:
+        return None
+    msg, dist = row
+    return msg if (1.0 - float(dist)) >= SIMILARITY_FLOOR else None
+
+
+async def _run_llm_loop(
+    session: AsyncSession, user: User, utterance: str, site_id: UUID | None, llm: LLMClient
+) -> AgentResult | None:
+    """The constrained function-calling loop (MAX_STEPS): the LLM routes to a
+    tool, the tool grounds the answer, the loop emits it. Terminal-only — the LLM
+    never composes the number. Returns None if no tool grounded an answer."""
+    for _step in range(MAX_STEPS):
+        decision = await llm.complete(
+            system=_AGENT_SYSTEM, user=utterance, json_schema=_DECISION_SCHEMA
+        )
+        tool = (decision or {}).get("tool")
+        query = (decision or {}).get("query") or utterance
+        if tool == "search_messages":
+            hit = await _search_messages_top(session, user, query, site_id)
+            if hit is not None:
+                return AgentResult(
+                    kind=AgentResultKind.answer,
+                    text=hit.body or "",
+                    tool="search_messages",
+                    evidence_event_ids=[str(hit.id)],
+                )
+            return None  # the tool abstained — don't burn the budget re-asking
+        return None  # "none" or an unknown tool → fall back to the clarify
+    return None
 
 
 _CLARIFY = AgentResult(

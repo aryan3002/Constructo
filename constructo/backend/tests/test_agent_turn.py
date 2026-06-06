@@ -58,6 +58,50 @@ async def test_ungroundable_returns_clarify_never_prose(client, world):
     assert resp.json()["kind"] == "clarify"
 
 
+async def test_llm_loop_falls_back_to_message_search(db_session, factory, world):
+    """When deterministic aggregation can't answer, the constrained tool-loop
+    routes to search_messages and grounds the answer in a real message (2.1
+    fuzzy tail). The LLM only routes — the message body IS the answer."""
+    from uuid import uuid4
+
+    from app.agent.loop import run_turn
+    from app.extraction.llm import FakeLLMClient
+    from app.models import (
+        ChatMessage,
+        Conversation,
+        ConversationKind,
+        MessageSide,
+    )
+    from app.search.embeddings import FakeEmbeddings
+    from app.search.index_message import index_message
+
+    _, owner, site = world
+    conv = Conversation(
+        company_id=owner.company_id, site_id=site.id,
+        kind=ConversationKind.site, created_by=owner.id,
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    msg = ChatMessage(
+        conversation_id=conv.id, sender_id=owner.id, sender_side=MessageSide.contractor,
+        client_msg_id=uuid4(), seq=1, body="the basement slab developed a leak near the column",
+        media_type="text",
+    )
+    db_session.add(msg)
+    await db_session.flush()
+    await index_message(db_session, msg.id, client=FakeEmbeddings())
+    await db_session.commit()
+
+    # The LLM routes to search_messages (it never writes the answer itself).
+    llm = FakeLLMClient(canned={"tool": "search_messages", "query": "slab leak column"})
+    result = await run_turn(
+        db_session, owner, "where did we discuss the slab leak?", site_id=site.id, llm=llm
+    )
+    assert result.kind.value == "answer"
+    assert result.tool == "search_messages"
+    assert str(msg.id) in result.evidence_event_ids
+
+
 async def test_scoping_excludes_other_sites(client, db_session, factory, world):
     company, _, site = world
     from app.sites.models import SiteAssignment
