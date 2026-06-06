@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,6 +21,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -54,6 +56,9 @@ const STR = {
     replyingTo: 'Replying to',
     reply: 'Reply',
     cancel: 'Cancel',
+    scanBill: 'Scan a bill',
+    photo: '📷 Photo',
+    uploadFailed: 'Upload failed — tap to retry',
   },
   hi: {
     title: 'टीम चैट',
@@ -72,6 +77,9 @@ const STR = {
     replyingTo: 'जवाब:',
     reply: 'जवाब दें',
     cancel: 'रद्द करें',
+    scanBill: 'बिल स्कैन करें',
+    photo: '📷 फ़ोटो',
+    uploadFailed: 'अपलोड फेल — फिर दबाएँ',
   },
 } as const
 
@@ -199,6 +207,46 @@ export default function CrewChat() {
     [text, lang],
   )
 
+  // Camera-as-Sensor (1.2): snap a challan → presign → direct-upload to R2 →
+  // send as a document message; the worker OCRs it into a card.
+  const onCamera = useCallback(async () => {
+    if (!site) return
+    const cam = await ImagePicker.requestCameraPermissionsAsync()
+    let result: ImagePicker.ImagePickerResult
+    if (cam.granted) {
+      result = await ImagePicker.launchCameraAsync({ quality: 0.6 })
+    } else {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!lib.granted) return
+      result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 })
+    }
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    const mime = asset.mimeType ?? 'image/jpeg'
+    const clientMsgId = newClientMsgId()
+    setPending((p) => [...p, { clientMsgId, body: str.photo, status: 'sending', captured: true }])
+    scrollToEnd()
+    try {
+      const ticket = await chatApi.presignMedia(site.id, mime, 'document')
+      const blob = await (await fetch(asset.uri)).blob()
+      await fetch(ticket.url, { method: ticket.method, headers: ticket.headers, body: blob })
+      await chatApi.send({
+        site_id: site.id,
+        client_msg_id: clientMsgId,
+        media_type: 'document',
+        attachment_key: ticket.key,
+        attachment_mime: mime,
+      })
+      setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
+      await msgsQ.refetch()
+      scrollToEnd()
+    } catch {
+      setPending((p) =>
+        p.map((m) => (m.clientMsgId === clientMsgId ? { ...m, status: 'failed' } : m)),
+      )
+    }
+  }, [site, msgsQ, scrollToEnd, str])
+
   type Row =
     | { kind: 'server'; key: string; msg: ChatMessage }
     | { kind: 'pending'; key: string; out: Outgoing }
@@ -323,6 +371,7 @@ export default function CrewChat() {
                       event={ev}
                       lang={lang}
                       sourceText={msg.body}
+                      attachmentUrl={msg.attachment_url}
                       time={fmtTime(msg.created_at)}
                     />
                   ))}
@@ -350,7 +399,14 @@ export default function CrewChat() {
                   mine ? ownBubble : otherBubble,
                 ]}
               >
-                <Body style={{ color: c.text }}>{body}</Body>
+                {serverMsg?.attachment_url ? (
+                  <Image
+                    source={{ uri: serverMsg.attachment_url }}
+                    style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4 }}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
                 <Mono style={{ color: c.textMute, fontSize: 11 }}>
                   {item.kind === 'pending'
                     ? item.out.status === 'failed'
@@ -442,6 +498,23 @@ export default function CrewChat() {
           borderTopWidth: 1,
         }}
       >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={str.scanBill}
+          onPress={() => void onCamera()}
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: theme.radii.control,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: c.bg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Feather name="camera" size={22} color={c.accentDeep} />
+        </Pressable>
         <TextInput
           value={text}
           onChangeText={setText}

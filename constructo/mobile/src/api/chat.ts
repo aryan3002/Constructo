@@ -35,6 +35,8 @@ export interface ChatMessage {
   reply_to_id: string | null
   media_type: string
   created_at: string
+  /** Short-lived presigned GET for an attachment (challan photo), else null. */
+  attachment_url: string | null
   /** Events this message minted; empty for plain human talk (a bubble). */
   events: ChatEvent[]
 }
@@ -47,6 +49,19 @@ export interface ChatSendBody {
   /** Structured-capture hint (a typed card / slash-command) — Phase 0.1 path. */
   capture_type?: string
   fields?: Record<string, unknown>
+  /** Media (1.2 Camera-as-Sensor): the bare R2 key the client uploaded to. */
+  attachment_key?: string
+  attachment_mime?: string
+  media_type?: 'text' | 'image' | 'document' | 'voice'
+}
+
+/** A direct-to-storage upload ticket (the client PUTs the file, then sends). */
+export interface PresignTicket {
+  key: string
+  url: string
+  method: string
+  headers: Record<string, string>
+  expires_in: number
 }
 
 /** RFC-4122 v4 — a valid UUID for the backend's `client_msg_id` (idempotency). */
@@ -71,6 +86,18 @@ export const chatApi = {
     return request<ChatMessage>('/api/v1/chat/messages', {
       method: 'POST',
       body: JSON.stringify(body),
+    })
+  },
+
+  /** Mint a direct-to-R2 upload ticket for chat media (1.2 Camera-as-Sensor). */
+  presignMedia(
+    siteId: string,
+    contentType: string,
+    kind: 'image' | 'document' | 'voice' = 'document',
+  ): Promise<PresignTicket> {
+    return request<PresignTicket>('/api/v1/chat/media', {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId, content_type: contentType, kind }),
     })
   },
 
