@@ -299,6 +299,29 @@ export interface SentinelResult {
   summary: string
 }
 
+// ---- Tamper-evident dispute pack (3.6) ------------------------------------
+export interface DisputePackResult {
+  site_id: string
+  counterparty: string
+  record_count: number
+  records: Array<Record<string, unknown>>
+  settlement: {
+    counterparty: string
+    paid_out: number
+    invoiced: number
+    unadjusted_advance: number
+    warn: boolean
+    message: string
+  }
+  head_hash: string
+  watermark: string
+  narrative: string
+}
+export interface PackAskResult {
+  answerable: boolean
+  answer: string
+}
+
 // ---- query helper ----------------------------------------------------------
 const qs = (params: Record<string, string | undefined>): string => {
   const entries = Object.entries(params).filter(([, v]) => v != null) as [
@@ -402,4 +425,17 @@ export const owner = {
     request<SentinelResult>(
       `/api/v1/sentinel${qs({ site_id: siteId, window_days: String(windowDays) })}`,
     ),
+
+  /** Tamper-evident dispute pack for a counterparty's advance case (3.6). */
+  disputePack: (siteId: string, counterparty: string) =>
+    request<DisputePackResult>(
+      `/api/v1/dispute-pack${qs({ site_id: siteId, counterparty })}`,
+    ),
+
+  /** Ask-the-pack — deterministic money Q&A grounded in the pack (3.6). */
+  askPack: (siteId: string, counterparty: string, question: string) =>
+    request<PackAskResult>('/api/v1/dispute-pack/ask', {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId, counterparty, question }),
+    }),
 }

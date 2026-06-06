@@ -29,6 +29,7 @@ const STR = {
     radar: 'Radar',
     forecastClear: 'Nothing needs ordering; cash-flow steady.',
     radarClear: 'All clear — nothing’s slipping.',
+    disputePack: 'Dispute pack',
   },
   hi: {
     timeline: 'टाइमलाइन',
@@ -41,6 +42,7 @@ const STR = {
     radar: 'रडार',
     forecastClear: 'कुछ मँगाने की ज़रूरत नहीं; नकदी ठीक।',
     radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
+    disputePack: 'विवाद फ़ाइल',
   },
 } as const
 
@@ -148,6 +150,16 @@ export default function SiteDetail() {
           })}
         </Card>
       ) : null}
+
+      {/* Tamper-evident dispute pack (3.6) — per-counterparty advance case. */}
+      <Button
+        title={t.disputePack}
+        variant="secondary"
+        onPress={() =>
+          router.push({ pathname: '/(contractor)/owner/dispute-pack', params: { site_id: siteId } })
+        }
+        style={{ marginTop: SPACE.xs }}
+      />
 
       <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>{t.timeline.toUpperCase()}</Small>
 
