@@ -78,12 +78,16 @@ async def reindex_now(
     user: User = Depends(_require_owner),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
-    """Backfill search embeddings for every event that is not yet indexed.
+    """Backfill search embeddings for every event AND chat message not yet
+    indexed — so the whole history (incl. WhatsApp-imported chatter) becomes
+    answerable by @ask / search. Safe to re-run.
 
     Network-free unless real embedding-provider creds are configured (otherwise
     the FakeEmbeddings fallback is used).
     """
     from app.search.index import index_all_unindexed
+    from app.search.index_message import index_all_unindexed_messages
 
-    indexed = await index_all_unindexed(session)
-    return {"indexed": indexed}
+    events = await index_all_unindexed(session)
+    messages = await index_all_unindexed_messages(session)
+    return {"events_indexed": events, "messages_indexed": messages}

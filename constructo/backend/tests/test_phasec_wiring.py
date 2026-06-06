@@ -265,7 +265,7 @@ async def test_admin_reindex_endpoint_backfills(db_session, factory, client):
 
     resp = await client.post("/api/v1/admin/reindex", headers=_auth(owner))
     assert resp.status_code == 200
-    assert resp.json()["indexed"] == 1
+    assert resp.json()["events_indexed"] == 1
 
     emb_count = await db_session.scalar(
         select(func.count())
