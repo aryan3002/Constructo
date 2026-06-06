@@ -515,21 +515,25 @@ export default function CrewChat() {
       {/* Pinned brief (1.8) — exceptions-first; shown only when something needs
           attention (empty = calm = good). */}
       {briefQ.data && briefQ.data.risk_count > 0 ? (
-        <View
-          style={{
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${briefQ.data.headline} — ${str.radar}`}
+          onPress={() => setRadarOpen(true)}
+          style={({ pressed }) => ({
             marginHorizontal: SPACE.lg,
             marginTop: SPACE.sm,
             padding: SPACE.md,
             borderRadius: theme.radii.card,
             borderWidth: 1,
             borderColor: c.line,
-            backgroundColor: c.card,
+            backgroundColor: pressed ? c.paper : c.card,
             gap: SPACE.xs,
-          }}
+          })}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Feather name="sunrise" size={14} color={c.accentDeep} />
-            <BodyStrong>{briefQ.data.headline}</BodyStrong>
+            <BodyStrong style={{ flex: 1 }}>{briefQ.data.headline}</BodyStrong>
+            <Feather name="chevron-right" size={18} color={c.textMute} />
           </View>
           {briefQ.data.risks.map((r, i) => (
             <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
@@ -547,7 +551,7 @@ export default function CrewChat() {
               </Small>
             </View>
           ))}
-        </View>
+        </Pressable>
       ) : null}
 
       {/* Messages */}
