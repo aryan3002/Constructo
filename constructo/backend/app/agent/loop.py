@@ -29,6 +29,7 @@ from app.models import (
     AgentTurn,
     ChatMessage,
     Conversation,
+    EventEmbedding,
     MessageEmbedding,
     SiteEventModel,
     User,
@@ -40,21 +41,24 @@ from app.search.router import SIMILARITY_FLOOR
 from app.sites.router import effective_visible_site_ids
 
 MAX_STEPS = 4  # the loop cap (the deterministic router uses a single step)
+_TOPK = 6  # retrieved events / messages fed to the grounded-answer synthesis
 
-# The router decision the LLM returns — it picks a green-tier tool to GROUND the
-# answer (or "none"); it never writes the number itself (a tool produces it).
-_DECISION_SCHEMA = {
+# Grounded-QA synthesis: the model answers ONLY from retrieved context (RAG), or
+# says it can't — it may never invent a fact, number, name, or date.
+_GROUNDED_SCHEMA = {
     "type": "object",
     "properties": {
-        "tool": {"type": "string", "enum": ["search_messages", "none"]},
-        "query": {"type": "string"},
+        "answer": {"type": "string"},
+        "grounded": {"type": "boolean"},
     },
-    "required": ["tool"],
+    "required": ["grounded"],
 }
-_AGENT_SYSTEM = (
-    "You are Nivaan's router. Pick ONE green-tier tool to ground the user's "
-    "question, or 'none'. You never write the answer yourself — a tool produces "
-    "it. Tools: search_messages (semantic search over this site's thread)."
+_GROUNDED_SYS = (
+    "You are Nivaan, answering a question about a construction site. Use ONLY the "
+    "CONTEXT below (captured events + thread messages). Answer in ONE concise "
+    "sentence. If the context does not contain the answer, set grounded=false and "
+    "leave answer empty. NEVER invent a fact, number, name, or date that isn't in "
+    "the context. Mirror the user's language (Hindi/Hinglish/English)."
 )
 
 _MATERIALS = (
@@ -100,10 +104,14 @@ async def run_turn(
     terminal tool and still never producing the number itself."""
     result = await _resolve(session, user, utterance, site_id)
     model = "deterministic"
+    # Beyond exact totals: any other site question goes through grounded RAG
+    # synthesis (retrieve events + messages, answer ONLY from them, abstain if the
+    # record has nothing) — so @ask answers "when did the slab pour?", "what's the
+    # status of the kitchen?", not just "how much cement?".
     if result.kind is AgentResultKind.clarify and llm is not None:
-        looped = await _run_llm_loop(session, user, utterance, site_id, llm)
-        if looped is not None:
-            result = looped
+        grounded = await _answer_grounded(session, user, utterance, site_id, llm)
+        if grounded is not None:
+            result = grounded
             model = getattr(llm, "model", "llm")
     session.add(
         AgentTurn(
@@ -121,58 +129,86 @@ async def run_turn(
     return result
 
 
-async def _search_messages_top(
-    session: AsyncSession, user: User, query: str, site_id: UUID | None
-) -> ChatMessage | None:
-    """Top semantic message hit above the relevance floor, scoped (a green-tier
-    tool). Abstains (None) below the floor rather than guess."""
+async def _scope(
+    session: AsyncSession, user: User, site_id: UUID | None
+) -> list[UUID] | None:
+    """The caller's visible sites, optionally narrowed to one. None → no access."""
+    if user.role is UserRole.homeowner:
+        return None
     visible = list(await effective_visible_site_ids(session, user))
     if site_id is not None:
         visible = [s for s in visible if s == site_id]
-    if not visible:
-        return None
-    [vec] = await get_embeddings_client().embed([query])
+    return visible or None
+
+
+async def _topk_events(
+    session: AsyncSession, scope: list[UUID], vec: list[float]
+) -> list[tuple[SiteEventModel, float]]:
+    distance = EventEmbedding.embedding.cosine_distance(vec).label("d")
+    rows = (
+        await session.execute(
+            select(SiteEventModel, distance)
+            .join(EventEmbedding, EventEmbedding.site_event_id == SiteEventModel.id)
+            .where(SiteEventModel.site_id.in_(scope), latest_event_clause())
+            .order_by(distance)
+            .limit(_TOPK)
+        )
+    ).all()
+    return [(e, 1.0 - float(d)) for e, d in rows]
+
+
+async def _topk_messages(
+    session: AsyncSession, scope: list[UUID], vec: list[float]
+) -> list[tuple[ChatMessage, float]]:
     distance = MessageEmbedding.embedding.cosine_distance(vec).label("d")
-    row = (
+    rows = (
         await session.execute(
             select(ChatMessage, distance)
             .join(MessageEmbedding, MessageEmbedding.chat_message_id == ChatMessage.id)
             .join(Conversation, Conversation.id == ChatMessage.conversation_id)
-            .where(Conversation.site_id.in_(visible))
+            .where(Conversation.site_id.in_(scope))
             .order_by(distance)
-            .limit(1)
+            .limit(_TOPK)
         )
-    ).first()
-    if row is None:
-        return None
-    msg, dist = row
-    return msg if (1.0 - float(dist)) >= SIMILARITY_FLOOR else None
+    ).all()
+    return [(m, 1.0 - float(d)) for m, d in rows]
 
 
-async def _run_llm_loop(
+async def _answer_grounded(
     session: AsyncSession, user: User, utterance: str, site_id: UUID | None, llm: LLMClient
 ) -> AgentResult | None:
-    """The constrained function-calling loop (MAX_STEPS): the LLM routes to a
-    tool, the tool grounds the answer, the loop emits it. Terminal-only — the LLM
-    never composes the number. Returns None if no tool grounded an answer."""
-    for _step in range(MAX_STEPS):
-        decision = await llm.complete(
-            system=_AGENT_SYSTEM, user=utterance, json_schema=_DECISION_SCHEMA
-        )
-        tool = (decision or {}).get("tool")
-        query = (decision or {}).get("query") or utterance
-        if tool == "search_messages":
-            hit = await _search_messages_top(session, user, query, site_id)
-            if hit is not None:
-                return AgentResult(
-                    kind=AgentResultKind.answer,
-                    text=hit.body or "",
-                    tool="search_messages",
-                    evidence_event_ids=[str(hit.id)],
-                )
-            return None  # the tool abstained — don't burn the budget re-asking
-        return None  # "none" or an unknown tool → fall back to the clarify
-    return None
+    """Grounded RAG answer (the general Q&A): retrieve the most relevant events +
+    thread messages (scoped), and have the model compose a ONE-sentence answer
+    ONLY from them — abstaining when the record has nothing or the model isn't
+    grounded. Returns None to fall back to the clarify."""
+    scope = await _scope(session, user, site_id)
+    if not scope:
+        return None
+    [vec] = await get_embeddings_client().embed([utterance])
+    events = [e for e, s in await _topk_events(session, scope, vec) if s >= SIMILARITY_FLOOR]
+    messages = [m for m, s in await _topk_messages(session, scope, vec) if s >= SIMILARITY_FLOOR]
+    if not events and not messages:
+        return None  # nothing in the record clears the floor — abstain honestly
+
+    lines = [
+        f"- [{e.event_type} {e.occurred_on}] {e.summary} {e.fields}" for e in events
+    ] + [f"- (message) {m.body}" for m in messages if m.body]
+    context = "\n".join(lines)
+    out = await llm.complete(
+        system=_GROUNDED_SYS,
+        user=f"QUESTION: {utterance}\n\nCONTEXT:\n{context}",
+        json_schema=_GROUNDED_SCHEMA,
+    )
+    answer = (out or {}).get("answer") or ""
+    if not (out or {}).get("grounded") or not answer.strip():
+        return None
+    evidence = [str(e.id) for e in events] + [str(m.id) for m in messages]
+    return AgentResult(
+        kind=AgentResultKind.answer,
+        text=answer.strip(),
+        tool="grounded_qa",
+        evidence_event_ids=evidence,
+    )
 
 
 _CLARIFY = AgentResult(
