@@ -158,6 +158,138 @@ async def require_homeowner(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+# --- Ask your home (homeowner grounded Q&A over the PUBLISHED slice) ---------
+# The Trust Membrane in question form: she can ask anything, but the answer is
+# grounded ONLY in the curated, human-published slice (updates, weekly summaries,
+# milestones, changes, photo captions, confirmed quiet periods) — never raw
+# events, crew chat, vendor names, or money rates. Calm, her language, digits
+# guarded, and an honest "ask your builder" when the record doesn't hold it.
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+
+class HomeownerAskIn(_BaseModel):
+    question: str
+    site_id: UUID | None = None
+
+
+class HomeownerAskOut(_BaseModel):
+    answerable: bool
+    answer: str
+    sources: int
+
+
+_HO_ABSTAIN = {
+    "en": "I don't see that in your updates yet — want me to ask your builder?",
+    "hi": "अभी आपके अपडेट में यह नहीं दिख रहा — क्या मैं आपके बिल्डर से पूछ लूँ?",
+}
+_HO_SYS = {
+    "en": (
+        "You are the homeowner's calm project assistant. Answer the question in "
+        "ONE or two warm, plain sentences using ONLY the PUBLISHED UPDATES below. "
+        "If they don't contain the answer, set grounded=false. NEVER invent a "
+        "fact, number, date, cost, or name not in the updates. No jargon. "
+        "Answer in English."
+    ),
+    "hi": (
+        "आप घर-मालिक के शांत प्रोजेक्ट सहायक हैं। नीचे दिए गए प्रकाशित अपडेट्स से ही, "
+        "एक-दो सरल और भरोसेमंद वाक्यों में जवाब दें। अगर जवाब नहीं है तो grounded=false "
+        "रखें। कोई भी तथ्य, संख्या, तारीख, खर्च या नाम न बनाएँ जो अपडेट में न हो। "
+        "जवाब हिंदी में दें।"
+    ),
+}
+_HO_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string"}, "grounded": {"type": "boolean"}},
+    "required": ["grounded"],
+}
+
+
+@router.post("/ask", response_model=HomeownerAskOut)
+async def homeowner_ask(
+    body: HomeownerAskIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> HomeownerAskOut:
+    from app.extraction.llm import get_llm_client
+    from app.homeowner.numeric_guard import extract_numeric_tokens
+
+    sid = await resolve_site(session, user, body.site_id)
+    lang = "hi" if (user.language or "en").lower().startswith("hi") else "en"
+    lines: list[str] = []
+
+    for u in (
+        await session.execute(
+            select(Update).where(Update.site_id == sid)
+            .order_by(Update.published_at.desc()).limit(12)
+        )
+    ).scalars():
+        line = f"- Update ({u.published_at.date()}): {u.title}. {(u.body or '').strip()}"
+        lines.append(line.strip())
+    for w in (
+        await session.execute(
+            select(WeeklySummary).where(WeeklySummary.site_id == sid)
+            .order_by(WeeklySummary.week_start.desc()).limit(4)
+        )
+    ).scalars():
+        lines.append(f"- Weekly summary (week of {w.week_start}): {w.text}")
+    for m in (
+        await session.execute(
+            select(Milestone).where(Milestone.site_id == sid).order_by(Milestone.order)
+        )
+    ).scalars():
+        when = m.completed_on or m.expected_on or m.started_on
+        lines.append(f"- Milestone: {m.name} — {m.status.value}{f' ({when})' if when else ''}")
+    for c in (
+        await session.execute(
+            select(Change).where(Change.site_id == sid).order_by(Change.id.desc()).limit(8)
+        )
+    ).scalars():
+        bits = []
+        if c.cost_delta is not None:
+            bits.append(f"cost {int(c.cost_delta):+d}")
+        if c.schedule_delta_days is not None:
+            bits.append(f"{c.schedule_delta_days:+d} days")
+        tail = f" [{', '.join(bits)}]" if bits else ""
+        lines.append(f"- Change: {c.description}{tail}{f' — {c.reason}' if c.reason else ''}")
+    for p in (
+        await session.execute(
+            select(PublishedPhoto).where(
+                PublishedPhoto.site_id == sid, PublishedPhoto.caption.is_not(None)
+            ).order_by(PublishedPhoto.published_at.desc()).limit(12)
+        )
+    ).scalars():
+        lines.append(f"- Photo{f' [{p.room_tag}]' if p.room_tag else ''}: {p.caption}")
+    for q in (
+        await session.execute(
+            select(QuietPeriod).where(
+                QuietPeriod.site_id == sid,
+                QuietPeriod.status.in_([QuietStatus.confirmed, QuietStatus.published]),
+                QuietPeriod.phase_reason.is_not(None),
+            )
+        )
+    ).scalars():
+        lines.append(f"- Quiet period: {q.phase_reason}")
+
+    if not lines:
+        return HomeownerAskOut(answerable=False, answer=_HO_ABSTAIN[lang], sources=0)
+
+    context = "\n".join(lines[:40])
+    out = await get_llm_client().complete(
+        system=_HO_SYS[lang],
+        user=f"QUESTION: {body.question}\n\nPUBLISHED UPDATES:\n{context}",
+        json_schema=_HO_SCHEMA,
+    )
+    answer = ((out or {}).get("answer") or "").strip()
+    grounded = bool((out or {}).get("grounded"))
+    # Digit-safety: the answer may not introduce a number that isn't in the
+    # published context (numeric_guard's tokens — no invented ₹/dates).
+    ctx_nums = set(extract_numeric_tokens(context))
+    digit_safe = set(extract_numeric_tokens(answer)) <= ctx_nums
+    if grounded and answer and digit_safe:
+        return HomeownerAskOut(answerable=True, answer=answer, sources=len(lines))
+    return HomeownerAskOut(answerable=False, answer=_HO_ABSTAIN[lang], sources=len(lines))
+
+
 def _invite_link(join_code: str) -> str:
     # Deep link the contractor shares; the H1 app reads the code from it.
     return f"constructo://join?code={join_code}"
