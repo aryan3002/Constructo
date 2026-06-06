@@ -9,6 +9,7 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -66,6 +67,10 @@ const STR = {
     reply: 'Reply',
     dispute: 'Dispute',
     resolve: 'Resolve dispute',
+    catchUp: 'Catch me up',
+    recapTitle: 'Last 24 hours',
+    recapNothing: 'Nothing logged in this window.',
+    recapDisputes: 'open disputes',
     cancel: 'Cancel',
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
@@ -97,6 +102,10 @@ const STR = {
     reply: 'जवाब दें',
     dispute: 'आपत्ति',
     resolve: 'विवाद सुलझाएँ',
+    catchUp: 'सार दिखाओ',
+    recapTitle: 'पिछले 24 घंटे',
+    recapNothing: 'इस अवधि में कुछ दर्ज नहीं।',
+    recapDisputes: 'खुले विवाद',
     cancel: 'रद्द करें',
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
@@ -159,6 +168,8 @@ export default function CrewChat() {
     event: ChatEvent
     summary: string
   } | null>(null)
+  // The "Catch me up" recap sheet (2.6).
+  const [recapOpen, setRecapOpen] = useState(false)
 
   // The supervisor's assigned site(s); v1 chats the first one.
   const sitesQ = useQuery({ queryKey: ['supervisor', 'sites'], queryFn: () => supervisorApi.sites() })
@@ -178,6 +189,13 @@ export default function CrewChat() {
     queryFn: () => chatApi.brief(site!.id),
     enabled: !!site,
     refetchInterval: 30000,
+  })
+
+  // Catch-me-up recap (2.6) — fetched only when the sheet is opened.
+  const recapQ = useQuery({
+    queryKey: ['chat', 'recap', site?.id],
+    queryFn: () => chatApi.recap(site!.id, 1),
+    enabled: !!site && recapOpen,
   })
 
   // Lookup for rendering a quoted parent above a reply (1.5 threading).
@@ -417,10 +435,35 @@ export default function CrewChat() {
           backgroundColor: c.card,
           borderBottomColor: c.line,
           borderBottomWidth: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.sm,
         }}
       >
-        <BodyStrong>{str.title}</BodyStrong>
-        <Small style={{ color: c.textMute }}>{site.name}</Small>
+        <View style={{ flex: 1 }}>
+          <BodyStrong>{str.title}</BodyStrong>
+          <Small style={{ color: c.textMute }}>{site.name}</Small>
+        </View>
+        {/* Catch me up (2.6) — deterministic recap of the last 24h. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={str.catchUp}
+          onPress={() => setRecapOpen(true)}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            minHeight: 40,
+            paddingHorizontal: SPACE.md,
+            borderRadius: 9999,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: pressed ? c.paper : c.card,
+          })}
+        >
+          <Feather name="sunrise" size={15} color={c.accentDeep} />
+          <Small style={{ fontWeight: '600', color: c.text }}>{str.catchUp}</Small>
+        </Pressable>
       </View>
 
       {/* Pinned brief (1.8) — exceptions-first; shown only when something needs
@@ -672,6 +715,64 @@ export default function CrewChat() {
                   <BodyStrong>{o.label}</BodyStrong>
                 </Pressable>
               ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Catch-me-up recap sheet (2.6) — deterministic totals, never a guess. */}
+      <Modal visible={recapOpen} transparent animationType="slide" onRequestClose={() => setRecapOpen(false)}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
+          onPress={() => setRecapOpen(false)}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: theme.radii.sheet,
+              borderTopRightRadius: theme.radii.sheet,
+              padding: SPACE.lg,
+              paddingBottom: insets.bottom + SPACE.lg,
+              gap: SPACE.md,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Feather name="sunrise" size={18} color={c.accentDeep} />
+              <BodyStrong style={{ flex: 1 }}>{str.recapTitle}</BodyStrong>
+              <Pressable accessibilityRole="button" accessibilityLabel={str.cancel} hitSlop={10} onPress={() => setRecapOpen(false)}>
+                <Feather name="x" size={22} color={c.textMute} />
+              </Pressable>
+            </View>
+
+            {recapQ.isLoading ? (
+              <View style={{ paddingVertical: SPACE.lg, alignItems: 'center' }}>
+                <ActivityIndicator color={c.accent} />
+              </View>
+            ) : recapQ.data ? (
+              <View style={{ gap: SPACE.sm }}>
+                <Body style={{ color: c.text }}>
+                  {recapQ.data.summary || str.recapNothing}
+                </Body>
+                {Object.entries(recapQ.data.event_counts).map(([type, n]) => (
+                  <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Small style={{ color: c.textMute, textTransform: 'capitalize' }}>
+                      {type.replace(/_/g, ' ')}
+                    </Small>
+                    <Mono style={{ color: c.text }}>{n}</Mono>
+                  </View>
+                ))}
+                {recapQ.data.open_disputes > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <Feather name="flag" size={14} color={c.risk} />
+                    <Small style={{ color: c.risk, fontWeight: '600' }}>
+                      {recapQ.data.open_disputes} {str.recapDisputes}
+                    </Small>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <Small muted>{str.recapNothing}</Small>
+            )}
           </Pressable>
         </Pressable>
       </Modal>

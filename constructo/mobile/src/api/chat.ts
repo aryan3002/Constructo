@@ -83,6 +83,20 @@ export interface SiteBrief {
   risks: BriefRisk[]
 }
 
+/** A deterministic Catch-me-up over a site's recent thread (2.6) — chatter
+ *  distilled into structured totals by the reducers, never an LLM guess. */
+export interface RecapResult {
+  site_id: string
+  days: number
+  event_counts: Record<string, number>
+  /** "cement: bori" -> qty (canonical unit). */
+  material_totals: Record<string, number>
+  worker_days: number | null
+  amount_total: number | null
+  open_disputes: number
+  summary: string
+}
+
 /** A grounded answer from Ask-the-Project (2.2). The total is computed in the
  *  backend reducers, never a model; `unconfirmed` is the honest caveat. */
 export interface AskResult {
@@ -145,6 +159,13 @@ export const chatApi = {
       method: 'POST',
       body: JSON.stringify({ site_id: siteId, question }),
     })
+  },
+
+  /** Catch-me-up (2.6): deterministic totals over the last `days` of the thread. */
+  recap(siteId: string, days = 1): Promise<RecapResult> {
+    return request<RecapResult>(
+      `/api/v1/recap?site_id=${encodeURIComponent(siteId)}&days=${days}`,
+    )
   },
 
   /** Advance the read cursor (returns 204). */
