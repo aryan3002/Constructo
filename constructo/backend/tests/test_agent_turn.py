@@ -58,20 +58,15 @@ async def test_ungroundable_returns_clarify_never_prose(client, world):
     assert resp.json()["kind"] == "clarify"
 
 
-async def test_llm_loop_falls_back_to_message_search(db_session, factory, world):
-    """When deterministic aggregation can't answer, the constrained tool-loop
-    routes to search_messages and grounds the answer in a real message (2.1
-    fuzzy tail). The LLM only routes — the message body IS the answer."""
+async def test_grounded_qa_answers_any_question_from_the_record(db_session, factory, world):
+    """When it isn't an exact-number aggregation, @ask answers via grounded RAG:
+    it retrieves the relevant message and the model composes a one-sentence answer
+    ONLY from that context (abstaining if nothing's there)."""
     from uuid import uuid4
 
     from app.agent.loop import run_turn
     from app.extraction.llm import FakeLLMClient
-    from app.models import (
-        ChatMessage,
-        Conversation,
-        ConversationKind,
-        MessageSide,
-    )
+    from app.models import ChatMessage, Conversation, ConversationKind, MessageSide
     from app.search.embeddings import FakeEmbeddings
     from app.search.index_message import index_message
 
@@ -92,14 +87,32 @@ async def test_llm_loop_falls_back_to_message_search(db_session, factory, world)
     await index_message(db_session, msg.id, client=FakeEmbeddings())
     await db_session.commit()
 
-    # The LLM routes to search_messages (it never writes the answer itself).
-    llm = FakeLLMClient(canned={"tool": "search_messages", "query": "slab leak column"})
+    # The model composes a grounded answer from the retrieved context (a
+    # grounded=false would abstain — it never writes facts that aren't there).
+    llm = FakeLLMClient(
+        canned={"grounded": True, "answer": "The basement slab developed a leak near the column."}
+    )
     result = await run_turn(
-        db_session, owner, "where did we discuss the slab leak?", site_id=site.id, llm=llm
+        db_session, owner, "what happened with the slab?", site_id=site.id, llm=llm
     )
     assert result.kind.value == "answer"
-    assert result.tool == "search_messages"
+    assert result.tool == "grounded_qa"
+    assert "leak" in result.text.lower()
     assert str(msg.id) in result.evidence_event_ids
+
+
+async def test_grounded_qa_abstains_when_record_is_empty(db_session, factory, world):
+    """No relevant record → abstain (clarify), never invent (the model is never
+    even called when retrieval is empty)."""
+    from app.agent.loop import run_turn
+    from app.extraction.llm import FakeLLMClient
+
+    _, owner, site = world
+    llm = FakeLLMClient(canned={"grounded": True, "answer": "fabricated"})
+    result = await run_turn(
+        db_session, owner, "what is the status of the kitchen?", site_id=site.id, llm=llm
+    )
+    assert result.kind.value == "clarify"
 
 
 async def test_scoping_excludes_other_sites(client, db_session, factory, world):

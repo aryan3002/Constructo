@@ -260,56 +260,74 @@ async def ask(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> AskOut:
-    parsed = parse_query(body.question, today=date.today())
-    if parsed.event_type is None or reducer_for(parsed.event_type.value) is None:
-        return AskOut(
-            answerable=False,
-            answer="Ask about deliveries, attendance, or amounts — e.g. "
-            '"how much cement this month?"',
-        )
-
-    # Scope: the caller's visible sites, optionally narrowed to one (never widened).
+    """Ask anything about the site. Exact totals (how much/many/paid) are computed
+    deterministically by the reducers; every other question is answered by
+    grounded RAG over the actual events + thread (cited, abstaining when the
+    record has nothing). Scoped to the caller's visible sites."""
     visible = await effective_visible_site_ids(session, user)
     if user.role is UserRole.homeowner or not visible:
         return AskOut(answerable=False, answer="No accessible sites.")
-    scope = visible
-    if body.site_id is not None:
-        if body.site_id not in visible:
-            return AskOut(answerable=False, answer="No accessible sites.")
-        scope = {body.site_id}
+    if body.site_id is not None and body.site_id not in visible:
+        return AskOut(answerable=False, answer="No accessible sites.")
 
-    stmt = (
-        select(SiteEventModel)
-        .where(SiteEventModel.site_id.in_(scope))
-        .where(SiteEventModel.event_type == parsed.event_type.value)
-        .where(latest_event_clause())
+    # 1) Deterministic exact-number aggregation (the LLM never produces the number).
+    parsed = parse_query(body.question, today=date.today())
+    metric = reducer_for(parsed.event_type.value) if parsed.event_type is not None else None
+    if metric is not None:
+        scope = {body.site_id} if body.site_id is not None else set(visible)
+        stmt = (
+            select(SiteEventModel)
+            .where(SiteEventModel.site_id.in_(scope))
+            .where(SiteEventModel.event_type == parsed.event_type.value)
+            .where(latest_event_clause())
+        )
+        if parsed.date_from is not None:
+            stmt = stmt.where(SiteEventModel.occurred_on >= parsed.date_from)
+        if parsed.date_to is not None:
+            stmt = stmt.where(SiteEventModel.occurred_on <= parsed.date_to)
+        rows = (await session.execute(stmt)).scalars().all()
+        events = [
+            EventLike(
+                id=str(e.id), event_type=e.event_type, fields=e.fields, confidence=e.confidence
+            )
+            for e in rows
+        ]
+        material = _material_in(body.question)
+        if metric == "sum_quantity":
+            result = sum_quantity(events, material=material)
+        elif metric == "sum_headcount":
+            result = sum_headcount(events)
+        else:
+            result = sum_amount(events)
+        if result.answerable:
+            return AskOut(
+                answerable=True,
+                answer=_phrase(result, material),
+                total=result.total,
+                unit=result.unit,
+                breakdown=result.breakdown,
+                evidence_event_ids=result.evidence_event_ids,
+                contributors=result.contributors,
+                unconfirmed=result.unconfirmed,
+            )
+
+    # 2) Grounded RAG fallback — any other site question, answered from the record.
+    from app.agent.loop import _answer_grounded
+    from app.extraction.llm import get_llm_client
+
+    grounded = await _answer_grounded(
+        session, user, body.question, body.site_id, get_llm_client()
     )
-    if parsed.date_from is not None:
-        stmt = stmt.where(SiteEventModel.occurred_on >= parsed.date_from)
-    if parsed.date_to is not None:
-        stmt = stmt.where(SiteEventModel.occurred_on <= parsed.date_to)
-    rows = (await session.execute(stmt)).scalars().all()
-    events = [
-        EventLike(id=str(e.id), event_type=e.event_type, fields=e.fields, confidence=e.confidence)
-        for e in rows
-    ]
+    if grounded is not None:
+        return AskOut(
+            answerable=True,
+            answer=grounded.text,
+            evidence_event_ids=grounded.evidence_event_ids,
+        )
 
-    metric = reducer_for(parsed.event_type.value)
-    material = _material_in(body.question)
-    if metric == "sum_quantity":
-        result = sum_quantity(events, material=material)
-    elif metric == "sum_headcount":
-        result = sum_headcount(events)
-    else:
-        result = sum_amount(events)
-
+    # 3) Nothing in the record supports an answer — abstain honestly.
     return AskOut(
-        answerable=result.answerable,
-        answer=_phrase(result, material),
-        total=result.total,
-        unit=result.unit,
-        breakdown=result.breakdown,
-        evidence_event_ids=result.evidence_event_ids,
-        contributors=result.contributors,
-        unconfirmed=result.unconfirmed,
+        answerable=False,
+        answer="I don't have that in the site record yet — try a delivery, "
+        "attendance, amount, or progress question.",
     )
