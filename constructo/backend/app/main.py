@@ -29,6 +29,7 @@ from app.chat.router import router as chat_router
 from app.common.errors import install_error_handlers
 from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
+from app.dispute_pack.router import router as dispute_pack_router
 from app.disputes.router import router as disputes_router
 from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
 from app.forecast.router import router as forecast_router
@@ -123,3 +124,4 @@ app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggre
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
+app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
