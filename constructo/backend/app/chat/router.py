@@ -30,6 +30,7 @@ from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import (
+    AckKind,
     ActionItem,
     ActionItemEvent,
     ActionItemEventKind,
@@ -40,6 +41,7 @@ from app.models import (
     ConversationRead,
     DisputeStatus,
     EventDispute,
+    MessageAck,
     MessageSide,
     RawMessageModel,
     SiteEventModel,
@@ -666,6 +668,75 @@ async def site_brief(
             for r in top
         ],
     )
+
+
+class AckIn(BaseModel):
+    ack: AckKind
+
+
+class ResolveOut(BaseModel):
+    closed_action_items: int
+
+
+async def _load_message_in_scope(
+    session: AsyncSession, user: User, message_id: UUID
+) -> ChatMessage:
+    msg = await session.get(ChatMessage, message_id)
+    if msg is None:
+        raise AppError(404, "not_found", "Message not found")
+    conv = await session.get(Conversation, msg.conversation_id)
+    if conv is None:
+        raise AppError(404, "not_found", "Conversation not found")
+    await _require_site(session, user, conv.site_id)
+    return msg
+
+
+@router.post("/messages/{message_id}/ack", status_code=204)
+async def ack_message(
+    message_id: UUID,
+    body: AckIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Word-ack a message (Seen / On it / Done) — never an emoji (2.6). One ack
+    per user per message; re-acking overwrites."""
+    await _load_message_in_scope(session, user, message_id)
+    existing = await session.get(MessageAck, (message_id, user.id))
+    if existing is None:
+        session.add(MessageAck(message_id=message_id, user_id=user.id, ack=body.ack))
+    else:
+        existing.ack = body.ack
+    await session.commit()
+
+
+@router.post("/messages/{message_id}/resolve", response_model=ResolveOut)
+async def resolve_thread(
+    message_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ResolveOut:
+    """Resolve a thread → close the Action Item(s) lifted from this message (2.6
+    'resolve-thread closes its linked object'). Idempotent; audit-logged."""
+    await _load_message_in_scope(session, user, message_id)
+    items = (
+        await session.execute(
+            select(ActionItem).where(
+                ActionItem.source_message_id == message_id,
+                ActionItem.status == ActionItemStatus.open,
+            )
+        )
+    ).scalars().all()
+    for item in items:
+        item.status = ActionItemStatus.done
+        item.completed_at = datetime.now(UTC)
+        session.add(
+            ActionItemEvent(
+                action_item_id=item.id, kind=ActionItemEventKind.completed, actor_id=user.id,
+                note="resolved via thread",
+            )
+        )
+    await session.commit()
+    return ResolveOut(closed_action_items=len(items))
 
 
 @router.post("/read", status_code=204)
