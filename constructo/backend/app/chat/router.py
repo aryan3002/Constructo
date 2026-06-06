@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,18 +70,12 @@ class ChatReadIn(BaseModel):
     last_seq: int = Field(ge=0)
 
 
-class PresignIn(BaseModel):
-    site_id: UUID
-    content_type: str
-    kind: str = "image"  # image | document | voice
+class MediaUploadOut(BaseModel):
+    """The stored object's bare key — the client then sends a message carrying
+    it as ``attachment_key``."""
 
-
-class PresignOut(BaseModel):
     key: str
-    url: str
-    method: str
-    headers: dict[str, str]
-    expires_in: int
+    media_type: str
 
 
 class ChatEventOut(BaseModel):
@@ -305,22 +299,33 @@ async def send_message(
     return out
 
 
-@router.post("/media", response_model=PresignOut)
-async def presign_media(
-    body: PresignIn,
+_MEDIA_EXT = {"image": "jpg", "document": "pdf", "voice": "m4a"}
+CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
+
+
+@router.post("/media", response_model=MediaUploadOut, status_code=201)
+async def upload_media(
+    file: UploadFile = File(...),
+    site_id: UUID = Form(...),
+    kind: str = Form("document"),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> PresignOut:
-    """Mint a direct-to-R2 upload ticket for chat media (1.2 Camera-as-Sensor).
-
-    The client PUTs the bytes straight to storage, then sends a message carrying
-    the bare ``attachment_key`` — the message itself never proxies the file.
-    """
-    await _require_site(session, user, body.site_id)
-    ext = {"image": "jpg", "document": "pdf", "voice": "m4a"}.get(body.kind, "bin")
-    key = f"chat/{body.site_id}/{uuid4().hex}.{ext}"
-    ticket = get_storage().presigned_put(key, body.content_type)
-    return PresignOut(**ticket)
+) -> MediaUploadOut:
+    """Upload chat media (1.2 Camera-as-Sensor). The server streams the file to
+    object storage (R2 in prod, local in CI — same ``put_bytes`` contract) and
+    returns the bare key; the client then sends a message carrying it as
+    ``attachment_key``, and the worker OCRs/STTs it into a Card."""
+    await _require_site(session, user, site_id)
+    data = await file.read()
+    if not data:
+        raise AppError(422, "empty_file", "No file content")
+    if len(data) > CHAT_MAX_MEDIA_BYTES:
+        raise AppError(413, "media_too_large", "Attachment exceeds 15 MB")
+    ext = _MEDIA_EXT.get(kind, "bin")
+    key = f"chat/{site_id}/{uuid4().hex}.{ext}"
+    get_storage().put_bytes(key, data, file.content_type or "application/octet-stream")
+    media_type = kind if kind in _CHAT_MEDIA_TYPES else "document"
+    return MediaUploadOut(key=key, media_type=media_type)
 
 
 @router.get("/messages", response_model=list[ChatMessageOut])

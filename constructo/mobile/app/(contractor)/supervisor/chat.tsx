@@ -227,14 +227,16 @@ export default function CrewChat() {
     setPending((p) => [...p, { clientMsgId, body: str.photo, status: 'sending', captured: true }])
     scrollToEnd()
     try {
-      const ticket = await chatApi.presignMedia(site.id, mime, 'document')
-      const blob = await (await fetch(asset.uri)).blob()
-      await fetch(ticket.url, { method: ticket.method, headers: ticket.headers, body: blob })
+      const uploaded = await chatApi.uploadMedia(
+        site.id,
+        { uri: asset.uri, name: asset.fileName ?? 'challan.jpg', type: mime },
+        'document',
+      )
       await chatApi.send({
         site_id: site.id,
         client_msg_id: clientMsgId,
         media_type: 'document',
-        attachment_key: ticket.key,
+        attachment_key: uploaded.key,
         attachment_mime: mime,
       })
       setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))

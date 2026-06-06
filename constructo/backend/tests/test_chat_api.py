@@ -377,18 +377,30 @@ async def test_send_bad_media_type_rejected(client, world):
     assert resp.status_code == 422
 
 
-async def test_presign_media_returns_ticket(client, world):
+async def test_upload_media_stores_and_returns_key(client, world):
     _, owner, site = world
     resp = await client.post(
         "/api/v1/chat/media",
-        json={"site_id": str(site.id), "content_type": "image/jpeg", "kind": "image"},
+        data={"site_id": str(site.id), "kind": "document"},
+        files={"file": ("challan.jpg", b"\xff\xd8\xff fake jpeg bytes", "image/jpeg")},
         headers=auth(owner),
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["key"].startswith(f"chat/{site.id}/")
-    assert body["method"] == "PUT"
-    assert body["url"]
+    assert body["media_type"] == "document"
+
+
+async def test_upload_media_requires_site(client, factory, world):
+    company, _, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor)  # unassigned
+    resp = await client.post(
+        "/api/v1/chat/media",
+        data={"site_id": str(site.id), "kind": "document"},
+        files={"file": ("x.jpg", b"abc", "image/jpeg")},
+        headers=auth(sup),
+    )
+    assert resp.status_code == 403
 
 
 async def test_worker_ocrs_document_attachment(db_session, world):
