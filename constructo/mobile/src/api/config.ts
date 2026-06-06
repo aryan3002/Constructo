@@ -7,6 +7,15 @@ export const API_BASE: string = (
   process.env.EXPO_PUBLIC_API_BASE ?? 'http://10.0.2.2:8000'
 ).replace(/\/$/, '')
 
+/**
+ * Public web app base — where vendor-facing links (e.g. the no-install confirm
+ * page `/vendor-confirm/:token`) resolve. Set `EXPO_PUBLIC_WEB_BASE` to the
+ * deployed web URL; falls back to the API host in dev.
+ */
+export const WEB_BASE: string = (
+  process.env.EXPO_PUBLIC_WEB_BASE ?? API_BASE
+).replace(/\/$/, '')
+
 /** Local calendar date (NOT UTC) as YYYY-MM-DD. */
 export function todayIso(): string {
   const d = new Date()

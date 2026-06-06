@@ -17,6 +17,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  Share,
   TextInput,
   View,
   type ViewStyle,
@@ -41,6 +42,8 @@ import {
 } from '../../../src/api/chat'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { actionItemsApi } from '../../../src/api/actionItems'
+import { vendorConfirmApi } from '../../../src/api/vendorConfirm'
+import { WEB_BASE } from '../../../src/api/config'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
@@ -78,6 +81,8 @@ const STR = {
     radarClear: 'All clear — nothing’s slipping.',
     todos: 'To-dos',
     makeTodo: 'Make a to-do',
+    vendorConfirm: 'Ask vendor to confirm',
+    vendorConfirmMsg: 'Please confirm this delivery:',
     cancel: 'Cancel',
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
@@ -118,6 +123,8 @@ const STR = {
     radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
     todos: 'काम',
     makeTodo: 'काम बनाएँ',
+    vendorConfirm: 'वेंडर से पुष्टि कराएँ',
+    vendorConfirmMsg: 'कृपया इस डिलीवरी की पुष्टि करें:',
     cancel: 'रद्द करें',
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
@@ -715,6 +722,14 @@ export default function CrewChat() {
             {[
               { key: 'reply', icon: 'corner-up-left' as const, label: str.reply, show: true },
               { key: 'todo', icon: 'check-square' as const, label: str.makeTodo, show: true },
+              {
+                key: 'vendorConfirm',
+                icon: 'send' as const,
+                label: str.vendorConfirm,
+                show:
+                  cardMenu?.event.event_type === 'material_delivery' ||
+                  cardMenu?.event.event_type === 'invoice_received',
+              },
               { key: 'dispute', icon: 'flag' as const, label: str.dispute, show: true },
               {
                 key: 'resolve',
@@ -745,6 +760,32 @@ export default function CrewChat() {
                             params: { site_id: site.id },
                           }))
                           .catch(() => Alert.alert(str.makeTodo, str.askFailed))
+                      }
+                    } else if (o.key === 'vendorConfirm') {
+                      const f = cm.event.fields as {
+                        vendor?: string
+                        material?: string
+                        quantity?: number
+                        unit?: string
+                      }
+                      if (site && f.vendor) {
+                        vendorConfirmApi
+                          .create({
+                            site_id: site.id,
+                            vendor_name: String(f.vendor),
+                            event_id: cm.event.id,
+                            material: f.material ? String(f.material) : undefined,
+                            claimed_qty: typeof f.quantity === 'number' ? f.quantity : undefined,
+                            claimed_unit: f.unit ? String(f.unit) : undefined,
+                          })
+                          .then((conf) =>
+                            Share.share({
+                              message: `${str.vendorConfirmMsg} ${WEB_BASE}${conf.confirm_path}`,
+                            }),
+                          )
+                          .catch(() => Alert.alert(str.vendorConfirm, str.askFailed))
+                      } else {
+                        Alert.alert(str.vendorConfirm, str.askFailed)
                       }
                     } else {
                       setDisputeSheet({
