@@ -44,6 +44,41 @@ _MATERIALS = (
 )
 
 
+class TurnIn(BaseModel):
+    utterance: str
+    site_id: UUID | None = None
+
+
+class TurnOut(BaseModel):
+    kind: str  # answer | clarify | cards (terminal tools — never free prose)
+    text: str
+    tool: str
+    total: float | None = None
+    unit: str | None = None
+    evidence_event_ids: list[str] = []
+
+
+@router.post("/agent/turn", response_model=TurnOut)
+async def agent_turn(
+    body: TurnIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TurnOut:
+    """@nivaan — one constrained turn. Deterministic-first; ends in a terminal
+    tool (answer/clarify/cards), scoped at the executor, audited in agent_turns."""
+    from app.agent.loop import run_turn
+
+    r = await run_turn(session, user, body.utterance, site_id=body.site_id)
+    return TurnOut(
+        kind=r.kind.value,
+        text=r.text,
+        tool=r.tool,
+        total=r.total,
+        unit=r.unit,
+        evidence_event_ids=r.evidence_event_ids,
+    )
+
+
 class MembraneSuggestIn(BaseModel):
     event_id: UUID
 
