@@ -51,6 +51,8 @@ export default function OwnerLayout() {
       <Tabs.Screen name="more" options={{ title: L.more, tabBarIcon: icon('☰') }} />
       {/* Nested site-detail route, off-tab. */}
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
+      {/* Foresight (portfolio) — pushed from More, off-tab. */}
+      <Tabs.Screen name="foresight" options={{ href: null }} />
     </Tabs>
   )
 }

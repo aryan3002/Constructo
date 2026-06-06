@@ -6,6 +6,7 @@
  * stream once they're inside one site.
  */
 import { View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -24,6 +25,10 @@ const STR = {
     errorLine: 'We could not load this site just now.',
     tryAgain: 'Try again',
     active: 'Active',
+    foresight: 'Foresight',
+    radar: 'Radar',
+    forecastClear: 'Nothing needs ordering; cash-flow steady.',
+    radarClear: 'All clear — nothing’s slipping.',
   },
   hi: {
     timeline: 'टाइमलाइन',
@@ -32,6 +37,10 @@ const STR = {
     errorLine: 'अभी यह साइट लोड नहीं हो सकी।',
     tryAgain: 'फिर कोशिश करें',
     active: 'सक्रिय',
+    foresight: 'दूरदृष्टि',
+    radar: 'रडार',
+    forecastClear: 'कुछ मँगाने की ज़रूरत नहीं; नकदी ठीक।',
+    radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
   },
 } as const
 
@@ -63,6 +72,8 @@ export default function SiteDetail() {
 
   const siteQ = useQuery({ queryKey: ['owner', 'site', siteId], queryFn: () => owner.site(siteId), enabled: !!siteId })
   const eventsQ = useQuery({ queryKey: ['owner', 'site', siteId, 'events'], queryFn: () => owner.siteEvents(siteId), enabled: !!siteId })
+  const forecastQ = useQuery({ queryKey: ['owner', 'site', siteId, 'forecast'], queryFn: () => owner.forecast(siteId), enabled: !!siteId })
+  const radarQ = useQuery({ queryKey: ['owner', 'site', siteId, 'sentinel'], queryFn: () => owner.sentinel(siteId), enabled: !!siteId })
 
   if (siteQ.isLoading) {
     return (
@@ -94,6 +105,49 @@ export default function SiteDetail() {
           <Small muted>{[site.type, site.location].filter(Boolean).join(' · ')}</Small>
         </View>
       </View>
+
+      {/* Foresight (3.3) — reorder + cash-flow, deterministic. */}
+      {forecastQ.data ? (
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACE.xs }}>
+            <Feather name="trending-up" size={14} color={theme.colors.accentDeep} />
+            <Small muted style={{ letterSpacing: 1 }}>{t.foresight.toUpperCase()}</Small>
+          </View>
+          <Body style={{ color: theme.colors.text }}>
+            {forecastQ.data.overdue_count > 0 || forecastQ.data.cashflow.answerable
+              ? forecastQ.data.summary
+              : t.forecastClear}
+          </Body>
+          {forecastQ.data.reorder.filter((r) => r.overdue).map((r) => (
+            <View key={r.material} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.warn }} />
+              <Small style={{ flex: 1, color: theme.colors.text }}>
+                {`${r.material} — ${r.days_since_last}d since last (usually ~${Math.round(r.avg_interval_days)}d)`}
+              </Small>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+
+      {/* Radar (3.1) — what's slipping. */}
+      {radarQ.data && radarQ.data.signals.length > 0 ? (
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACE.xs }}>
+            <Feather name="radio" size={14} color={theme.colors.accentDeep} />
+            <Small muted style={{ letterSpacing: 1 }}>{t.radar.toUpperCase()}</Small>
+          </View>
+          {radarQ.data.signals.map((s, i) => {
+            const tone =
+              s.severity === 'high' ? theme.colors.risk : s.severity === 'medium' ? theme.colors.warn : theme.colors.info
+            return (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, marginTop: i === 0 ? 0 : 6 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 6, backgroundColor: tone }} />
+                <Small style={{ flex: 1, color: theme.colors.text }}>{s.message}</Small>
+              </View>
+            )
+          })}
+        </Card>
+      ) : null}
 
       <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>{t.timeline.toUpperCase()}</Small>
 

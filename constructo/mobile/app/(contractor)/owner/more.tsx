@@ -4,6 +4,7 @@
  * web-primary for heavy desk work (Owner.md §6.6 / §8); this MVP screen ships
  * identity + the sign-out path.
  */
+import { Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -20,6 +21,8 @@ const STR = {
     role: 'Role',
     phone: 'Phone',
     signOut: 'Sign out',
+    foresight: 'Foresight',
+    foresightSub: 'Portfolio rollup across all your sites',
     webNote: 'Team, Reconciliation, Payments, Permits and Exports stay on the web dashboard for now — built for desk-altitude work.',
   },
   hi: {
@@ -29,6 +32,8 @@ const STR = {
     role: 'भूमिका',
     phone: 'फ़ोन',
     signOut: 'साइन आउट',
+    foresight: 'दूरदृष्टि',
+    foresightSub: 'सभी साइटों का पोर्टफोलियो सार',
     webNote: 'टीम, मिलान, भुगतान, परमिट और एक्सपोर्ट फ़िलहाल वेब डैशबोर्ड पर हैं — गहरे डेस्क-कार्य के लिए।',
   },
 } as const
@@ -69,6 +74,18 @@ export default function More() {
           <Mono muted style={{ marginTop: SPACE.sm }}>{t.phone}: {me.phone}</Mono>
         ) : null}
       </Card>
+
+      <Pressable accessibilityRole="button" accessibilityLabel={t.foresight} onPress={() => router.push('/(contractor)/owner/foresight')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+            <View style={{ flex: 1 }}>
+              <BodyStrong>{t.foresight}</BodyStrong>
+              <Small muted style={{ marginTop: 2 }}>{t.foresightSub}</Small>
+            </View>
+            <Body muted>›</Body>
+          </View>
+        </Card>
+      </Pressable>
 
       <Card>
         <Small muted style={{ letterSpacing: 1 }}>{t.company.toUpperCase()}</Small>
