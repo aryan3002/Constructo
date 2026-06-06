@@ -219,6 +219,71 @@ async def undo_approval(
     return _approval_out(payment)
 
 
+class SettlementOut(BaseModel):
+    counterparty: str
+    paid_out: Decimal
+    invoiced: Decimal
+    unadjusted_advance: Decimal
+    warn: bool
+    message: str
+
+
+@router.get("/settlement", response_model=SettlementOut)
+async def settlement(
+    counterparty: str = Query(..., min_length=1),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SettlementOut:
+    """Advance Ledger / Advance Guard (2.5 L2): a counterparty's unadjusted
+    advance — money paid out beyond what they've invoiced — computed
+    deterministically and warned before a fresh payment."""
+    from app.common.site_events import latest_event_clause
+    from app.payments.advance import (
+        CounterpartyInvoice,
+        CounterpartyPayment,
+        compute_settlement,
+    )
+
+    # Payments out, scoped to what the caller may see.
+    pay_stmt = (await _base_scoped_stmt(session, user)).where(
+        Payment.direction == PaymentDirection.contractor_to_supplier
+    )
+    payments = [
+        CounterpartyPayment(counterparty=p.counterparty_name, amount=p.amount)
+        for p in (await session.execute(pay_stmt)).scalars().all()
+    ]
+
+    # Invoice events, scoped to visible sites (finance roles see the whole company).
+    inv_stmt = (
+        select(SiteEventModel)
+        .where(SiteEventModel.event_type == "invoice_received")
+        .where(latest_event_clause())
+    )
+    if not _sees_all_payments(user):
+        visible = await effective_visible_site_ids(session, user)
+        inv_stmt = inv_stmt.where(SiteEventModel.site_id.in_(visible or [UUID(int=0)]))
+    else:
+        company_sites = select(Site.id).where(Site.company_id == user.company_id)
+        inv_stmt = inv_stmt.where(SiteEventModel.site_id.in_(company_sites))
+    invoices = [
+        CounterpartyInvoice(
+            vendor=e.fields.get("vendor"),
+            amount=Decimal(str(e.fields.get("amount") or 0)),
+        )
+        for e in (await session.execute(inv_stmt)).scalars().all()
+    ]
+
+    b = compute_settlement(counterparty, payments, invoices)
+    return SettlementOut(
+        counterparty=b.counterparty,
+        paid_out=b.paid_out,
+        invoiced=b.invoiced,
+        unadjusted_advance=b.unadjusted_advance,
+        warn=b.warn,
+        message=b.message,
+    )
+
+
 async def _base_scoped_stmt(session: AsyncSession, user: User):
     """A SELECT over Payment limited to what `user` may see, before extra filters."""
     stmt = select(Payment).where(Payment.company_id == user.company_id)
