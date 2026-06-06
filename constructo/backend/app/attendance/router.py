@@ -23,9 +23,11 @@ import datetime as dt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.aggregate import EventLike, sum_headcount
 from app.attendance import service
 from app.attendance.schemas import (
     AttendanceCaptureIn,
@@ -42,6 +44,7 @@ from app.common.pagination import (
     decode_cursor,
     encode_cursor,
 )
+from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import Site, SiteEventModel, User, UserRole
 from app.sites.router import effective_visible_site_ids
@@ -205,6 +208,67 @@ async def my_payments(
         limit=_parse_limit(limit),
     )
     return Page[MyPaymentOut](items=[_payment_out(p) for p in payments], next_cursor=None)
+
+
+class WageTrailOut(BaseModel):
+    """The mukadam's wage-proof trail (1.9) — his logged attendance turned into
+    worker-days, with the contributing events as evidence. 'Your haan became
+    your wage proof.'"""
+
+    days: int
+    total_worker_days: float
+    days_logged: int
+    by_date: dict[str, float]
+    evidence_event_ids: list[UUID]
+
+
+@router.get("/me/wage-trail", response_model=WageTrailOut)
+async def wage_trail(
+    days: int = Query(30, ge=1, le=180),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> WageTrailOut:
+    """Attendance the caller's crew logged on their site(s), aggregated to
+    worker-days — the wage-proof basis (1.9 wedge). Deterministic; scoped to the
+    caller's visible sites; evidence is the contributing attendance events."""
+    visible = await effective_visible_site_ids(session, user)
+    if not visible:
+        return WageTrailOut(
+            days=days, total_worker_days=0, days_logged=0, by_date={}, evidence_event_ids=[]
+        )
+    since = dt.date.today() - dt.timedelta(days=days - 1)
+    rows = (
+        await session.execute(
+            select(SiteEventModel)
+            .where(
+                SiteEventModel.site_id.in_(visible),
+                SiteEventModel.event_type == "attendance",
+                SiteEventModel.occurred_on >= since,
+            )
+            .where(latest_event_clause())
+        )
+    ).scalars().all()
+
+    events = [
+        EventLike(id=str(e.id), event_type=e.event_type, fields=e.fields, confidence=e.confidence)
+        for e in rows
+    ]
+    agg = sum_headcount(events)
+    by_date: dict[str, float] = {}
+    days_seen: set = set()
+    for e in rows:
+        head = e.fields.get("headcount")
+        if isinstance(head, (int, float)) and e.confidence >= 0.5:
+            key = e.occurred_on.isoformat()
+            by_date[key] = by_date.get(key, 0.0) + float(head)
+            days_seen.add(key)
+    return WageTrailOut(
+        days=days,
+        total_worker_days=agg.total or 0.0,
+        days_logged=len(days_seen),
+        by_date=by_date,
+        evidence_event_ids=[UUID(i) for i in agg.evidence_event_ids],
+    )
 
 
 # ---- serializers -----------------------------------------------------------
