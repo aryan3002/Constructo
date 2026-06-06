@@ -44,6 +44,7 @@ from app.publish.router import router as publish_router
 from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
+from app.sentinel.router import router as sentinel_router
 from app.sites.router import router as sites_router
 from app.vendors.router import router as vendors_router
 
@@ -121,3 +122,4 @@ app.include_router(disputes_router)  # Phase 1.7 contested-truth (disputes)
 app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggregation)
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
+app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
