@@ -14,6 +14,7 @@ import type {
   DesignSelection,
   Drawing,
   Home,
+  HomeownerAskResult,
   HomeownerDecision,
   HomeownerJoinRequest,
   HomeownerJoinResponse,
@@ -164,6 +165,18 @@ export const homeowner = {
     request<DesignSelection>('/api/v1/homeowner/design/conflicts/resolve', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  /**
+   * "Ask your home" — grounded Q&A over the homeowner's PUBLISHED slice only
+   * (the Trust Membrane in question form). Answers in her language, digit-guarded,
+   * and abstains (`answerable=false`) to "ask your builder" when the record
+   * doesn't hold it. Engine: POST /homeowner/ask (#109). Stateless — the calm
+   * answer is instant info, not a tracked request.
+   */
+  ask: (question: string, siteId?: string) =>
+    request<HomeownerAskResult>('/api/v1/homeowner/ask', {
+      method: 'POST',
+      body: JSON.stringify({ question, site_id: siteId }),
     }),
   requests: (siteId?: string) =>
     request<HomeownerRequest[]>(`/api/v1/homeowner/requests${qs({ site_id: siteId })}`),
