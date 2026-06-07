@@ -7,23 +7,18 @@
  * built for gloves/sun/one-thumb (≥56px targets). Capture beats forms for this
  * role, so this is photo/voice first; the "what is this?" tag is one tap.
  */
-import { useState, type ComponentProps, type ReactNode } from 'react'
-import {
-  ActivityIndicator,
-  Image,
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  UIManager,
-  View,
-} from 'react-native'
+import { type ReactNode } from 'react'
+import { ActivityIndicator, Platform, Pressable, UIManager, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, H2, Micro, Mono, Small, StatusDot, StatusPill } from '../../../src/ui'
+import { Body, BodyStrong, H2, Mono, Small, StatusDot } from '../../../src/ui'
 import type { CaptureKind } from '../../../src/api/supervisor'
-import type { ChatEvent } from '../../../src/api/chat'
+
+// CaptureCard + MessageBubble live in the shared chat module so the owner Chat
+// screen can reuse them. supervisor chat.tsx still uses its own inline Pressable bubble.
+export { CaptureCard, MessageBubble } from '../../../src/chat/MessageView'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -299,205 +294,6 @@ export function SentRow({
         </Small>
       </View>
     </Pressable>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// CaptureCard — a chat message that became a structured SiteEvent, rendered
-// inline as a Card (event-type pill + key fields + "show proof") instead of a
-// flat bubble. This is "capture with a conversation around it" made VISIBLE:
-// the magic that a message also booked ground-truth into the ledger. Low
-// confidence is marked amber (honest AI); the proof is one tap away (the soul).
-// ---------------------------------------------------------------------------
-
-type EvLang = 'en' | 'hi'
-
-type EvMeta = { icon: ComponentProps<typeof Feather>['name']; en: string; hi: string }
-
-const EVENT_META: Record<string, EvMeta> = {
-  attendance: { icon: 'users', en: 'Attendance', hi: 'हाज़िरी' },
-  material_delivery: { icon: 'truck', en: 'Delivery', hi: 'डिलीवरी' },
-  progress_update: { icon: 'trending-up', en: 'Progress', hi: 'प्रगति' },
-  issue: { icon: 'alert-triangle', en: 'Issue', hi: 'दिक्कत' },
-  invoice_received: { icon: 'file-text', en: 'Invoice', hi: 'बिल' },
-  drawing_shared: { icon: 'map', en: 'Drawing', hi: 'ड्रॉइंग' },
-  approval: { icon: 'check-circle', en: 'Decision', hi: 'फ़ैसला' },
-  payment_request: { icon: 'credit-card', en: 'Payment', hi: 'भुगतान' },
-  unknown: { icon: 'help-circle', en: 'Note', hi: 'नोट' },
-}
-
-const CARD_STR = {
-  en: { show: 'Show proof ▾', hide: 'Hide proof ▴', review: 'Check this', captured: 'Captured', conf: 'sure', workers: 'workers', disputed: 'Disputed', approved: 'Approved' },
-  hi: { show: 'सबूत देखें ▾', hide: 'सबूत छिपाएँ ▴', review: 'जाँचें', captured: 'दर्ज हुआ', conf: 'पक्का', workers: 'मज़दूर', disputed: 'विवादित', approved: 'मंज़ूर' },
-} as const
-
-/** Indian-grouped rupee formatting (no reliance on Hermes Intl). */
-function inr(value: number): string {
-  const neg = value < 0
-  const s = Math.abs(Math.round(value)).toString()
-  let grouped = s
-  if (s.length > 3) {
-    const last3 = s.slice(-3)
-    let rest = s.slice(0, -3)
-    const parts: string[] = []
-    while (rest.length > 2) {
-      parts.unshift(rest.slice(-2))
-      rest = rest.slice(0, -2)
-    }
-    if (rest) parts.unshift(rest)
-    grouped = `${parts.join(',')},${last3}`
-  }
-  return `${neg ? '-₹' : '₹'}${grouped}`
-}
-
-/** A compact, Mono-rendered key-field line; '' → caller falls back to summary. */
-function keyFields(eventType: string, f: Record<string, unknown>, lang: EvLang): string {
-  const str = (k: string) => (f[k] == null ? '' : String(f[k]))
-  const num = (k: string) => (typeof f[k] === 'number' ? (f[k] as number) : null)
-  switch (eventType) {
-    case 'attendance': {
-      const head = num('headcount')
-      const trades =
-        f.by_trade && typeof f.by_trade === 'object'
-          ? Object.entries(f.by_trade as Record<string, unknown>)
-              .map(([t, v]) => `${v} ${t}`)
-              .join(' · ')
-          : ''
-      const base = head != null ? `${head} ${CARD_STR[lang].workers}` : ''
-      return [base, trades].filter(Boolean).join('   ')
-    }
-    case 'material_delivery':
-      return (
-        [str('quantity'), str('unit'), str('material')].filter(Boolean).join(' ') +
-        (str('vendor') ? `   ·   ${str('vendor')}` : '')
-      )
-    case 'invoice_received':
-      return (
-        (num('amount') != null ? inr(num('amount')!) : '') +
-        (str('vendor') ? `   ·   ${str('vendor')}` : '') +
-        (str('invoice_number') ? `   ·   #${str('invoice_number')}` : '')
-      )
-    case 'payment_request':
-      return (num('amount') != null ? inr(num('amount')!) : '') + (str('to') ? `   →   ${str('to')}` : '')
-    default:
-      return ''
-  }
-}
-
-export function CaptureCard({
-  event,
-  lang,
-  sourceText,
-  attachmentUrl,
-  time,
-}: {
-  event: ChatEvent
-  lang: EvLang
-  /** The original message text — the proof, revealed on tap. */
-  sourceText?: string | null
-  /** The captured photo/challan (1.2) — shown in the proof reveal. */
-  attachmentUrl?: string | null
-  time: string
-}) {
-  const { theme } = useTheme()
-  const c = theme.colors
-  const [open, setOpen] = useState(false)
-  const meta = EVENT_META[event.event_type] ?? EVENT_META.unknown
-  const str = CARD_STR[lang]
-  const fieldsLine = keyFields(event.event_type, event.fields, lang)
-  const pct = Math.round(event.confidence * 100)
-
-  const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-    setOpen((o) => !o)
-  }
-
-  return (
-    <View
-      style={[
-        {
-          backgroundColor: c.card,
-          borderRadius: theme.radii.card,
-          borderWidth: 1,
-          borderColor: c.line,
-          padding: SPACE.lg,
-          gap: SPACE.sm,
-        },
-        theme.shadowCard,
-      ]}
-    >
-      {/* Header: event-type pill (icon + word) + low-confidence cue (amber). */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            alignSelf: 'flex-start',
-            borderRadius: 9999,
-            borderWidth: 1,
-            borderColor: c.line,
-            backgroundColor: c.paper,
-            paddingVertical: 4,
-            paddingHorizontal: 10,
-          }}
-        >
-          <Feather name={meta.icon} size={13} color={c.text} />
-          <Small style={{ fontWeight: '600' }}>{lang === 'hi' ? meta.hi : meta.en}</Small>
-        </View>
-        {event.contested ? <StatusPill status="risk" label={str.disputed} size="sm" /> : null}
-        {(event.fields as { status?: string })?.status === 'approved' ? (
-          <StatusPill status="ok" label={str.approved} size="sm" />
-        ) : null}
-        {event.needs_clarification && !event.contested ? (
-          <StatusPill status="warn" label={str.review} size="sm" />
-        ) : null}
-      </View>
-
-      {/* Key fields (Mono ledger numerals) and/or the human-readable summary. */}
-      {fieldsLine ? <Mono style={{ fontSize: 18, color: c.text }}>{fieldsLine}</Mono> : null}
-      {event.summary ? (
-        <Body style={{ color: fieldsLine ? c.textMute : c.text }}>{event.summary}</Body>
-      ) : null}
-
-      {/* Show proof — one tap from the captured message (evidence on tap). */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={toggle}
-        style={{ minHeight: TAP, justifyContent: 'center' }}
-      >
-        <BodyStrong color={c.accentDeep}>{open ? str.hide : str.show}</BodyStrong>
-      </Pressable>
-
-      {open ? (
-        <View
-          style={{
-            gap: SPACE.xs,
-            borderRadius: theme.radii.control,
-            borderWidth: 1,
-            borderColor: c.line,
-            backgroundColor: c.paper,
-            padding: SPACE.sm,
-          }}
-        >
-          <Micro muted style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {str.captured}
-          </Micro>
-          {attachmentUrl ? (
-            <Image
-              source={{ uri: attachmentUrl }}
-              style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 2 }}
-              resizeMode="cover"
-            />
-          ) : null}
-          {sourceText ? <Body style={{ color: c.text }}>{sourceText}</Body> : null}
-          <Mono muted style={{ fontSize: 12 }}>
-            {[time, `${pct}% ${str.conf}`].filter(Boolean).join('  ·  ')}
-          </Mono>
-        </View>
-      ) : null}
-    </View>
   )
 }
 
