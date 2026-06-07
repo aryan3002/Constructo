@@ -4,10 +4,15 @@
  * "client present" cue when the homeowner is in the thread (shape + --info, never
  * color alone), a compact recency string, and an amber-fill unread badge.
  *
+ * For `kind === 'homeowner'` rows the title reads "Homeowner · {site_name}" and a
+ * Feather `user` glyph (shape + --info color, never color alone) marks it as the
+ * curated homeowner channel so the owner can instantly tell it from the crew thread.
+ *
  * Owner-branch-specific (NOT in src/ui) — built on the shared kit + tokens,
  * mirroring the surrounding `owner/_components.tsx` surfaces.
  */
 import { Pressable, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -16,8 +21,18 @@ import { BodyStrong, Micro, Mono, Small } from '../../../src/ui'
 import type { ConversationSummary } from '../../../src/api/chat'
 
 const STR = {
-  en: { client: 'Client in this thread', site: 'Site', now: 'now' },
-  hi: { client: 'इस चैट में ग्राहक', site: 'साइट', now: 'अभी' },
+  en: {
+    client: 'Client in this thread',
+    site: 'Site',
+    now: 'now',
+    homeowner: 'Homeowner',
+  },
+  hi: {
+    client: 'इस चैट में ग्राहक',
+    site: 'साइट',
+    now: 'अभी',
+    homeowner: 'गृहस्वामी',
+  },
 } as const
 
 /** Initials from a thread label — up to two leading letters (uppercased). */
@@ -56,7 +71,13 @@ export function ConversationRow({
   const c = theme.colors
   const t = STR[lang]
 
-  const label = conversation.title ?? conversation.site_name ?? t.site
+  const isHomeowner = conversation.kind === 'homeowner'
+  const siteName = conversation.site_name ?? t.site
+  // Homeowner rows get a distinct bilingual label: "Homeowner · {site_name}".
+  // Other kinds fall back to the existing title → site_name → 'Site' logic.
+  const label = isHomeowner
+    ? `${t.homeowner} · ${siteName}`
+    : (conversation.title ?? conversation.site_name ?? t.site)
   const when = recency(conversation.last_message_at, t.now)
   const unread = conversation.unread_count > 0
 
@@ -82,26 +103,47 @@ export function ConversationRow({
         theme.shadowCard,
       ]}
     >
-      {/* Initials avatar */}
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: c.paper,
-          borderWidth: 1,
-          borderColor: c.line,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <BodyStrong style={{ color: c.accentDeep }}>{initials(label)}</BodyStrong>
-      </View>
+      {/* Avatar: homeowner kind gets a person-glyph avatar (shape + --info color,
+          never color alone); other kinds get the standard initials avatar. */}
+      {isHomeowner ? (
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: 'rgba(59,125,216,0.10)',
+            borderWidth: 1,
+            borderColor: c.info,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Feather name="user" size={20} color={c.info} />
+        </View>
+      ) : (
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: c.paper,
+            borderWidth: 1,
+            borderColor: c.line,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <BodyStrong style={{ color: c.accentDeep }}>{initials(label)}</BodyStrong>
+        </View>
+      )}
 
-      {/* Title + client-present cue */}
+      {/* Title + contextual sub-label.
+          For homeowner kind: suppress the generic "client present" cue — the
+          homeowner IS the counterparty, the label already communicates this.
+          For group/site: show the cue as before when has_homeowner is true. */}
       <View style={{ flex: 1, gap: 2 }}>
         <BodyStrong numberOfLines={1}>{label}</BodyStrong>
-        {conversation.has_homeowner ? (
+        {!isHomeowner && conversation.has_homeowner ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Micro style={{ color: c.info }}>◆</Micro>
             <Small style={{ color: c.info }} numberOfLines={1}>

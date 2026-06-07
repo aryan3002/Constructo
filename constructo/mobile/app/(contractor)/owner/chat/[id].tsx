@@ -48,6 +48,7 @@ const STR = {
     site: 'Site',
     unavailable: "This conversation isn't available yet.",
     manage: 'Manage',
+    homeowner: 'Homeowner',
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
@@ -62,6 +63,7 @@ const STR = {
     site: 'साइट',
     unavailable: 'यह बातचीत अभी उपलब्ध नहीं है।',
     manage: 'प्रबंधन',
+    homeowner: 'गृहस्वामी',
   },
 } as const
 
@@ -93,6 +95,8 @@ export default function OwnerConversation() {
   }>()
   // A group thread has no site_id — it's addressed by its conversation id.
   const isGroup = kind === 'group' // used by the group Manage UI (PR 6)
+  // Homeowner channel (Phase 3): curated thread for the homeowner counterparty.
+  const isHomeowner = kind === 'homeowner'
   // Any non-site thread (group OR homeowner, Phase 3) is addressed by conv id.
   const addressByConv = kind !== 'site'
 
@@ -202,7 +206,9 @@ export default function OwnerConversation() {
           <Feather name="chevron-left" size={24} color={c.text} />
         </Pressable>
         <BodyStrong style={{ flex: 1 }} numberOfLines={1}>
-          {title || str.site}
+          {isHomeowner
+            ? `${str.homeowner} · ${title || str.site}`
+            : (title || str.site)}
         </BodyStrong>
         {isGroup && isAdmin ? (
           <Pressable
@@ -227,8 +233,10 @@ export default function OwnerConversation() {
         ) : null}
       </View>
 
-      {/* Client-present banner (shape + --info tint, never color alone). */}
-      {hasHomeowner === '1' ? (
+      {/* Client-present banner (shape + --info tint, never color alone).
+          Suppressed for homeowner kind: the homeowner IS the counterparty —
+          the banner is redundant and would confuse rather than inform. */}
+      {hasHomeowner === '1' && !isHomeowner ? (
         <View
           style={{
             flexDirection: 'row',
