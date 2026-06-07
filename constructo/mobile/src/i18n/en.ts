@@ -38,6 +38,7 @@ export const en = {
     home: 'Home',
     photos: 'Photos',
     updates: 'Updates',
+    messages: 'Messages',
     design: 'Design',
     settings: 'Settings',
     ask: 'Ask',
