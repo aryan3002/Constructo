@@ -867,11 +867,156 @@ async def test_conversations_inbox_scoped_to_assigned_sites_for_supervisor(
     assert {r["site_id"] for r in resp.json()} == {str(site.id)}
 
 
-async def test_conversations_inbox_forbidden_for_homeowner(client, factory, world):
+async def test_conversations_inbox_forbidden_for_homeowner(
+    client, factory, world
+):
+    # Doc 18 Phase 2 non-goal: the inbox is the homeowner's discovery surface and
+    # stays closed for the homeowner role. The homeowner Messages surface (and
+    # lifting this block) is Phase 3, gated on a membrane review.
     company, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
     ho = await factory.user(company=company, role=UserRole.homeowner)
     resp = await client.get("/api/v1/chat/conversations", headers=auth(ho))
-    assert resp.status_code == 403
+    assert resp.status_code == 403, resp.text
+
+
+# ---- groups: conversation_id-keyed reads + inbox (doc 18 Phase 2) ----------
+
+
+async def _make_group(db_session, company, created_by, members, *, title="Coord",
+                      archived=False):
+    from datetime import UTC, datetime
+
+    from app.models import Conversation, ConversationKind, ConversationMember
+
+    conv = Conversation(
+        company_id=company.id,
+        site_id=None,
+        kind=ConversationKind.group,
+        title=title,
+        created_by=created_by.id,
+        archived_at=datetime.now(UTC) if archived else None,
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    for member_user, role in members:
+        db_session.add(
+            ConversationMember(
+                conversation_id=conv.id,
+                user_id=member_user.id,
+                role=role,
+                added_by=created_by.id,
+            )
+        )
+    await db_session.flush()
+    return conv
+
+
+async def test_list_messages_by_conversation_id_for_member_returns_empty(
+    client, db_session, factory, world
+):
+    from app.models import MemberRole
+
+    company, owner, _ = world
+    conv = await _make_group(db_session, company, owner, [(owner, MemberRole.admin)])
+    resp = await client.get(
+        f"/api/v1/chat/messages?conversation_id={conv.id}", headers=auth(owner)
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+async def test_list_messages_by_conversation_id_blocks_non_member(
+    client, db_session, factory, world
+):
+    from app.models import MemberRole
+
+    company, owner, _ = world
+    outsider = await factory.user(company=company, role=UserRole.supervisor)
+    conv = await _make_group(db_session, company, owner, [(owner, MemberRole.admin)])
+    resp = await client.get(
+        f"/api/v1/chat/messages?conversation_id={conv.id}", headers=auth(outsider)
+    )
+    assert resp.status_code == 403, resp.text
+
+
+async def test_list_messages_site_keyed_path_unchanged(client, world):
+    # The legacy site_id-keyed read still works end-to-end (send then list).
+    _, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
+    resp = await client.get(
+        f"/api/v1/chat/messages?site_id={site.id}", headers=auth(owner)
+    )
+    assert resp.status_code == 200, resp.text
+    bodies = [m["body"] for m in resp.json()]
+    assert bodies == ["hi"]
+
+
+async def test_inbox_includes_group_for_member(client, db_session, factory, world):
+    from app.models import MemberRole
+
+    company, owner, _ = world
+    conv = await _make_group(
+        db_session, company, owner, [(owner, MemberRole.admin)], title="Vendors"
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    groups = [r for r in resp.json() if r["kind"] == "group"]
+    assert len(groups) == 1
+    assert groups[0]["id"] == str(conv.id)
+    assert groups[0]["title"] == "Vendors"
+    assert groups[0]["site_id"] is None
+
+
+async def test_inbox_excludes_archived_group(client, db_session, factory, world):
+    from app.models import MemberRole
+
+    company, owner, _ = world
+    await _make_group(
+        db_session, company, owner, [(owner, MemberRole.admin)],
+        title="Old", archived=True,
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    assert [r for r in resp.json() if r["kind"] == "group"] == []
+
+
+async def test_inbox_group_has_homeowner_flag(client, db_session, factory, world):
+    """A group with a homeowner-role member surfaces has_homeowner=True in the
+    inbox (the 'client present' cue); a group with crew only stays False."""
+    from app.models import MemberRole
+
+    company, owner, _ = world
+    homeowner = await factory.user(company=company, role=UserRole.homeowner)
+    with_ho = await _make_group(
+        db_session,
+        company,
+        owner,
+        [(owner, MemberRole.admin), (homeowner, MemberRole.member)],
+        title="With homeowner",
+    )
+    crew = await factory.user(company=company, role=UserRole.supervisor)
+    without_ho = await _make_group(
+        db_session,
+        company,
+        owner,
+        [(owner, MemberRole.admin), (crew, MemberRole.member)],
+        title="Crew only",
+    )
+
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    groups = {r["id"]: r for r in resp.json() if r["kind"] == "group"}
+    assert groups[str(with_ho.id)]["has_homeowner"] is True
+    assert groups[str(without_ho.id)]["has_homeowner"] is False
 
 
 async def test_conversations_inbox_orders_by_last_message_desc(client, factory, world):

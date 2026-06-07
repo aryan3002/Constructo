@@ -26,7 +26,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,7 @@ from app.auth.deps import get_current_user
 from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
+from app.chat.access import require_access
 from app.chat.realtime import broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
 from app.common.errors import AppError
@@ -49,6 +50,7 @@ from app.models import (
     ChatMessage,
     Conversation,
     ConversationKind,
+    ConversationMember,
     ConversationRead,
     DisputeStatus,
     EventDispute,
@@ -74,6 +76,10 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
+# Sort floor for inbox ordering across two sources (site + group) in Python —
+# threads with no messages yet sort last under "newest-first".
+_MIN_DT = datetime(1970, 1, 1, tzinfo=UTC)
+
 
 # Media a chat message can carry (Camera-as-Sensor / voice). "document" routes a
 # challan/invoice through OCR; "image" is a scene photo; "voice" runs STT.
@@ -98,8 +104,15 @@ class ChatSendIn(BaseModel):
 
 
 class ChatReadIn(BaseModel):
-    site_id: UUID
+    site_id: UUID | None = None
+    conversation_id: UUID | None = None
     last_seq: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if self.site_id is None and self.conversation_id is None:
+            raise ValueError("provide site_id or conversation_id")
+        return self
 
 
 class MediaUploadOut(BaseModel):
@@ -214,6 +227,38 @@ async def _get_or_create_site_conversation(
         session.add(conv)
         await session.flush()
     return conv
+
+
+async def _resolve_conversation(
+    session: AsyncSession,
+    user: User,
+    *,
+    site_id: UUID | None,
+    conversation_id: UUID | None,
+) -> Conversation | None:
+    """Resolve the target conversation for a read surface from either a
+    ``conversation_id`` (any kind, access-checked) or a ``site_id`` (the crew
+    site thread, may not exist yet → None). Raises AppError on missing/forbidden.
+
+    ``conversation_id`` wins when both are supplied.
+    """
+    if conversation_id is not None:
+        conv = await session.get(Conversation, conversation_id)
+        if conv is None:
+            raise AppError(404, "not_found", "Conversation not found")
+        await require_access(session, user, conv)
+        return conv
+    if site_id is None:
+        raise AppError(422, "missing_target", "Provide site_id or conversation_id")
+    await _require_site(session, user, site_id)
+    return (
+        await session.execute(
+            select(Conversation).where(
+                Conversation.site_id == site_id,
+                Conversation.kind == ConversationKind.site,
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def _parent_event(session: AsyncSession, reply_to_id: UUID | None) -> SiteEventModel | None:
@@ -581,22 +626,20 @@ async def upload_media(
 
 @router.get("/messages", response_model=list[ChatMessageOut])
 async def list_messages(
-    site_id: UUID = Query(...),
+    site_id: UUID | None = Query(None),
+    conversation_id: UUID | None = Query(None),
     after_seq: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ChatMessageOut]:
-    """The site thread, oldest→newest, after a seq cursor (for sync-on-reconnect)."""
-    await _require_site(session, user, site_id)
-    conv = (
-        await session.execute(
-            select(Conversation).where(
-                Conversation.site_id == site_id,
-                Conversation.kind == ConversationKind.site,
-            )
-        )
-    ).scalar_one_or_none()
+    """A thread, oldest→newest, after a seq cursor (for sync-on-reconnect).
+
+    Keyed by ``conversation_id`` (any kind, access-checked) or the crew
+    ``site_id``. An empty site thread (no conversation yet) lists as []."""
+    conv = await _resolve_conversation(
+        session, user, site_id=site_id, conversation_id=conversation_id
+    )
     if conv is None:
         return []
     rows = (
@@ -677,30 +720,114 @@ async def list_conversations(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ConversationOut]:
-    """The chat inbox: every site crew thread the caller can access, with unread
-    counts and a 'client present' cue. Membership is derived from site scope
-    (no group rows in Phase 1). Homeowner role is blocked (Phase 3)."""
+    """The chat inbox: every site crew thread the caller can access plus every
+    group thread they belong to, with unread counts and a 'client present' cue.
+    Site membership is derived from site scope; group membership is explicit
+    (``ConversationMember``). The homeowner inbox stays closed in Phase 2 — the
+    homeowner Messages surface is a later slice gated on a membrane review."""
     if user.role is UserRole.homeowner:
         raise AppError(403, "forbidden", "Homeowner chat is not available yet")
+
     visible = await effective_visible_site_ids(session, user)
-    if not visible:
-        return []
-    rows = (
-        await session.execute(
-            select(Conversation, Site.name)
-            .join(Site, Site.id == Conversation.site_id)
-            .where(
-                Conversation.kind == ConversationKind.site,
-                Conversation.site_id.in_(visible),
+
+    # ---- site threads (skipped entirely for homeowner role) ----------------
+    out_sites: list[ConversationOut] = []
+    if visible:
+        rows = (
+            await session.execute(
+                select(Conversation, Site.name)
+                .join(Site, Site.id == Conversation.site_id)
+                .where(
+                    Conversation.kind == ConversationKind.site,
+                    Conversation.site_id.in_(visible),
+                )
             )
-            .order_by(Conversation.last_message_at.desc().nullslast())
+        ).all()
+        if rows:
+            site_conv_ids = [conv.id for conv, _ in rows]
+            site_ids = list({conv.site_id for conv, _ in rows})
+            site_reads = await _reads_for(session, user, site_conv_ids)
+            homeowner_site_ids = set(
+                (
+                    await session.execute(
+                        select(HomeownerMember.site_id)
+                        .where(HomeownerMember.site_id.in_(site_ids))
+                        .distinct()
+                    )
+                ).scalars().all()
+            )
+            out_sites = [
+                ConversationOut(
+                    id=conv.id,
+                    kind=conv.kind,
+                    site_id=conv.site_id,
+                    title=conv.title,
+                    site_name=site_name,
+                    last_message_at=conv.last_message_at,
+                    unread_count=max(0, conv.last_seq - site_reads.get(conv.id, 0)),
+                    has_homeowner=conv.site_id in homeowner_site_ids,
+                )
+                for conv, site_name in rows
+            ]
+
+    # ---- group threads (explicit membership; any role) ---------------------
+    group_rows = (
+        await session.execute(
+            select(Conversation)
+            .join(
+                ConversationMember,
+                ConversationMember.conversation_id == Conversation.id,
+            )
+            .where(
+                ConversationMember.user_id == user.id,
+                Conversation.kind == ConversationKind.group,
+                Conversation.archived_at.is_(None),
+            )
         )
-    ).all()
-    if not rows:
-        return []
-    conv_ids = [conv.id for conv, _ in rows]
-    site_ids = list({conv.site_id for conv, _ in rows})
-    reads = {
+    ).scalars().all()
+    out_groups: list[ConversationOut] = []
+    if group_rows:
+        g_ids = [g.id for g in group_rows]
+        group_reads = await _reads_for(session, user, g_ids)
+        homeowner_group_ids = set(
+            (
+                await session.execute(
+                    select(ConversationMember.conversation_id)
+                    .join(User, User.id == ConversationMember.user_id)
+                    .where(
+                        ConversationMember.conversation_id.in_(g_ids),
+                        User.role == UserRole.homeowner,
+                    )
+                    .distinct()
+                )
+            ).scalars().all()
+        )
+        out_groups = [
+            ConversationOut(
+                id=g.id,
+                kind=g.kind,
+                site_id=None,
+                title=g.title,
+                site_name=None,
+                last_message_at=g.last_message_at,
+                unread_count=max(0, g.last_seq - group_reads.get(g.id, 0)),
+                has_homeowner=g.id in homeowner_group_ids,
+            )
+            for g in group_rows
+        ]
+
+    combined = out_sites + out_groups
+    combined.sort(key=lambda c: c.last_message_at or _MIN_DT, reverse=True)
+    return combined
+
+
+async def _reads_for(
+    session: AsyncSession, user: User, conv_ids: list[UUID]
+) -> dict[UUID, int]:
+    """The caller's last-read seq per conversation, batched."""
+    if not conv_ids:
+        return {}
+    return {
         r.conversation_id: r.last_read_seq
         for r in (
             await session.execute(
@@ -711,28 +838,6 @@ async def list_conversations(
             )
         ).scalars().all()
     }
-    homeowner_site_ids = set(
-        (
-            await session.execute(
-                select(HomeownerMember.site_id)
-                .where(HomeownerMember.site_id.in_(site_ids))
-                .distinct()
-            )
-        ).scalars().all()
-    )
-    return [
-        ConversationOut(
-            id=conv.id,
-            kind=conv.kind,
-            site_id=conv.site_id,
-            title=conv.title,
-            site_name=site_name,
-            last_message_at=conv.last_message_at,
-            unread_count=max(0, conv.last_seq - reads.get(conv.id, 0)),
-            has_homeowner=conv.site_id in homeowner_site_ids,
-        )
-        for conv, site_name in rows
-    ]
 
 
 class BriefRiskOut(BaseModel):
@@ -884,33 +989,32 @@ async def resolve_thread(
 @router.websocket("/ws")
 async def chat_ws(
     websocket: WebSocket,
-    site_id: UUID = Query(...),
+    site_id: UUID | None = Query(None),
+    conversation_id: UUID | None = Query(None),
     token: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Live message stream for a site thread (2.0). Auth is a query ``token``
+    """Live message stream for a thread (2.0). Auth is a query ``token``
     (WS can't carry an Authorization header cleanly); scoping reuses the REST
-    rules. The seq-authoritative store is still Neon and the client backfills
-    anything missed via ``after_seq`` — this only pushes new messages live."""
+    rules via ``_resolve_conversation`` (so homeowner is still blocked from a
+    site thread, but may subscribe to a group it belongs to). The
+    seq-authoritative store is still Neon and the client backfills anything
+    missed via ``after_seq`` — this only pushes new messages live."""
     try:
         user = await session.get(User, UUID(decode_token(token)["sub"]))
     except Exception:
         await websocket.close(code=1008)
         return
-    if user is None or user.role is UserRole.homeowner:
+    if user is None:
         await websocket.close(code=1008)
         return
-    visible = await effective_visible_site_ids(session, user)
-    if site_id not in visible:
-        await websocket.close(code=1008)
-        return
-    conv = (
-        await session.execute(
-            select(Conversation).where(
-                Conversation.site_id == site_id, Conversation.kind == ConversationKind.site
-            )
+    try:
+        conv = await _resolve_conversation(
+            session, user, site_id=site_id, conversation_id=conversation_id
         )
-    ).scalar_one_or_none()
+    except AppError:
+        await websocket.close(code=1008)
+        return
     if conv is None:
         await websocket.close(code=1011)
         return
@@ -933,16 +1037,10 @@ async def mark_read(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Advance the caller's read cursor for the site thread."""
-    await _require_site(session, user, body.site_id)
-    conv = (
-        await session.execute(
-            select(Conversation).where(
-                Conversation.site_id == body.site_id,
-                Conversation.kind == ConversationKind.site,
-            )
-        )
-    ).scalar_one_or_none()
+    """Advance the caller's read cursor for the target thread."""
+    conv = await _resolve_conversation(
+        session, user, site_id=body.site_id, conversation_id=body.conversation_id
+    )
     if conv is None:
         return
     cursor = await session.get(ConversationRead, (conv.id, user.id))
