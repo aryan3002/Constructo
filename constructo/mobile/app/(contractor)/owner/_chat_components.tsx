@@ -26,12 +26,14 @@ const STR = {
     site: 'Site',
     now: 'now',
     homeowner: 'Homeowner',
+    companyWide: 'Company-wide',
   },
   hi: {
     client: 'इस चैट में ग्राहक',
     site: 'साइट',
     now: 'अभी',
     homeowner: 'गृहस्वामी',
+    companyWide: 'कंपनी-व्यापी',
   },
 } as const
 
@@ -72,6 +74,9 @@ export function ConversationRow({
   const t = STR[lang]
 
   const isHomeowner = conversation.kind === 'homeowner'
+  // A group is company-wide when it has no site_id (null or absent).
+  const isCompanyWideGroup =
+    conversation.kind === 'group' && conversation.site_id == null
   const siteName = conversation.site_name ?? t.site
   // Homeowner rows get a distinct bilingual label: "Homeowner · {site_name}".
   // Other kinds fall back to the existing title → site_name → 'Site' logic.
@@ -140,10 +145,19 @@ export function ConversationRow({
       {/* Title + contextual sub-label.
           For homeowner kind: suppress the generic "client present" cue — the
           homeowner IS the counterparty, the label already communicates this.
-          For group/site: show the cue as before when has_homeowner is true. */}
+          For group/site: show the cue as before when has_homeowner is true.
+          For company-wide groups: show a "Company-wide" tag (◈ shape + --info
+          tint, never color alone) so owners can distinguish them at a glance. */}
       <View style={{ flex: 1, gap: 2 }}>
         <BodyStrong numberOfLines={1}>{label}</BodyStrong>
-        {!isHomeowner && conversation.has_homeowner ? (
+        {isCompanyWideGroup ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Micro style={{ color: c.info }}>◈</Micro>
+            <Small style={{ color: c.info }} numberOfLines={1}>
+              {t.companyWide}
+            </Small>
+          </View>
+        ) : !isHomeowner && conversation.has_homeowner ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Micro style={{ color: c.info }}>◆</Micro>
             <Small style={{ color: c.info }} numberOfLines={1}>

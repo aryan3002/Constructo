@@ -46,7 +46,8 @@ const STR = {
     newTitle: 'New group',
     namePlaceholder: 'Group name e.g. "Site A — Finishing"',
     pickSite: 'Site',
-    pickSiteHint: 'Pick the site this group belongs to.',
+    pickSiteHint: 'Choose a site, or make it company-wide.',
+    companyWide: 'Company-wide (no site)',
     noSites: 'No sites yet.',
     members: 'Members',
     membersHint: 'Add the people who should be in this thread. You are added as admin.',
@@ -84,7 +85,8 @@ const STR = {
     newTitle: 'नया ग्रुप',
     namePlaceholder: 'ग्रुप का नाम जैसे "साइट A — फिनिशिंग"',
     pickSite: 'साइट',
-    pickSiteHint: 'यह ग्रुप किस साइट का है, चुनें।',
+    pickSiteHint: 'एक साइट चुनें, या इसे कंपनी-व्यापी बनाएँ।',
+    companyWide: 'कंपनी-व्यापी (कोई साइट नहीं)',
     noSites: 'अभी कोई साइट नहीं।',
     members: 'सदस्य',
     membersHint: 'जिन्हें इस चैट में रखना है उन्हें जोड़ें। आप एडमिन के रूप में जुड़ते हैं।',
@@ -298,14 +300,19 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
 
   const [name, setName] = useState('')
   const [siteId, setSiteId] = useState<string | null>(null)
+  const [companyWide, setCompanyWide] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+
+  // scopeChosen = the user has selected either "company-wide" or a specific site.
+  const scopeChosen = companyWide || !!siteId
 
   // Reset all transient state whenever the sheet (re)opens.
   useEffect(() => {
     if (visible) {
       setName('')
       setSiteId(null)
+      setCompanyWide(false)
       setSelected(new Set())
       setError(null)
     }
@@ -319,9 +326,9 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
   const sites = sitesQ.data?.items ?? []
 
   const addableQ = useQuery({
-    queryKey: ['groups', 'addable', siteId],
-    queryFn: () => groupsApi.addableUsers(siteId!),
-    enabled: visible && !!siteId,
+    queryKey: ['groups', 'addable', companyWide ? 'company' : siteId],
+    queryFn: () => groupsApi.addableUsers(companyWide ? undefined : (siteId ?? undefined)),
+    enabled: visible && scopeChosen,
   })
   const addable: AddableUser[] = addableQ.data ?? []
 
@@ -336,7 +343,7 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
     mutationFn: () =>
       groupsApi.create({
         name: name.trim(),
-        site_id: siteId!,
+        site_id: companyWide ? null : siteId,
         member_user_ids: [...selected],
       }),
     onSuccess: (group) => {
@@ -357,7 +364,7 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
     onError: (e) => setError(errLine(e, t, t.createFailed)),
   })
 
-  const canCreate = !!name.trim() && !!siteId && !create.isPending
+  const canCreate = !!name.trim() && scopeChosen && !create.isPending
 
   return (
     <SheetShell visible={visible} onClose={onClose}>
@@ -381,54 +388,90 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
             <Small muted>{t.pickSiteHint}</Small>
             {sitesQ.isLoading ? (
               <ActivityIndicator color={c.accent} style={{ paddingVertical: SPACE.md }} />
-            ) : sites.length === 0 ? (
-              <Small muted>{t.noSites}</Small>
             ) : (
               <View style={{ gap: SPACE.sm }}>
-                {sites.map((s) => {
-                  const on = siteId === s.id
-                  return (
-                    <Pressable
-                      key={s.id}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: on }}
-                      accessibilityLabel={s.name}
-                      onPress={() => {
-                        setSiteId(s.id)
-                        setSelected(new Set())
-                      }}
-                      style={({ pressed }) => ({
-                        minHeight: TAP,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: SPACE.md,
-                        paddingVertical: SPACE.sm,
-                        paddingHorizontal: SPACE.md,
-                        borderWidth: on ? 2 : 1,
-                        borderColor: on ? c.accent : c.line,
-                        borderRadius: theme.radii.control,
-                        backgroundColor: on ? 'rgba(242,161,0,0.08)' : c.card,
-                        opacity: pressed ? 0.9 : 1,
-                      })}
-                    >
-                      <Feather
-                        name={on ? 'check-circle' : 'circle'}
-                        size={20}
-                        color={on ? c.accentDeep : c.textMute}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <BodyStrong numberOfLines={1}>{s.name}</BodyStrong>
-                        {s.location ? <Small color={c.textMute}>{s.location}</Small> : null}
-                      </View>
-                    </Pressable>
-                  )
-                })}
+                {/* Company-wide option — always shown at the top */}
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: companyWide }}
+                  accessibilityLabel={t.companyWide}
+                  onPress={() => {
+                    setCompanyWide(true)
+                    setSiteId(null)
+                    setSelected(new Set())
+                  }}
+                  style={({ pressed }) => ({
+                    minHeight: TAP,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.md,
+                    paddingVertical: SPACE.sm,
+                    paddingHorizontal: SPACE.md,
+                    borderWidth: companyWide ? 2 : 1,
+                    borderColor: companyWide ? c.accent : c.line,
+                    borderRadius: theme.radii.control,
+                    backgroundColor: companyWide ? 'rgba(242,161,0,0.08)' : c.card,
+                    opacity: pressed ? 0.9 : 1,
+                  })}
+                >
+                  <Feather
+                    name={companyWide ? 'check-circle' : 'circle'}
+                    size={20}
+                    color={companyWide ? c.accentDeep : c.textMute}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <BodyStrong numberOfLines={1}>{t.companyWide}</BodyStrong>
+                  </View>
+                </Pressable>
+                {sites.length === 0 ? (
+                  <Small muted>{t.noSites}</Small>
+                ) : (
+                  sites.map((s) => {
+                    const on = !companyWide && siteId === s.id
+                    return (
+                      <Pressable
+                        key={s.id}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={s.name}
+                        onPress={() => {
+                          setCompanyWide(false)
+                          setSiteId(s.id)
+                          setSelected(new Set())
+                        }}
+                        style={({ pressed }) => ({
+                          minHeight: TAP,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: SPACE.md,
+                          paddingVertical: SPACE.sm,
+                          paddingHorizontal: SPACE.md,
+                          borderWidth: on ? 2 : 1,
+                          borderColor: on ? c.accent : c.line,
+                          borderRadius: theme.radii.control,
+                          backgroundColor: on ? 'rgba(242,161,0,0.08)' : c.card,
+                          opacity: pressed ? 0.9 : 1,
+                        })}
+                      >
+                        <Feather
+                          name={on ? 'check-circle' : 'circle'}
+                          size={20}
+                          color={on ? c.accentDeep : c.textMute}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <BodyStrong numberOfLines={1}>{s.name}</BodyStrong>
+                          {s.location ? <Small color={c.textMute}>{s.location}</Small> : null}
+                        </View>
+                      </Pressable>
+                    )
+                  })
+                )}
               </View>
             )}
           </View>
 
-          {/* Member multi-select (after a site is chosen) */}
-          {siteId ? (
+          {/* Member multi-select (after a scope is chosen — site or company-wide) */}
+          {scopeChosen ? (
             <View style={{ gap: SPACE.xs }}>
               <Small muted style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 {t.members}
@@ -524,10 +567,13 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
   })
   const members: GroupMember[] = membersQ.data?.members ?? []
 
+  // siteParam is undefined for company-wide groups (siteId === '').
+  const siteParam = siteId || undefined
+
   const addableQ = useQuery({
-    queryKey: ['groups', 'addable', siteId, groupId],
-    queryFn: () => groupsApi.addableUsers(siteId, groupId),
-    enabled: visible && !!siteId && !!groupId,
+    queryKey: ['groups', 'addable', siteId || 'company', groupId],
+    queryFn: () => groupsApi.addableUsers(siteParam, groupId),
+    enabled: visible && !!groupId,
   })
   const addable: AddableUser[] = (addableQ.data ?? []).filter((u) => !u.already_member)
 
@@ -549,7 +595,7 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['groups', 'members', groupId] })
     void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
-    void qc.invalidateQueries({ queryKey: ['groups', 'addable', siteId, groupId] })
+    void qc.invalidateQueries({ queryKey: ['groups', 'addable', siteId || 'company', groupId] })
   }
 
   const rename = useMutation({

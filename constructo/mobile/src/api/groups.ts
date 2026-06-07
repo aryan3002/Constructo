@@ -1,9 +1,10 @@
 /**
- * Groups API (doc 18 Phase 2) — a named multi-party thread scoped to a site,
- * with admin/member roles and a possible homeowner participant. Wraps
- * `GET/POST/PATCH/DELETE /api/v1/chat/groups*` via the shared {@link request}
- * helper (never edits the client). A group conversation is addressed by its own
- * id (`conversation_id`) in messages/read/send — see {@link chatApi}.
+ * Groups API (doc 18 Phase 2 + Phase 4) — a named multi-party thread scoped to
+ * a site (or company-wide when site_id is null), with admin/member roles and a
+ * possible homeowner participant. Wraps `GET/POST/PATCH/DELETE
+ * /api/v1/chat/groups*` via the shared {@link request} helper (never edits the
+ * client). A group conversation is addressed by its own id (`conversation_id`)
+ * in messages/read/send — see {@link chatApi}.
  */
 import { request } from './client'
 
@@ -35,8 +36,11 @@ export interface AddableUser {
 }
 
 export const groupsApi = {
-  /** Create a group on a site with an initial member set (caller is admin). */
-  create(body: { name: string; site_id: string; member_user_ids: string[] }): Promise<Group> {
+  /**
+   * Create a group with an initial member set (caller is added as admin).
+   * Pass `site_id: null` for a company-wide group (no site scope).
+   */
+  create(body: { name: string; site_id: string | null; member_user_ids: string[] }): Promise<Group> {
     return request<Group>('/api/v1/chat/groups', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -74,10 +78,16 @@ export const groupsApi = {
     })
   },
 
-  /** Site users addable to a group (optionally excluding an existing group's members). */
-  addableUsers(siteId: string, groupId?: string): Promise<AddableUser[]> {
-    const q = new URLSearchParams({ site_id: siteId })
+  /**
+   * Users addable to a group. When `siteId` is provided, results are scoped to
+   * that site's crew. Omitting `siteId` (company-wide group) returns all crew
+   * across the company. Pass `groupId` to exclude existing members of that group.
+   */
+  addableUsers(siteId?: string, groupId?: string): Promise<AddableUser[]> {
+    const q = new URLSearchParams()
+    if (siteId) q.set('site_id', siteId)
     if (groupId) q.set('group_id', groupId)
-    return request<AddableUser[]>(`/api/v1/chat/groups/addable-users?${q.toString()}`)
+    const qs = q.toString()
+    return request<AddableUser[]>(`/api/v1/chat/groups/addable-users${qs ? `?${qs}` : ''}`)
   },
 }
