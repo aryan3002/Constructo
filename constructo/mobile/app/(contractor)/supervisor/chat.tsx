@@ -200,7 +200,7 @@ export default function CrewChat() {
 
   const msgsQ = useQuery({
     queryKey: ['chat', site?.id],
-    queryFn: () => chatApi.messages(site!.id),
+    queryFn: () => chatApi.messages({ siteId: site!.id }),
     enabled: !!site,
     refetchInterval: 8000,
   })
