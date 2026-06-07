@@ -13,13 +13,13 @@ import { RefreshControl, ScrollView, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
-import { useT } from '../../../src/i18n/I18nProvider'
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../src/theme/tokens'
-import { Body, FLOATING_NAV_CLEARANCE, H1, Small } from '../../../src/ui'
-import { useAuth } from '../../../src/auth/AuthContext'
-import { chatApi, type ConversationSummary } from '../../../src/api/chat'
-import { ChannelRow } from '../_messages_components'
+import { useT } from '../../src/i18n/I18nProvider'
+import { useTheme } from '../../src/theme/ThemeProvider'
+import { SPACE } from '../../src/theme/tokens'
+import { Body, FLOATING_NAV_CLEARANCE, H1, Small } from '../../src/ui'
+import { useAuth } from '../../src/auth/AuthContext'
+import { chatApi, type ConversationSummary } from '../../src/api/chat'
+import { ChannelRow } from './_messages_components'
 
 const STR = {
   en: {
