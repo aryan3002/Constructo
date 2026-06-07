@@ -645,14 +645,17 @@ export default function CrewChat() {
                   delayLongPress={250}
                   style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
                 >
-                  {cardEvents.map((ev: ChatEvent) => (
+                  {cardEvents.map((ev: ChatEvent, i: number) => (
+                    // The source text / attachment / time belong to the MESSAGE,
+                    // not each event — pass them to the first card only so the
+                    // proof reveal doesn't visually duplicate across sibling cards.
                     <CaptureCard
                       key={ev.id}
                       event={ev}
                       lang={lang}
-                      sourceText={msg.body}
-                      attachmentUrl={msg.attachment_url}
-                      time={fmtTime(msg.created_at)}
+                      sourceText={i === 0 ? msg.body : undefined}
+                      attachmentUrl={i === 0 ? msg.attachment_url : undefined}
+                      time={i === 0 ? fmtTime(msg.created_at) : ''}
                     />
                   ))}
                 </Pressable>
