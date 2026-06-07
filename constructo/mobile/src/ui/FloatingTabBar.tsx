@@ -6,8 +6,9 @@
  * pane + a warm-paper fill over it, like WhatsApp). Content scrolls *behind*
  * it. Never an opaque edge-to-edge bar (§8).
  *
- * Renders only the 4 top-level destinations (Home · Photos · Updates · Design)
- * as icon + label — active tinted Calm Pine, inactive textMuted. Sub-routes
+ * Renders only the 5 top-level destinations
+ * (Home · Photos · Updates · Messages · Design) as icon + label — active tinted
+ * Calm Pine, inactive textMuted. Sub-routes
  * (`href: null`) are filtered out so pushed screens cover the bar full-screen.
  *
  * Press feedback uses Pressable's `pressed` state (instant scale 0.98) rather
@@ -28,6 +29,7 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = 
   home: 'home',
   photos: 'image',
   updates: 'file-text',
+  messages: 'message-circle',
   design: 'layout',
 }
 
@@ -46,7 +48,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
 
-  // Only the 4 top-level destinations. A custom tabBar receives *every* route
+  // Only the 5 top-level destinations. A custom tabBar receives *every* route
   // in `state.routes`; Expo Router consumes `href: null` and does NOT surface it
   // on `descriptors[...].options`, so filtering by `href` is unreliable and lets
   // pushed routes (settings, members, onboarding…) leak in as extra tabs. Filter

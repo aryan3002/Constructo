@@ -180,6 +180,15 @@ export const chatApi = {
     return request<ConversationSummary[]>('/api/v1/chat/conversations')
   },
 
+  /** Get-or-create the homeowner's private builder channel for her site
+   *  (doc 18 Phase 3) — returns its ConversationSummary so the inbox can pin it. */
+  homeownerChannel(siteId: string): Promise<ConversationSummary> {
+    return request<ConversationSummary>('/api/v1/chat/homeowner-channel', {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId }),
+    })
+  },
+
   /** Send a message (idempotent on client_msg_id). */
   send(body: ChatSendBody): Promise<ChatMessage> {
     return request<ChatMessage>('/api/v1/chat/messages', {

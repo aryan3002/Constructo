@@ -40,6 +40,7 @@ export const hi: Dict = {
     home: 'होम',
     photos: 'तस्वीरें',
     updates: 'अपडेट',
+    messages: 'संदेश',
     design: 'डिज़ाइन',
     settings: 'सेटिंग्स',
     ask: 'पूछें',
