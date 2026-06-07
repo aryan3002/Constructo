@@ -16,6 +16,7 @@ from app.models.chat import (
 )
 from app.models.company import Company
 from app.models.company_billing import CompanyBilling
+from app.models.conversation_member import ConversationMember, MemberRole
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.dpr import Dpr, DprStatus
 from app.models.event_dispute import DisputeStatus, EventDispute
@@ -87,7 +88,9 @@ __all__ = [
     "ComponentStatus",
     "Conversation",
     "ConversationKind",
+    "ConversationMember",
     "ConversationRead",
+    "MemberRole",
     "Decision",
     "DecisionKind",
     "DecisionState",
