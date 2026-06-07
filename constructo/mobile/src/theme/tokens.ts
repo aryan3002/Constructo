@@ -28,6 +28,16 @@ export const STATUS = {
   quiet: '#8c8a82',
 } as const
 
+/**
+ * Soft tints derived from the status spine — used as container backgrounds
+ * behind a status glyph/banner (never as color-alone). Shared across both
+ * surfaces, exactly like {@link STATUS}, and spread into each palette.
+ * `infoTint` = 10% of `STATUS.info` (#3b7dd8).
+ */
+export const STATUS_TINT = {
+  infoTint: 'rgba(59,125,216,0.10)',
+} as const
+
 export interface ThemeColors {
   /** App canvas. */
   bg: string
@@ -58,6 +68,8 @@ export interface ThemeColors {
   info: string
   /** Calm quiet-period tone (grey) — never red. */
   quiet: string
+  /** 10% tint of `info` — soft container bg behind an info glyph/banner. */
+  infoTint: string
 }
 
 export interface ThemeRadii {
@@ -109,6 +121,7 @@ const BLUEPRINT_COLORS: ThemeColors = {
   text: '#15171c',
   textMute: '#6b6f78',
   ...STATUS,
+  ...STATUS_TINT,
 }
 
 // Daylight = the homeowner surface, on the "Calm Cockpit" system (§3.1):
@@ -128,6 +141,7 @@ const DAYLIGHT_COLORS: ThemeColors = {
   text: '#1e2230', // body / headings
   textMute: '#5b6166', // metadata, captions, inactive nav
   ...STATUS,
+  ...STATUS_TINT,
 }
 
 /**

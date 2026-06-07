@@ -111,7 +111,7 @@ export function ConversationRow({
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: 'rgba(59,125,216,0.10)',
+            backgroundColor: c.infoTint,
             borderWidth: 1,
             borderColor: c.info,
             alignItems: 'center',
