@@ -244,8 +244,7 @@ export default function OwnerConversation() {
             gap: 6,
             paddingVertical: SPACE.xs,
             paddingHorizontal: SPACE.lg,
-            // 10% tint of theme info (#3b7dd8) — Blueprint is light-only.
-            backgroundColor: 'rgba(59,125,216,0.10)',
+            backgroundColor: c.infoTint,
             borderBottomColor: c.line,
             borderBottomWidth: 1,
           }}

@@ -201,6 +201,7 @@ function SheetHead({
 
 /** A small "Client" cue — ◆ shape + --info tint (never color-alone). */
 function ClientTag({ label, color }: { label: string; color: string }) {
+  const { theme } = useTheme()
   return (
     <View
       style={{
@@ -210,7 +211,7 @@ function ClientTag({ label, color }: { label: string; color: string }) {
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
-        backgroundColor: 'rgba(59,125,216,0.10)',
+        backgroundColor: theme.colors.infoTint,
       }}
     >
       <Small style={{ color }}>◆</Small>

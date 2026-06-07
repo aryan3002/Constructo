@@ -1,4 +1,4 @@
-import { severityToStatus, STATUS, THEMES } from './tokens'
+import { severityToStatus, STATUS, STATUS_TINT, THEMES } from './tokens'
 
 describe('design tokens', () => {
   it('ships both themes', () => {
@@ -10,6 +10,11 @@ describe('design tokens', () => {
     expect(THEMES.blueprint.colors.ok).toBe(STATUS.ok)
     expect(THEMES.daylight.colors.ok).toBe(STATUS.ok)
     expect(THEMES.blueprint.colors.risk).toBe(THEMES.daylight.colors.risk)
+  })
+
+  it('shares the info tint across themes', () => {
+    expect(THEMES.blueprint.colors.infoTint).toBe(STATUS_TINT.infoTint)
+    expect(THEMES.daylight.colors.infoTint).toBe(STATUS_TINT.infoTint)
   })
 
   it('uses the softer Daylight radius and the bolder Blueprint radius', () => {
