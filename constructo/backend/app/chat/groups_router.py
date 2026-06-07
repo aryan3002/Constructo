@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat-groups"])
 
 class GroupCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    site_id: UUID  # REQUIRED in Phase 2
+    site_id: UUID | None = None  # None = company-wide, talk-only, crew-only
     member_user_ids: list[UUID] = Field(default_factory=list)
 
 
@@ -147,10 +147,15 @@ async def create_group(
 ) -> GroupOut:
     """Owner creates a group on one of their visible sites and becomes its first
     admin. Listed ``member_user_ids`` are added as plain members; the owner and
-    any unknown/foreign user ids are silently skipped (the roster is the truth)."""
-    visible = await effective_visible_site_ids(session, owner)
-    if body.site_id not in visible:
-        raise AppError(403, "forbidden", "Site not visible to you")
+    any unknown/foreign user ids are silently skipped (the roster is the truth).
+
+    When ``site_id`` is omitted (``None``) a company-wide group is created: no
+    site, talk-only (no extraction), crew-only membership."""
+    if body.site_id is not None:
+        visible = await effective_visible_site_ids(session, owner)
+        if body.site_id not in visible:
+            raise AppError(403, "forbidden", "Site not visible to you")
+    # body.site_id is None => company-wide group (no site, talk-only).
 
     conv = Conversation(
         company_id=owner.company_id,
@@ -180,6 +185,8 @@ async def create_group(
         member_user = await session.get(User, uid)
         if member_user is None or member_user.company_id != owner.company_id:
             continue  # silently ignore foreign/unknown
+        if body.site_id is None and member_user.role == UserRole.homeowner:
+            continue  # company-wide groups are crew-only
         session.add(
             ConversationMember(
                 conversation_id=conv.id,
@@ -195,17 +202,22 @@ async def create_group(
 
 @router.get("/groups/addable-users", response_model=list[AddableUserOut])
 async def addable_users(
-    site_id: UUID = Query(...),
+    site_id: UUID | None = Query(None),
     group_id: UUID | None = Query(None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[AddableUserOut]:
-    """Users the caller may add to a group on ``site_id``: all company crew
-    (role != homeowner) UNION homeowner-role users who are joined HomeownerMembers
-    of that site. ``already_member`` is flagged per ``group_id`` (when given).
+    """Users the caller may add to a group. ``site_id`` is optional: for a site
+    group it returns all company crew (role != homeowner) UNION homeowner-role
+    users who are joined HomeownerMembers of that site; without ``site_id`` (a
+    company-wide group, which is crew-only) only company crew are returned.
+    ``already_member`` is flagged per ``group_id`` (when given).
 
     Gate: with ``group_id`` the caller must be an admin of that group; without
-    one (the pre-create picker) the caller must be an owner."""
+    one (the pre-create picker) the caller must be an owner.
+
+    Without ``site_id`` (company-wide group picker), only company crew are
+    returned — homeowners are excluded because they belong to specific sites."""
     if group_id is not None:
         await require_group_admin(session, user, group_id)
     elif user.role is not UserRole.owner:
@@ -222,19 +234,22 @@ async def addable_users(
     ).scalars().all()
 
     # Homeowner-role users joined to this site (non-null user_id = redeemed).
-    homeowners = (
-        await session.execute(
-            select(User)
-            .join(HomeownerMember, HomeownerMember.user_id == User.id)
-            .where(
-                HomeownerMember.site_id == site_id,
-                HomeownerMember.user_id.is_not(None),
-                User.role == UserRole.homeowner,
-                User.company_id == user.company_id,
+    # Only run for site groups; company-wide groups are crew-only.
+    homeowners: list[User] = []
+    if site_id is not None:
+        homeowners = (
+            await session.execute(
+                select(User)
+                .join(HomeownerMember, HomeownerMember.user_id == User.id)
+                .where(
+                    HomeownerMember.site_id == site_id,
+                    HomeownerMember.user_id.is_not(None),
+                    User.role == UserRole.homeowner,
+                    User.company_id == user.company_id,
+                )
+                .distinct()
             )
-            .distinct()
-        )
-    ).scalars().all()
+        ).scalars().all()
 
     # Existing members for the already_member flag.
     member_ids: set[UUID] = set()
@@ -303,6 +318,8 @@ async def add_members(
         member_user = await session.get(User, uid)
         if member_user is None or member_user.company_id != user.company_id:
             continue
+        if conv.site_id is None and member_user.role == UserRole.homeowner:
+            continue  # company-wide groups are crew-only
         session.add(
             ConversationMember(
                 conversation_id=conv.id,
