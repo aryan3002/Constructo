@@ -44,7 +44,10 @@ export interface ChatMessage {
 }
 
 export interface ChatSendBody {
-  site_id: string
+  /** Target a site crew thread (Phase 1). Mutually exclusive with `conversation_id`. */
+  site_id?: string
+  /** Target a group/homeowner thread by conversation id (Phase 2). */
+  conversation_id?: string
   client_msg_id: string
   body?: string
   reply_to_id?: string
@@ -152,12 +155,24 @@ export function newClientMsgId(): string {
   })
 }
 
+/**
+ * Address exactly one chat thread — a site crew thread by `siteId`, OR a
+ * group/homeowner thread by `conversationId`. The discriminated union makes
+ * passing neither (or both) a compile error at the call site.
+ */
+export type ChatAddress =
+  | { siteId: string; conversationId?: never }
+  | { conversationId: string; siteId?: never }
+
 export const chatApi = {
-  /** The site thread, oldest→newest, after a seq cursor (sync-on-reconnect). */
-  messages(siteId: string, afterSeq = 0): Promise<ChatMessage[]> {
-    return request<ChatMessage[]>(
-      `/api/v1/chat/messages?site_id=${encodeURIComponent(siteId)}&after_seq=${afterSeq}`,
-    )
+  /** A thread, oldest→newest, after a seq cursor (sync-on-reconnect). Address a
+   *  site crew thread by `siteId`, or a group/homeowner thread by `conversationId`. */
+  messages(opts: ChatAddress & { afterSeq?: number }): Promise<ChatMessage[]> {
+    const q = new URLSearchParams()
+    if ('conversationId' in opts && opts.conversationId) q.set('conversation_id', opts.conversationId)
+    else if ('siteId' in opts && opts.siteId) q.set('site_id', opts.siteId)
+    q.set('after_seq', String(opts.afterSeq ?? 0))
+    return request<ChatMessage[]>(`/api/v1/chat/messages?${q.toString()}`)
   },
 
   /** The owner Chat inbox — accessible site threads, most-recent-first. */
@@ -213,11 +228,16 @@ export const chatApi = {
     )
   },
 
-  /** Advance the read cursor (returns 204). */
-  read(siteId: string, lastSeq: number): Promise<void> {
+  /** Advance the read cursor (returns 204). Address a site crew thread by
+   *  `siteId`, or a group/homeowner thread by `conversationId`. */
+  read(opts: ChatAddress & { lastSeq: number }): Promise<void> {
+    const body =
+      'conversationId' in opts && opts.conversationId
+        ? { conversation_id: opts.conversationId, last_seq: opts.lastSeq }
+        : { site_id: (opts as { siteId: string }).siteId, last_seq: opts.lastSeq }
     return request<void>('/api/v1/chat/read', {
       method: 'POST',
-      body: JSON.stringify({ site_id: siteId, last_seq: lastSeq }),
+      body: JSON.stringify(body),
     })
   },
 }

@@ -53,6 +53,7 @@ export default function OwnerChatInbox() {
       pathname: '/(contractor)/owner/chat/[id]',
       params: {
         id: c.id,
+        kind: c.kind,
         siteId: c.site_id ?? '',
         title: c.title ?? c.site_name ?? 'Site',
         hasHomeowner: c.has_homeowner ? '1' : '0',

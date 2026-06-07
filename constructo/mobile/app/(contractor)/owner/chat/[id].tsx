@@ -78,21 +78,28 @@ export default function OwnerConversation() {
   const str = STR[lang]
   const listRef = useRef<FlatList>(null)
 
-  const { siteId, title, hasHomeowner } = useLocalSearchParams<{
+  const { id, siteId, kind, title, hasHomeowner } = useLocalSearchParams<{
+    id: string
     siteId: string
+    kind: string
     title: string
     hasHomeowner: string
   }>()
+  // A group thread has no site_id — it's addressed by its conversation id.
+  const isGroup = kind === 'group' // used by the group Manage UI (PR 6)
+  // Any non-site thread (group OR homeowner, Phase 3) is addressed by conv id.
+  const addressByConv = kind !== 'site'
 
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [sending, setSending] = useState(false)
 
   const q = useQuery({
-    queryKey: ['owner', 'chat', siteId],
-    queryFn: () => chatApi.messages(siteId, 0),
+    queryKey: ['owner', 'chat', id],
+    queryFn: () =>
+      chatApi.messages(addressByConv ? { conversationId: id, afterSeq: 0 } : { siteId, afterSeq: 0 }),
     refetchInterval: 8000,
-    enabled: !!siteId,
+    enabled: addressByConv ? !!id : !!siteId,
   })
 
   const messages = useMemo(() => q.data ?? [], [q.data])
@@ -100,26 +107,28 @@ export default function OwnerConversation() {
   // Mark-read: advance the cursor to the newest seq, then clear the inbox badge.
   const newestSeq = messages.length > 0 ? messages[messages.length - 1].seq : 0
   useEffect(() => {
-    if (!siteId || newestSeq <= 0) return
+    const addressed = addressByConv ? !!id : !!siteId
+    if (!addressed || newestSeq <= 0) return
     chatApi
-      .read(siteId, newestSeq)
+      .read(addressByConv ? { conversationId: id, lastSeq: newestSeq } : { siteId, lastSeq: newestSeq })
       .then(() => qc.invalidateQueries({ queryKey: ['owner', 'conversations'] }))
       .catch(() => undefined)
-  }, [siteId, newestSeq, qc])
+  }, [addressByConv, id, siteId, newestSeq, qc])
 
   const scrollToEnd = () =>
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
 
   const onSend = async () => {
     const body = text.trim()
-    if (!body || !siteId || sending) return
+    const addressed = addressByConv ? !!id : !!siteId
+    if (!body || !addressed || sending) return
     setSending(true)
     const replyToId = replyTo?.id
     setText('')
     setReplyTo(null)
     try {
       await chatApi.send({
-        site_id: siteId,
+        ...(addressByConv ? { conversation_id: id } : { site_id: siteId }),
         client_msg_id: newClientMsgId(),
         body,
         ...(replyToId ? { reply_to_id: replyToId } : {}),
@@ -135,11 +144,10 @@ export default function OwnerConversation() {
     }
   }
 
-  // A non-`site` thread (future homeowner/group) has no site_id, so the detail
-  // query is disabled (`enabled: !!siteId`) and would otherwise dead-end on a
-  // blank screen. Show a calm bilingual line instead. Phase 1 only returns
-  // `site` threads, so this is latent — but cheap to guard now.
-  if (!siteId) {
+  // A group thread is valid with no site_id — it's addressed by `id`. Only
+  // dead-end when the thread is wholly unaddressable (neither id nor siteId),
+  // showing a calm bilingual line instead of a blank screen.
+  if (!siteId && !id) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, padding: SPACE.lg, justifyContent: 'center' }}>
         <Small muted style={{ textAlign: 'center' }}>{str.unavailable}</Small>
