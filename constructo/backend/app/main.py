@@ -25,6 +25,7 @@ from app.billing.router import router as billing_router
 from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.capture.router import router as capture_router
+from app.chat.groups_router import router as chat_groups_router
 from app.chat.router import router as chat_router
 from app.common.errors import install_error_handlers
 from app.config import settings
@@ -119,6 +120,7 @@ app.include_router(homeowner_router)  # H0 homeowner-facing app API
 app.include_router(publish_router)  # H0 contractor-side publisher controls
 app.include_router(capture_router)  # app-authenticated field capture → extraction
 app.include_router(chat_router)  # Phase 1.0 in-app chat (crew site thread)
+app.include_router(chat_groups_router)  # Phase 2 groups CRUD + members + RBAC
 app.include_router(action_items_router)  # Phase 1.6 action items / to-dos
 app.include_router(disputes_router)  # Phase 1.7 contested-truth (disputes)
 app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggregation)
