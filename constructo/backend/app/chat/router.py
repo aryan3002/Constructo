@@ -52,9 +52,11 @@ from app.models import (
     ConversationRead,
     DisputeStatus,
     EventDispute,
+    HomeownerMember,
     MessageAck,
     MessageSide,
     RawMessageModel,
+    Site,
     SiteEventModel,
     User,
     UserRole,
@@ -148,6 +150,19 @@ class ChatMessageOut(BaseModel):
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
+
+
+class ConversationOut(BaseModel):
+    """One row in the chat inbox (owner Chat tab / future supervisor + homeowner)."""
+
+    id: UUID
+    kind: ConversationKind
+    site_id: UUID | None
+    title: str | None
+    site_name: str | None
+    last_message_at: datetime | None
+    unread_count: int
+    has_homeowner: bool
 
 
 def _safe_attachment_url(key: str | None, storage=None) -> str | None:
@@ -655,6 +670,69 @@ async def _events_for_messages(
             if sid in raw_id_set:
                 by_raw.setdefault(sid, []).append(ev)
     return by_raw
+
+
+@router.get("/conversations", response_model=list[ConversationOut])
+async def list_conversations(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ConversationOut]:
+    """The chat inbox: every site crew thread the caller can access, with unread
+    counts and a 'client present' cue. Membership is derived from site scope
+    (no group rows in Phase 1). Homeowner role is blocked (Phase 3)."""
+    if user.role is UserRole.homeowner:
+        raise AppError(403, "forbidden", "Homeowner chat is not available yet")
+    visible = await effective_visible_site_ids(session, user)
+    if not visible:
+        return []
+    rows = (
+        await session.execute(
+            select(Conversation, Site.name)
+            .join(Site, Site.id == Conversation.site_id)
+            .where(
+                Conversation.kind == ConversationKind.site,
+                Conversation.site_id.in_(visible),
+            )
+            .order_by(Conversation.last_message_at.desc().nullslast())
+        )
+    ).all()
+    if not rows:
+        return []
+    conv_ids = [conv.id for conv, _ in rows]
+    site_ids = list({conv.site_id for conv, _ in rows})
+    reads = {
+        r.conversation_id: r.last_read_seq
+        for r in (
+            await session.execute(
+                select(ConversationRead).where(
+                    ConversationRead.conversation_id.in_(conv_ids),
+                    ConversationRead.user_id == user.id,
+                )
+            )
+        ).scalars().all()
+    }
+    homeowner_site_ids = set(
+        (
+            await session.execute(
+                select(HomeownerMember.site_id)
+                .where(HomeownerMember.site_id.in_(site_ids))
+                .distinct()
+            )
+        ).scalars().all()
+    )
+    return [
+        ConversationOut(
+            id=conv.id,
+            kind=conv.kind,
+            site_id=conv.site_id,
+            title=conv.title,
+            site_name=site_name,
+            last_message_at=conv.last_message_at,
+            unread_count=max(0, conv.last_seq - reads.get(conv.id, 0)),
+            has_homeowner=conv.site_id in homeowner_site_ids,
+        )
+        for conv, site_name in rows
+    ]
 
 
 class BriefRiskOut(BaseModel):

@@ -23,6 +23,7 @@ from app.models import (
     SiteEventModel,
     UserRole,
 )
+from app.models.homeowner_member import HomeownerMember
 from app.sites.models import SiteAssignment
 
 
@@ -778,3 +779,115 @@ async def test_chat_structured_card_books_verbatim(db_session, world):
     assert event.event_type == "material_delivery"
     assert event.fields == {"material": "cement", "quantity": 50}
     assert event.confidence == 1.0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/chat/conversations  (owner Chat inbox — Task 1)
+# ---------------------------------------------------------------------------
+
+
+async def test_conversations_inbox_lists_existing_site_threads(client, world):
+    company, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert len(data) == 1
+    row = data[0]
+    assert row["site_id"] == str(site.id)
+    assert row["kind"] == "site"
+    assert row["site_name"] == site.name
+    assert row["unread_count"] == 1
+    assert row["has_homeowner"] is False
+    assert row["last_message_at"] is not None
+
+
+async def test_conversations_inbox_excludes_sites_without_a_thread(client, factory, world):
+    company, owner, site = world
+    await factory.site(company, name="Site B")
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    site_ids = {r["site_id"] for r in resp.json()}
+    assert site_ids == {str(site.id)}
+
+
+async def test_conversations_inbox_unread_clears_after_read(client, world):
+    company, owner, site = world
+    sent = await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
+    seq = sent.json()["seq"]
+    await client.post(
+        "/api/v1/chat/read",
+        json={"site_id": str(site.id), "last_seq": seq},
+        headers=auth(owner),
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.json()[0]["unread_count"] == 0
+
+
+async def test_conversations_inbox_has_homeowner_flag(client, db_session, world):
+    company, owner, site = world
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi"},
+        headers=auth(owner),
+    )
+    db_session.add(HomeownerMember(site_id=site.id, join_code="ABC123"))
+    await db_session.flush()
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert resp.json()[0]["has_homeowner"] is True
+
+
+async def test_conversations_inbox_scoped_to_assigned_sites_for_supervisor(
+    client, db_session, factory, world
+):
+    company, owner, site = world
+    other = await factory.site(company, name="Site B")
+    for s in (site, other):
+        await client.post(
+            "/api/v1/chat/messages",
+            json={"site_id": str(s.id), "client_msg_id": str(uuid4()), "body": "x"},
+            headers=auth(owner),
+        )
+    sup = await factory.user(company=company, role=UserRole.supervisor)
+    db_session.add(SiteAssignment(site_id=site.id, user_id=sup.id))
+    await db_session.flush()
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(sup))
+    assert {r["site_id"] for r in resp.json()} == {str(site.id)}
+
+
+async def test_conversations_inbox_forbidden_for_homeowner(client, factory, world):
+    company, owner, site = world
+    ho = await factory.user(company=company, role=UserRole.homeowner)
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(ho))
+    assert resp.status_code == 403
+
+
+async def test_conversations_inbox_orders_by_last_message_desc(client, factory, world):
+    company, owner, site = world
+    site_b = await factory.site(company, name="Site B")
+    # send to site A first, then site B -> B is more recent
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "first"},
+        headers=auth(owner),
+    )
+    await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site_b.id), "client_msg_id": str(uuid4()), "body": "second"},
+        headers=auth(owner),
+    )
+    resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    ordered = [r["site_id"] for r in resp.json()]
+    assert ordered == [str(site_b.id), str(site.id)]  # most-recent first
