@@ -127,6 +127,22 @@ export interface AskResult {
   unconfirmed: number
 }
 
+/**
+ * One row in the owner Chat inbox — an accessible site crew thread, ordered
+ * most-recent-first by the server (owners get every company thread). The badge
+ * count + `has_homeowner` cue drive the inbox row without opening the thread.
+ */
+export interface ConversationSummary {
+  id: string
+  kind: 'site' | 'homeowner' | 'group'
+  site_id: string | null
+  title: string | null
+  site_name: string | null
+  last_message_at: string | null
+  unread_count: number
+  has_homeowner: boolean
+}
+
 /** RFC-4122 v4 — a valid UUID for the backend's `client_msg_id` (idempotency). */
 export function newClientMsgId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -142,6 +158,11 @@ export const chatApi = {
     return request<ChatMessage[]>(
       `/api/v1/chat/messages?site_id=${encodeURIComponent(siteId)}&after_seq=${afterSeq}`,
     )
+  },
+
+  /** The owner Chat inbox — accessible site threads, most-recent-first. */
+  conversations(): Promise<ConversationSummary[]> {
+    return request<ConversationSummary[]>('/api/v1/chat/conversations')
   },
 
   /** Send a message (idempotent on client_msg_id). */
