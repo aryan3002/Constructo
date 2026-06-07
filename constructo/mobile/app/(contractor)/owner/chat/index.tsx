@@ -7,17 +7,21 @@
  * Blueprint theme: warm paper canvas, ScrollView + RefreshControl, exceptions-
  * calm empty state (a single bilingual line, not a dump).
  */
-import { RefreshControl, ScrollView, View } from 'react-native'
+import { useState } from 'react'
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../../src/theme/tokens'
-import { Body, H1, Small } from '../../../../src/ui'
+import { SPACE, TAP } from '../../../../src/theme/tokens'
+import { Body, BodyStrong, H1, Small } from '../../../../src/ui'
+import { useAuth } from '../../../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../../../src/api/chat'
 import { ErrorBlock, LoadingBlock } from '../_components'
 import { ConversationRow } from '../_chat_components'
+import { NewGroupSheet } from '../_group_sheets'
 
 const STR = {
   en: {
@@ -26,6 +30,7 @@ const STR = {
     empty: 'No conversations yet. Your site crew threads will appear here.',
     err: 'We could not load your chats just now.',
     retry: 'Try again',
+    newGroup: 'New group',
   },
   hi: {
     title: 'चैट',
@@ -33,6 +38,7 @@ const STR = {
     empty: 'अभी कोई बातचीत नहीं। आपकी साइट टीम चैट यहाँ दिखेंगी।',
     err: 'अभी चैट लोड नहीं हो सकीं।',
     retry: 'फिर कोशिश करें',
+    newGroup: 'नया ग्रुप',
   },
 } as const
 
@@ -40,7 +46,12 @@ export default function OwnerChatInbox() {
   const { lang } = useT()
   const { theme } = useTheme()
   const router = useRouter()
+  const { me } = useAuth()
   const t = STR[lang]
+
+  // Only the owner can spin up a new group thread (admin server-side).
+  const isOwner = me?.role === 'owner'
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
 
   const q = useQuery({
     queryKey: ['owner', 'conversations'],
@@ -82,9 +93,31 @@ export default function OwnerChatInbox() {
 
   return (
     <Wrap onRefresh={() => void q.refetch()} refreshing={q.isRefetching}>
-      <View style={{ gap: SPACE.xs }}>
-        <H1>{t.title}</H1>
-        <Body muted>{t.subtitle}</Body>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+        <View style={{ flex: 1, gap: SPACE.xs }}>
+          <H1>{t.title}</H1>
+          <Body muted>{t.subtitle}</Body>
+        </View>
+        {isOwner ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.newGroup}
+            onPress={() => setNewGroupOpen(true)}
+            style={({ pressed }) => ({
+              minHeight: TAP,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: SPACE.md,
+              borderRadius: theme.radii.control,
+              backgroundColor: theme.colors.accent,
+              opacity: pressed ? 0.9 : 1,
+            })}
+          >
+            <Feather name="plus" size={16} color={theme.colors.onAccent} />
+            <BodyStrong style={{ color: theme.colors.onAccent }}>{t.newGroup}</BodyStrong>
+          </Pressable>
+        ) : null}
       </View>
 
       {items.length === 0 ? (
@@ -96,6 +129,8 @@ export default function OwnerChatInbox() {
           ))}
         </View>
       )}
+
+      <NewGroupSheet visible={newGroupOpen} onClose={() => setNewGroupOpen(false)} />
     </Wrap>
   )
 }

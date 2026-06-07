@@ -25,11 +25,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../../src/theme/tokens'
+import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
 import { CaptureCard, MessageBubble } from '../../../../src/chat/MessageView'
 import { chatApi, newClientMsgId, type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
+import { groupsApi } from '../../../../src/api/groups'
+import { useAuth } from '../../../../src/auth/AuthContext'
 import { LoadingBlock, ErrorBlock } from '../_components'
+import { ManageGroupSheet } from '../_group_sheets'
 
 const STR = {
   en: {
@@ -44,6 +47,7 @@ const STR = {
     back: 'Back',
     site: 'Site',
     unavailable: "This conversation isn't available yet.",
+    manage: 'Manage',
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
@@ -57,6 +61,7 @@ const STR = {
     back: 'पीछे',
     site: 'साइट',
     unavailable: 'यह बातचीत अभी उपलब्ध नहीं है।',
+    manage: 'प्रबंधन',
   },
 } as const
 
@@ -75,6 +80,7 @@ export default function OwnerConversation() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const qc = useQueryClient()
+  const { me } = useAuth()
   const str = STR[lang]
   const listRef = useRef<FlatList>(null)
 
@@ -93,6 +99,18 @@ export default function OwnerConversation() {
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [sending, setSending] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
+
+  // For group threads, learn the roster to gate the "Manage" action on the
+  // caller actually being an admin (the sheet's mutations are admin-only).
+  const membersQ = useQuery({
+    queryKey: ['groups', 'members', id],
+    queryFn: () => groupsApi.members(id),
+    enabled: isGroup && !!id,
+  })
+  const isAdmin = (membersQ.data?.members ?? []).some(
+    (m) => m.user_id === me?.id && m.role === 'admin',
+  )
 
   const q = useQuery({
     queryKey: ['owner', 'chat', id],
@@ -186,6 +204,27 @@ export default function OwnerConversation() {
         <BodyStrong style={{ flex: 1 }} numberOfLines={1}>
           {title || str.site}
         </BodyStrong>
+        {isGroup && isAdmin ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={str.manage}
+            onPress={() => setManageOpen(true)}
+            style={({ pressed }) => ({
+              minHeight: TAP,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: SPACE.md,
+              borderRadius: theme.radii.control,
+              borderWidth: 1,
+              borderColor: c.line,
+              opacity: pressed ? 0.9 : 1,
+            })}
+          >
+            <Feather name="settings" size={16} color={c.text} />
+            <Small style={{ color: c.text }}>{str.manage}</Small>
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Client-present banner (shape + --info tint, never color alone). */}
@@ -354,6 +393,15 @@ export default function OwnerConversation() {
           <BodyStrong style={{ color: text.trim() ? c.onAccent : c.textMute }}>{str.send}</BodyStrong>
         </Pressable>
       </View>
+
+      {isGroup && isAdmin ? (
+        <ManageGroupSheet
+          visible={manageOpen}
+          onClose={() => setManageOpen(false)}
+          groupId={id}
+          siteId={siteId ?? ''}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   )
 }
