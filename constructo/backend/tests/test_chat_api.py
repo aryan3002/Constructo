@@ -1036,3 +1036,96 @@ async def test_conversations_inbox_orders_by_last_message_desc(client, factory, 
     resp = await client.get("/api/v1/chat/conversations", headers=auth(owner))
     ordered = [r["site_id"] for r in resp.json()]
     assert ordered == [str(site_b.id), str(site.id)]  # most-recent first
+
+
+# ---- group SEND: conversation_id-keyed send + site-group capture (Phase 2) --
+
+
+async def _make_site_group(db_session, company, site, created_by, members, *, title="Coord"):
+    """A Phase-2 group (always non-null site_id) with explicit membership."""
+    from app.models import Conversation, ConversationKind, ConversationMember
+
+    conv = Conversation(
+        company_id=company.id,
+        site_id=site.id,
+        kind=ConversationKind.group,
+        title=title,
+        created_by=created_by.id,
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    for member_user, role in members:
+        db_session.add(
+            ConversationMember(
+                conversation_id=conv.id,
+                user_id=member_user.id,
+                role=role,
+                added_by=created_by.id,
+            )
+        )
+    await db_session.flush()
+    return conv
+
+
+async def test_group_message_mints_event_to_site(client, db_session, factory, world):
+    """A message sent by conversation_id to a site-group runs the SAME capture
+    pipeline: it mints a RawMessage with external_group_id="app:{site.id}", so
+    the worker files the extraction to the group's site."""
+    from app.models import MemberRole
+
+    company, owner, site = world
+    conv = await _make_site_group(
+        db_session, company, site, owner, [(owner, MemberRole.admin)]
+    )
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "conversation_id": str(conv.id),
+            "client_msg_id": str(uuid4()),
+            "body": "cement 50 bori aa gaya",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+
+    raw = (
+        await db_session.execute(
+            select(RawMessageModel).where(RawMessageModel.source == "app_chat")
+        )
+    ).scalars().one()
+    assert raw.external_group_id == f"app:{site.id}"
+    assert raw.text == "cement 50 bori aa gaya"
+    assert raw.raw["site_id"] == str(site.id)
+
+
+async def test_group_send_blocks_non_member(client, db_session, factory, world):
+    """A non-member posting to a group conversation_id is forbidden."""
+    from app.models import MemberRole
+
+    company, owner, site = world
+    outsider = await factory.user(company=company, role=UserRole.supervisor)
+    conv = await _make_site_group(
+        db_session, company, site, owner, [(owner, MemberRole.admin)]
+    )
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "conversation_id": str(conv.id),
+            "client_msg_id": str(uuid4()),
+            "body": "let me in",
+        },
+        headers=auth(outsider),
+    )
+    assert resp.status_code == 403, resp.text
+
+
+async def test_site_keyed_send_unchanged(client, world):
+    """The crew-thread path (site_id, no conversation_id) is intact: 201, seq 1."""
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={"site_id": str(site.id), "client_msg_id": str(uuid4()), "body": "hi crew"},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["seq"] == 1

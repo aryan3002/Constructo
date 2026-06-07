@@ -87,7 +87,8 @@ _CHAT_MEDIA_TYPES = {"text", "image", "document", "voice"}
 
 
 class ChatSendIn(BaseModel):
-    site_id: UUID
+    site_id: UUID | None = None
+    conversation_id: UUID | None = None
     client_msg_id: UUID
     body: str | None = None
     reply_to_id: UUID | None = None
@@ -101,6 +102,12 @@ class ChatSendIn(BaseModel):
     media_type: str = "text"
     # Content hash from the upload (1.7 dedupe) — a replayed challan is caught.
     attachment_sha256: str | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if self.site_id is None and self.conversation_id is None:
+            raise ValueError("provide site_id or conversation_id")
+        return self
 
 
 class ChatReadIn(BaseModel):
@@ -441,8 +448,25 @@ async def send_message(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ChatMessageOut:
-    """Post a message to the site's crew thread (idempotent on client_msg_id)."""
-    await _require_site(session, user, body.site_id)
+    """Post a message to a thread by ``conversation_id`` (a group) or the crew
+    ``site_id`` thread (idempotent on client_msg_id). A site-group runs the SAME
+    capture→event pipeline, filing extraction to the group's site."""
+    if body.conversation_id is not None:
+        conv = await session.get(Conversation, body.conversation_id)
+        if conv is None:
+            raise AppError(404, "not_found", "Conversation not found")
+        await require_access(session, user, conv)
+        if conv.kind == ConversationKind.homeowner:
+            raise AppError(403, "forbidden", "Homeowner channel is not open yet")  # Phase 3
+        target_site_id = conv.site_id
+    else:
+        if body.site_id is None:
+            # defensive: the model validator already requires one target, but
+            # guard the narrowed branch
+            raise AppError(422, "missing_target", "Provide site_id or conversation_id")
+        await _require_site(session, user, body.site_id)
+        conv = await _get_or_create_site_conversation(session, user, body.site_id)
+        target_site_id = body.site_id
 
     if body.media_type not in _CHAT_MEDIA_TYPES:
         raise AppError(422, "bad_media_type", f"media_type must be one of {_CHAT_MEDIA_TYPES}")
@@ -455,8 +479,6 @@ async def send_message(
         raise AppError(
             422, "empty_message", "Provide body text, structured fields, or an attachment"
         )
-
-    conv = await _get_or_create_site_conversation(session, user, body.site_id)
 
     # Adversarial-capture dedupe (1.7): a replayed attachment (same content hash
     # already in this thread) is recorded as a duplicate and NOT extracted, so it
@@ -553,40 +575,57 @@ async def send_message(
     # AI-detected Action Item (2.7): a plain-text assignment ("Ramesh ko Friday
     # tak bolo") spawns a badged, dismissable to-do. Only on free text (a typed
     # capture / media is a capture, not a task). Best-effort: never fails a send.
-    if body.body and not body.capture_type and not body.fields and not body.attachment_key:
-        await _propose_action_item(session, user, body.site_id, msg.id, body.body)
+    # Action items are site-scoped, so skip them for a site-less talk-only group
+    # (forward-compat for Phase 4 company-wide groups with no site).
+    if (
+        target_site_id is not None
+        and body.body
+        and not body.capture_type
+        and not body.fields
+        and not body.attachment_key
+    ):
+        await _propose_action_item(session, user, target_site_id, msg.id, body.body)
 
     # Extraction seam — mint a RawMessage(source="app_chat") and bridge it. The
     # capture_type/fields hints ride the Phase 0.1 fast path; a media attachment
     # (challan photo / voice note) flows through OCR/STT (1.2 Camera-as-Sensor).
-    raw = RawMessageModel(
-        source="app_chat",
-        external_group_id=f"app:{body.site_id}",
-        sender_id=str(user.id),
-        sender_name=user.name,
-        media_type=body.media_type,
-        text=body.body,
-        media_url=body.attachment_key,
-        media_mime=body.attachment_mime,
-        sent_at=now,
-        received_at=now,
-        raw={
-            "client": "app_chat",
-            "capture_type": body.capture_type,
-            "fields": body.fields,
-            "site_id": str(body.site_id),
-            "chat_message_id": str(msg.id),
-            **({"reply_context": reply_context} if reply_context else {}),
-        },
-    )
-    session.add(raw)
-    await session.flush()
-    msg.raw_message_id = raw.id
+    # A site-group resolves to its site, so its raw uses the SAME
+    # ``external_group_id="app:{site_id}"`` the worker keys off — no worker change.
+    # Talk-only guard (forward-compat for a Phase 4 company-wide group with no
+    # site): skip the raw + extraction entirely; the message still stores, commits
+    # and broadcasts. ``target_site_id`` is never None in Phase 2 (groups require a
+    # site), but be defensive.
+    raw = None
+    if target_site_id is not None:
+        raw = RawMessageModel(
+            source="app_chat",
+            external_group_id=f"app:{target_site_id}",
+            sender_id=str(user.id),
+            sender_name=user.name,
+            media_type=body.media_type,
+            text=body.body,
+            media_url=body.attachment_key,
+            media_mime=body.attachment_mime,
+            sent_at=now,
+            received_at=now,
+            raw={
+                "client": "app_chat",
+                "capture_type": body.capture_type,
+                "fields": body.fields,
+                "site_id": str(target_site_id),
+                "chat_message_id": str(msg.id),
+                **({"reply_context": reply_context} if reply_context else {}),
+            },
+        )
+        session.add(raw)
+        await session.flush()
+        msg.raw_message_id = raw.id
     await session.commit()
     await session.refresh(msg)
 
     # Best-effort: a worker failure must never fail the send.
-    await enqueue_extraction(raw.id)
+    if raw is not None:
+        await enqueue_extraction(raw.id)
     out = ChatMessageOut.model_validate(msg)
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
     # Push the new message live to any subscribed clients (2.0). The card upgrade
