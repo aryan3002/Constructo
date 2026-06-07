@@ -4,15 +4,20 @@ Drives the real endpoints under ``/api/v1/chat/groups`` to exercise the RBAC
 matrix: owner-only create (creator becomes admin), admin-managed membership,
 the last-admin guard (remove + demote), self-leave, addable-users (crew +
 homeowner, already_member flag, cross-company exclusion), and archive removing
-the group from the inbox.
+the group from the inbox.  Phase 4 Tasks 1-2: company-wide groups (no site_id)
+and crew-only addable-users.
 """
+from uuid import uuid4
+
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
 
 from app.auth.jwt import create_access_token
 from app.models import (
     HomeownerMember,
     MemberStatus,
+    RawMessageModel,
     UserRole,
 )
 
@@ -357,3 +362,207 @@ async def test_addable_users_requires_owner_without_group_id(client, factory, wo
         headers=auth(pm),
     )
     assert resp.status_code == 403
+
+
+# ---- company-wide groups (Phase 4, Tasks 1-2) --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_owner_creates_company_wide_group(client, factory, world):
+    """POST /groups with NO site_id creates a company-wide group (site_id=None)."""
+    company, owner, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor, name="Sup")
+
+    body = {
+        "name": "All Hands",
+        "member_user_ids": [str(sup.id)],
+    }
+    resp = await client.post("/api/v1/chat/groups", json=body, headers=auth(owner))
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["name"] == "All Hands"
+    assert data["site_id"] is None
+
+    by_id = {m["user_id"]: m for m in data["members"]}
+    assert by_id[str(owner.id)]["role"] == "admin"
+    assert by_id[str(sup.id)]["role"] == "member"
+
+
+@pytest.mark.asyncio
+async def test_company_wide_group_appears_in_owner_inbox(client, factory, world):
+    """Company-wide group appears in the owner's inbox with kind=group, site_id=None."""
+    company, owner, site = world
+
+    body = {"name": "Company Broadcast"}
+    resp = await client.post("/api/v1/chat/groups", json=body, headers=auth(owner))
+    assert resp.status_code == 201
+    group_id = resp.json()["id"]
+
+    inbox = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert inbox.status_code == 200
+    rows = {c["id"]: c for c in inbox.json()}
+    assert group_id in rows
+    assert rows[group_id]["kind"] == "group"
+    assert rows[group_id]["site_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_company_wide_group_message_is_talk_only(
+    client, factory, world, db_session
+):
+    """Messages sent to a company-wide group mint NO RawMessage (talk-only)."""
+    company, owner, site = world
+
+    body = {"name": "Talk Room"}
+    group_resp = await client.post(
+        "/api/v1/chat/groups", json=body, headers=auth(owner)
+    )
+    assert group_resp.status_code == 201
+    conv_id = group_resp.json()["id"]
+
+    raw_before = await db_session.scalar(
+        select(func.count()).select_from(RawMessageModel)
+    )
+
+    send = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "conversation_id": conv_id,
+            "client_msg_id": str(uuid4()),
+            "body": "Hello company",
+        },
+        headers=auth(owner),
+    )
+    assert send.status_code == 201
+
+    raw_after = await db_session.scalar(
+        select(func.count()).select_from(RawMessageModel)
+    )
+    assert raw_after == raw_before  # no RawMessage minted
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_create_company_wide_group(client, factory, world):
+    """A PM posting with no site_id must be rejected with 403."""
+    company, owner, site = world
+    pm = await factory.user(company=company, role=UserRole.pm, name="PM Raj")
+
+    body = {"name": "Sneaky Group"}
+    resp = await client.post("/api/v1/chat/groups", json=body, headers=auth(pm))
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_addable_users_company_wide_is_crew_only(
+    client, factory, world, db_session
+):
+    """GET /groups/addable-users with NO site_id returns crew but excludes homeowners."""
+    company, owner, site = world
+    sup = await factory.user(company=company, role=UserRole.supervisor, name="Sup")
+    homeowner = await factory.user(
+        company=company, role=UserRole.homeowner, name="HO User"
+    )
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=homeowner.id,
+            status=MemberStatus.active,
+            join_code="cw-addable-1",
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get(
+        "/api/v1/chat/groups/addable-users",
+        headers=auth(owner),
+    )
+    assert resp.status_code == 200
+    by_id = {u["user_id"]: u for u in resp.json()}
+
+    assert str(sup.id) in by_id
+    assert str(owner.id) in by_id
+    assert str(homeowner.id) not in by_id  # crew-only; no site → no homeowners
+
+
+@pytest.mark.asyncio
+async def test_addable_users_site_group_still_includes_homeowner(
+    client, factory, world, db_session
+):
+    """GET /groups/addable-users?site_id=<site> still includes the site's homeowner
+    (regression: the site-group path must be unchanged when site_id is provided)."""
+    company, owner, site = world
+    homeowner = await factory.user(
+        company=company, role=UserRole.homeowner, name="HO Reg"
+    )
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=homeowner.id,
+            status=MemberStatus.active,
+            join_code="site-addable-1",
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/api/v1/chat/groups/addable-users?site_id={site.id}",
+        headers=auth(owner),
+    )
+    assert resp.status_code == 200
+    by_id = {u["user_id"]: u for u in resp.json()}
+
+    assert str(homeowner.id) in by_id
+    assert by_id[str(homeowner.id)]["role"] == "homeowner"
+
+
+# ---- company-wide crew-only invariant (server-side enforcement) -------------
+
+
+@pytest.mark.asyncio
+async def test_company_wide_create_skips_homeowner_member(client, factory, world):
+    """Creating a company-wide group (no site_id) with a same-company homeowner's
+    id in member_user_ids must NOT add the homeowner: company-wide is crew-only.
+    The guard lives server-side, not just in the UI picker."""
+    company, owner, site = world
+    homeowner = await factory.user(
+        company=company, role=UserRole.homeowner, name="HO Sneak"
+    )
+
+    body = {
+        "name": "Crew Only",
+        "member_user_ids": [str(homeowner.id)],
+    }
+    resp = await client.post("/api/v1/chat/groups", json=body, headers=auth(owner))
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["site_id"] is None
+
+    ids = {m["user_id"] for m in data["members"]}
+    assert str(homeowner.id) not in ids
+    assert ids == {str(owner.id)}  # only the owner admin
+
+
+@pytest.mark.asyncio
+async def test_company_wide_add_members_skips_homeowner(client, factory, world):
+    """POST /groups/{id}/members on a company-wide group must skip homeowners:
+    an admin cannot back-door a homeowner in after creation."""
+    company, owner, site = world
+    homeowner = await factory.user(
+        company=company, role=UserRole.homeowner, name="HO Backdoor"
+    )
+
+    body = {"name": "Crew Broadcast"}
+    group = (
+        await client.post("/api/v1/chat/groups", json=body, headers=auth(owner))
+    ).json()
+    assert group["site_id"] is None
+
+    resp = await client.post(
+        f"/api/v1/chat/groups/{group['id']}/members",
+        json={"user_ids": [str(homeowner.id)]},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 200
+    ids = {m["user_id"] for m in resp.json()["members"]}
+    assert str(homeowner.id) not in ids
+    assert ids == {str(owner.id)}  # roster unchanged
