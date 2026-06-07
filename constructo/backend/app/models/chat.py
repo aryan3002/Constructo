@@ -7,8 +7,9 @@ the bridge). Ordering authority is the per-conversation ``seq`` (a monotonic
 counter on the conversation row, assigned under a row lock); ``client_msg_id``
 makes sends idempotent so an offline outbox can retry safely.
 
-Membership is derived from site scope in v1 (homeowner members + the site's
-contractor team), so there is no explicit members table yet.
+Membership for ``group`` conversations is explicit (the ``conversation_members``
+table); ``site``/``homeowner`` membership stays derived from site scope
+(homeowner members + the site's contractor team).
 """
 from __future__ import annotations
 
@@ -18,12 +19,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -35,6 +39,7 @@ from app.db import Base
 class ConversationKind(StrEnum):
     homeowner = "homeowner"  # curated homeowner <-> contractor (Calm Cockpit)
     site = "site"  # the crew's per-site thread (Blueprint)
+    group = "group"  # ad-hoc group thread (explicit membership, site optional)
 
 
 class MessageSide(StrEnum):
@@ -43,19 +48,34 @@ class MessageSide(StrEnum):
 
 
 class Conversation(Base):
-    """One thread, scoped to a site. v1: one per (site, kind)."""
+    """One chat thread. ``site``/``homeowner`` threads are singletons per
+    (site, kind); ``group`` threads are additive (a site may have many) and may
+    be site-less. The singleton applies only to site/homeowner kinds."""
 
     __tablename__ = "conversations"
     __table_args__ = (
-        UniqueConstraint("site_id", "kind", name="uq_conversation_site_kind"),
+        Index(
+            "uq_conversation_site_singleton",
+            "site_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("kind IN ('site','homeowner')"),
+        ),
+        # site_id is nullable only so groups can be site-less; site/homeowner
+        # threads must keep a site_id (NULLs would also defeat the partial
+        # unique index above, since Postgres treats NULLs as distinct).
+        CheckConstraint(
+            "kind NOT IN ('site','homeowner') OR site_id IS NOT NULL",
+            name="ck_conversation_site_required",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
-    site_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=False
+    site_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=True
     )
     kind: Mapped[ConversationKind] = mapped_column(
         SAEnum(ConversationKind, name="conversation_kind"), nullable=False
@@ -66,6 +86,9 @@ class Conversation(Base):
     # under a row lock on send so it is gap-free and clock-independent.
     last_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
