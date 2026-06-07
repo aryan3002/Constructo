@@ -13,6 +13,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import AppError
+from app.homeowner.scoping import homeowner_site_ids
 from app.models import (
     Conversation,
     ConversationKind,
@@ -32,15 +33,15 @@ async def can_access(
     Site/homeowner threads: site-scoped (homeowner role blocked from site kind).
     Group threads: explicit membership (a homeowner can be a member)."""
     if conversation.kind in (ConversationKind.site, ConversationKind.homeowner):
-        if (
-            user.role is UserRole.homeowner
-            and conversation.kind is ConversationKind.site
-        ):
-            return False
         if conversation.site_id is None:
             return False
-        visible = await effective_visible_site_ids(session, user)
-        return conversation.site_id in visible
+        if user.role is UserRole.homeowner:
+            # A homeowner is still blocked from the crew site thread; she reaches
+            # ONLY her own per-site homeowner channel (active membership).
+            if conversation.kind is ConversationKind.site:
+                return False
+            return conversation.site_id in await homeowner_site_ids(session, user)
+        return conversation.site_id in await effective_visible_site_ids(session, user)
     if conversation.kind is ConversationKind.group:
         # Defence-in-depth: a group is company-scoped. Even if a (future buggy or
         # malicious) write created a cross-tenant membership row, never let it

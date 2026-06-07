@@ -41,6 +41,7 @@ from app.chat.reply_interpreter import apply_correction, is_approval, parse_corr
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
+from app.homeowner.scoping import homeowner_site_ids
 from app.models import (
     AckKind,
     ActionItem,
@@ -185,6 +186,12 @@ class ConversationOut(BaseModel):
     has_homeowner: bool
 
 
+class HomeownerChannelIn(BaseModel):
+    """Open (get-or-create) the per-site homeowner 1:1 channel."""
+
+    site_id: UUID
+
+
 def _safe_attachment_url(key: str | None, storage=None) -> str | None:
     """Best-effort presigned GET for an attachment key. Never raises — a presign
     hiccup must not break sending or listing (the client can re-fetch)."""
@@ -206,8 +213,9 @@ def _side_for(user: User) -> MessageSide:
 
 async def _require_site(session: AsyncSession, user: User, site_id: UUID) -> None:
     if user.role is UserRole.homeowner:
-        # The curated homeowner room is a later slice.
-        raise AppError(403, "forbidden", "Homeowner chat is not available yet")
+        # Homeowners never use the site_id crew-thread path; their live channel is
+        # reached by conversation_id (kind=homeowner) via can_access.
+        raise AppError(403, "forbidden", "Use your builder channel")
     visible = await effective_visible_site_ids(session, user)
     if site_id not in visible:
         raise AppError(403, "forbidden", "You are not assigned to this site")
@@ -230,6 +238,36 @@ async def _get_or_create_site_conversation(
             site_id=site_id,
             kind=ConversationKind.site,
             created_by=user.id,
+        )
+        session.add(conv)
+        await session.flush()
+    return conv
+
+
+async def _get_or_create_homeowner_conversation(
+    session: AsyncSession, site_id: UUID
+) -> Conversation:
+    """The site's single ``kind=homeowner`` channel — the builder↔homeowner 1:1
+    room. company_id is taken from the SITE (the caller may be the homeowner,
+    who has no company scope over the contractor's tenant). Concurrent creates
+    for the same site will 500 on the partial-unique violation; acceptable at
+    pilot scale (fix with ON CONFLICT + re-read before GA)."""
+    conv = (
+        await session.execute(
+            select(Conversation).where(
+                Conversation.site_id == site_id,
+                Conversation.kind == ConversationKind.homeowner,
+            )
+        )
+    ).scalar_one_or_none()
+    if conv is None:
+        site = await session.get(Site, site_id)
+        if site is None:
+            raise AppError(404, "not_found", "Site not found")
+        conv = Conversation(
+            company_id=site.company_id,
+            site_id=site_id,
+            kind=ConversationKind.homeowner,
         )
         session.add(conv)
         await session.flush()
@@ -456,9 +494,11 @@ async def send_message(
         if conv is None:
             raise AppError(404, "not_found", "Conversation not found")
         await require_access(session, user, conv)
-        if conv.kind == ConversationKind.homeowner:
-            raise AppError(403, "forbidden", "Homeowner channel is not open yet")  # Phase 3
         target_site_id = conv.site_id
+        # The homeowner 1:1 channel is talk-only (doc 18 Phase 3): a human room
+        # with masking/translation, NOT a capture surface — no RawMessage, no
+        # extraction, no action-item proposal.
+        talk_only = conv.kind is ConversationKind.homeowner
     else:
         if body.site_id is None:
             # defensive: the model validator already requires one target, but
@@ -467,6 +507,7 @@ async def send_message(
         await _require_site(session, user, body.site_id)
         conv = await _get_or_create_site_conversation(session, user, body.site_id)
         target_site_id = body.site_id
+        talk_only = False
 
     if body.media_type not in _CHAT_MEDIA_TYPES:
         raise AppError(422, "bad_media_type", f"media_type must be one of {_CHAT_MEDIA_TYPES}")
@@ -579,6 +620,7 @@ async def send_message(
     # (forward-compat for Phase 4 company-wide groups with no site).
     if (
         target_site_id is not None
+        and not talk_only
         and body.body
         and not body.capture_type
         and not body.fields
@@ -596,7 +638,7 @@ async def send_message(
     # and broadcasts. ``target_site_id`` is never None in Phase 2 (groups require a
     # site), but be defensive.
     raw = None
-    if target_site_id is not None:
+    if target_site_id is not None and not talk_only:
         raw = RawMessageModel(
             source="app_chat",
             external_group_id=f"app:{target_site_id}",
@@ -754,22 +796,124 @@ async def _events_for_messages(
     return by_raw
 
 
+def _conv_out(
+    conv: Conversation,
+    *,
+    site_name: str | None,
+    last_read: int,
+    has_homeowner: bool,
+) -> ConversationOut:
+    """One inbox row from a conversation + its resolved site name, read cursor,
+    and 'client present' cue."""
+    return ConversationOut(
+        id=conv.id,
+        kind=conv.kind,
+        site_id=conv.site_id,
+        title=conv.title,
+        site_name=site_name,
+        last_message_at=conv.last_message_at,
+        unread_count=max(0, conv.last_seq - last_read),
+        has_homeowner=has_homeowner,
+    )
+
+
+async def _homeowner_channel_rows(
+    session: AsyncSession, user: User, site_ids: list[UUID]
+) -> list[ConversationOut]:
+    """Existing ``kind=homeowner`` channels for the given sites, as inbox rows
+    (read cursor applied; has_homeowner=True). Read-only — never creates one."""
+    if not site_ids:
+        return []
+    rows = (
+        await session.execute(
+            select(Conversation, Site.name)
+            .join(Site, Site.id == Conversation.site_id)
+            .where(
+                Conversation.kind == ConversationKind.homeowner,
+                Conversation.site_id.in_(site_ids),
+            )
+        )
+    ).all()
+    if not rows:
+        return []
+    reads = await _reads_for(session, user, [conv.id for conv, _ in rows])
+    return [
+        _conv_out(
+            conv,
+            site_name=site_name,
+            last_read=reads.get(conv.id, 0),
+            has_homeowner=True,
+        )
+        for conv, site_name in rows
+    ]
+
+
+async def _group_rows(session: AsyncSession, user: User) -> list[ConversationOut]:
+    """The caller's group threads (explicit membership; any role)."""
+    group_rows = (
+        await session.execute(
+            select(Conversation)
+            .join(
+                ConversationMember,
+                ConversationMember.conversation_id == Conversation.id,
+            )
+            .where(
+                ConversationMember.user_id == user.id,
+                Conversation.kind == ConversationKind.group,
+                Conversation.archived_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    if not group_rows:
+        return []
+    g_ids = [g.id for g in group_rows]
+    group_reads = await _reads_for(session, user, g_ids)
+    homeowner_group_ids = set(
+        (
+            await session.execute(
+                select(ConversationMember.conversation_id)
+                .join(User, User.id == ConversationMember.user_id)
+                .where(
+                    ConversationMember.conversation_id.in_(g_ids),
+                    User.role == UserRole.homeowner,
+                )
+                .distinct()
+            )
+        ).scalars().all()
+    )
+    return [
+        _conv_out(
+            g,
+            site_name=None,
+            last_read=group_reads.get(g.id, 0),
+            has_homeowner=g.id in homeowner_group_ids,
+        )
+        for g in group_rows
+    ]
+
+
 @router.get("/conversations", response_model=list[ConversationOut])
 async def list_conversations(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ConversationOut]:
-    """The chat inbox: every site crew thread the caller can access plus every
-    group thread they belong to, with unread counts and a 'client present' cue.
-    Site membership is derived from site scope; group membership is explicit
-    (``ConversationMember``). The homeowner inbox stays closed in Phase 2 — the
-    homeowner Messages surface is a later slice gated on a membrane review."""
+    """The chat inbox.
+
+    Homeowner caller: her per-site homeowner channels (active membership) plus
+    any group she belongs to — never a crew site thread. Crew caller: every site
+    crew thread in scope, every group they belong to, AND the homeowner channel
+    for each visible site (so the owner sees the client room). Read-only — the
+    inbox never get-or-creates a channel."""
     if user.role is UserRole.homeowner:
-        raise AppError(403, "forbidden", "Homeowner chat is not available yet")
+        site_ids = await homeowner_site_ids(session, user)
+        combined = await _homeowner_channel_rows(session, user, site_ids)
+        combined += await _group_rows(session, user)
+        combined.sort(key=lambda c: c.last_message_at or _MIN_DT, reverse=True)
+        return combined
 
     visible = await effective_visible_site_ids(session, user)
 
-    # ---- site threads (skipped entirely for homeowner role) ----------------
+    # ---- site threads (crew only) ------------------------------------------
     out_sites: list[ConversationOut] = []
     if visible:
         rows = (
@@ -786,7 +930,7 @@ async def list_conversations(
             site_conv_ids = [conv.id for conv, _ in rows]
             site_ids = list({conv.site_id for conv, _ in rows})
             site_reads = await _reads_for(session, user, site_conv_ids)
-            homeowner_site_ids = set(
+            present_site_ids = set(
                 (
                     await session.execute(
                         select(HomeownerMember.site_id)
@@ -796,68 +940,56 @@ async def list_conversations(
                 ).scalars().all()
             )
             out_sites = [
-                ConversationOut(
-                    id=conv.id,
-                    kind=conv.kind,
-                    site_id=conv.site_id,
-                    title=conv.title,
+                _conv_out(
+                    conv,
                     site_name=site_name,
-                    last_message_at=conv.last_message_at,
-                    unread_count=max(0, conv.last_seq - site_reads.get(conv.id, 0)),
-                    has_homeowner=conv.site_id in homeowner_site_ids,
+                    last_read=site_reads.get(conv.id, 0),
+                    has_homeowner=conv.site_id in present_site_ids,
                 )
                 for conv, site_name in rows
             ]
 
-    # ---- group threads (explicit membership; any role) ---------------------
-    group_rows = (
-        await session.execute(
-            select(Conversation)
-            .join(
-                ConversationMember,
-                ConversationMember.conversation_id == Conversation.id,
-            )
-            .where(
-                ConversationMember.user_id == user.id,
-                Conversation.kind == ConversationKind.group,
-                Conversation.archived_at.is_(None),
-            )
-        )
-    ).scalars().all()
-    out_groups: list[ConversationOut] = []
-    if group_rows:
-        g_ids = [g.id for g in group_rows]
-        group_reads = await _reads_for(session, user, g_ids)
-        homeowner_group_ids = set(
-            (
-                await session.execute(
-                    select(ConversationMember.conversation_id)
-                    .join(User, User.id == ConversationMember.user_id)
-                    .where(
-                        ConversationMember.conversation_id.in_(g_ids),
-                        User.role == UserRole.homeowner,
-                    )
-                    .distinct()
-                )
-            ).scalars().all()
-        )
-        out_groups = [
-            ConversationOut(
-                id=g.id,
-                kind=g.kind,
-                site_id=None,
-                title=g.title,
-                site_name=None,
-                last_message_at=g.last_message_at,
-                unread_count=max(0, g.last_seq - group_reads.get(g.id, 0)),
-                has_homeowner=g.id in homeowner_group_ids,
-            )
-            for g in group_rows
-        ]
+    # ---- homeowner channels for visible sites (so the owner sees the room) --
+    out_homeowner = await _homeowner_channel_rows(session, user, list(visible))
 
-    combined = out_sites + out_groups
+    # ---- group threads (explicit membership; any role) ---------------------
+    out_groups = await _group_rows(session, user)
+
+    combined = out_sites + out_homeowner + out_groups
     combined.sort(key=lambda c: c.last_message_at or _MIN_DT, reverse=True)
     return combined
+
+
+@router.post("/homeowner-channel", response_model=ConversationOut)
+async def open_homeowner_channel(
+    body: HomeownerChannelIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ConversationOut:
+    """Get-or-create the per-site homeowner 1:1 channel and return its inbox row.
+
+    Authorize by side: a homeowner must be an active member of the site; crew
+    must have the site in their visible scope. The channel is shared (one per
+    site) — both sides resolve to the same conversation."""
+    if user.role is UserRole.homeowner:
+        if body.site_id not in await homeowner_site_ids(session, user):
+            raise AppError(403, "forbidden", "Property not in scope")
+    else:
+        if body.site_id not in await effective_visible_site_ids(session, user):
+            raise AppError(403, "forbidden", "You are not assigned to this site")
+
+    conv = await _get_or_create_homeowner_conversation(session, body.site_id)
+    site = await session.get(Site, body.site_id)
+    await session.commit()
+    await session.refresh(conv)
+
+    reads = await _reads_for(session, user, [conv.id])
+    return _conv_out(
+        conv,
+        site_name=site.name if site else None,
+        last_read=reads.get(conv.id, 0),
+        has_homeowner=True,
+    )
 
 
 async def _reads_for(

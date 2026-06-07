@@ -867,12 +867,12 @@ async def test_conversations_inbox_scoped_to_assigned_sites_for_supervisor(
     assert {r["site_id"] for r in resp.json()} == {str(site.id)}
 
 
-async def test_conversations_inbox_forbidden_for_homeowner(
+async def test_conversations_inbox_empty_for_non_member_homeowner(
     client, factory, world
 ):
-    # Doc 18 Phase 2 non-goal: the inbox is the homeowner's discovery surface and
-    # stays closed for the homeowner role. The homeowner Messages surface (and
-    # lifting this block) is Phase 3, gated on a membrane review.
+    # Doc 18 Phase 3: the inbox is now open to the homeowner role, but it only
+    # shows her own channels (active membership) + her groups — never a crew site
+    # thread. A homeowner who is a member of nothing sees an empty inbox (not 403).
     company, owner, site = world
     await client.post(
         "/api/v1/chat/messages",
@@ -881,7 +881,8 @@ async def test_conversations_inbox_forbidden_for_homeowner(
     )
     ho = await factory.user(company=company, role=UserRole.homeowner)
     resp = await client.get("/api/v1/chat/conversations", headers=auth(ho))
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
 
 
 # ---- groups: conversation_id-keyed reads + inbox (doc 18 Phase 2) ----------

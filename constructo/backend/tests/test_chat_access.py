@@ -14,6 +14,7 @@ from app.models import (
     MemberRole,
     UserRole,
 )
+from app.models.homeowner_member import HomeownerMember, MemberStatus
 
 
 @pytest_asyncio.fixture
@@ -30,6 +31,17 @@ async def _make_site_conversation(db_session, company, site, created_by):
         site_id=site.id,
         kind=ConversationKind.site,
         created_by=created_by.id,
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    return conv
+
+
+async def _make_homeowner_conversation(db_session, company, site):
+    conv = Conversation(
+        company_id=company.id,
+        site_id=site.id,
+        kind=ConversationKind.homeowner,
     )
     db_session.add(conv)
     await db_session.flush()
@@ -66,6 +78,60 @@ async def test_homeowner_blocked_from_site_thread(db_session, factory, world):
     homeowner = await factory.user(company=company, role=UserRole.homeowner)
     conv = await _make_site_conversation(db_session, company, site, owner)
     assert await can_access(db_session, homeowner, conv) is False
+
+
+@pytest.mark.asyncio
+async def test_homeowner_can_access_her_homeowner_channel(db_session, factory, world):
+    company, owner, site = world
+    homeowner = await factory.user(company=company, role=UserRole.homeowner)
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=homeowner.id,
+            status=MemberStatus.active,
+            join_code="ho-access-1",
+        )
+    )
+    await db_session.flush()
+    conv = await _make_homeowner_conversation(db_session, company, site)
+    assert await can_access(db_session, homeowner, conv) is True
+
+
+@pytest.mark.asyncio
+async def test_homeowner_still_blocked_from_site_kind(db_session, factory, world):
+    company, owner, site = world
+    homeowner = await factory.user(company=company, role=UserRole.homeowner)
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=homeowner.id,
+            status=MemberStatus.active,
+            join_code="ho-access-2",
+        )
+    )
+    await db_session.flush()
+    conv = await _make_site_conversation(db_session, company, site, owner)
+    # Even an active member is blocked from the crew (kind=site) thread.
+    assert await can_access(db_session, homeowner, conv) is False
+
+
+@pytest.mark.asyncio
+async def test_homeowner_blocked_from_another_sites_homeowner_channel(
+    db_session, factory, world
+):
+    company, owner, site = world
+    # A homeowner who is a member of nothing — not of this site's channel.
+    homeowner = await factory.user(company=company, role=UserRole.homeowner)
+    conv = await _make_homeowner_conversation(db_session, company, site)
+    assert await can_access(db_session, homeowner, conv) is False
+
+
+@pytest.mark.asyncio
+async def test_crew_can_access_homeowner_channel(db_session, factory, world):
+    company, owner, site = world
+    conv = await _make_homeowner_conversation(db_session, company, site)
+    # The owner (crew) sees the homeowner channel for a site in their scope.
+    assert await can_access(db_session, owner, conv) is True
 
 
 @pytest.mark.asyncio
