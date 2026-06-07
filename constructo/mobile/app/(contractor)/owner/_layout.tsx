@@ -12,8 +12,8 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 
 const LABELS = {
-  en: { brief: 'Brief', sites: 'Sites', approvals: 'Approvals', search: 'Search', more: 'More' },
-  hi: { brief: 'ब्रीफ़', sites: 'साइट', approvals: 'मंज़ूरी', search: 'खोज', more: 'और' },
+  en: { brief: 'Brief', chat: 'Chat', sites: 'Sites', approvals: 'Approvals', search: 'Search', more: 'More' },
+  hi: { brief: 'ब्रीफ़', chat: 'चैट', sites: 'साइट', approvals: 'मंज़ूरी', search: 'खोज', more: 'और' },
 } as const
 
 function icon(glyph: string) {
@@ -45,10 +45,14 @@ export default function OwnerLayout() {
       }}
     >
       <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: icon('◆') }} />
+      <Tabs.Screen name="chat" options={{ title: L.chat, tabBarIcon: icon('✉') }} />
       <Tabs.Screen name="sites" options={{ title: L.sites, tabBarIcon: icon('▦') }} />
       <Tabs.Screen name="approvals" options={{ title: L.approvals, tabBarIcon: icon('✓') }} />
-      <Tabs.Screen name="search" options={{ title: L.search, tabBarIcon: icon('⌕') }} />
       <Tabs.Screen name="more" options={{ title: L.more, tabBarIcon: icon('☰') }} />
+      {/* Search stays routable (pushed from More), off-tab. */}
+      <Tabs.Screen name="search" options={{ href: null }} />
+      {/* Conversation detail, off-tab. */}
+      <Tabs.Screen name="chat/[id]" options={{ href: null }} />
       {/* Nested site-detail route, off-tab. */}
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
       {/* Foresight (portfolio) — pushed from More, off-tab. */}

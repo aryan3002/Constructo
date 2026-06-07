@@ -21,6 +21,8 @@ const STR = {
     role: 'Role',
     phone: 'Phone',
     signOut: 'Sign out',
+    search: 'Search',
+    searchSub: 'Find any event, site or person across the record',
     foresight: 'Foresight',
     foresightSub: 'Portfolio rollup across all your sites',
     webNote: 'Team, Reconciliation, Payments, Permits and Exports stay on the web dashboard for now — built for desk-altitude work.',
@@ -32,6 +34,8 @@ const STR = {
     role: 'भूमिका',
     phone: 'फ़ोन',
     signOut: 'साइन आउट',
+    search: 'खोज',
+    searchSub: 'रिकॉर्ड में कोई भी इवेंट, साइट या व्यक्ति खोजें',
     foresight: 'दूरदृष्टि',
     foresightSub: 'सभी साइटों का पोर्टफोलियो सार',
     webNote: 'टीम, मिलान, भुगतान, परमिट और एक्सपोर्ट फ़िलहाल वेब डैशबोर्ड पर हैं — गहरे डेस्क-कार्य के लिए।',
@@ -74,6 +78,19 @@ export default function More() {
           <Mono muted style={{ marginTop: SPACE.sm }}>{t.phone}: {me.phone}</Mono>
         ) : null}
       </Card>
+
+      <Pressable accessibilityRole="button" accessibilityLabel={t.search} onPress={() => router.push('/(contractor)/owner/search')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+            <Body muted style={{ fontSize: 18 }}>⌕</Body>
+            <View style={{ flex: 1 }}>
+              <BodyStrong>{t.search}</BodyStrong>
+              <Small muted style={{ marginTop: 2 }}>{t.searchSub}</Small>
+            </View>
+            <Body muted>›</Body>
+          </View>
+        </Card>
+      </Pressable>
 
       <Pressable accessibilityRole="button" accessibilityLabel={t.foresight} onPress={() => router.push('/(contractor)/owner/foresight')}>
         <Card>
