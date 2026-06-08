@@ -124,6 +124,11 @@ class MilestoneOut(BaseModel):
     expected_on: date | None
     completed_on: date | None
     order: int
+    # Industry-typical (NOT project-specific) ``[min, max]`` day range for this
+    # phase, matched by name — see ``milestone_reference``. ``None`` when the
+    # name isn't recognized; the UI labels it "usually X–Y days" and never as a
+    # per-project estimate.
+    typical_duration_days: tuple[int, int] | None = None
 
 
 class PhotoOut(BaseModel):
@@ -148,6 +153,13 @@ class UpdateOut(BaseModel):
     title: str
     body: str | None
     published_at: datetime
+    # Structured delay story (Calm Cockpit §5/§8). Populated only for type=delay;
+    # null on every other type. The mobile delay card renders the red treatment
+    # only when revised_date + reason + an impact are all present.
+    revised_date: date | None = None
+    impact_days: int | None = None
+    impact_cost_delta: float | None = None  # rupees; the client formats lakh/crore
+    reason: str | None = None
 
 
 class WeeklySummaryOut(BaseModel):

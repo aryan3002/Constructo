@@ -492,6 +492,10 @@ async def seed() -> dict[str, int]:
             m = await _upsert(
                 session, Milestone, _id("milestone", mkey),
                 site_id=site_a, name=name, status=status, order=order,
+                # The active phase carries a real start date so the homeowner
+                # tracker can show the honest elapsed "day N" alongside the
+                # industry-typical range ("usually 20–40 days · day 8").
+                started_on=(TODAY - timedelta(days=7)) if now_ms else None,
                 completed_on=(TODAY - timedelta(days=60)) if done else None,
                 expected_on=(TODAY + timedelta(days=30)) if now_ms else None,
             )

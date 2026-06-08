@@ -44,10 +44,12 @@ import {
 import {
   SUB_TABS,
   dayNumberSince,
+  delayStory,
   formatDate,
   formatDayDelta,
   formatDayNumber,
   formatRupeeDelta,
+  formatTypicalRange,
   milestoneMeta,
   shortDate,
   updateMeta,
@@ -81,8 +83,9 @@ const STR = {
     notStarted: 'Not started',
     // Timeline
     delayEyebrow: 'Delay',
-    delayRevised: 'Revised date',
+    delayRevised: 'Now expected',
     delayImpact: 'What this means',
+    reason: 'Why',
     milestoneEyebrow: 'Milestone',
     changeEyebrow: 'Change',
     progressEyebrow: 'Progress',
@@ -95,6 +98,7 @@ const STR = {
     msEvidenceClaim: 'Completed and reviewed on site',
     msNoProof: 'No proof attached yet',
     // Change story card
+    changeWhat: 'What changed',
     changeWhy: 'Why',
     changeCost: 'Cost',
     changeSchedule: 'Schedule',
@@ -134,8 +138,9 @@ const STR = {
     notStarted: 'शुरू नहीं हुआ',
     // Timeline
     delayEyebrow: 'देरी',
-    delayRevised: 'नई तारीख',
+    delayRevised: 'अब अपेक्षित',
     delayImpact: 'इसका मतलब',
+    reason: 'कारण',
     milestoneEyebrow: 'पड़ाव',
     changeEyebrow: 'बदलाव',
     progressEyebrow: 'प्रगति',
@@ -148,6 +153,7 @@ const STR = {
     msEvidenceClaim: 'साइट पर पूरा और जाँचा गया',
     msNoProof: 'अभी कोई प्रमाण नहीं',
     // Change story card
+    changeWhat: 'क्या बदला',
     changeWhy: 'क्यों',
     changeCost: 'लागत',
     changeSchedule: 'समय',
@@ -295,21 +301,37 @@ function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
   const meta = updateMeta(u.type, lang)
   const occurred = formatDate(u.published_at, lang)
 
-  // DELAY archetype — red, but only when it carries its required story.
-  if (u.type === 'delay' && u.body) {
-    const revised = shortDate(u.published_at, lang)
+  // DELAY archetype — red ONLY with the full STRUCTURED story (revised date +
+  // reason + at least one measured impact). A story-less delay degrades to a
+  // calm entry below; we never fabricate the date/impact to justify red (§5/§8).
+  const story = delayStory(u)
+  if (story) {
     return (
       <CalmCard status="risk" eyebrow={str.delayEyebrow} title={u.title}>
         <View style={{ gap: SPACE.sm }}>
-          {revised ? (
-            <View style={{ flexDirection: 'row', gap: SPACE.sm, alignItems: 'baseline' }}>
-              <Small muted>{str.delayRevised}:</Small>
-              <Mono>{revised}</Mono>
+          <View style={{ flexDirection: 'row', gap: SPACE.sm, alignItems: 'baseline' }}>
+            <Small muted>{str.delayRevised}:</Small>
+            <Mono>{formatDate(story.revisedDate, lang)}</Mono>
+          </View>
+          {story.impactDays != null || story.impactCost != null ? (
+            <View style={{ flexDirection: 'row', gap: SPACE.lg }}>
+              {story.impactDays != null ? (
+                <View>
+                  <Small muted>{str.changeSchedule}</Small>
+                  <Mono color={STATUS.risk}>{formatDayDelta(story.impactDays, lang)}</Mono>
+                </View>
+              ) : null}
+              {story.impactCost != null ? (
+                <View>
+                  <Small muted>{str.changeCost}</Small>
+                  <Mono color={STATUS.risk}>{formatRupeeDelta(story.impactCost)}</Mono>
+                </View>
+              ) : null}
             </View>
           ) : null}
           <View>
-            <Eyebrow>{str.delayImpact}</Eyebrow>
-            <Body>{u.body}</Body>
+            <Eyebrow>{str.reason}</Eyebrow>
+            <Body>{story.reason}</Body>
           </View>
         </View>
       </CalmCard>
@@ -417,6 +439,10 @@ function MilestoneRow({ m, isLast, lang }: { m: Milestone; isLast: boolean; lang
 
   // Honest time line per status — dates only, plus elapsed "day N" while active.
   const dayN = m.status === 'now' ? dayNumberSince(m.started_on) : null
+  // Industry-typical range ("usually 10–18 days") — normalizes "is this normal?"
+  // beside the real "day N". Done phases show only their real completed date; an
+  // unrecognized phase shows no range (never fabricated).
+  const typical = m.status === 'done' ? null : formatTypicalRange(m.typical_duration_days, lang)
   const dateLine: string =
     m.status === 'done'
       ? `${str.msDoneOn} ${formatDate(m.completed_on ?? m.expected_on, lang)}`
@@ -487,6 +513,9 @@ function MilestoneRow({ m, isLast, lang }: { m: Milestone; isLast: boolean; lang
             </Mono>
           ) : null}
         </View>
+
+        {/* Industry-typical range — honest "usually X–Y days", never a %. */}
+        {typical ? <Small muted>{typical}</Small> : null}
 
         {/* Evidence packet on done milestones — one tap to proof. */}
         {m.status === 'done' ? (
