@@ -5,9 +5,10 @@
  * groups (the builder channel is always present).
  *
  * Her channel is get-or-created on mount via `chatApi.homeownerChannel(siteId)`
- * so the row is live even before her first message. We dedupe it against
- * `conversations()` so it never appears twice. Self-themed by the (homeowner)
- * layout's Daylight ThemeProvider.
+ * so the row is live even before her first message; if `siteId` isn't set, we
+ * fall back to the existing `homeowner`-kind row from `conversations()` so the
+ * channel still shows. We dedupe it against `conversations()` so it never appears
+ * twice. Self-themed by the (homeowner) layout's Daylight ThemeProvider.
  */
 import { RefreshControl, ScrollView, View } from 'react-native'
 import { useRouter } from 'expo-router'
@@ -60,8 +61,13 @@ export default function HomeownerMessagesInbox() {
     refetchInterval: 15000,
   })
 
-  const builder = channelQ.data ?? null
   const conversations = convQ.data ?? []
+  // Builder channel: prefer the get-or-created channel (when `siteId` is known),
+  // otherwise fall back to the existing `homeowner`-kind conversation that
+  // `conversations()` already returns — so her channel shows regardless of whether
+  // `siteId` is set in auth state (e.g. a non-join-code login path).
+  const builder =
+    channelQ.data ?? conversations.find((conv) => conv.kind === 'homeowner') ?? null
 
   // Her groups only (the builder channel is rendered from `builder`, pinned).
   // Dedupe the builder row by id in case it also appears in conversations().
