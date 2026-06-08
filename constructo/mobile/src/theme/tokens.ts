@@ -214,14 +214,17 @@ export const THEMES: Record<ThemeName, Theme> = {
  * 13px mono eyebrow (`monoSm`) is the one exception and is mono-only.
  */
 export const TYPE = {
+  // NOTE: Eczar is a tall serif — on iOS, RN's <Text> CLIPS the ascenders when
+  // lineHeight is near the fontSize. The heading line-heights below are kept
+  // generous (~1.27–1.36×) so the serif tops never cut off. Don't tighten them.
   /** Hero "You're okay." — the 3-second answer (Eczar serif, 500). */
-  display: { fontSize: 44, lineHeight: 46, letterSpacing: -0.7 },
+  display: { fontSize: 44, lineHeight: 56, letterSpacing: -0.7 },
   /** Screen titles (Eczar 600). */
-  h1: { fontSize: 28, lineHeight: 33, letterSpacing: -0.3 },
+  h1: { fontSize: 28, lineHeight: 36, letterSpacing: -0.3 },
   /** Section / letter headings (Eczar 600). */
-  h2: { fontSize: 22, lineHeight: 27, letterSpacing: -0.2 },
+  h2: { fontSize: 22, lineHeight: 30, letterSpacing: -0.2 },
   /** Card titles (Eczar 600 — the skill's h3). */
-  title: { fontSize: 18, lineHeight: 23 },
+  title: { fontSize: 18, lineHeight: 25 },
   /** Primary reading copy / status sentence (Hind). */
   bodyLg: { fontSize: 18, lineHeight: 27 },
   body: { fontSize: 16, lineHeight: 24 },
