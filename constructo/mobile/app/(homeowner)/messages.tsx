@@ -19,6 +19,7 @@
  * twice. Self-themed by the (homeowner) layout's Daylight ThemeProvider.
  */
 import { RefreshControl, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -135,14 +136,15 @@ export default function HomeownerMessagesInbox() {
   // "All caught up" — nothing waiting AND nothing in the quiet list either
   // (i.e. she has only the builder channel and it's read).
   const everythingQuiet = needsYou.length === 0
+  const insets = useSafeAreaInsets()
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
       contentContainerStyle={{
         paddingHorizontal: SPACE.gutter,
-        paddingTop: SPACE.xl,
-        paddingBottom: FLOATING_NAV_CLEARANCE,
+        paddingTop: insets.top + SPACE.md,
+        paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE,
         gap: SPACE.xl,
       }}
       refreshControl={

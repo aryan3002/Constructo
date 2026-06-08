@@ -11,7 +11,7 @@
  * `href: null`, so they cover the bar full-screen.
  */
 import { View } from 'react-native'
-import { Redirect, Tabs } from 'expo-router'
+import { Redirect, Tabs, usePathname } from 'expo-router'
 
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
@@ -22,6 +22,10 @@ function HomeownerTabs() {
   const { t } = useT()
   const { theme } = useTheme()
   const askLabel = t('nav.ask')
+  // Hide the Ask pill on the pushed chat thread — it has its own composer, and
+  // the thread covers the bar full-screen (the bar is hidden there too).
+  const pathname = usePathname()
+  const onThread = /^\/messages\/[^/]+$/.test(pathname ?? '')
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -53,7 +57,7 @@ function HomeownerTabs() {
         <Tabs.Screen name="welcome" options={{ href: null }} />
         <Tabs.Screen name="household" options={{ href: null }} />
       </Tabs>
-      <AskPill label={askLabel} />
+      {!onThread ? <AskPill label={askLabel} /> : null}
     </View>
   )
 }
