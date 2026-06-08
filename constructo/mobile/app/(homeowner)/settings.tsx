@@ -17,11 +17,12 @@ import { homeowner } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import type { Language } from '../../src/api/types'
-import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
 import {
+  BodyLg,
   Display,
-  Micro,
+  Eyebrow,
+  FadeInUp,
   Screen,
   SettingsGroup,
   SettingsRow,
@@ -32,6 +33,7 @@ import { summaryCadence, type Lang } from './_settings.util'
 const STR = {
   en: {
     title: 'Settings',
+    intro: 'A calm place to tune how the home keeps in touch.',
     account: 'ACCOUNT',
     household: 'HOUSEHOLD',
     app: 'APP',
@@ -51,6 +53,7 @@ const STR = {
   },
   hi: {
     title: 'सेटिंग्स',
+    intro: 'घर आपसे कैसे जुड़ा रहे, यह शांति से तय करने की जगह।',
     account: 'खाता',
     household: 'परिवार',
     app: 'ऐप',
@@ -72,7 +75,6 @@ const STR = {
 export default function Settings() {
   const { lang, setLang } = useT()
   const { signOut, siteId, me } = useAuth()
-  const { theme } = useTheme()
   const router = useRouter()
   const L: Lang = lang === 'hi' ? 'hi' : 'en'
   const tx = STR[L]
@@ -103,13 +105,17 @@ export default function Settings() {
 
   return (
     <Screen floatingNav>
-      <Display>{tx.title}</Display>
+      {/* Calm-on-sand intro — serif title + one reassuring line, like Home. */}
+      <FadeInUp style={{ gap: SPACE.xs }}>
+        <Display>{tx.title}</Display>
+        <BodyLg muted numberOfLines={2}>
+          {tx.intro}
+        </BodyLg>
+      </FadeInUp>
 
       {/* HOUSEHOLD */}
-      <View style={{ gap: SPACE.sm }}>
-        <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>
-          {tx.household}
-        </Micro>
+      <FadeInUp delay={40} style={{ gap: SPACE.sm }}>
+        <Eyebrow>{tx.household}</Eyebrow>
         <SettingsGroup>
           <SettingsRow
             icon="users"
@@ -127,13 +133,11 @@ export default function Settings() {
             onPress={() => router.push('/(homeowner)/notifications')}
           />
         </SettingsGroup>
-      </View>
+      </FadeInUp>
 
       {/* APP */}
-      <View style={{ gap: SPACE.sm }}>
-        <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>
-          {tx.app}
-        </Micro>
+      <FadeInUp delay={80} style={{ gap: SPACE.sm }}>
+        <Eyebrow>{tx.app}</Eyebrow>
         <SettingsGroup>
           <SettingsRow
             icon="globe"
@@ -143,13 +147,11 @@ export default function Settings() {
             onPress={toggleLanguage}
           />
         </SettingsGroup>
-      </View>
+      </FadeInUp>
 
       {/* ACCOUNT */}
-      <View style={{ gap: SPACE.sm }}>
-        <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>
-          {tx.account}
-        </Micro>
+      <FadeInUp delay={120} style={{ gap: SPACE.sm }}>
+        <Eyebrow>{tx.account}</Eyebrow>
         <SettingsGroup>
           <SettingsRow
             icon="user"
@@ -169,7 +171,7 @@ export default function Settings() {
             onPress={() => void onSignOut()}
           />
         </SettingsGroup>
-      </View>
+      </FadeInUp>
 
       <Small muted style={{ textAlign: 'center' }}>
         {tx.footer}
