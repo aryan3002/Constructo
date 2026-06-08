@@ -1,20 +1,23 @@
 /**
- * Members — the household roster with graceful authority (handoff §5).
+ * Members — the household roster on the Calm Cockpit foundation (handoff §5).
  *
- * Every member is shown with their name, a named role label, and a one-line
- * *capability* sentence describing what they CAN do (e.g. "Can approve costs",
- * "Can comment + suggest design"). We NEVER render a grey lock or a "you can't"
- * message — a non-owner sees their own capabilities stated positively; the
- * primary/co-owner additionally sees manage affordances.
+ * A calm household roster: each member is a warm card with a clay role kicker
+ * (`Eyebrow`), the person's name, and a one-line *capability* sentence saying
+ * what they CAN do. Graceful authority is the rule — we NEVER render a grey
+ * lock or a "you can't" message. A non-owner simply sees their own capabilities
+ * stated positively; the primary/co-owner additionally sees a calm "Manage
+ * household" affordance (which lives in household.tsx).
  *
- * Reads `capabilities()` (viewer authority) + `roster()` (the people). Add /
- * remove / change-role live in the existing household.tsx — managers get a
- * "Manage household" button that pushes there rather than duplicating the form.
+ * Invited-but-not-joined members carry a calm `StatusPill` (quiet tone — a soft
+ * clock, never red, never an alarm). Empty/loading resolve to the reassuring
+ * `QuietState`, not a blank or "0 members".
  *
- * Pushed screen (declared `href:null` in _layout). Feather icons, no emoji,
- * no %, warm-paper tokens. Strings in the per-screen en/hi pattern.
+ * Reads `capabilities()` (viewer authority) + `roster()` (the people). Pushed
+ * screen (`href:null` in _layout) → `Screen floatingNav` reserves bottom room
+ * for the floating bar + Ask pill (handoff §2.6). Feather icons, no emoji, no %,
+ * warm-sand tokens only. Strings in the per-screen en/hi pattern.
  */
-import { ActivityIndicator, View } from 'react-native'
+import { View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -27,13 +30,17 @@ import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
 import {
   Body,
+  BodyLg,
   BodyStrong,
   Button,
   Card,
   Display,
+  Eyebrow,
+  FadeInUp,
   Micro,
+  QuietState,
   Screen,
-  Small,
+  StatusPill,
 } from '../../src/ui'
 import {
   canManage,
@@ -46,21 +53,29 @@ import {
 const STR = {
   en: {
     title: 'Members',
+    eyebrow: 'Household',
     subtitle: 'Everyone following this home, and what each person can do.',
     you: 'You',
-    invited: 'Invited, not yet joined',
+    invited: 'Invited',
+    invitedFull: 'Invited, not yet joined',
     manage: 'Manage household',
-    empty: 'No members yet.',
-    rosterEyebrow: 'HOUSEHOLD',
+    emptyTitle: 'Just you, for now',
+    emptyBody: 'No one else is following this home yet. Add family or an advisor when you’re ready.',
+    rosterEyebrow: 'The people on this home',
+    loadingTitle: 'Gathering your household…',
   },
   hi: {
     title: 'सदस्य',
+    eyebrow: 'परिवार',
     subtitle: 'इस घर से जुड़े सभी लोग, और हर कोई क्या कर सकता है।',
     you: 'आप',
-    invited: 'आमंत्रित, अभी शामिल नहीं',
+    invited: 'आमंत्रित',
+    invitedFull: 'आमंत्रित, अभी शामिल नहीं',
     manage: 'परिवार संभालें',
-    empty: 'अभी कोई सदस्य नहीं।',
-    rosterEyebrow: 'परिवार',
+    emptyTitle: 'अभी सिर्फ़ आप',
+    emptyBody: 'इस घर से अभी कोई और नहीं जुड़ा। तैयार हों तो परिवार या सलाहकार जोड़ें।',
+    rosterEyebrow: 'इस घर के लोग',
+    loadingTitle: 'आपका परिवार जुटाया जा रहा है…',
   },
 } as const
 
@@ -87,33 +102,41 @@ export default function Members() {
 
   return (
     <Screen floatingNav>
-      <View style={{ gap: SPACE.sm }}>
-        <Display>{tx.title}</Display>
-        <Small muted>{tx.subtitle}</Small>
-      </View>
+      {/* ---- Calm header: clay kicker + serif title + reassuring line. ---- */}
+      <FadeInUp style={{ gap: SPACE.xs }}>
+        <Eyebrow>{tx.eyebrow}</Eyebrow>
+        <Display accessibilityRole="header">{tx.title}</Display>
+        <BodyLg muted>{tx.subtitle}</BodyLg>
+      </FadeInUp>
 
       {rosterQ.isLoading ? (
-        <ActivityIndicator color={theme.colors.accent} />
+        // Loading never blocks a blank screen — a calm, on-track reassurance.
+        <QuietState icon="users" tone="ontrack" title={tx.loadingTitle} message="" />
       ) : members.length === 0 ? (
-        <Small muted>{tx.empty}</Small>
+        // Empty is designed, framed as reassurance — never "0 members".
+        <QuietState
+          icon="home"
+          tone="ontrack"
+          title={tx.emptyTitle}
+          message={tx.emptyBody}
+        />
       ) : (
-        <View style={{ gap: SPACE.sm }}>
-          <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>
-            {tx.rosterEyebrow}
-          </Micro>
-          {members.map((m) => (
-            <MemberCard
-              key={m.id}
-              member={m}
-              lang={L}
-              // The caller's own membership (members()[0] convention) is hard to
-              // match to roster rows; use user_id when present.
-              isYou={Boolean(m.user_id && me?.id && m.user_id === me.id)}
-              tx={tx}
-              theme={theme}
-            />
+        <FadeInUp delay={40} style={{ gap: SPACE.sm }}>
+          <Eyebrow style={{ color: theme.colors.textMute }}>{tx.rosterEyebrow}</Eyebrow>
+          {members.map((m, i) => (
+            <FadeInUp key={m.id} delay={60 + i * 30}>
+              <MemberCard
+                member={m}
+                lang={L}
+                // The caller's own membership (members()[0] convention) is hard
+                // to match to roster rows; use user_id when present.
+                isYou={Boolean(m.user_id && me?.id && m.user_id === me.id)}
+                tx={tx}
+                theme={theme}
+              />
+            </FadeInUp>
           ))}
-        </View>
+        </FadeInUp>
       )}
 
       {/* Graceful authority: managers get the add/manage affordance (which lives
@@ -159,15 +182,18 @@ function MemberCard({
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: SPACE.md,
-        borderLeftWidth: isYou ? 3 : 0,
-        borderLeftColor: isYou ? theme.colors.accent : 'transparent',
+        // A warm sage edge marks "you" — a gentle cue, never a hard outline.
+        borderLeftWidth: isYou ? 3 : 1,
+        borderLeftColor: isYou ? theme.colors.accent : theme.colors.line,
       }}
     >
-      {/* Avatar chip */}
+      {/* Avatar chip — soft sage pebble with initial or a calm user glyph. */}
       <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         style={{
-          width: 40,
-          height: 40,
+          width: 48,
+          height: 48,
           borderRadius: theme.radii.pill,
           backgroundColor: AP.chip,
           alignItems: 'center',
@@ -175,13 +201,16 @@ function MemberCard({
         }}
       >
         {showInitial ? (
-          <BodyStrong color={theme.colors.accentDeep}>{initial}</BodyStrong>
+          <BodyStrong color={AP.onChip}>{initial}</BodyStrong>
         ) : (
-          <Feather name="user" size={18} color={theme.colors.accentDeep} />
+          <Feather name="user" size={20} color={AP.onChip} />
         )}
       </View>
 
       <View style={{ flex: 1, gap: SPACE.xs }}>
+        {/* Clay role kicker — the named role, sentence above the name. */}
+        <Eyebrow>{subRoleLabel(member.sub_role, lang)}</Eyebrow>
+
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
           <BodyStrong numberOfLines={1} style={{ flexShrink: 1 }}>
             {name}
@@ -195,24 +224,24 @@ function MemberCard({
                 paddingVertical: 2,
               }}
             >
-              <Micro style={{ color: AP.onChip }}>{tx.you}</Micro>
+              <Micro style={{ color: AP.onChip, fontWeight: '600' }}>{tx.you}</Micro>
             </View>
           ) : null}
         </View>
 
-        <Small style={{ color: theme.colors.accentDeep }}>
-          {subRoleLabel(member.sub_role, lang)}
-        </Small>
-
         {/* The positive capability line — graceful authority, never a lock. */}
         <Body muted>{cap}</Body>
-        {design ? <Small muted>{design}</Small> : null}
+        {design ? <Body muted>{design}</Body> : null}
 
+        {/* Invited-but-not-joined: a calm quiet-tone pill (clock, never red). */}
         {isInvited ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <Feather name="clock" size={13} color={theme.colors.warn} />
-            <Small style={{ color: theme.colors.warn }}>{tx.invited}</Small>
-          </View>
+          <StatusPill
+            status="quiet"
+            label={tx.invited}
+            size="sm"
+            icon="clock"
+            style={{ marginTop: 2 }}
+          />
         ) : null}
       </View>
     </Card>
