@@ -25,3 +25,7 @@ constructo/backend/media/
 # Local editor/agent config
 .claude/
 **/.claude/
+
+# local junk / backups
+tmp/
+*.env.bak*
