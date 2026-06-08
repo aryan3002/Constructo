@@ -25,7 +25,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import { Body, Eyebrow, FLOATING_NAV_CLEARANCE, H1, QuietState, Small, StatusPill } from '../../src/ui'
+import { Body, Display, Eyebrow, FLOATING_NAV_CLEARANCE, QuietState, Small, StatusPill } from '../../src/ui'
 import { useAuth } from '../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../src/api/chat'
 import { ChannelRow } from './_messages_components'
@@ -150,7 +150,7 @@ export default function HomeownerMessagesInbox() {
       }
     >
       <View style={{ gap: SPACE.xs }}>
-        <H1>{t.title}</H1>
+        <Display>{t.title}</Display>
         <Body muted>{t.subtitle}</Body>
       </View>
 

@@ -218,9 +218,9 @@ export const TYPE = {
   // lineHeight is near the fontSize. The heading line-heights below are kept
   // generous (~1.27–1.36×) so the serif tops never cut off. Don't tighten them.
   /** Hero "You're okay." — the 3-second answer (Eczar serif, 500). */
-  display: { fontSize: 44, lineHeight: 56, letterSpacing: -0.7 },
+  display: { fontSize: 44, lineHeight: 60, letterSpacing: -0.7 },
   /** Screen titles (Eczar 600). */
-  h1: { fontSize: 28, lineHeight: 36, letterSpacing: -0.3 },
+  h1: { fontSize: 28, lineHeight: 38, letterSpacing: -0.3 },
   /** Section / letter headings (Eczar 600). */
   h2: { fontSize: 22, lineHeight: 30, letterSpacing: -0.2 },
   /** Card titles (Eczar 600 — the skill's h3). */

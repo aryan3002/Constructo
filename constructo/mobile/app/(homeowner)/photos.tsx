@@ -398,25 +398,31 @@ export default function Photos() {
     [queryClient, s],
   )
 
+  // iOS gotcha: presenting the picker while the sheet Modal is still dismissing
+  // makes it silently fail to open. So we launch the picker FIRST (it presents
+  // over the open sheet), then close the sheet once it returns — never the other
+  // way round.
   const onTakePhoto = useCallback(async () => {
-    setUploadOpen(false)
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
+      setUploadOpen(false)
       Alert.alert(s.permTitle, s.permCamera)
       return
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+    setUploadOpen(false)
     if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
   }, [s, doUpload])
 
   const onChooseLibrary = useCallback(async () => {
-    setUploadOpen(false)
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
+      setUploadOpen(false)
       Alert.alert(s.permTitle, s.permLibrary)
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+    setUploadOpen(false)
     if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
   }, [s, doUpload])
 
