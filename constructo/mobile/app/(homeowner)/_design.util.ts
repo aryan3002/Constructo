@@ -81,6 +81,10 @@ export interface DesignStrings {
   conflictResolved: string
   authoritativeTag: string
   advisoryTag: string
+  /** Quiet notice for a member without a design say (graceful read-only). */
+  readOnlyNotice: string
+  /** Entry to the confirm / re-draft style loop. */
+  refreshStyle: string
   /** Per-kind drawing labels (active language). */
   kinds: Record<DrawingKind, string>
 }
@@ -148,6 +152,8 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     conflictResolved: 'Choice saved for your home.',
     authoritativeTag: 'has a say',
     advisoryTag: 'suggesting',
+    readOnlyNotice: 'You can view your design space. Ask an owner for a say to make changes.',
+    refreshStyle: 'Refresh your style',
     kinds: {
       plan: 'Floor plan',
       elevation: 'Elevation',
@@ -220,6 +226,8 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     conflictResolved: 'आपके घर के लिए चुनाव सहेजा गया।',
     authoritativeTag: 'राय है',
     advisoryTag: 'सुझाव दे रहे',
+    readOnlyNotice: 'आप अपना डिज़ाइन स्थान देख सकते हैं। बदलाव के लिए किसी मालिक से राय का अनुरोध करें।',
+    refreshStyle: 'अपनी शैली ताज़ा करें',
     kinds: {
       plan: 'फ़्लोर प्लान',
       elevation: 'एलिवेशन',
