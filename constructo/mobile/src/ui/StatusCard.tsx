@@ -20,7 +20,7 @@ import { AP, SPACE } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Card } from './Card'
 import { SettleBar } from './SettleBar'
-import { BodyLg, H2, Micro } from './Typography'
+import { BodyLg, Eyebrow, H2, Micro } from './Typography'
 
 export interface StatusCardProps {
   /** Current milestone title (e.g. "Brickwork — first floor"). */
@@ -36,6 +36,8 @@ export interface StatusCardProps {
   startLabel: string
   endLabel: string
   tickFraction?: number | null
+  /** Clay "you are here" caption beside the phase title (the TimeBar signature). */
+  youAreHereLabel?: string
 }
 
 export function StatusCard({
@@ -47,14 +49,13 @@ export function StatusCard({
   startLabel,
   endLabel,
   tickFraction,
+  youAreHereLabel,
 }: StatusCardProps) {
   const { theme } = useTheme()
   const c = theme.colors
 
   return (
     <Card style={{ gap: SPACE.md }}>
-      <H2>{milestoneTitle}</H2>
-
       {hasTimeline ? (
         <SettleBar
           fraction={fraction}
@@ -66,6 +67,19 @@ export function StatusCard({
           labelColor={c.textMute}
         />
       ) : null}
+
+      {/* Current phase + clay "you are here" — position in TIME, never a %. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: SPACE.sm,
+        }}
+      >
+        <H2 style={{ flexShrink: 1 }}>{milestoneTitle}</H2>
+        {hasTimeline && youAreHereLabel ? <Eyebrow>{youAreHereLabel}</Eyebrow> : null}
+      </View>
 
       <BodyLg numberOfLines={4}>{statusSentence}</BodyLg>
 

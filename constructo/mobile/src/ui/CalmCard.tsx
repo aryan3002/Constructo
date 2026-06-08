@@ -5,7 +5,7 @@
  */
 import { View, type ViewStyle } from 'react-native'
 
-import { STATUS, type Status } from '../theme/tokens'
+import { type Status } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { SPACE } from '../theme/tokens'
 import { Body, H2, Small } from './Typography'
@@ -39,7 +39,7 @@ export function CalmCard({
           backgroundColor: theme.colors.card,
           borderRadius: theme.radii.card,
           borderLeftWidth: 4,
-          borderLeftColor: STATUS[status],
+          borderLeftColor: theme.colors[status],
           padding: SPACE.lg,
         },
         theme.shadowCard,
