@@ -319,3 +319,15 @@ The flagship. Compose the kit for the message list + composer; keep ALL contract
 - **Spec coverage:** kit units (T2–T6) ✓; theme fix (T1) ✓; three migrations behavior-preserving (T7–T9) ✓; homeowner reply (T7) ✓; Home Room weave via `custom` rows (T4/T9 design) ✓; tests + typecheck + on-device verify (T2, T7, T9, T10) ✓. Deferred items (capture→ledger, @ask, action items, de-gating) correctly absent.
 - **Placeholder scan:** Tasks 4/5/9 describe component bodies as "written during execution" against an exact prop interface + the exact existing line references to mirror — acceptable for a behavior-preserving extraction of large existing UI; all NEW pure logic (T2/T3) has complete code.
 - **Type consistency:** `ChatFeedItem`, `messagesToFeed(messages, lang)`, `useChatThread(address)`, `ChatAddress`, `ChatMessage`, `ChatEvent` names are consistent across tasks and match `src/api/chat.ts`.
+
+---
+
+## Execution status (2026-06-08)
+
+**Done (PR #161 → feat/homeowner-calm-cockpit):** Tasks 1–7 + Slice B + DaylightBubble retired.
+- Kit built: `messagesToFeed` (tested), `useChatThread`, `MessageFeed`, `ChatComposer`, `CaptureRail`, theme-aware `MessageBubble`.
+- Homeowner thread migrated onto the kit + quote-reply; `DaylightBubble` retired.
+- Slice B inline `@ask` shipped in the homeowner thread (`_ask_row.tsx`).
+- typecheck clean, jest 48/48; verified rendering on the iOS sim (sim blocks synthetic typing, so type-and-send is a device check).
+
+**Deferred (founder pivoted to homeowner features):** Task 8 (owner migration) + Task 9 (supervisor flagship migration) — own focused PR later. Then Slice C (action items), Slice D (capture→ledger), Slice E (crew de-gating).
