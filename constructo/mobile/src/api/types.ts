@@ -108,6 +108,9 @@ export interface MemberManageRequest {
 
 /** Extended capabilities returned from GET /me/capabilities */
 export interface Capabilities {
+  /** The resolved site for these capabilities — the client persists it to restore
+   *  `siteId` after a token-based relaunch (powers the builder-channel get-or-create). */
+  site_id: string
   sub_role: HomeownerSubRole
   can_approve: boolean
   can_comment: boolean

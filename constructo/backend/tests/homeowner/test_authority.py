@@ -99,6 +99,9 @@ async def test_capabilities_reflects_sub_role(client, ctx, family):
     )
     assert owner_caps.status_code == 200, owner_caps.text
     assert owner_caps.json()["can_approve"] is True
+    # The resolved site_id rides on the response so the mobile client can restore
+    # its `siteId` after a token-based relaunch (it powers the builder channel).
+    assert owner_caps.json()["site_id"] == str(ctx.site.id)
 
     family_caps = await client.get(
         "/api/v1/homeowner/me/capabilities", headers=auth(family.user)

@@ -1965,7 +1965,8 @@ async def my_capabilities(
             (r.design_space_id for r in rows if r.can_design and r.design_space_id), None
         )
     return CapabilitiesOut(
+        site_id=sid,
         **capabilities_for(
             sub_role, can_design_flag=can_design_flag, design_space_id=design_space_id
-        )
+        ),
     )

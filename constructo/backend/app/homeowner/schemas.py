@@ -443,6 +443,11 @@ class HomeownerDecisionOut(BaseModel):
 class CapabilitiesOut(BaseModel):
     """What the calling member may do on a property (drives client affordances)."""
 
+    # The resolved site this capability set is for. The mobile client persists it
+    # to restore `siteId` after a token-based relaunch — `siteId` powers the
+    # get-or-create of her 1:1 builder channel, so without it the channel never
+    # appears in her Messages inbox.
+    site_id: UUID
     sub_role: str
     can_approve: bool
     can_comment: bool
