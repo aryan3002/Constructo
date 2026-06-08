@@ -1,0 +1,46 @@
+/* ============================================================
+   Constructo Homeowner — Motion
+   Calm, never urgent. Gentle ease-outs, soft fades + small rises.
+   No bounce, no spring, no infinite decorative loops.
+   ALWAYS honor prefers-reduced-motion (see bottom).
+   ============================================================ */
+:root {
+  /* durations */
+  --dur-instant: 90ms;   /* @kind other */
+  --dur-fast: 140ms;     /* @kind other */
+  --dur: 220ms;          /* @kind other */
+  --dur-slow: 360ms;     /* @kind other */
+  --dur-gentle: 600ms;   /* @kind other */
+
+  /* easing — calm */
+  --ease-calm: cubic-bezier(.22,.61,.36,1);   /* @kind other */
+  --ease-soft: cubic-bezier(.40,0,.20,1);     /* @kind other */
+  --ease-exit: cubic-bezier(.4,0,1,1);        /* @kind other */
+
+  /* press feedback (subtle scale, no bounce) */
+  --press-scale: 0.97;   /* @kind other */
+
+  /* common transitions */
+  --tr-press: transform var(--dur-fast) var(--ease-soft);   /* @kind other */
+  --tr-color: background-color var(--dur) var(--ease-calm), color var(--dur) var(--ease-calm), border-color var(--dur) var(--ease-calm);   /* @kind other */
+  --tr-rise:  opacity var(--dur-slow) var(--ease-calm), transform var(--dur-slow) var(--ease-calm);   /* @kind other */
+}
+
+/* gentle entrance — base style is the visible end-state; animate FROM hidden,
+   gated so print / reduced-motion show content immediately. */
+@media (prefers-reduced-motion: no-preference) {
+  .calm-rise { animation: calmRise var(--dur-slow) var(--ease-calm) both; }
+  @keyframes calmRise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

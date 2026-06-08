@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Constructo · Home Room (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;600;700&family=Mukta:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600&family=Hind:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #e9e6e0; }
+  svg.lucide { stroke-width:1.85px; display:block; }
+
+  /* ===== shared phone shell ===== */
+  .screen { width:390px; height:844px; overflow:hidden; position:relative; display:flex; flex-direction:column; font-family:var(--font-body); color:var(--ink); }
+  .statusbar { display:flex; align-items:center; justify-content:space-between; padding:13px 26px 0; font-size:14px; font-weight:600; flex-shrink:0; }
+  .statusbar .sb { display:flex; gap:6px; align-items:center; }
+  .statusbar .sb svg.lucide { width:16px; height:16px; }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+
+  /* ===== header ===== */
+  .chead { flex-shrink:0; padding:8px 16px 12px; border-bottom:1px solid var(--line); background:var(--header-bg); backdrop-filter:blur(8px); }
+  .chead-row { display:flex; align-items:center; gap:11px; }
+  .cback { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink); }
+  .cback svg.lucide { width:21px; height:21px; }
+  .cav { width:42px; height:42px; border-radius:13px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:var(--font-title); font-weight:600; font-size:15px; color:#fff; background:var(--accent); letter-spacing:.02em; }
+  .ctitle { flex:1; min-width:0; }
+  .ctitle h1 { font-family:var(--font-title); font-weight:600; font-size:16px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ctitle .builder { display:flex; align-items:center; gap:4px; font-size:12.5px; color:var(--ink-soft); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ctitle .builder svg.lucide { width:13px; height:13px; color:var(--accent); }
+  .toggle { display:inline-flex; align-items:center; border-radius:999px; font-size:12.5px; font-weight:600; overflow:hidden; border:1px solid var(--line); background:var(--toggle-bg); flex-shrink:0; }
+  .toggle span { padding:6px 10px; line-height:1; }
+  .toggle span.on { background:var(--accent); color:#fff; border-radius:999px; }
+  .toggle span.off { color:var(--ink-soft); }
+  .trust { display:flex; align-items:center; gap:7px; margin-top:11px; font-size:11.5px; color:var(--ink-soft); background:var(--trust-bg); border:1px solid var(--line); padding:7px 11px; border-radius:11px; }
+  .trust svg.lucide { width:14px; height:14px; flex-shrink:0; color:var(--accent); }
+
+  /* ===== thread ===== */
+  .thread { flex:1; overflow-y:auto; padding:18px 16px 8px; display:flex; flex-direction:column; gap:14px; background:var(--thread-bg); }
+  .thread > * { flex-shrink:0; }
+  .thread::-webkit-scrollbar { width:0; }
+  .daydiv { align-self:center; font-size:11px; color:var(--ink-soft); background:var(--chip-bg); padding:4px 12px; border-radius:999px; font-weight:600; letter-spacing:.02em; }
+
+  .msg { display:flex; gap:9px; max-width:84%; }
+  .msg.them { align-self:flex-start; }
+  .msg.me { align-self:flex-end; flex-direction:row-reverse; }
+  .mav { width:28px; height:28px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:#fff; background:var(--accent); font-family:var(--font-title); }
+  .bubble { padding:11px 14px; font-size:14.5px; line-height:1.42; border:1px solid var(--line); }
+  .bubble.them { background:var(--them-bubble); border-radius:var(--rb) var(--rb) var(--rb) 6px; }
+  .bubble.me { background:var(--me-bubble); border-color:var(--me-border); border-radius:var(--rb) var(--rb) 6px var(--rb); }
+  .btime { font-size:10.5px; color:var(--ink-soft); margin-top:5px; opacity:.85; }
+
+  /* ===== inline published update card ===== */
+  .pubcard { align-self:flex-start; width:90%; background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:0 10px 24px -20px rgba(40,34,20,.5); }
+  .tag { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .tag svg.lucide { width:12px; height:12px; }
+  .tag.published { color:#3f5a32; background:rgba(94,122,78,.14); }
+  .tag.amber { color:#7d5a13; background:rgba(169,122,30,.14); }
+  .pub { padding:13px 14px 14px; }
+  .pub .tag { margin-bottom:11px; }
+  .pub-main { display:flex; gap:13px; }
+  .thumb { width:66px; height:66px; border-radius:13px; flex-shrink:0; position:relative; overflow:hidden;
+    background:linear-gradient(150deg,#cdbfa6,#a8916f); }
+  .thumb .grid { position:absolute; inset:0; background-image:linear-gradient(rgba(0,0,0,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.05) 1px,transparent 1px); background-size:18px 18px; }
+  .thumb .cnt { position:absolute; right:5px; bottom:5px; font-size:10px; font-weight:700; color:#fff; background:rgba(0,0,0,.45); padding:2px 6px; border-radius:7px; backdrop-filter:blur(2px); }
+  .pub h3 { font-family:var(--font-title); font-weight:600; font-size:16px; line-height:1.15; }
+  .pub .meta { font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .pub .proof { display:inline-flex; align-items:center; gap:6px; margin-top:9px; font-size:13px; font-weight:600; color:var(--accent); white-space:nowrap; }
+  .pub .proof svg.lucide { width:15px; height:15px; }
+
+  /* ===== inline decision card (amber) ===== */
+  .dec { align-self:flex-start; width:90%; background:var(--amber-card); border:1px solid var(--amber-border); border-radius:18px; padding:14px; box-shadow:0 10px 24px -20px rgba(120,86,20,.5); }
+  .dec .tag { margin-bottom:10px; }
+  .dec h3 { font-family:var(--font-title); font-weight:600; font-size:16px; line-height:1.2; }
+  .dec .sub { font-size:12.5px; color:var(--ink-soft); margin-top:4px; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .dec .sub svg.lucide { width:13px; height:13px; color:var(--amber); }
+  .dec .review { margin-top:13px; height:48px; width:100%; border:none; border-radius:13px; background:var(--amber); color:#fff; font-family:var(--font-title); font-weight:600; font-size:14.5px; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer; }
+  .dec .review svg.lucide { width:17px; height:17px; }
+
+  /* ===== Nivaan @ask answer ===== */
+  .nivaan { align-self:flex-start; max-width:88%; }
+  .nivaan .nhead { display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+  .nivaan .nav-av { width:24px; height:24px; border-radius:8px; background:linear-gradient(140deg,var(--accent),var(--accent-deep)); display:flex; align-items:center; justify-content:center; color:#fff; }
+  .nivaan .nav-av svg.lucide { width:14px; height:14px; }
+  .nivaan .nname { font-family:var(--font-title); font-size:12.5px; font-weight:600; }
+  .nivaan .nname b { color:var(--ink-soft); font-weight:400; }
+  .nivaan .nbody { background:var(--niv-bg); border:1px solid var(--niv-border); border-radius:6px var(--rb) var(--rb) var(--rb); padding:12px 14px; font-size:14.5px; line-height:1.45; }
+  .nivaan .cite { display:inline-flex; align-items:center; gap:5px; margin-top:10px; font-size:11px; font-weight:600; color:#3f5a32; background:rgba(94,122,78,.13); padding:5px 9px; border-radius:999px; }
+  .nivaan .cite svg.lucide { width:12px; height:12px; }
+  .nivaan .fallback { display:inline-flex; align-items:center; gap:5px; margin-top:10px; margin-left:7px; font-size:11px; color:var(--ink-soft); border:1px dashed var(--line); padding:5px 9px; border-radius:999px; }
+  .nivaan .fallback svg.lucide { width:12px; height:12px; }
+  .askq { font-size:13px; color:var(--accent); font-weight:600; }
+
+  /* ===== composer ===== */
+  .composer { flex-shrink:0; border-top:1px solid var(--line); background:var(--header-bg); backdrop-filter:blur(8px); padding:10px 14px 24px; }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; }
+  .chips::-webkit-scrollbar { height:0; }
+  .chip { white-space:nowrap; font-size:12.5px; font-weight:600; color:var(--ink); background:var(--chip-bg); border:1px solid var(--line); padding:9px 13px; border-radius:999px; display:flex; align-items:center; gap:6px; min-height:38px; }
+  .chip svg.lucide { width:14px; height:14px; color:var(--ink-soft); }
+  .chip.ask { color:var(--accent); background:var(--accent-bg); border-color:var(--accent-border); }
+  .chip.ask svg.lucide { color:var(--accent); }
+  .comprow { display:flex; align-items:center; gap:9px; }
+  .iconbtn { width:48px; height:48px; border-radius:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+  .iconbtn svg.lucide { width:22px; height:22px; }
+  .iconbtn.cam { background:var(--accent-bg); border-color:var(--accent-border); color:var(--accent); }
+  .inputpill { flex:1; min-width:0; height:48px; border-radius:14px; border:1px solid var(--line); background:var(--surface); display:flex; align-items:center; padding:0 6px 0 15px; gap:6px; }
+  .inputpill .ph { flex:1; font-size:14px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; }
+  .inputpill .mic { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); }
+  .inputpill .mic svg.lucide { width:19px; height:19px; }
+  .sendbtn { width:48px; height:48px; border-radius:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:none; background:var(--accent); color:#fff; }
+  .sendbtn svg.lucide { width:21px; height:21px; }
+
+  /* ============================================================= */
+  /* Direction A · Aangan */
+  .A {
+    --font-title:'Eczar', serif; --font-body:'Mukta', sans-serif;
+    --paper:#F4ECDF; --surface:#FCF7EE; --ink:#2E2418; --ink-soft:#7A6A55; --line:rgba(46,36,24,.10);
+    --accent:#B25B3B; --accent-deep:#8f4528; --accent-bg:rgba(178,91,59,.10); --accent-border:rgba(178,91,59,.28);
+    --amber:#A97A1E; --amber-card:#FBF2DC; --amber-border:rgba(169,122,30,.32);
+    --them-bubble:#FCF7EE; --me-bubble:rgba(178,91,59,.11); --me-border:rgba(178,91,59,.22);
+    --niv-bg:#FBF6EC; --niv-border:rgba(46,36,24,.12);
+    --header-bg:rgba(248,242,232,.9); --thread-bg:radial-gradient(140% 50% at 50% 0%, #FAF4EA, #F4ECDF);
+    --toggle-bg:rgba(255,255,255,.5); --trust-bg:rgba(255,255,255,.45); --chip-bg:rgba(255,255,255,.6);
+    --rb:18px;
+  }
+  /* Direction B · Aakaash */
+  .B {
+    --font-title:'Poppins', sans-serif; --font-body:'Hind', sans-serif;
+    --surface:#FCFEFD; --ink:#1E2A2C; --ink-soft:#62716F; --line:rgba(30,42,44,.08);
+    --accent:#2E8B7F; --accent-deep:#1F6E63; --accent-bg:rgba(46,139,127,.10); --accent-border:rgba(46,139,127,.26);
+    --amber:#A9791F; --amber-card:#FBF4E2; --amber-border:rgba(169,121,31,.30);
+    --them-bubble:#FFFFFF; --me-bubble:rgba(46,139,127,.11); --me-border:rgba(46,139,127,.2);
+    --niv-bg:#F6FBFA; --niv-border:rgba(30,42,44,.1);
+    --header-bg:rgba(243,247,245,.9); --thread-bg:linear-gradient(180deg,#EEF3F0,#E7ECE9);
+    --toggle-bg:rgba(255,255,255,.7); --trust-bg:rgba(255,255,255,.6); --chip-bg:#FFFFFF;
+    --rb:20px;
+  }
+  /* Blend · Aangan × Aakaash */
+  .C {
+    --font-title:'Eczar', serif; --font-body:'Hind', sans-serif;
+    --surface:#FCFAF3; --ink:#2A2519; --ink-soft:#766C58; --line:rgba(42,37,25,.09);
+    --accent:#4E7D69; --accent-deep:#3C6451; --accent-bg:rgba(78,125,105,.11); --accent-border:rgba(78,125,105,.26);
+    --amber:#A97A1E; --amber-card:#FAF2DC; --amber-border:rgba(169,122,30,.30);
+    --them-bubble:#FCFAF3; --me-bubble:rgba(78,125,105,.11); --me-border:rgba(78,125,105,.2);
+    --niv-bg:#FAF7EF; --niv-border:rgba(42,37,25,.11);
+    --header-bg:rgba(248,244,236,.9); --thread-bg:radial-gradient(140% 50% at 50% 0%, #F8F4EC, #F3EFE6);
+    --toggle-bg:rgba(255,255,255,.55); --trust-bg:rgba(255,255,255,.5); --chip-bg:rgba(255,255,255,.6);
+    --rb:19px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+const I = ({n}) => <i data-lucide={n}></i>;
+
+function ChatScreen({ dir }) {
+  return (
+    <div className={"screen " + dir}>
+      <div className="statusbar">
+        <span>9:41</span>
+        <span className="sb"><I n="signal-high" /><I n="wifi" /><I n="battery-full" /></span>
+      </div>
+
+      <div className="chead">
+        <div className="chead-row">
+          <div className="cback"><I n="chevron-left" /></div>
+          <div className="cav">VC</div>
+          <div className="ctitle">
+            <h1>Priya's Home · Whitefield</h1>
+            <div className="builder"><I n="badge-check" /> Verma Constructions</div>
+          </div>
+          <div className="toggle"><span className="on">EN</span><span className="off">हिं</span></div>
+        </div>
+        <div className="trust"><I n="shield-check" /> Your builder posts here · only what they send reaches you.</div>
+      </div>
+
+      <div className="thread">
+        <div className="daydiv">Sunday, 8 June</div>
+
+        <div className="msg them">
+          <div className="mav">VC</div>
+          <div>
+            <div className="bubble them">Namaste Priya 🙏 This week we finished the roof slab — curing is on now.</div>
+            <div className="btime">9:02 AM</div>
+          </div>
+        </div>
+
+        <div className="pubcard">
+          <div className="pub">
+            <span className="tag published"><I n="badge-check" /> Published update</span>
+            <div className="pub-main">
+              <div className="thumb"><div className="grid"></div><span className="cnt">+6</span></div>
+              <div>
+                <h3>Roof slab complete</h3>
+                <div className="meta">8 Jun · 6 photos</div>
+                <div className="proof"><I n="images" /> Show proof</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="dec">
+          <span className="tag amber"><I n="hand" /> Needs your choice</span>
+          <h3>A choice for you — bathroom tile</h3>
+          <div className="sub"><I n="clock" /> Tiling begins in ~4 days</div>
+          <button className="review">Review <I n="arrow-right" /></button>
+        </div>
+
+        <div className="msg me">
+          <div>
+            <div className="bubble me">Looks lovely! Can we see the kitchen next?</div>
+            <div className="btime" style={{textAlign:'right'}}>9:18 AM</div>
+          </div>
+        </div>
+
+        <div className="msg me">
+          <div>
+            <div className="bubble me"><span className="askq">@ask</span> curing matlab kya?</div>
+          </div>
+        </div>
+
+        <div className="nivaan">
+          <div className="nhead">
+            <div className="nav-av"><I n="sparkles" /></div>
+            <div className="nname">Nivaan <b>· your guide</b></div>
+          </div>
+          <div className="nbody">
+            Curing = keeping the slab wet so it sets strong — about 2 weeks for your roof, day 3 now.
+            <div>
+              <span className="cite"><I n="sparkles" /> from your site updates</span>
+              <span className="fallback"><I n="message-circle" /> ask your builder</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="composer">
+        <div className="chips">
+          <span className="chip ask"><I n="sparkles" /> Ask</span>
+          <span className="chip"><I n="help-circle" /> Ask a question</span>
+          <span className="chip"><I n="calendar-check" /> Request a visit</span>
+          <span className="chip"><I n="flag" /> Flag something</span>
+        </div>
+        <div className="comprow">
+          <div className="iconbtn cam"><I n="camera" /></div>
+          <div className="inputpill">
+            <span className="ph">Message Verma Constructions…</span>
+            <div className="mic"><I n="mic" /></div>
+          </div>
+          <button className="sendbtn"><I n="arrow-up" /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <DesignCanvas>
+    <DCSection id="homeroom" title="Home Room — the curated builder thread" subtitle="A letter-thread, not a chat app · only what the builder sends reaches her">
+      <DCArtboard id="a" label="A · Aangan — warm editorial" width={390} height={844}><ChatScreen dir="A" /></DCArtboard>
+      <DCArtboard id="b" label="B · Aakaash — daylight calm" width={390} height={844}><ChatScreen dir="B" /></DCArtboard>
+      <DCArtboard id="c" label="C · Blend — Aangan × Aakaash" width={390} height={844}><ChatScreen dir="C" /></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+function paint(){ window.lucide && window.lucide.createIcons(); document.querySelectorAll('.thread').forEach(t=>t.scrollTop=t.scrollHeight); }
+setTimeout(paint, 40); setTimeout(paint, 350); setTimeout(paint, 900);
+</script>
+</body>
+</html>

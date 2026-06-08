@@ -1,0 +1,13 @@
+/* ============================================================
+   Constructo Homeowner — Design System entry point
+   Direction C "Blend": warm sand canvas · Eczar headlines · Hind body ·
+   sage-green primary · clay celebration · amber needs-you · red delay-only.
+   Consumers link THIS file. It only @imports — no inline rules here.
+   ============================================================ */
+@import "tokens/fonts.css";       /* @font-face — self-hosted Eczar / Hind / IBM Plex Mono (Devanagari + Latin) */
+@import "tokens/colors.css";      /* palette + semantic status tokens */
+@import "tokens/spacing.css";     /* spacing, radius, sizing, tap targets */
+@import "tokens/typography.css";  /* families, scale, semantic type roles */
+@import "tokens/elevation.css";   /* warm soft shadows, glows, focus ring */
+@import "tokens/motion.css";      /* calm easings, durations, reduced-motion */
+@import "tokens/base.css";        /* reset + document defaults */

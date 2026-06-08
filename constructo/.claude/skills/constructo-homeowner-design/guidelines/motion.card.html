@@ -1,0 +1,28 @@
+<!-- @dsCard group="Spacing" viewport="700x200" name="Motion" subtitle="Calm, never urgent — gentle ease-outs, soft fades + small rises, no bounce" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><link rel="stylesheet" href="../styles.css" />
+<style>
+  body{margin:0;background:var(--page-bg);padding:22px;font-family:var(--font-body);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;max-width:580px;}
+  .r{display:flex;justify-content:space-between;font-size:13px;color:var(--text-body);border-bottom:1px solid var(--hairline);padding:5px 0;}
+  .r b{font-weight:600;color:var(--text-strong);}
+  .r .v{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);}
+  .demo{margin-top:16px;display:flex;align-items:center;gap:12px;}
+  .dot{width:14px;height:14px;border-radius:50%;background:var(--green-600);}
+  @media (prefers-reduced-motion: no-preference){
+    .dot{animation:slide 2.4s var(--ease-calm) infinite alternate;}
+    @keyframes slide{from{transform:translateX(0);opacity:.6}to{transform:translateX(120px);opacity:1}}
+  }
+  .cap{font-size:12px;color:var(--text-secondary);}
+</style></head>
+<body>
+  <div class="grid">
+    <div class="r"><b>Fast · taps</b><span class="v">140ms</span></div>
+    <div class="r"><b>Default</b><span class="v">220ms</span></div>
+    <div class="r"><b>Entrance</b><span class="v">360ms</span></div>
+    <div class="r"><b>Gentle reveal</b><span class="v">600ms</span></div>
+    <div class="r"><b>Ease (calm)</b><span class="v">cubic(.22,.61,.36,1)</span></div>
+    <div class="r"><b>Press</b><span class="v">scale .97</span></div>
+  </div>
+  <div class="demo"><span class="dot"></span><span class="cap">ease-calm · honors prefers-reduced-motion</span></div>
+</body></html>

@@ -1,0 +1,69 @@
+/* ============================================================
+   Constructo Homeowner — Typography
+   Eczar (serif) = HEADLINES ONLY. Hind (sans) = all body/UI.
+   IBM Plex Mono = money + tabular numerals.
+   Multi-script: every face ships Devanagari + Latin (see fonts.css).
+   Single-language per screen (English OR Hindi) — never both.
+   Minimum legible size 14px; mobile-first.
+   ============================================================ */
+:root {
+  /* ---- Families ---- */
+  --font-display: 'Eczar', 'Georgia', serif;        /* headlines / reassuring statements */
+  --font-body:    'Hind', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* ---- Weights ---- */
+  --fw-light: 300;     /* @kind font */
+  --fw-regular: 400;   /* @kind font */
+  --fw-medium: 500;    /* @kind font */
+  --fw-semibold: 600;  /* @kind font */
+  --fw-bold: 700;      /* @kind font */
+
+  /* ---- Type scale (px) ---- */
+  --fs-hero: 44px;       /* "You're okay." — the 3-second answer (Eczar 500) */
+  --fs-h1: 28px;         /* screen titles (Eczar 600) */
+  --fs-h2: 22px;         /* section / letter headings (Eczar 600) */
+  --fs-h3: 18px;         /* card titles (Eczar 600) */
+  --fs-title: 16px;      /* strong UI label / list title (Hind 600) */
+  --fs-body: 15px;       /* default body (Hind 400) */
+  --fs-body-sm: 14px;    /* secondary body — never smaller (Hind 400) */
+  --fs-label: 12.5px;    /* meta, captions (Hind 500) */
+  --fs-eyebrow: 11.5px;  /* uppercase kicker (Hind 600, clay-700) */
+  --fs-mono: 16px;       /* money / numerals (IBM Plex Mono 500) */
+
+  /* ---- Line heights ---- */
+  --lh-tight: 1.02;      /* @kind font */
+  --lh-heading: 1.18;    /* @kind font */
+  --lh-snug: 1.3;        /* @kind font */
+  --lh-body: 1.45;       /* @kind font */
+
+  /* ---- Tracking ---- */
+  --ls-hero: -0.015em;
+  --ls-heading: -0.01em;
+  --ls-eyebrow: 0.2em;
+  --ls-mono: -0.01em;
+
+  /* ---- Semantic text roles ---- */
+  --type-hero:    var(--fw-medium) var(--fs-hero)/var(--lh-tight) var(--font-display);
+  --type-h1:      var(--fw-semibold) var(--fs-h1)/var(--lh-heading) var(--font-display);
+  --type-h2:      var(--fw-semibold) var(--fs-h2)/var(--lh-heading) var(--font-display);
+  --type-h3:      var(--fw-semibold) var(--fs-h3)/var(--lh-heading) var(--font-display);
+  --type-title:   var(--fw-semibold) var(--fs-title)/var(--lh-snug) var(--font-body);
+  --type-body:    var(--fw-regular) var(--fs-body)/var(--lh-body) var(--font-body);
+  --type-body-sm: var(--fw-regular) var(--fs-body-sm)/var(--lh-body) var(--font-body);
+  --type-label:   var(--fw-medium) var(--fs-label)/var(--lh-snug) var(--font-body);
+}
+
+/* Optional helper classes (components mostly set font: via the tokens above) */
+.t-hero   { font: var(--type-hero);  letter-spacing: var(--ls-hero); color: var(--text-strong); text-wrap: balance; }
+.t-h1     { font: var(--type-h1);    letter-spacing: var(--ls-heading); color: var(--text-strong); }
+.t-h2     { font: var(--type-h2);    letter-spacing: var(--ls-heading); color: var(--text-strong); }
+.t-h3     { font: var(--type-h3);    color: var(--text-strong); }
+.t-title  { font: var(--type-title); color: var(--text-strong); }
+.t-body   { font: var(--type-body);  color: var(--text-body); }
+.t-body-sm{ font: var(--type-body-sm); color: var(--text-secondary); }
+.t-label  { font: var(--type-label); color: var(--text-secondary); }
+.t-eyebrow{ font-family: var(--font-body); font-weight: var(--fw-semibold); font-size: var(--fs-eyebrow);
+            letter-spacing: var(--ls-eyebrow); text-transform: uppercase; color: var(--clay-700); }
+.t-mono   { font-family: var(--font-mono); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums;
+            letter-spacing: var(--ls-mono); }

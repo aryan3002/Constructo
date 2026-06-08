@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Constructo · Journey (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;600;700&family=Mukta:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600&family=Hind:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #e9e6e0; }
+  svg.lucide { stroke-width:1.85px; display:block; }
+
+  .screen { width:390px; height:844px; overflow:hidden; position:relative; display:flex; flex-direction:column; font-family:var(--font-body); color:var(--ink); background:var(--page-bg); }
+  .statusbar { display:flex; align-items:center; justify-content:space-between; padding:13px 26px 0; font-size:14px; font-weight:600; flex-shrink:0; }
+  .statusbar .sb { display:flex; gap:6px; align-items:center; }
+  .statusbar .sb svg.lucide { width:16px; height:16px; }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+
+  /* header */
+  .jhead { flex-shrink:0; padding:10px 20px 14px; display:flex; align-items:flex-end; justify-content:space-between; }
+  .jhead h1 { font-family:var(--font-title); font-weight:600; font-size:28px; line-height:1; }
+  .jhead .sub { font-size:12.5px; color:var(--ink-soft); margin-top:5px; }
+  .toggle { display:inline-flex; align-items:center; border-radius:999px; font-size:12.5px; font-weight:600; overflow:hidden; border:1px solid var(--line); background:var(--toggle-bg); }
+  .toggle span { padding:6px 11px; line-height:1; }
+  .toggle span.on { background:var(--accent); color:#fff; border-radius:999px; }
+  .toggle span.off { color:var(--ink-soft); }
+
+  .jscroll { flex:1; overflow-y:auto; padding:2px 18px 26px; }
+  .jscroll::-webkit-scrollbar { width:0; }
+  .jscroll > * { flex-shrink:0; }
+
+  /* weekly letter card */
+  .letter { background:var(--letter-bg); border:1px solid var(--line); border-radius:20px; padding:18px; box-shadow:0 14px 32px -24px rgba(40,34,20,.5); }
+  .letter .lead { display:flex; align-items:baseline; justify-content:space-between; }
+  .letter .eyebrow { font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); font-weight:700; }
+  .letter h2 { font-family:var(--font-title); font-weight:600; font-size:21px; margin-top:6px; }
+  .letter .when { font-size:12.5px; color:var(--ink-soft); }
+  .lline { display:flex; align-items:flex-start; gap:10px; margin-top:13px; font-size:14px; line-height:1.3; }
+  .lline .lic { width:22px; height:22px; border-radius:7px; flex-shrink:0; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .lline .lic svg.lucide { width:13px; height:13px; }
+  .lline b { font-weight:600; }
+  .lline .lab { color:var(--ink-soft); font-weight:600; margin-right:2px; }
+  .ic.ok { background:var(--ok-bg); color:var(--ok); }
+  .ic.info { background:var(--info-bg); color:var(--info); }
+  .ic.amber { background:var(--amber-bg); color:var(--amber); }
+  .ic.risk { background:var(--risk-bg); color:var(--risk); }
+  .ic.quiet { background:var(--quiet-bg); color:var(--quiet); }
+  .letter-actions { display:flex; gap:10px; margin-top:16px; }
+  .listen { height:48px; padding:0 16px; border-radius:13px; border:1px solid var(--line); background:var(--surface); display:flex; align-items:center; gap:8px; font-family:var(--font-body); font-weight:600; font-size:13.5px; color:var(--ink); cursor:pointer; }
+  .listen svg.lucide { width:18px; height:18px; color:var(--accent); }
+  .readfull { height:48px; flex:1; border:none; border-radius:13px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; gap:7px; font-family:var(--font-title); font-weight:600; font-size:14px; cursor:pointer; }
+  .readfull svg.lucide { width:16px; height:16px; }
+
+  /* running total */
+  .total { margin-top:14px; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .total .tlabel { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; }
+  .total .tnum { font-size:24px; font-weight:600; color:var(--ink); margin-top:5px; }
+  .okchip { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:var(--ok); background:var(--ok-bg); padding:5px 10px; border-radius:999px; white-space:nowrap; }
+  .okchip svg.lucide { width:13px; height:13px; }
+
+  /* feed spine */
+  .feed { margin-top:22px; }
+  .feed-title { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin:0 0 6px 50px; }
+  .jitem { display:flex; gap:14px; position:relative; padding-bottom:18px; }
+  .rail { width:34px; flex-shrink:0; display:flex; justify-content:center; position:relative; }
+  .rail::before { content:''; position:absolute; top:8px; bottom:-18px; width:2px; background:var(--line); border-radius:2px; }
+  .jitem:last-child .rail::before { display:none; }
+  .node { width:32px; height:32px; border-radius:50%; position:relative; z-index:1; display:flex; align-items:center; justify-content:center; border:2px solid var(--page-solid); }
+  .node svg.lucide { width:16px; height:16px; }
+  .node.ok { background:var(--ok-bg); color:var(--ok); }
+  .node.info { background:var(--info-bg); color:var(--info); }
+  .node.risk { background:var(--risk-bg); color:var(--risk); }
+  .node.quiet { background:var(--quiet-bg); color:var(--quiet); }
+
+  .jcard { flex:1; min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:13px 14px; box-shadow:0 8px 20px -18px rgba(40,34,20,.45); }
+  .jcard.risk { background:var(--risk-card); border-color:var(--risk-border); }
+  .jcard.quiet { background:transparent; box-shadow:none; border-style:dashed; }
+  .jlabel { font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700; }
+  .jlabel.ok{color:var(--ok)} .jlabel.info{color:var(--info)} .jlabel.risk{color:var(--risk)} .jlabel.quiet{color:var(--quiet)}
+  .jcard h4 { font-family:var(--font-title); font-weight:600; font-size:16px; line-height:1.18; margin-top:5px; }
+  .jcard .meta { font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .jcard .qtext { font-size:13.5px; color:var(--ink-soft); line-height:1.4; margin-top:5px; }
+  .proofrow { display:flex; align-items:center; gap:11px; margin-top:11px; }
+  .pthumb { width:50px; height:50px; border-radius:11px; flex-shrink:0; position:relative; overflow:hidden; background:linear-gradient(150deg,#cdbfa6,#a8916f); }
+  .pthumb .grid { position:absolute; inset:0; background-image:linear-gradient(rgba(0,0,0,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.05) 1px,transparent 1px); background-size:14px 14px; }
+  .proof { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--accent); white-space:nowrap; }
+  .proof svg.lucide { width:15px; height:15px; }
+  .changeprice { display:flex; align-items:center; gap:9px; margin-top:9px; }
+  .changeprice .p { font-size:15px; font-weight:600; }
+  /* delay detail rows */
+  .drows { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+  .drow { display:flex; gap:7px; font-size:13px; }
+  .drow .dk { color:var(--ink-soft); min-width:64px; }
+  .drow .dv { font-weight:600; }
+  .dwhy { display:inline-flex; align-items:center; gap:5px; margin-top:11px; font-size:13px; font-weight:600; color:var(--risk); }
+  .dwhy svg.lucide { width:15px; height:15px; }
+
+  /* themes */
+  .A { --font-title:'Eczar',serif; --font-body:'Mukta',sans-serif;
+    --surface:#FCF7EE; --letter-bg:#FBF3E4; --page-solid:#F4ECDF; --ink:#2E2418; --ink-soft:#7A6A55; --line:rgba(46,36,24,.10); --page-bg:radial-gradient(120% 45% at 50% 0%, #FAF4EA, #F4ECDF);
+    --accent:#B25B3B; --toggle-bg:rgba(255,255,255,.55);
+    --ok:#5E7A4E; --ok-bg:rgba(94,122,78,.14); --info:#3F6B92; --info-bg:rgba(63,107,146,.13); --amber:#A97A1E; --amber-bg:rgba(169,122,30,.14);
+    --risk:#A4382A; --risk-bg:rgba(164,56,42,.12); --risk-card:#FBEEEB; --risk-border:rgba(164,56,42,.25); --quiet:#9A8E78; --quiet-bg:rgba(122,106,85,.14); }
+  .B { --font-title:'Poppins',sans-serif; --font-body:'Hind',sans-serif;
+    --surface:#FCFEFD; --letter-bg:#FFFFFF; --page-solid:#E9EEEB; --ink:#1E2A2C; --ink-soft:#62716F; --line:rgba(30,42,44,.08); --page-bg:linear-gradient(180deg,#EEF3F0,#E6ECE9);
+    --accent:#2E8B7F; --toggle-bg:rgba(255,255,255,.7);
+    --ok:#2E8B7F; --ok-bg:rgba(46,139,127,.14); --info:#3E6F99; --info-bg:rgba(62,111,153,.13); --amber:#A9791F; --amber-bg:rgba(169,121,31,.14);
+    --risk:#C2584A; --risk-bg:rgba(194,88,74,.14); --risk-card:#FBEFEC; --risk-border:rgba(194,88,74,.28); --quiet:#8A9794; --quiet-bg:rgba(98,113,111,.14); }
+  .C { --font-title:'Eczar',serif; --font-body:'Hind',sans-serif;
+    --surface:#FCFAF3; --letter-bg:#FCF8EE; --page-solid:#F3EFE6; --ink:#2A2519; --ink-soft:#766C58; --line:rgba(42,37,25,.09); --page-bg:radial-gradient(120% 45% at 50% 0%, #F8F4EC, #F3EFE6);
+    --accent:#4E7D69; --toggle-bg:rgba(255,255,255,.55);
+    --ok:#4E7D69; --ok-bg:rgba(78,125,105,.14); --info:#446B86; --info-bg:rgba(68,107,134,.13); --amber:#A97A1E; --amber-bg:rgba(169,122,30,.14);
+    --risk:#A4382A; --risk-bg:rgba(164,56,42,.12); --risk-card:#FAEEEA; --risk-border:rgba(164,56,42,.24); --quiet:#9A8E78; --quiet-bg:rgba(118,108,88,.14); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+const I = ({n}) => <i data-lucide={n}></i>;
+
+function JourneyScreen({ dir }) {
+  return (
+    <div className={"screen " + dir}>
+      <div className="statusbar"><span>9:41</span><span className="sb"><I n="signal-high" /><I n="wifi" /><I n="battery-full" /></span></div>
+
+      <div className="jhead">
+        <div>
+          <h1>Journey</h1>
+          <div className="sub">Priya's Home · Whitefield</div>
+        </div>
+        <div className="toggle"><span className="on">EN</span><span className="off">हिं</span></div>
+      </div>
+
+      <div className="jscroll">
+        <div className="letter">
+          <div className="lead">
+            <div>
+              <div className="eyebrow">This week</div>
+              <h2>2–8 June</h2>
+            </div>
+          </div>
+          <div className="lline"><span className="lic ic ok"><I n="check" /></span><span><span className="lab">Done ·</span> <b>Roof slab finished</b></span></div>
+          <div className="lline"><span className="lic ic info"><I n="arrow-right" /></span><span><span className="lab">Coming next ·</span> Plastering begins</span></div>
+          <div className="lline"><span className="lic ic amber"><I n="hand" /></span><span><span className="lab">Needs you ·</span> 1 tile choice</span></div>
+          <div className="lline"><span className="lic ic risk"><I n="triangle-alert" /></span><span><span className="lab">Delays ·</span> Plastering ~5 days (rain)</span></div>
+          <div className="letter-actions">
+            <button className="listen"><I n="volume-2" /> Listen</button>
+            <button className="readfull">Read full letter <I n="arrow-right" /></button>
+          </div>
+        </div>
+
+        <div className="total">
+          <div>
+            <div className="tlabel">Changes so far</div>
+            <div className="tnum mono">+₹2,40,000</div>
+          </div>
+          <span className="okchip"><I n="circle-check" /> all approved by you</span>
+        </div>
+
+        <div className="feed">
+          <div className="feed-title">Updates</div>
+
+          <div className="jitem">
+            <div className="rail"><div className="node ok"><I n="check" /></div></div>
+            <div className="jcard">
+              <div className="jlabel ok">Milestone</div>
+              <h4>Roof slab complete</h4>
+              <div className="meta">8 Jun · 6 photos</div>
+              <div className="proofrow">
+                <div className="pthumb"><div className="grid"></div></div>
+                <span className="proof"><I n="images" /> Show proof</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="jitem">
+            <div className="rail"><div className="node info"><I n="arrow-left-right" /></div></div>
+            <div className="jcard">
+              <div className="jlabel info">Progress</div>
+              <h4>Curing started</h4>
+              <div className="meta">2 days ago</div>
+            </div>
+          </div>
+
+          <div className="jitem">
+            <div className="rail"><div className="node risk"><I n="triangle-alert" /></div></div>
+            <div className="jcard risk">
+              <div className="jlabel risk">Delay</div>
+              <h4>Plastering pushed ~5 days</h4>
+              <div className="drows">
+                <div className="drow"><span className="dk">Now expected</span><span className="dv">~18 Jul</span></div>
+                <div className="drow"><span className="dk">Reason</span><span className="dv">Rain</span></div>
+                <div className="drow"><span className="dk">Handover</span><span className="dv"><span className="okchip"><I n="circle-check" /> unchanged</span></span></div>
+              </div>
+              <span className="dwhy">Why this happened <I n="arrow-right" /></span>
+            </div>
+          </div>
+
+          <div className="jitem">
+            <div className="rail"><div className="node info"><I n="arrow-left-right" /></div></div>
+            <div className="jcard">
+              <div className="jlabel info">Change</div>
+              <h4>Bathroom tile upgraded</h4>
+              <div className="changeprice">
+                <span className="p mono">+₹18,000</span>
+                <span className="okchip"><I n="circle-check" /> approved by you</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="jitem">
+            <div className="rail"><div className="node quiet"><I n="clock" /></div></div>
+            <div className="jcard quiet">
+              <div className="jlabel quiet">Quiet</div>
+              <div className="qtext">Site quiet 3 days — curing, normal. Nothing to worry about.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <DesignCanvas>
+    <DCSection id="journey" title="The Journey timeline" subtitle="Pinned weekly letter + running total, then a status spine · red only on the genuine delay">
+      <DCArtboard id="a" label="A · Aangan — warm editorial" width={390} height={844}><JourneyScreen dir="A" /></DCArtboard>
+      <DCArtboard id="b" label="B · Aakaash — daylight calm" width={390} height={844}><JourneyScreen dir="B" /></DCArtboard>
+      <DCArtboard id="c" label="C · Blend — Aangan × Aakaash" width={390} height={844}><JourneyScreen dir="C" /></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+function paint(){ window.lucide && window.lucide.createIcons(); }
+setTimeout(paint, 40); setTimeout(paint, 350); setTimeout(paint, 900);
+</script>
+</body>
+</html>

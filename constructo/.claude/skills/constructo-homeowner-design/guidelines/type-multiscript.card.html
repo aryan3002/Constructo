@@ -1,0 +1,26 @@
+<!-- @dsCard group="Type" viewport="700x230" name="Multi-script — Devanagari + Latin" subtitle="Every face ships both scripts. App is single-language per screen (EN or हिं)" -->
+<!DOCTYPE html>
+<html lang="hi"><head><meta charset="UTF-8" /><link rel="stylesheet" href="../styles.css" />
+<style>
+  body{margin:0;background:var(--page-bg);padding:24px;}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .col .lang{font-family:var(--font-body);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--clay-700);font-weight:600;}
+  .col .hero{font-family:var(--font-display);font-weight:500;font-size:34px;line-height:1.05;color:var(--text-strong);margin-top:8px;}
+  .col .body{font-family:var(--font-body);font-size:15px;line-height:1.5;color:var(--text-body);margin-top:10px;}
+  .note{font-family:var(--font-body);font-size:12px;color:var(--text-secondary);margin-top:18px;}
+</style></head>
+<body>
+  <div class="pair">
+    <div class="col">
+      <div class="lang">English</div>
+      <div class="hero">You're okay.</div>
+      <div class="body">Nothing needs you today. We'll tell you the moment it does.</div>
+    </div>
+    <div class="col">
+      <div class="lang">हिन्दी</div>
+      <div class="hero">सब ठीक है।</div>
+      <div class="body">आज आपको कुछ नहीं करना है। ज़रूरत होते ही हम बताएँगे।</div>
+    </div>
+  </div>
+  <div class="note">Eczar + Hind both render Devanagari + Latin beautifully at small sizes. Shown together here for the specimen only — in the app, each screen is one language.</div>
+</body></html>

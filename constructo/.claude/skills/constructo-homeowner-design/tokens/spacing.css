@@ -1,0 +1,50 @@
+/* ============================================================
+   Constructo Homeowner — Spacing, Radius, Layout
+   4px base grid. Generous, calm rhythm — room to breathe.
+   Accessibility: interactive targets >= 48px (--tap-min).
+   ============================================================ */
+:root {
+  /* ---- Spacing scale (4px base) ---- */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* ---- Semantic spacing ---- */
+  --gap-inline: var(--space-2);     /* icon ↔ label */
+  --gap-stack: var(--space-3);      /* tight vertical rhythm */
+  --gap-card: var(--space-4);       /* between cards */
+  --pad-card: 18px;                 /* card inner padding */
+  --pad-screen: 22px;               /* screen side gutter */
+  --pad-screen-top: 14px;
+
+  /* ---- Radius ---- */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 14px;     /* buttons, inputs */
+  --radius-lg: 18px;     /* small cards, tiles */
+  --radius-xl: 22px;     /* primary cards */
+  --radius-2xl: 28px;    /* hero / daylight card */
+  --radius-bubble: 19px; /* chat bubbles */
+  --radius-pill: 999px;
+
+  /* ---- Sizing ---- */
+  --tap-min: 48px;       /* minimum interactive target */
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --avatar-sm: 28px;
+  --avatar-md: 42px;
+  --border-w: 1px;
+
+  /* ---- App frame ---- */
+  --app-max-w: 430px;    /* phone content max width */
+  --nav-h: 64px;         /* bottom nav height */
+}

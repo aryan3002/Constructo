@@ -1,0 +1,20 @@
+<!-- @dsCard group="Type" viewport="700x190" name="Numerals — IBM Plex Mono" subtitle="Money in ₹ Indian grouping, tabular so columns align" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><link rel="stylesheet" href="../styles.css" />
+<style>
+  body{margin:0;background:var(--page-bg);padding:24px;font-family:var(--font-body);}
+  .big{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums;font-size:30px;color:var(--text-strong);letter-spacing:-.01em;}
+  .col{margin-top:14px;display:inline-flex;flex-direction:column;gap:4px;}
+  .col span{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:16px;color:var(--text-body);}
+  .meta{font-family:var(--font-body);font-size:12px;color:var(--text-secondary);margin-top:14px;}
+</style></head>
+<body>
+  <div class="big">+₹2,40,000</div>
+  <div class="col">
+    <span>₹1,20,000</span>
+    <span>₹18,000</span>
+    <span>₹6,000</span>
+    <span>+₹0</span>
+  </div>
+  <div class="meta">IBM Plex Mono 500 · tabular-nums · ₹ grouped Indian-style (lakh): ₹1,20,000 not ₹120,000</div>
+</body></html>

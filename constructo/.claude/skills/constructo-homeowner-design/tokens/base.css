@@ -1,0 +1,34 @@
+/* ============================================================
+   Constructo Homeowner — Base
+   Minimal, calm reset + document defaults built on the tokens.
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--text-body);
+  font: var(--type-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+img, picture, video, canvas { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: var(--text-link); text-decoration: none; }
+
+/* Headlines use the display serif by default; everything else stays sans. */
+h1, h2, h3 { font-family: var(--font-display); color: var(--text-strong); margin: 0; letter-spacing: var(--ls-heading); line-height: var(--lh-heading); }
+h4, h5, h6, p { margin: 0; }
+p { text-wrap: pretty; }
+
+::selection { background: var(--green-tint-strong); color: var(--ink-900); }
+
+/* Keyboard focus only — calm 2-tone ring */
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* Screen-reader-only utility */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}

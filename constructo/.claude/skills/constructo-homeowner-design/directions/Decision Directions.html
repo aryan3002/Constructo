@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Constructo · Decision (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;600;700&family=Mukta:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600&family=Hind:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #e9e6e0; }
+  svg.lucide { stroke-width:1.85px; display:block; }
+
+  .screen { width:390px; height:844px; overflow:hidden; position:relative; display:flex; flex-direction:column; font-family:var(--font-body); color:var(--ink); background:var(--page-bg); }
+  .statusbar { display:flex; align-items:center; justify-content:space-between; padding:13px 26px 0; font-size:14px; font-weight:600; flex-shrink:0; }
+  .statusbar .sb { display:flex; gap:6px; align-items:center; }
+  .statusbar .sb svg.lucide { width:16px; height:16px; }
+  .body { flex:1; overflow:hidden; display:flex; flex-direction:column; padding:0 22px; }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+
+  .topbar { display:flex; align-items:center; gap:12px; padding:14px 0 6px; flex-shrink:0; }
+  .back { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--toggle-bg); border:1px solid var(--line); color:var(--ink); }
+  .back svg.lucide { width:20px; height:20px; }
+  .crumb { font-size:13.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
+
+  .needpill { display:inline-flex; align-items:center; gap:8px; align-self:flex-start; background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); padding:8px 14px 8px 11px; border-radius:999px; font-weight:600; font-size:13.5px; margin-top:10px; white-space:nowrap; }
+  .needpill .dot { width:8px; height:8px; border-radius:50%; background:var(--amber); }
+  .needpill svg.lucide { width:15px; height:15px; }
+  .why { font-family:var(--font-why); font-weight:var(--why-weight); font-size:var(--why-size); line-height:1.25; letter-spacing:-.01em; margin-top:16px; }
+  .why em { font-style:normal; color:var(--accent); }
+
+  .options { display:grid; grid-template-columns:1fr 1fr; gap:13px; margin-top:22px; }
+  .opt { background:var(--surface); border:1px solid var(--line); border-radius:var(--ro); padding:11px; display:flex; flex-direction:column; box-shadow:0 12px 26px -20px rgba(40,34,20,.5); position:relative; }
+  .taste { position:absolute; top:18px; left:18px; z-index:2; background:var(--ok); color:#fff; font-size:11px; font-weight:600; padding:4px 9px 4px 8px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; box-shadow:0 4px 10px -4px rgba(0,0,0,.3); }
+  .taste svg.lucide { width:12px; height:12px; }
+  .tile { width:100%; height:120px; border-radius:13px; position:relative; overflow:hidden; }
+  .tile.matte { background:radial-gradient(60% 80% at 30% 20%, rgba(255,255,255,.1), transparent 60%), repeating-linear-gradient(135deg, rgba(0,0,0,.018) 0 3px, transparent 3px 6px), linear-gradient(160deg,#cdc6ba,#b3aa9c); }
+  .tile.glossy { background:linear-gradient(115deg, transparent 38%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.05) 54%, transparent 60%), linear-gradient(160deg,#9fb0b6,#6f868f 70%,#536a73); }
+  .tile .grid { position:absolute; inset:0; background-image:linear-gradient(rgba(0,0,0,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.06) 1px,transparent 1px); background-size:33px 33px; }
+  .opt h3 { font-family:var(--font-title); font-weight:600; font-size:var(--opt-title); margin-top:11px; line-height:1.12; }
+  .opt p { font-size:13px; color:var(--ink-soft); line-height:1.32; margin-top:5px; min-height:51px; }
+  .price { font-size:16px; font-weight:600; color:var(--ink); margin-top:2px; }
+  .price.free { color:var(--ok); }
+  .choose { margin-top:11px; height:48px; border-radius:13px; background:var(--accent); color:#fff; border:none; font-family:var(--font-title); font-weight:600; font-size:14.5px; cursor:pointer; }
+
+  .ask { margin-top:13px; height:50px; width:100%; border-radius:14px; background:var(--surface); border:1px solid var(--line); color:var(--ink); font-family:var(--font-title); font-weight:600; font-size:15px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+  .ask svg.lucide { width:18px; height:18px; color:var(--ink-soft); }
+  .reassure { display:flex; align-items:center; gap:8px; justify-content:center; margin-top:auto; padding:18px 0 26px; font-size:13.5px; color:var(--ok); font-weight:600; }
+  .reassure svg.lucide { width:16px; height:16px; }
+
+  /* Direction A */
+  .A { --font-title:'Eczar',serif; --font-body:'Mukta',sans-serif; --font-why:'Eczar',serif; --why-weight:500; --why-size:25px; --opt-title:18px; --ro:18px;
+    --surface:#FCF7EE; --ink:#2E2418; --ink-soft:#7A6A55; --line:rgba(46,36,24,.10); --page-bg:radial-gradient(120% 60% at 50% -10%, #FAF3E8, #F4ECDF);
+    --accent:#B25B3B; --ok:#5E7A4E; --amber:#A97A1E; --amber-ink:#7d5a13; --amber-bg:rgba(169,122,30,.12); --amber-border:rgba(169,122,30,.28); --toggle-bg:rgba(255,255,255,.55); }
+  /* Direction B */
+  .B { --font-title:'Poppins',sans-serif; --font-body:'Hind',sans-serif; --font-why:'Poppins',sans-serif; --why-weight:500; --why-size:21px; --opt-title:16px; --ro:20px;
+    --surface:#FCFEFD; --ink:#1E2A2C; --ink-soft:#62716F; --line:rgba(30,42,44,.08); --page-bg:linear-gradient(180deg,#EDF2EF,#E6ECE9);
+    --accent:#2E8B7F; --ok:#2E8B7F; --amber:#A9791F; --amber-ink:#7c5912; --amber-bg:rgba(169,121,31,.12); --amber-border:rgba(169,121,31,.25); --toggle-bg:rgba(255,255,255,.7); }
+  /* Blend */
+  .C { --font-title:'Eczar',serif; --font-body:'Hind',sans-serif; --font-why:'Eczar',serif; --why-weight:500; --why-size:24px; --opt-title:18px; --ro:19px;
+    --surface:#FCFAF3; --ink:#2A2519; --ink-soft:#766C58; --line:rgba(42,37,25,.09); --page-bg:radial-gradient(120% 60% at 50% -10%, #F8F4EC, #F3EFE6);
+    --accent:#4E7D69; --ok:#4E7D69; --amber:#A97A1E; --amber-ink:#7d5a13; --amber-bg:rgba(169,122,30,.12); --amber-border:rgba(169,122,30,.28); --toggle-bg:rgba(255,255,255,.55); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+const I = ({n}) => <i data-lucide={n}></i>;
+
+function DecisionScreen({ dir }) {
+  return (
+    <div className={"screen " + dir}>
+      <div className="statusbar"><span>9:41</span><span className="sb"><I n="signal-high" /><I n="wifi" /><I n="battery-full" /></span></div>
+      <div className="body">
+        <div className="topbar">
+          <div className="back"><I n="arrow-left" /></div>
+          <span className="crumb">A decision for you · 1 of 1</span>
+        </div>
+        <div className="needpill"><span className="dot"></span><I n="hand" /> Needs your choice</div>
+        <div className="why">Tiling starts in <em>~4 days</em>, so we need your tile pick before then.</div>
+
+        <div className="options">
+          <div className="opt">
+            <div className="taste"><I n="heart" /> Matches your taste</div>
+            <div className="tile matte"><div className="grid"></div></div>
+            <h3>Matte anti-slip</h3>
+            <p>Safer when wet, softer look.</p>
+            <div className="price free mono">+₹0</div>
+            <button className="choose">Choose Matte</button>
+          </div>
+          <div className="opt">
+            <div className="tile glossy"><div className="grid"></div></div>
+            <h3>Glossy</h3>
+            <p>Shinier, but shows water spots.</p>
+            <div className="price mono">+₹6,000</div>
+            <button className="choose">Choose Glossy</button>
+          </div>
+        </div>
+
+        <button className="ask"><I n="message-circle" /> Ask first</button>
+        <div className="reassure"><I n="circle-check" /> Reversible until tiling begins (~4 days)</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <DesignCanvas>
+    <DCSection id="decision" title="The Decision screen" subtitle="One pre-briefed choice · amber “needs you”, never red · equal-weight options">
+      <DCArtboard id="a" label="A · Aangan — warm editorial" width={390} height={844}><DecisionScreen dir="A" /></DCArtboard>
+      <DCArtboard id="b" label="B · Aakaash — daylight calm" width={390} height={844}><DecisionScreen dir="B" /></DCArtboard>
+      <DCArtboard id="c" label="C · Blend — Aangan × Aakaash" width={390} height={844}><DecisionScreen dir="C" /></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+setTimeout(()=>window.lucide&&window.lucide.createIcons(), 40);
+setTimeout(()=>window.lucide&&window.lucide.createIcons(), 350);
+</script>
+</body>
+</html>

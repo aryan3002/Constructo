@@ -1,0 +1,23 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Amber — needs you" subtitle="A choice, not a risk. Amber-700 text on tint (4.8:1). Never use red for choices" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><link rel="stylesheet" href="../styles.css" />
+<style>
+  body{margin:0;background:var(--page-bg);padding:20px;font-family:var(--font-body);}
+  .ramp{display:flex;gap:10px;flex-wrap:wrap;}
+  .sw{flex:1;min-width:120px;}
+  .block{height:54px;border-radius:var(--radius-md);border:1px solid var(--border);}
+  .nm{font-size:12px;color:var(--text-strong);font-weight:600;margin-top:7px;}
+  .hx{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);}
+  .use{margin-top:16px;}
+  .pill{white-space:nowrap;display:inline-flex;align-items:center;gap:7px;background:var(--amber-tint);color:var(--amber-700);padding:8px 13px;border-radius:var(--radius-pill);font-weight:600;font-size:13px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--amber-600);}
+</style></head>
+<body>
+  <div class="ramp">
+    <div class="sw"><div class="block" style="background:var(--amber-500)"></div><div class="nm">--amber-500</div><div class="hx">#BC8E2E</div></div>
+    <div class="sw"><div class="block" style="background:var(--amber-600)"></div><div class="nm">--amber-600</div><div class="hx">#A97A1E · dot</div></div>
+    <div class="sw"><div class="block" style="background:var(--amber-700)"></div><div class="nm">--amber-700</div><div class="hx">#7D5A13 · text</div></div>
+    <div class="sw"><div class="block" style="background:var(--amber-tint)"></div><div class="nm">--amber-tint</div><div class="hx">14%</div></div>
+  </div>
+  <div class="use"><span class="pill"><span class="dot"></span>Needs your choice</span></div>
+</body></html>

@@ -1,11 +1,17 @@
 ---
 name: constructo-design-system
-description: The locked visual language and UX principles for Constructo — the AI-native construction-management product for India SMB contractors. Use this skill WHENEVER building, designing, styling, or reviewing ANY Constructo UI — the React web dashboard, Android app screens, components, the WhatsApp bot's message formatting, or the homeowner app — even if the user just says "build the dashboard", "add a screen", "style this", or "make a component". It encodes the color tokens, typography, components, motion, and accessibility rules so every screen stays on-brand instead of defaulting to generic SaaS. The contractor WEB console is now a light+dark dual-mode system on semantic tokens (full spec in vault `11-Contractor-Web-Experience/`). Trigger on any frontend/UI/screen/component/styling work in this repo.
+description: The locked visual language and UX principles for Constructo's CONTRACTOR surfaces — the React web dashboard (light+dark "Blueprint"), the Expo contractor app, and the WhatsApp bot's message formatting. Use this skill WHENEVER building, designing, styling, or reviewing any CONTRACTOR or web Constructo UI — even if the user just says "build the dashboard", "add a screen", "style this", or "make a component". NOTE — the HOMEOWNER app has its OWN design system: use the `constructo-homeowner-design` skill ("Calm Cockpit") for anything homeowner-facing; this skill no longer covers it. It encodes the color tokens, typography, components, motion, and accessibility rules so every contractor screen stays on-brand instead of defaulting to generic SaaS. The contractor WEB console is a light+dark dual-mode system on semantic tokens (full spec in vault `11-Contractor-Web-Experience/`). Trigger on any contractor/web frontend/UI/screen/component/styling work in this repo.
 ---
 
-# Constructo Design System — "Blueprint & Daylight"
+# Constructo Design System — "Blueprint" (Contractor)
 
-Apply this to every Constructo interface. Full design docs live in the product vault under `07-Design/` (Principles, Design System, IA, Auth, Role Flows, WhatsApp Bot, Core Flows, Homeowner, Notifications, Accessibility). For the **contractor web console** specifically, the authority is `11-Contractor-Web-Experience/` — the senior-grade **light+dark design system** (`01`), IA & shell (`02`), screen-by-screen (`03`), frontend architecture (`04`), component library (`05`), setup/admin control plane (`06`), and build plan (`07`). This skill is the working summary — read it before writing UI code, and follow the vault docs for screen-level detail.
+> **⚠ Homeowner app moved out.** The homeowner app's visual system is now its own skill —
+> **`constructo-homeowner-design`** ("Calm Cockpit", Direction C: warm sand + sage-green + Eczar/Hind).
+> Use that skill for **anything homeowner-facing**. This skill is now the authority for the
+> **contractor** surfaces only (web dashboard, contractor Expo app, WhatsApp bot). Any "Daylight"
+> homeowner content below is **superseded** — kept for historical reference only.
+
+Apply this to every contractor Constructo interface. Full design docs live in the product vault under `07-Design/` (Principles, Design System, IA, Auth, Role Flows, WhatsApp Bot, Core Flows, Homeowner, Notifications, Accessibility). For the **contractor web console** specifically, the authority is `11-Contractor-Web-Experience/` — the senior-grade **light+dark design system** (`01`), IA & shell (`02`), screen-by-screen (`03`), frontend architecture (`04`), component library (`05`), setup/admin control plane (`06`), and build plan (`07`). This skill is the working summary — read it before writing UI code, and follow the vault docs for screen-level detail.
 
 ## The product in one line
 Turn the chaos a construction team already creates on WhatsApp into one trustworthy source of operational truth, and hand each role exactly their slice — in the language and format they already use (Hindi-first, voice/photo-first, evidence-on-tap).
@@ -13,7 +19,7 @@ Turn the chaos a construction team already creates on WhatsApp into one trustwor
 ## Three surfaces, three temperatures
 - **WhatsApp bot** — capture & query. Invisible, polite, one-tap, Hindi/Hinglish. No rich UI; format with text, lists, emoji, document sends.
 - **Contractor app + web** — review, decide, act. Confident, grounded, evidence-dense. Theme: **Site / "Blueprint"** — now **light + dark** dual-mode on the web (`data-theme="light"|"dark"`, OS-default + user override); the Expo contractor app stays light for now.
-- **Homeowner app** — reassure. Calm, warm, card-based. Theme: **Daylight.**
+- **Homeowner app** — reassure. Calm, warm, card-based. **Design authority = the separate `constructo-homeowner-design` skill** ("Calm Cockpit", Direction C) — NOT this skill. The old "Daylight" tokens here are superseded.
 
 ## Five principles (in priority order)
 1. **Evidence on tap** — every number/alert/claim is one tap from its proof (timestamped photo, challan, voice extraction, message). This is the soul. Build a reusable `EvidenceCard` with a `Show proof ▾` reveal.

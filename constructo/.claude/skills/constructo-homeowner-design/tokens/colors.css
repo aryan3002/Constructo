@@ -1,0 +1,93 @@
+/* ============================================================
+   Constructo Homeowner — Colors
+   Direction C "Blend". Warm sand canvas; disciplined status palette.
+   Roles (locked):
+     green  = primary actions + "on track"
+     clay   = warm secondary (celebration, milestones)
+     amber  = "needs you" choices
+     red    = genuine delay / risk ONLY
+     neutral = progress / quiet / info (no decorative hue)
+   All text colors below verified >= 4.5:1 on the sand canvas (#F3EFE6).
+   ============================================================ */
+:root {
+  /* ---- Sand canvas + surfaces (warm, never clinical white) ---- */
+  --sand-50:  #FBF7EF;   /* lifted highlight */
+  --sand-100: #F8F4EC;   /* letter / elevated panel */
+  --sand-200: #F3EFE6;   /* PAGE / app canvas */
+  --sand-300: #ECE5D7;   /* sunken / track */
+  --surface:  #FCFAF3;   /* card surface */
+  --surface-2:#F7F2E8;   /* secondary surface */
+
+  /* ---- Ink (warm near-black) ---- */
+  --ink-900: #2A2519;    /* headlines + primary text */
+  --ink-700: #4A4334;    /* strong body */
+  --ink-600: #6A6047;    /* secondary text (5.42:1 on sand) */
+  --ink-400: #8C7F66;    /* muted / decorative ONLY (not body copy) */
+  --hairline:        rgba(42,37,25,.09);
+  --hairline-strong: rgba(42,37,25,.15);
+  --scrim:           rgba(42,37,25,.45);
+
+  /* ---- Green — primary action + on-track ---- */
+  --green-400: #6BA48E;
+  --green-500: #4E8C76;
+  --green-600: #3E7A66;  /* primary fill (white text 5.02:1) */
+  --green-700: #2F6151;  /* on-track text, links, pressed (6.20:1 on sand) */
+  --green-tint: rgba(62,122,102,.12);
+  --green-tint-strong: rgba(62,122,102,.18);
+
+  /* ---- Clay — celebration / milestones (warm secondary) ---- */
+  --clay-400: #CF7A53;
+  --clay-500: #C2673F;
+  --clay-600: #AE5635;   /* fill (white text 5.02:1) */
+  --clay-700: #92482A;   /* clay TEXT / eyebrow on sand (5.75:1) */
+  --clay-tint: rgba(174,86,53,.12);
+
+  /* ---- Amber — "needs you" choices ---- */
+  --amber-500: #BC8E2E;
+  --amber-600: #A97A1E;  /* dot / fill behind dark text only */
+  --amber-700: #7D5A13;  /* amber TEXT on sand or tint (5.47:1 / 4.75:1) */
+  --amber-tint: rgba(169,122,30,.14);
+
+  /* ---- Red — genuine delay / risk ONLY ---- */
+  --red-600: #A4382A;    /* fill (white text 6.61:1); text on sand 5.76:1 */
+  --red-700: #862C20;
+  --red-tint: rgba(164,56,42,.11);
+
+  /* ---- Neutral status (progress / quiet / info) ---- */
+  --neutral-ink: #6A6047;
+  --neutral-tint: rgba(42,37,25,.07);
+  --quiet-ink: #8C7F66;
+  --quiet-tint: rgba(140,127,102,.13);
+
+  /* ============ Semantic aliases (use these in components) ============ */
+  --page-bg:        var(--sand-200);
+  --surface-card:   var(--surface);
+  --surface-letter: var(--sand-100);
+
+  --text-strong:    var(--ink-900);
+  --text-body:      var(--ink-700);
+  --text-secondary: var(--ink-600);
+  --text-muted:     var(--ink-400);
+  --text-on-accent: #FFFFFF;
+  --text-link:      var(--green-700);
+
+  --border:         var(--hairline);
+  --border-strong:  var(--hairline-strong);
+
+  --accent:         var(--green-600);   /* primary action fill */
+  --accent-press:   var(--green-700);
+  --accent-text:    var(--green-700);   /* accent as text */
+  --accent-tint:    var(--green-tint);
+
+  --secondary:      var(--clay-600);    /* celebration / milestone fill */
+  --secondary-text: var(--clay-700);
+  --secondary-tint: var(--clay-tint);
+
+  /* status: color pairs (fg text/icon + bg tint) — always paired with an icon + word */
+  --status-ontrack-fg: var(--green-700);  --status-ontrack-bg: var(--green-tint);
+  --status-milestone-fg: var(--clay-700); --status-milestone-bg: var(--clay-tint);
+  --status-needsyou-fg: var(--amber-700); --status-needsyou-bg: var(--amber-tint);
+  --status-delay-fg: var(--red-600);      --status-delay-bg: var(--red-tint);
+  --status-progress-fg: var(--neutral-ink); --status-progress-bg: var(--neutral-tint);
+  --status-quiet-fg: var(--quiet-ink);    --status-quiet-bg: var(--quiet-tint);
+}

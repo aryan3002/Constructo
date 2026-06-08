@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Constructo · Home (Blend)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;600;700&family=Hind:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #e9e6e0; }
+
+  svg.lucide { stroke-width:1.85px; display:block; }
+
+  .screen { width:390px; height:844px; overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  .statusbar { display:flex; align-items:center; justify-content:space-between; padding:14px 28px 0; font-size:14px; font-weight:600; flex-shrink:0; }
+  .statusbar .sb-icons { display:flex; gap:6px; align-items:center; }
+  .statusbar .sb-icons svg.lucide { width:17px; height:17px; }
+  .body { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+  .scroll { flex:1; overflow:hidden; padding:0 22px; }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+
+  /* ===================== Blend · Aangan × Aakaash ===================== */
+  .C {
+    --paper:#F3EFE6; --surface:#FCFAF3; --ink:#2A2519; --ink-soft:#766C58;
+    --green:#4E7D69; --green-deep:#3C6451; --green-bg:rgba(78,125,105,.12);
+    --clay:#B05B3A; --amber:#A97A1E; --brick:#A4382A;
+    --line:rgba(42,37,25,.09);
+    background:radial-gradient(125% 65% at 50% -8%, #F8F4EC 0%, var(--paper) 58%);
+    color:var(--ink); font-family:'Hind', sans-serif;
+  }
+
+  .C .head { display:flex; align-items:flex-start; justify-content:space-between; padding:18px 4px 4px; }
+  .C .greet { font-size:14.5px; color:var(--ink-soft); font-weight:500; white-space:nowrap; }
+  .C .date { font-size:12.5px; color:var(--ink-soft); opacity:.8; margin-top:2px; }
+  .C .toggle { display:inline-flex; align-items:center; border-radius:999px; font-size:13px; font-weight:600; overflow:hidden; border:1px solid var(--line); background:rgba(255,255,255,.55); }
+  .C .toggle span { padding:6px 12px; line-height:1; }
+  .C .toggle span.on { background:var(--green); color:#fff; border-radius:999px; }
+  .C .toggle span.off { color:var(--ink-soft); }
+
+  /* hero — daylight openness + serif soul */
+  .C .hero { padding:24px 4px 6px; }
+  .C .halo {
+    width:46px; height:46px; border-radius:50%;
+    background:radial-gradient(circle at 50% 42%, #6FA088, var(--green));
+    display:flex; align-items:center; justify-content:center; color:#fff;
+    box-shadow:0 0 0 7px rgba(78,125,105,.10), 0 8px 16px -8px rgba(60,100,81,.55); margin-bottom:18px;
+  }
+  .C .halo svg.lucide { width:25px; height:25px; stroke-width:2.4px; }
+  .C .eyebrow { font-size:11.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--clay); font-weight:600; margin-bottom:9px; }
+  .C .answer { font-family:'Eczar', serif; font-weight:500; font-size:46px; line-height:1.0; letter-spacing:-.015em; }
+  .C .answer .sub { display:block; font-family:'Hind'; font-size:18px; font-weight:400; color:var(--ink-soft); margin-top:13px; line-height:1.35; letter-spacing:0; }
+  .C .pill { display:inline-flex; align-items:center; gap:8px; margin-top:18px; background:var(--green-bg); color:var(--green-deep); border:1px solid rgba(78,125,105,.25); padding:8px 15px 8px 12px; border-radius:999px; font-weight:600; font-size:13.5px; white-space:nowrap; }
+  .C .pill svg.lucide { width:16px; height:16px; }
+  .C .pill .dot { width:8px; height:8px; border-radius:50%; background:var(--green); }
+
+  /* cards */
+  .C .card { background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:18px; margin-top:16px; box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 14px 30px -24px rgba(42,37,25,.5); }
+  .C .card-head { display:flex; align-items:center; justify-content:space-between; }
+  .C .card-label { font-size:11.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; }
+  .C .card-when { font-size:12.5px; color:var(--ink-soft); }
+
+  /* time bar — clean segments, warm here-glow */
+  .C .timebar { display:flex; gap:5px; margin:18px 4px 0; }
+  .C .seg { height:8px; border-radius:6px; flex:1; background:rgba(42,37,25,.08); position:relative; }
+  .C .seg.done { background:var(--green); }
+  .C .seg.here { background:var(--green); }
+  .C .seg.here::after { content:''; position:absolute; right:-4px; top:-6px; width:20px; height:20px; border-radius:50%; background:var(--clay); border:4px solid var(--surface); box-shadow:0 0 0 4px rgba(176,91,58,.18); }
+  .C .phase { display:flex; align-items:baseline; justify-content:space-between; margin-top:16px; }
+  .C .phase b { font-family:'Eczar',serif; font-weight:600; font-size:19px; }
+  .C .phase .pos { font-size:12.5px; color:var(--clay); font-weight:600; }
+
+  /* latest update */
+  .C .update { display:flex; gap:14px; align-items:flex-start; }
+  .C .photo { width:74px; height:74px; border-radius:16px; flex-shrink:0; overflow:hidden; position:relative; background:linear-gradient(135deg,#cdbfa6,#a8916f); display:flex; align-items:flex-end; }
+  .C .photo svg.lucide { color:rgba(255,255,255,.9); width:17px; height:17px; margin:7px; }
+  .C .upbody { flex:1; }
+  .C .uptime { font-size:12.5px; color:var(--clay); font-weight:600; }
+  .C .uptext { font-size:15px; line-height:1.35; margin-top:3px; }
+  .C .proof { display:inline-flex; align-items:center; gap:6px; margin-top:9px; font-size:13px; font-weight:600; color:var(--ink-soft); }
+  .C .proof svg.lucide { width:16px; height:16px; }
+
+  /* bottom nav */
+  .C .nav { flex-shrink:0; display:flex; justify-content:space-around; padding:12px 16px 26px; border-top:1px solid var(--line); background:rgba(252,250,243,.85); backdrop-filter:blur(8px); }
+  .C .nav a { display:flex; flex-direction:column; align-items:center; gap:4px; font-size:11px; color:var(--ink-soft); text-decoration:none; }
+  .C .nav a svg.lucide { width:24px; height:24px; }
+  .C .nav a.active { color:var(--green); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+const I = ({n}) => <i data-lucide={n}></i>;
+
+function HomeBlend() {
+  return (
+    <div className="screen C">
+      <div className="statusbar">
+        <span>9:41</span>
+        <span className="sb-icons">
+          <I n="signal-high" /><I n="wifi" /><I n="battery-full" />
+        </span>
+      </div>
+      <div className="body">
+        <div className="scroll">
+          <div className="head">
+            <div>
+              <div className="greet">Good morning, Priya</div>
+              <div className="date">Friday, 7 June</div>
+            </div>
+            <div className="toggle"><span className="on">EN</span><span className="off">हिं</span></div>
+          </div>
+
+          <div className="hero">
+            <div className="halo"><I n="check" /></div>
+            <div className="eyebrow">Today</div>
+            <div className="answer">You're okay.
+              <span className="sub">Nothing needs you today. We'll tell you the moment it does.</span>
+            </div>
+            <div className="pill"><span className="dot"></span><I n="circle-check" /> On track · checked 1h ago</div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <span className="card-label">Start → Handover</span>
+              <span className="card-when mono">Mar – Dec</span>
+            </div>
+            <div className="timebar">
+              <div className="seg done"></div>
+              <div className="seg done"></div>
+              <div className="seg here"></div>
+              <div className="seg"></div>
+              <div className="seg"></div>
+            </div>
+            <div className="phase"><b>Brickwork &amp; walls</b><span className="pos">you are here</span></div>
+          </div>
+
+          <div className="card">
+            <div className="update">
+              <div className="photo"><I n="image" /></div>
+              <div className="upbody">
+                <div className="uptime">2 days ago</div>
+                <div className="uptext">Roof slab finished. It's curing now — this takes about two weeks.</div>
+                <div className="proof"><I n="images" /> 6 photos · Show proof</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="nav">
+          <a className="active"><I n="house" />Home</a>
+          <a><I n="route" />Journey</a>
+          <a><I n="images" />Photos</a>
+          <a><I n="wallet" />Money</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <DesignCanvas>
+    <DCSection id="blend" title="Home — the blend" subtitle="B's calm daylight shell · A's serif soul · warm sage-green primary, clay accent">
+      <DCArtboard id="c" label="C · Aangan × Aakaash — the blend" width={390} height={844}><HomeBlend /></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+setTimeout(() => window.lucide && window.lucide.createIcons(), 30);
+setTimeout(() => window.lucide && window.lucide.createIcons(), 300);
+</script>
+</body>
+</html>

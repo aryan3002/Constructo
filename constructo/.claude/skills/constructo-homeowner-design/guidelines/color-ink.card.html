@@ -1,0 +1,21 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Ink & hairlines" subtitle="Warm near-black text — all body colours verified ≥4.5:1 on sand" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><link rel="stylesheet" href="../styles.css" />
+<style>
+  body{margin:0;background:var(--page-bg);padding:20px;font-family:var(--font-body);}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .sw{flex:1;min-width:108px;}
+  .block{height:64px;border-radius:var(--radius-md);border:1px solid var(--border);}
+  .nm{font-size:12.5px;color:var(--text-strong);font-weight:600;margin-top:8px;}
+  .hx{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);}
+  .role{font-size:11px;color:var(--text-secondary);margin-top:1px;}
+</style></head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="block" style="background:var(--ink-900)"></div><div class="nm">--ink-900</div><div class="hx">#2A2519</div><div class="role">headlines / text</div></div>
+    <div class="sw"><div class="block" style="background:var(--ink-700)"></div><div class="nm">--ink-700</div><div class="hx">#4A4334</div><div class="role">strong body</div></div>
+    <div class="sw"><div class="block" style="background:var(--ink-600)"></div><div class="nm">--ink-600</div><div class="hx">#6A6047</div><div class="role">secondary · 5.4:1</div></div>
+    <div class="sw"><div class="block" style="background:var(--ink-400)"></div><div class="nm">--ink-400</div><div class="hx">#8C7F66</div><div class="role">muted (non-body)</div></div>
+    <div class="sw"><div class="block" style="background:var(--surface);box-shadow:inset 0 0 0 1px var(--hairline-strong)"></div><div class="nm">--hairline</div><div class="hx">9% ink</div><div class="role">borders</div></div>
+  </div>
+</body></html>

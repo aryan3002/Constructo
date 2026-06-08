@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Bottom navigation" subtitle="Icon + label · active sage-green · ≥48px targets" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  body { margin: 0; background: var(--page-bg); padding: 22px; }
+  .frame { max-width: 360px; margin: 0 auto; border: 1px solid var(--border); border-radius: var(--radius-2xl); overflow: hidden; background: var(--page-bg); }
+  .filler { height: 150px; display:flex; align-items:center; justify-content:center; font: var(--type-label); color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel">
+const { BottomNav, QuietState } = window.ConstructoHomeownerDesignSystem_f56755;
+const items = [
+  { key: "home", icon: "house", label: "Home" },
+  { key: "journey", icon: "route", label: "Journey" },
+  { key: "photos", icon: "images", label: "Photos" },
+  { key: "money", icon: "wallet", label: "Money" },
+];
+function Demo(){
+  const [tab, setTab] = React.useState("home");
+  return (
+    <div className="frame">
+      <QuietState title="All calm" message="Nothing needs you today." />
+      <BottomNav items={items} active={tab} onChange={setTab} />
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>
