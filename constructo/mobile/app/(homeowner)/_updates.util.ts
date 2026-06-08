@@ -72,3 +72,47 @@ export function formatDate(iso: string | null, lang: Language): string {
     year: 'numeric',
   })
 }
+
+/** Short day+month — "14 Jun" — no year (the surrounding context implies it). */
+export function shortDate(iso: string | null, lang: Language): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * The 7-day window of a weekly summary, from its `week_start` — "26 May – 1 Jun".
+ * Used for the pinned WeeklySummaryCard eyebrow on the Timeline tab.
+ */
+export function weekRange(weekStart: string, lang: Language): string | null {
+  const s = new Date(weekStart)
+  if (Number.isNaN(s.getTime())) return null
+  const e = new Date(s)
+  e.setDate(e.getDate() + 6)
+  const fmt = (d: Date) =>
+    d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' })
+  return `${fmt(s)} – ${fmt(e)}`
+}
+
+/**
+ * Inclusive whole-day count from a start date to today (so a milestone that
+ * started today reads "day 1"). Returns null for missing/future/invalid input —
+ * we only ever show an HONEST elapsed count, never a fabricated estimate (§6).
+ */
+export function dayNumberSince(startIso: string | null): number | null {
+  if (!startIso) return null
+  const s = new Date(startIso)
+  if (Number.isNaN(s.getTime())) return null
+  const MS_PER_DAY = 24 * 60 * 60 * 1000
+  const startDay = Date.UTC(s.getFullYear(), s.getMonth(), s.getDate())
+  const now = new Date()
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  const days = Math.floor((today - startDay) / MS_PER_DAY) + 1
+  return days >= 1 ? days : null
+}
+
+/** "day 8" / "8वाँ दिन" — localised elapsed-day label for an active milestone. */
+export function formatDayNumber(day: number, lang: Language): string {
+  return lang === 'hi' ? `${day}वाँ दिन` : `day ${day}`
+}
