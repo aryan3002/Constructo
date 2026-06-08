@@ -1,34 +1,51 @@
 /**
- * Daylight message primitives (doc 18 Phase 3) — the homeowner Messages tab.
+ * Home Room message primitives — the homeowner Messages tab, re-skinned to the
+ * locked "Calm Cockpit" design system (Direction C · "Blend").
  *
  * These DO NOT reuse the Blueprint `MessageBubble` (it hardcodes amber). They
  * are calm, warm, residential bubbles + inbox rows on the Daylight palette:
- * Calm Pine for her own messages, soft white cards (hairline + diffuse shadow)
- * for the builder's, 16px radius, Mono muted timestamps, bilingual EN/HI.
+ *   - the homeowner's OWN message sits on a soft SAGE tint (green-tint as a
+ *     calm solid, never the loud sage fill) with ink text;
+ *   - the builder / team message sits on the warm SURFACE card (hairline +
+ *     soft "lifted paper" shadow);
+ *   - bubbles use the chat bubble radius (~19 — the skill's `--radius-bubble`),
+ *     with a gentle spoken-bubble tail on the sender's side;
+ *   - real-photo attachments render through the kit `PhotoTile` (real photos
+ *     only — never an AI/3D render);
+ *   - timestamps are muted IBM Plex Mono; status = colour + icon + word;
+ *   - bilingual EN/HI via the active language.
  */
-import { Image, Pressable, View } from 'react-native'
+import { Pressable, View } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
-import { Body, Mono, Small } from '../../src/ui'
+import { AP, SPACE } from '../../src/theme/tokens'
+import { Body, Mono, PhotoTile, Small, type PhotoTileData } from '../../src/ui'
 import type { ConversationSummary } from '../../src/api/chat'
+
+/** Chat bubble radius — the skill's `--radius-bubble` (19). Softer than the
+ *  22-card "pebble", a touch tighter so a bubble reads as speech, not a panel. */
+export const BUBBLE_RADIUS = 19
 
 const STR = {
   en: {
     builder: 'Your builder',
     group: 'Group',
     unread: (n: number) => `${n} new`,
+    photoCaption: 'Photo from your site team',
   },
   hi: {
     builder: 'आपका बिल्डर',
     group: 'ग्रुप',
     unread: (n: number) => `${n} नए`,
+    photoCaption: 'आपकी साइट टीम से फ़ोटो',
   },
 } as const
 
-/** A single Daylight chat bubble. `mine` (the homeowner) right-aligns on Calm
- *  Pine with white text; the builder's left-aligns on a soft white card. */
+/** A single Home Room chat bubble. `mine` (the homeowner) right-aligns on a soft
+ *  sage tint with ink text; the builder/team left-aligns on the warm surface
+ *  card. Real-photo attachments render through the kit `PhotoTile`. */
 export function DaylightBubble({
   body,
   mine,
@@ -40,8 +57,19 @@ export function DaylightBubble({
   timestamp: string
   attachmentUrl?: string | null
 }) {
+  const { lang } = useT()
   const { theme } = useTheme()
   const c = theme.colors
+  const t = STR[lang as 'en' | 'hi'] ?? STR.en
+
+  // Her own message: soft sage tint (green-tint as a calm solid), ink text.
+  // The builder's: warm surface card with a hairline + soft "lifted paper" lift.
+  const bg = mine ? AP.chip : c.card
+
+  const hasBody = !!body?.trim()
+  const photo: PhotoTileData | null = attachmentUrl
+    ? { id: attachmentUrl, imageUri: attachmentUrl, caption: hasBody ? body : null }
+    : null
 
   return (
     <View
@@ -51,47 +79,47 @@ export function DaylightBubble({
         paddingHorizontal: SPACE.gutter,
       }}
     >
-      <View
-        style={[
-          {
-            maxWidth: '86%',
-            backgroundColor: mine ? c.accent : c.card,
-            borderRadius: theme.radii.card,
-            // A spoken-bubble tail on the sender's side.
-            borderBottomRightRadius: mine ? 6 : theme.radii.card,
-            borderBottomLeftRadius: mine ? theme.radii.card : 6,
-            paddingHorizontal: SPACE.lg,
-            paddingVertical: SPACE.md,
-            gap: attachmentUrl ? SPACE.sm : 0,
-          },
-          mine
-            ? null
-            : { borderWidth: 1, borderColor: c.line, ...theme.shadowCard },
-        ]}
-      >
-        {attachmentUrl ? (
-          <Image
-            source={{ uri: attachmentUrl }}
-            accessibilityIgnoresInvertColors
-            style={{
-              width: 220,
-              height: 160,
-              borderRadius: theme.radii.chip,
-              backgroundColor: c.paper,
+      {/* A real-photo attachment is its own PhotoTile (kit), not a raw <Image>. */}
+      {photo ? (
+        <View style={{ width: 260, maxWidth: '86%', marginBottom: hasBody ? SPACE.xs : 0 }}>
+          <PhotoTile
+            photo={photo}
+            variant="hero"
+            labels={{
+              caption: t.photoCaption,
+              translate: '',
+              save: '',
+              share: '',
+              hide: '',
+              video: '',
+              starred: '',
             }}
-            resizeMode="cover"
           />
-        ) : null}
-        {body ? <Body color={mine ? c.onAccent : c.text}>{body}</Body> : null}
-      </View>
-      <Mono
-        muted
-        style={{
-          marginTop: 4,
-          marginHorizontal: 4,
-          color: c.textMute,
-        }}
-      >
+        </View>
+      ) : null}
+
+      {/* The text bubble. Omitted for a bare photo — the tile carries the caption. */}
+      {hasBody ? (
+        <View
+          style={[
+            {
+              maxWidth: '86%',
+              backgroundColor: bg,
+              borderRadius: BUBBLE_RADIUS,
+              // A spoken-bubble tail on the sender's side.
+              borderBottomRightRadius: mine ? 6 : BUBBLE_RADIUS,
+              borderBottomLeftRadius: mine ? BUBBLE_RADIUS : 6,
+              paddingHorizontal: SPACE.lg,
+              paddingVertical: SPACE.md,
+            },
+            mine ? null : { borderWidth: 1, borderColor: c.line, ...theme.shadowCard },
+          ]}
+        >
+          <Body color={c.text}>{body}</Body>
+        </View>
+      ) : null}
+
+      <Mono muted style={{ marginTop: 4, marginHorizontal: 4, color: c.textMute }}>
         {timestamp}
       </Mono>
     </View>
@@ -99,8 +127,8 @@ export function DaylightBubble({
 }
 
 /** An inbox row — her builder channel (pinned) or a group. ≥48px tap (64
- *  minHeight), Daylight card, Mono recency, an unread dot + count (shape +
- *  color, never color alone). */
+ *  minHeight), warm surface card, Mono recency, an unread pill (sage dot +
+ *  count — shape + colour, never colour alone). */
 export function ChannelRow({
   conversation,
   siteName,
@@ -138,25 +166,29 @@ export function ChannelRow({
           borderRadius: theme.radii.card,
           borderWidth: 1,
           borderColor: c.line,
-          opacity: pressed ? 0.92 : 1,
+          transform: [{ scale: pressed ? 0.99 : 1 }],
+          opacity: pressed ? 0.94 : 1,
         },
         theme.shadowCard,
       ]}
     >
-      {/* Leading glyph chip — Calm Pine for the builder, soft tint for groups */}
+      {/* Leading glyph chip — colour + icon (never a bare initial). A house for
+          her builder; people for a group thread. */}
       <View
         style={{
           width: 44,
           height: 44,
           borderRadius: 22,
-          backgroundColor: isBuilder ? c.accent : c.accentWarm,
+          backgroundColor: isBuilder ? AP.chip : c.secondaryContainer,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Body color={isBuilder ? c.onAccent : c.accentDeep} style={{ fontWeight: '700' }}>
-          {(title || '?').trim().charAt(0).toUpperCase()}
-        </Body>
+        <Feather
+          name={isBuilder ? 'home' : 'users'}
+          size={20}
+          color={isBuilder ? AP.onChip : c.secondary}
+        />
       </View>
 
       <View style={{ flex: 1, gap: 2 }}>
@@ -167,13 +199,17 @@ export function ChannelRow({
           {!isBuilder ? (
             <View
               style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
                 paddingHorizontal: 8,
                 paddingVertical: 2,
-                borderRadius: theme.radii.chip,
-                backgroundColor: c.accentWarm,
+                borderRadius: theme.radii.pill,
+                backgroundColor: c.secondaryContainer,
               }}
             >
-              <Small style={{ color: c.accentDeep, fontWeight: '600' }}>{t.group}</Small>
+              <Feather name="users" size={11} color={c.secondary} />
+              <Small style={{ color: c.secondary, fontWeight: '600' }}>{t.group}</Small>
             </View>
           ) : null}
         </View>
@@ -184,7 +220,8 @@ export function ChannelRow({
         ) : null}
       </View>
 
-      {/* Trailing: Mono recency + an unread pill (dot + count — shape, not color) */}
+      {/* Trailing: Mono recency + an unread pill (sage dot + count — shape,
+          never colour alone). */}
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
         {conversation.last_message_at ? (
           <Mono muted style={{ color: c.textMute }}>
@@ -203,13 +240,11 @@ export function ChannelRow({
               paddingHorizontal: 8,
               paddingVertical: 2,
               borderRadius: theme.radii.pill,
-              backgroundColor: c.accentWarm,
+              backgroundColor: AP.chip,
             }}
           >
-            <View
-              style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent }}
-            />
-            <Small style={{ color: c.accentDeep, fontWeight: '700' }}>{t.unread(unread)}</Small>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent }} />
+            <Small style={{ color: AP.onChip, fontWeight: '700' }}>{t.unread(unread)}</Small>
           </View>
         ) : null}
       </View>
