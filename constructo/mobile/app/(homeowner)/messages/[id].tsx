@@ -10,7 +10,7 @@
  * ledger slice will light the cards up). The composer is text + reply for now;
  * camera/voice/@ask arrive with their slices.
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -20,6 +20,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../src/theme/tokens'
 import { BodyStrong, QuietState, Small } from '../../../src/ui'
+import { homeowner } from '../../../src/api/client'
 import {
   ChatComposer,
   MessageFeed,
@@ -27,11 +28,20 @@ import {
   useChatThread,
   type FeedRow,
 } from '../../../src/chat'
+import { HomeownerAskRow, type AskStatus } from '../_ask_row'
+
+/** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */
+interface AskEntry {
+  id: number
+  question: string
+  status: AskStatus
+  answer?: string
+}
 
 const STR = {
   en: {
     builder: 'Your builder',
-    placeholder: 'Message your site team…',
+    placeholder: 'Message, or @ask a question…',
     send: 'Send',
     emptyTitle: 'No messages yet',
     empty: 'Say hello to your site team — they’ll see it right away.',
@@ -40,7 +50,7 @@ const STR = {
   },
   hi: {
     builder: 'आपका बिल्डर',
-    placeholder: 'अपनी साइट टीम को संदेश भेजें…',
+    placeholder: 'संदेश भेजें, या @ask से सवाल पूछें…',
     send: 'भेजें',
     emptyTitle: 'अभी कोई संदेश नहीं',
     empty: 'अपनी साइट टीम को नमस्ते कहें — वे तुरंत देख लेंगे।',
@@ -73,14 +83,62 @@ export default function HomeownerThread() {
   const thread = useChatThread({ conversationId: id })
   const [text, setText] = useState('')
 
-  const items: FeedRow[] = useMemo(
-    () => messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en'),
-    [thread.messages, lang],
-  )
+  // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
+  const [asks, setAsks] = useState<AskEntry[]>([])
+  const askId = useRef(0)
+
+  // Abstained answers can be promoted into the durable builder request thread.
+  const askBuilder = async (entry: AskEntry) => {
+    try {
+      await homeowner.createRequest({ title: entry.question })
+      setAsks((prev) => prev.filter((a) => a.id !== entry.id))
+    } catch {
+      /* keep the row so she can retry */
+    }
+  }
+
+  const items: FeedRow[] = useMemo(() => {
+    const base = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en')
+    const askRows: FeedRow[] = asks.map((a) => ({
+      kind: 'custom',
+      key: `ask:${a.id}`,
+      node: (
+        <HomeownerAskRow
+          question={a.question}
+          status={a.status}
+          answer={a.answer}
+          onAskBuilder={a.status === 'abstain' ? () => askBuilder(a) : undefined}
+        />
+      ),
+    }))
+    return [...base, ...askRows]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.messages, lang, asks])
 
   const onSend = async () => {
     const body = text.trim()
     if (!body) return
+    // "@ask <question>" → an inline grounded answer (not sent as a chat message).
+    if (/^@ask\b/i.test(body)) {
+      const question = body.replace(/^@ask\s*/i, '').trim()
+      if (!question) return
+      setText('')
+      const id = (askId.current += 1)
+      setAsks((prev) => [...prev, { id, question, status: 'pending' }])
+      try {
+        const res = await homeowner.ask(question)
+        setAsks((prev) =>
+          prev.map((a) =>
+            a.id === id
+              ? { ...a, status: res.answerable ? 'grounded' : 'abstain', answer: res.answer }
+              : a,
+          ),
+        )
+      } catch {
+        setAsks((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'error' } : a)))
+      }
+      return
+    }
     setText('')
     try {
       await thread.send(body)
