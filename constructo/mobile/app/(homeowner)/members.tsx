@@ -19,7 +19,6 @@
  */
 import { View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
@@ -29,6 +28,7 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
 import {
+  Avatar,
   Body,
   BodyLg,
   BodyStrong,
@@ -168,11 +168,6 @@ function MemberCard({
 }) {
   const isInvited = member.status === 'invited'
   const name = member.display_name ?? member.phone ?? '—'
-  // Initial avatar when we have a real name (not a phone/dash fallback) — the
-  // first letter, uppercased. `\p{L}` keeps it to letters (incl. Devanagari),
-  // so a phone like "+9198…" falls back to the generic icon.
-  const initial = member.display_name?.trim()?.[0]?.toUpperCase()
-  const showInitial = Boolean(initial && /\p{L}/u.test(initial))
   const cap = capabilityLine(member.sub_role, lang)
   const design = designLine(member, lang)
 
@@ -187,25 +182,8 @@ function MemberCard({
         borderLeftColor: isYou ? theme.colors.accent : theme.colors.line,
       }}
     >
-      {/* Avatar chip — soft sage pebble with initial or a calm user glyph. */}
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: theme.radii.pill,
-          backgroundColor: AP.chip,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {showInitial ? (
-          <BodyStrong color={AP.onChip}>{initial}</BodyStrong>
-        ) : (
-          <Feather name="user" size={20} color={AP.onChip} />
-        )}
-      </View>
+      {/* Avatar pebble — shared kit component (initial or a calm user glyph). */}
+      <Avatar name={member.display_name} />
 
       <View style={{ flex: 1, gap: SPACE.xs }}>
         {/* Clay role kicker — the named role, sentence above the name. */}

@@ -51,6 +51,7 @@ import {
   CalmCard,
   Card,
   Display,
+  Eyebrow,
   FadeInUp,
   H2,
   MonoSm,
@@ -278,11 +279,8 @@ const SPARSE_THRESHOLD = 3
  * shortcut-rail kickers: a muted, letter-spaced, uppercased {@link Small}.
  */
 function SectionKicker({ children }: { children: string }) {
-  return (
-    <Small muted style={{ fontWeight: '600', letterSpacing: 1 }}>
-      {children.toUpperCase()}
-    </Small>
-  )
+  // The clay kit Eyebrow (clay-700, uppercase) — so Photos kickers match Home.
+  return <Eyebrow>{children}</Eyebrow>
 }
 
 export default function Photos() {
