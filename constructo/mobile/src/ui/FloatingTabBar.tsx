@@ -33,8 +33,10 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = 
   design: 'layout',
 }
 
-/** Warm-paper fill over the blur. Higher opacity on Android (weaker blur). */
-const FILL = Platform.OS === 'android' ? 'rgba(250,246,238,0.92)' : 'rgba(250,246,238,0.72)'
+/** Warm-sand surface fill over the blur (Direction C: surface #FCFAF3, like the
+ *  skill's color-mix(surface-card 88%, transparent)). Higher opacity on Android
+ *  where the blur is weaker. */
+const FILL = Platform.OS === 'android' ? 'rgba(252,250,243,0.94)' : 'rgba(252,250,243,0.80)'
 
 /**
  * Vertical space a scrolling tab screen must reserve at its bottom so content

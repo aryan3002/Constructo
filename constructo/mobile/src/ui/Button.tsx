@@ -8,7 +8,7 @@ import { useTheme } from '../theme/ThemeProvider'
 import { SPACE, TAP } from '../theme/tokens'
 import { BodyStrong } from './Typography'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'celebrate' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'md' | 'lg'
 
 export interface ButtonProps {
@@ -39,15 +39,17 @@ export function Button({
   const c = theme.colors
 
   const bg: Record<ButtonVariant, string> = {
-    primary: c.accent,
+    primary: c.accent, // sage green — the primary role
+    celebrate: c.secondary, // warm clay — milestone / celebration ONLY
     secondary: c.card,
     ghost: 'transparent',
     danger: c.risk,
   }
   const fg: Record<ButtonVariant, string> = {
     primary: c.onAccent,
+    celebrate: '#ffffff',
     secondary: c.text,
-    ghost: c.text,
+    ghost: c.accentDeep,
     danger: '#ffffff',
   }
   const isDisabled = disabled || loading
@@ -74,7 +76,7 @@ export function Button({
           transform: [{ scale: pressed && !isDisabled ? 0.98 : 1 }],
           alignSelf: block ? 'stretch' : 'flex-start',
         },
-        variant === 'primary' ? theme.shadowCard : null,
+        variant === 'primary' || variant === 'celebrate' ? theme.shadowCard : null,
         style,
       ]}
     >

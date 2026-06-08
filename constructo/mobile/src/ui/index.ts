@@ -12,13 +12,18 @@ export {
   DataNum,
   MonoSm,
   Mono,
+  Eyebrow,
 } from './Typography'
 export { Button } from './Button'
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button'
 export { StatusPill, StatusDot } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
 export { Card } from './Card'
-export type { CardProps } from './Card'
+export type { CardProps, CardVariant } from './Card'
+export { DecisionCard } from './DecisionCard'
+export type { DecisionCardProps } from './DecisionCard'
+export { QuietState } from './QuietState'
+export type { QuietStateProps } from './QuietState'
 export { CalmCard } from './CalmCard'
 export type { CalmCardProps } from './CalmCard'
 export { EvidenceCard } from './EvidenceCard'
