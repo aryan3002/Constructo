@@ -103,12 +103,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (persistedSubRole) setSubRole(persistedSubRole as HomeownerSubRole)
       if (persistedSiteId) setSiteId(persistedSiteId)
       if (persistedOnboarded === '1') setOnboarded(true)
-      // For homeowners with no persisted sub_role, pull it from capabilities.
-      if (profile.role === 'homeowner' && !persistedSubRole) {
+      // A homeowner needs BOTH sub_role and site_id client-side after a token-based
+      // relaunch. site_id is the one that bites: it powers the get-or-create of her
+      // 1:1 builder channel, so without it the channel never appears in Messages.
+      // Neither rides on /auth/me, so when either is missing we resolve them from
+      // capabilities (which now returns the resolved site_id) and persist for next
+      // launch. Isolated + best-effort — this can only ADD context, never demote.
+      if (profile.role === 'homeowner' && (!persistedSubRole || !persistedSiteId)) {
         const caps: Capabilities = await homeowner.capabilities(persistedSiteId ?? undefined)
-        setSubRole(caps.sub_role)
-        if (persistedSiteId) setSiteId(persistedSiteId)
-        await AsyncStorage.setItem(SUB_ROLE_KEY, caps.sub_role)
+        if (!persistedSubRole) {
+          setSubRole(caps.sub_role)
+          await AsyncStorage.setItem(SUB_ROLE_KEY, caps.sub_role)
+        }
+        if (!persistedSiteId && caps.site_id) {
+          setSiteId(caps.site_id)
+          await AsyncStorage.setItem(SITE_ID_KEY, caps.site_id)
+        }
       }
     } catch {
       /* best-effort context restore — never demotes the authed session */
