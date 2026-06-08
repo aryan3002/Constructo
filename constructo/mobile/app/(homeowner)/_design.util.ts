@@ -30,9 +30,25 @@ export interface DesignStrings {
   whatChanged: string
   versionLabel: string
   pendingApproval: string
+  /** DecisionCard kicker on a plan awaiting the homeowner's choice. */
+  needsYourChoice: string
+  /** Calm "why now" line under a pending plan ("Shared by your builder · <date>"). */
+  sharedByBuilder: string
   openFile: string
   approveDrawing: string
+  /** Full-width green CTA on a pending plan's DecisionCard. */
+  reviewAndApprove: string
   approveDrawingComingSoon: string
+  /** Eyebrow above the Plans section. */
+  plansEyebrow: string
+  /** Eyebrow above the coherence section. */
+  coherenceEyebrow: string
+  /** Eyebrow above the inspiration board. */
+  inspirationEyebrow: string
+  /** Eyebrow above the monthly digest. */
+  digestEyebrow: string
+  /** PhotoTile fallback caption / a11y labels for inspiration tiles. */
+  inspirationCaption: string
   coherenceTitle: string
   coherenceSubtitle: string
   fitsLabel: string
@@ -87,10 +103,18 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     whatChanged: 'WHAT CHANGED',
     versionLabel: 'Version',
     pendingApproval: 'Pending your approval',
+    needsYourChoice: 'Needs your choice',
+    sharedByBuilder: 'Shared by your builder',
     openFile: 'Open drawing',
     approveDrawing: 'Approve',
+    reviewAndApprove: 'Review & approve',
     approveDrawingComingSoon:
       'Approving plans in the app is coming soon. For now, please confirm with your builder.',
+    plansEyebrow: 'YOUR PLANS',
+    coherenceEyebrow: 'COHERENCE',
+    inspirationEyebrow: 'THE LOOK YOU LOVE',
+    digestEyebrow: 'EACH MONTH',
+    inspirationCaption: 'Reference photo',
     coherenceTitle: 'How your choices fit together',
     coherenceSubtitle: 'A gentle read on coherence — advice only, never a block.',
     fitsLabel: 'Fits your style',
@@ -151,10 +175,18 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     whatChanged: 'क्या बदला',
     versionLabel: 'संस्करण',
     pendingApproval: 'आपकी स्वीकृति बाकी',
+    needsYourChoice: 'आपका चुनाव चाहिए',
+    sharedByBuilder: 'आपके बिल्डर ने साझा किया',
     openFile: 'नक्शा खोलें',
     approveDrawing: 'स्वीकृत करें',
+    reviewAndApprove: 'देखें और स्वीकृत करें',
     approveDrawingComingSoon:
       'ऐप में नक्शे स्वीकृत करना जल्द आ रहा है। फ़िलहाल, कृपया अपने बिल्डर से पुष्टि करें।',
+    plansEyebrow: 'आपके नक्शे',
+    coherenceEyebrow: 'तालमेल',
+    inspirationEyebrow: 'आपकी पसंद का रूप',
+    digestEyebrow: 'हर महीने',
+    inspirationCaption: 'संदर्भ तस्वीर',
     coherenceTitle: 'आपके चुनाव कैसे मेल खाते हैं',
     coherenceSubtitle: 'मेल पर एक नरम राय — सिर्फ़ सलाह, कभी रोक नहीं।',
     fitsLabel: 'आपकी शैली से मेल खाता है',
