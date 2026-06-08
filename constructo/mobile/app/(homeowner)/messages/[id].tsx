@@ -24,8 +24,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../../src/theme/tokens'
-import { BodyStrong, Small } from '../../../src/ui'
+import { AP, SPACE, TAP } from '../../../src/theme/tokens'
+import { BodyStrong, QuietState, Small } from '../../../src/ui'
 import { chatApi, newClientMsgId, type ChatMessage } from '../../../src/api/chat'
 import { DaylightBubble } from '../_messages_components'
 
@@ -34,7 +34,8 @@ const STR = {
     builder: 'Your builder',
     placeholder: 'Message your site team…',
     send: 'Send',
-    empty: 'No messages yet. Say hello to your site team.',
+    emptyTitle: 'No messages yet',
+    empty: 'Say hello to your site team — they’ll see it right away.',
     err: 'We couldn’t load this conversation just now.',
     back: 'Back',
   },
@@ -42,7 +43,8 @@ const STR = {
     builder: 'आपका बिल्डर',
     placeholder: 'अपनी साइट टीम को संदेश भेजें…',
     send: 'भेजें',
-    empty: 'अभी कोई संदेश नहीं। अपनी साइट टीम को नमस्ते कहें।',
+    emptyTitle: 'अभी कोई संदेश नहीं',
+    empty: 'अपनी साइट टीम को नमस्ते कहें — वे तुरंत देख लेंगे।',
     err: 'यह बातचीत अभी लोड नहीं हो सकी।',
     back: 'वापस',
   },
@@ -150,6 +152,24 @@ export default function HomeownerThread() {
         >
           <Feather name="chevron-left" size={26} color={c.text} />
         </Pressable>
+        {/* Warm leading glyph — matches the inbox ChannelRow (house for her
+            builder channel, people for a group). Colour + icon, never a bare initial. */}
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: kind === 'homeowner' ? AP.chip : c.secondaryContainer,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Feather
+            name={kind === 'homeowner' ? 'home' : 'users'}
+            size={18}
+            color={kind === 'homeowner' ? AP.onChip : c.secondary}
+          />
+        </View>
         <View style={{ flex: 1 }}>
           <BodyStrong numberOfLines={1}>{headerTitle}</BodyStrong>
           {siteName ? (
@@ -187,10 +207,8 @@ export default function HomeownerThread() {
             />
           )}
           ListEmptyComponent={
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.xl }}>
-              <Small muted style={{ textAlign: 'center' }}>
-                {t.empty}
-              </Small>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />
             </View>
           }
         />
