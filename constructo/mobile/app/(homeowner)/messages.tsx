@@ -109,6 +109,9 @@ export default function HomeownerMessagesInbox() {
         kind: conv.kind,
         title,
         siteName: conv.site_name ?? '',
+        // Her builder channel's site → the thread weaves in that site's updates
+        // & decisions as inline cards (the Home Room). Empty for a group thread.
+        siteId: conv.site_id ?? '',
       },
     })
 
