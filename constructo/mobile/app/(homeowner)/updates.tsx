@@ -33,10 +33,13 @@ import {
 } from '../../src/ui'
 import {
   SUB_TABS,
+  delayStory,
+  elapsedDays,
   formatDate,
   formatDayDelta,
   formatRupeeDelta,
   formatRupees,
+  formatTypicalRange,
   milestoneMeta,
   updateMeta,
   type SubTab,
@@ -65,6 +68,7 @@ const STR = {
     scheduleLabel: 'Schedule change',
     notStarted: 'Not started',
     reason: 'Why',
+    delayRevised: 'Now expected',
     // Change story card strings (H5.D)
     changeWhat: 'What changed',
     changeWhy: 'Why',
@@ -102,6 +106,7 @@ const STR = {
     scheduleLabel: 'समय में बदलाव',
     notStarted: 'शुरू नहीं हुआ',
     reason: 'कारण',
+    delayRevised: 'अब अपेक्षित',
     // Change story card strings (H5.D)
     changeWhat: 'क्या बदला',
     changeWhy: 'क्यों',
@@ -280,7 +285,13 @@ function TimelineTab() {
         <Card>
           {items.map((u, i) => {
             const meta = updateMeta(u.type, lang)
-            const tint = meta.status === 'mute' ? theme.colors.textMute : STATUS[meta.status]
+            const story = delayStory(u)
+            // Red is reserved for a genuine delay WITH its full story (Calm Cockpit
+            // §5/§8). A delay missing the revised date / reason / impact degrades to
+            // a calm grey dot — we never fabricate the story to justify red.
+            const tone: Status | 'mute' =
+              u.type === 'delay' ? (story ? 'risk' : 'mute') : meta.status
+            const tint = tone === 'mute' ? theme.colors.textMute : STATUS[tone]
             const isLast = i === items.length - 1
             return (
               // Architectural Precision left-rail: teal date + status dot + title.
@@ -307,15 +318,59 @@ function TimelineTab() {
                   ) : null}
                 </View>
                 <View style={{ flex: 1, paddingBottom: isLast ? 0 : SPACE.lg }}>
-                  <Small color={theme.colors.accent} style={{ letterSpacing: 1 }}>
-                    {formatDate(u.published_at, lang).toUpperCase()}
-                  </Small>
-                  <BodyStrong style={{ marginTop: 2 }}>{u.title}</BodyStrong>
-                  {u.body ? (
-                    <Small muted style={{ marginTop: 4 }}>
-                      {u.body}
-                    </Small>
-                  ) : null}
+                  {story ? (
+                    // Genuine delay: revised date + impact + reason, ALWAYS shown
+                    // together. The red eyebrow replaces the date — the headline
+                    // fact is when the work is NOW expected, not when we said so.
+                    <>
+                      <Small color={STATUS.risk} style={{ letterSpacing: 1 }}>
+                        {meta.label.toUpperCase()}
+                      </Small>
+                      <BodyStrong style={{ marginTop: 2 }}>{u.title}</BodyStrong>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'baseline',
+                          gap: SPACE.xs,
+                          marginTop: 4,
+                        }}
+                      >
+                        <Small muted>{str.delayRevised}:</Small>
+                        <BodyStrong>{formatDate(story.revisedDate, lang)}</BodyStrong>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: SPACE.lg, marginTop: 4 }}>
+                        {story.impactDays != null ? (
+                          <View>
+                            <Small muted>{str.changeSchedule}</Small>
+                            <Mono color={STATUS.risk}>
+                              {formatDayDelta(story.impactDays, lang)}
+                            </Mono>
+                          </View>
+                        ) : null}
+                        {story.impactCost != null ? (
+                          <View>
+                            <Small muted>{str.changeCost}</Small>
+                            <Mono color={STATUS.risk}>{formatRupeeDelta(story.impactCost)}</Mono>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Small muted style={{ marginTop: 4 }}>
+                        {str.reason}: {story.reason}
+                      </Small>
+                    </>
+                  ) : (
+                    <>
+                      <Small color={theme.colors.accent} style={{ letterSpacing: 1 }}>
+                        {formatDate(u.published_at, lang).toUpperCase()}
+                      </Small>
+                      <BodyStrong style={{ marginTop: 2 }}>{u.title}</BodyStrong>
+                      {u.body ? (
+                        <Small muted style={{ marginTop: 4 }}>
+                          {u.body}
+                        </Small>
+                      ) : null}
+                    </>
+                  )}
                 </View>
               </View>
             )
@@ -352,6 +407,15 @@ function MilestonesTab() {
           m.status === 'done'
             ? formatDate(m.completed_on ?? m.expected_on, lang)
             : formatDate(m.expected_on, lang)
+        // Honest expectation line (Calm Cockpit §5: ranges, never a %). The
+        // industry-typical range normalizes "is this normal?"; the real elapsed
+        // "day N" is the project truth alongside it. Done phases show only the
+        // real completed date.
+        const elapsed = m.status === 'now' ? elapsedDays(m.started_on) : null
+        const typical =
+          m.status === 'done' ? null : formatTypicalRange(m.typical_duration_days, lang)
+        const dayLabel = elapsed != null ? (lang === 'hi' ? `दिन ${elapsed}` : `day ${elapsed}`) : null
+        const estimate = [typical, dayLabel].filter(Boolean).join(' · ')
         return (
           <View
             key={m.id}
@@ -393,6 +457,9 @@ function MilestonesTab() {
             <Mono muted style={{ fontSize: 12 }}>
               {date}
             </Mono>
+            {estimate ? (
+              <Small muted>{estimate}</Small>
+            ) : null}
           </View>
         )
       })}

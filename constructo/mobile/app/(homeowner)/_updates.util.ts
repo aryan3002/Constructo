@@ -2,7 +2,7 @@
  * Helpers local to the Project Updates screen (app/(homeowner)/updates.tsx).
  * Pure functions only — no React, no shared-file edits.
  */
-import type { Language } from '../../src/api/types'
+import type { Language, Update } from '../../src/api/types'
 import type { Status } from '../../src/theme/tokens'
 import type { UpdateType, MilestoneStatus } from '../../src/api/types'
 
@@ -25,6 +25,33 @@ export function updateMeta(
   }
   const m = META[type] ?? META.progress
   return { status: m.status, label: lang === 'hi' ? m.hi : m.en }
+}
+
+/** The structured story behind a delay (Calm Cockpit §5/§8). */
+export interface DelayStory {
+  revisedDate: string
+  reason: string
+  impactDays: number | null
+  impactCost: number | null
+}
+
+/**
+ * A delay only earns the red treatment when it carries the full story: a revised
+ * date + a reason + at least one measured impact (days and/or cost). Returns the
+ * story when complete, or `null` when the entry is not a delay or is missing any
+ * piece — callers degrade a story-less delay to a calm (non-red) entry rather
+ * than fabricate a date/impact the contractor never gave.
+ */
+export function delayStory(u: Update): DelayStory | null {
+  if (u.type !== 'delay') return null
+  const hasImpact = u.impact_days != null || u.impact_cost_delta != null
+  if (!u.revised_date || !u.reason || !hasImpact) return null
+  return {
+    revisedDate: u.revised_date,
+    reason: u.reason,
+    impactDays: u.impact_days ?? null,
+    impactCost: u.impact_cost_delta ?? null,
+  }
 }
 
 /** Map a milestone status to the StatusPill props (label localised). */
@@ -59,6 +86,36 @@ export function formatDayDelta(days: number | null, lang: Language): string {
   const unit = lang === 'hi' ? 'दिन' : d === 1 || d === -1 ? 'day' : 'days'
   const sign = d > 0 ? '+' : ''
   return `${sign}${d} ${unit}`
+}
+
+/**
+ * Honest, inclusive elapsed day count for a started milestone — the start date
+ * itself is "day 1", so a phase begun 7 days ago reads "day 8". Returns `null`
+ * when there's no start date, the date is unparseable, or the start is still in
+ * the future (the phase hasn't begun). This is REAL project time — distinct from
+ * the industry-typical range, which is only a reference.
+ */
+export function elapsedDays(startedOn: string | null, now: Date = new Date()): number | null {
+  if (!startedOn) return null
+  const start = new Date(startedOn)
+  if (Number.isNaN(start.getTime())) return null
+  const MS_PER_DAY = 24 * 60 * 60 * 1000
+  const diff = Math.floor((now.getTime() - start.getTime()) / MS_PER_DAY)
+  if (diff < 0) return null
+  return diff + 1
+}
+
+/**
+ * Label a curated INDUSTRY-typical duration range as "usually X–Y days" (never
+ * project-specific). Returns `null` when no range is known, so the UI omits the
+ * line rather than fabricating one.
+ */
+export function formatTypicalRange(range: [number, number] | null, lang: Language): string | null {
+  if (!range) return null
+  const [min, max] = range
+  return lang === 'hi'
+    ? `आमतौर पर ${min}–${max} दिन`
+    : `usually ${min}–${max} days`
 }
 
 /** Friendly date from an ISO string (falls back to the raw value). */

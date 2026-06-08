@@ -136,6 +136,13 @@ export interface Milestone {
   expected_on: string | null
   completed_on: string | null
   order: number
+  /**
+   * Industry-typical `[min, max]` day range for this phase, matched by name on
+   * the backend (curated static table — NOT derived from this project). `null`
+   * when the name isn't recognized. Render as "usually X–Y days" only; never
+   * present it as a project-specific estimate.
+   */
+  typical_duration_days: [number, number] | null
 }
 
 export interface Photo {
@@ -156,6 +163,13 @@ export interface Update {
   title: string
   body: string | null
   published_at: string
+  // Structured delay story (Calm Cockpit §5/§8). Populated only for type=delay;
+  // null on every other type. The delay card renders the red treatment ONLY when
+  // revised_date + reason + an impact are all present — never fabricated.
+  revised_date: string | null
+  impact_days: number | null
+  impact_cost_delta: number | null // rupees; formatRupees handles lakh/crore
+  reason: string | null
 }
 
 export interface WeeklySummary {
