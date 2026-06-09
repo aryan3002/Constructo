@@ -540,6 +540,44 @@ async def test_upload_media_stores_and_returns_key(client, world):
     assert body["media_type"] == "document"
 
 
+async def test_homeowner_uploads_media_to_her_channel(client, db_session, factory, world):
+    """Slice D: a homeowner uploads media to her builder channel by
+    conversation_id; the crew-only site_id path still 403s her."""
+    company, _, site = world
+    ho = await factory.user(company=company, role=UserRole.homeowner)
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=ho.id,
+            sub_role=HomeownerSubRole.primary_owner,
+            status=MemberStatus.active,
+        )
+    )
+    await db_session.flush()
+    ch = await client.post(
+        "/api/v1/chat/homeowner-channel", json={"site_id": str(site.id)}, headers=auth(ho)
+    )
+    conv_id = ch.json()["id"]
+
+    ok = await client.post(
+        "/api/v1/chat/media",
+        data={"conversation_id": conv_id, "kind": "image"},
+        files={"file": ("challan.jpg", b"\xff\xd8\xff fake", "image/jpeg")},
+        headers=auth(ho),
+    )
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["key"].startswith(f"chat/{site.id}/")
+
+    # The crew-only site_id path still 403s her.
+    blocked = await client.post(
+        "/api/v1/chat/media",
+        data={"site_id": str(site.id), "kind": "image"},
+        files={"file": ("x.jpg", b"abc", "image/jpeg")},
+        headers=auth(ho),
+    )
+    assert blocked.status_code == 403, blocked.text
+
+
 async def test_upload_media_requires_site(client, factory, world):
     company, _, site = world
     sup = await factory.user(company=company, role=UserRole.supervisor)  # unassigned

@@ -197,15 +197,19 @@ export const chatApi = {
     })
   },
 
-  /** Upload chat media (1.2 Camera-as-Sensor); returns the stored bare key. */
+  /** Upload chat media (1.2 Camera-as-Sensor); returns the stored bare key.
+   *  Addressed by `siteId` (crew thread) or `conversationId` (homeowner channel /
+   *  group the caller is in — Slice D). */
   uploadMedia(
-    siteId: string,
+    address: ChatAddress,
     file: UploadFile,
     kind: 'image' | 'document' | 'voice' = 'document',
   ): Promise<MediaUpload> {
     const form = new FormData()
     form.append('file', file as unknown as Blob)
-    form.append('site_id', siteId)
+    if ('conversationId' in address && address.conversationId)
+      form.append('conversation_id', address.conversationId)
+    else if ('siteId' in address && address.siteId) form.append('site_id', address.siteId)
     form.append('kind', kind)
     return uploadMultipart<MediaUpload>('/api/v1/chat/media', form)
   },

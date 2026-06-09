@@ -15,15 +15,16 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Vi
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { AP, SPACE } from '../../../src/theme/tokens'
+import { AP, SPACE, TAP } from '../../../src/theme/tokens'
 import { BodyStrong, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
-import type { ChatMessage } from '../../../src/api/chat'
+import { chatApi, type ChatMessage } from '../../../src/api/chat'
 import {
   ChatComposer,
   MessageFeed,
@@ -55,6 +56,8 @@ const STR = {
     todoErr: 'We couldn’t make that to-do just now.',
     todos: 'To-dos',
     cancel: 'Cancel',
+    photo: 'Send a photo',
+    photoErr: 'We couldn’t send that photo just now.',
   },
   hi: {
     builder: 'आपका बिल्डर',
@@ -69,6 +72,8 @@ const STR = {
     todoErr: 'अभी यह काम नहीं बना सके।',
     todos: 'काम',
     cancel: 'रद्द करें',
+    photo: 'फ़ोटो भेजें',
+    photoErr: 'अभी फ़ोटो नहीं भेज सके।',
   },
 } as const
 
@@ -118,6 +123,39 @@ export default function HomeownerThread() {
       { text: t.makeTodo, onPress: () => void makeTodo(m) },
       { text: t.cancel, style: 'cancel' },
     ])
+  }
+
+  // Send a photo (Slice D): pick from camera/library → upload to her channel →
+  // send as a document so the worker OCRs a challan into a card (booked to her
+  // site, flagged for crew confirm). Only her builder channel (it has a site).
+  const onCamera = async () => {
+    const cam = await ImagePicker.requestCameraPermissionsAsync()
+    let result: ImagePicker.ImagePickerResult
+    if (cam.granted) {
+      result = await ImagePicker.launchCameraAsync({ quality: 0.6 })
+    } else {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!lib.granted) return
+      result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 })
+    }
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    const mime = asset.mimeType ?? 'image/jpeg'
+    try {
+      const uploaded = await chatApi.uploadMedia(
+        { conversationId: id },
+        { uri: asset.uri, name: asset.fileName ?? 'photo.jpg', type: mime },
+        'document',
+      )
+      await thread.sendMedia({
+        attachmentKey: uploaded.key,
+        mime,
+        sha256: uploaded.sha256,
+        mediaType: 'document',
+      })
+    } catch {
+      Alert.alert(t.photo, t.photoErr)
+    }
   }
 
   // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
@@ -285,6 +323,25 @@ export default function HomeownerThread() {
         reply={thread.reply ? { snippet: thread.reply.body ?? '' } : null}
         onCancelReply={() => thread.setReply(null)}
         insetsBottom={insets.bottom}
+        leadingActions={
+          <Pressable
+            onPress={() => void onCamera()}
+            accessibilityRole="button"
+            accessibilityLabel={t.photo}
+            style={{
+              width: TAP,
+              height: TAP,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: c.paper,
+            }}
+          >
+            <Feather name="camera" size={20} color={c.accentDeep} />
+          </Pressable>
+        }
       />
     </KeyboardAvoidingView>
   )

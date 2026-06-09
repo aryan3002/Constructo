@@ -21,6 +21,14 @@ export interface UseChatThread {
   /** Send `body` as a text message (idempotent). Throws on failure so the caller
    *  can restore the composer text; the reply target is restored automatically. */
   send: (body: string) => Promise<void>
+  /** Send an uploaded media attachment (image/document/voice) as a message. */
+  sendMedia: (opts: {
+    attachmentKey: string
+    mime: string
+    sha256: string
+    mediaType: 'image' | 'document' | 'voice'
+    body?: string
+  }) => Promise<void>
   refetch: () => void
 }
 
@@ -82,6 +90,32 @@ export function useChatThread(address: ChatAddress, opts?: { pollMs?: number }):
     [address, reply, sending, q],
   )
 
+  const sendMedia = useCallback<UseChatThread['sendMedia']>(
+    async (opts) => {
+      if (sending) return
+      setSending(true)
+      try {
+        const sendAddr =
+          'conversationId' in address
+            ? { conversation_id: address.conversationId }
+            : { site_id: address.siteId }
+        await chatApi.send({
+          ...sendAddr,
+          client_msg_id: newClientMsgId(),
+          media_type: opts.mediaType,
+          attachment_key: opts.attachmentKey,
+          attachment_mime: opts.mime,
+          attachment_sha256: opts.sha256,
+          ...(opts.body ? { body: opts.body } : {}),
+        })
+        await q.refetch()
+      } finally {
+        setSending(false)
+      }
+    },
+    [address, sending, q],
+  )
+
   return {
     messages,
     isLoading: q.isLoading,
@@ -90,6 +124,7 @@ export function useChatThread(address: ChatAddress, opts?: { pollMs?: number }):
     reply,
     setReply,
     send,
+    sendMedia,
     refetch: q.refetch,
   }
 }
