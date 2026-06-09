@@ -19,6 +19,8 @@ from app.models import (
     ChatMessage,
     Conversation,
     ConversationRead,
+    HomeownerSubRole,
+    MemberStatus,
     RawMessageModel,
     SiteEventModel,
     UserRole,
@@ -1130,3 +1132,61 @@ async def test_site_keyed_send_unchanged(client, world):
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["seq"] == 1
+
+
+async def test_homeowner_channel_capture_books_event_needs_clarification(
+    client, db_session, factory, world
+):
+    """Slice D: a homeowner's structured capture in her builder channel books a
+    SiteEvent to her site, but lands needs_clarification (amber) for crew confirm
+    — her channel is no longer talk-only, and the raw is tagged sender_side."""
+    company, _, site = world
+    ho = await factory.user(company=company, role=UserRole.homeowner)
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=ho.id,
+            sub_role=HomeownerSubRole.primary_owner,
+            status=MemberStatus.active,
+        )
+    )
+    await db_session.flush()
+
+    ch = await client.post(
+        "/api/v1/chat/homeowner-channel", json={"site_id": str(site.id)}, headers=auth(ho)
+    )
+    assert ch.status_code in (200, 201), ch.text
+    conv_id = ch.json()["id"]
+
+    send = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "conversation_id": conv_id,
+            "client_msg_id": str(uuid4()),
+            "body": "12 mazdoor aaye",
+            "capture_type": "attendance",
+            "fields": {"headcount": 12},
+        },
+        headers=auth(ho),
+    )
+    assert send.status_code == 201, send.text
+
+    # Her channel now mints a RawMessage (no longer talk-only), tagged homeowner.
+    raw = (
+        await db_session.execute(
+            select(RawMessageModel).where(RawMessageModel.sender_id == str(ho.id))
+        )
+    ).scalars().one()
+    assert raw.external_group_id == f"app:{site.id}"
+    assert raw.raw["sender_side"] == "homeowner"
+
+    # The worker books the event to her site — but flags it for crew confirm,
+    # overriding the structured fast-path's needs_clarification=False.
+    ids = await handle_ingested(
+        raw.id, session_factory=_session_factory(db_session), llm=FakeLLMClient()
+    )
+    assert len(ids) == 1
+    event = await db_session.get(SiteEventModel, ids[0])
+    assert event.site_id == site.id
+    assert event.event_type == "attendance"
+    assert event.needs_clarification is True

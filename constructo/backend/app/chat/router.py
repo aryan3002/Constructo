@@ -495,10 +495,12 @@ async def send_message(
             raise AppError(404, "not_found", "Conversation not found")
         await require_access(session, user, conv)
         target_site_id = conv.site_id
-        # The homeowner 1:1 channel is talk-only (doc 18 Phase 3): a human room
-        # with masking/translation, NOT a capture surface — no RawMessage, no
-        # extraction, no action-item proposal.
-        talk_only = conv.kind is ConversationKind.homeowner
+        # The homeowner 1:1 channel now feeds the SAME capture→event pipeline as a
+        # site-group (Slice D): her captures book SiteEvents to her site, stamped
+        # needs_clarification (amber) for crew confirm — keyed off `sender_side`
+        # in the raw below. A site-less company-wide group stays talk-only (there
+        # is no site to file events to).
+        talk_only = conv.kind is ConversationKind.group and conv.site_id is None
     else:
         if body.site_id is None:
             # defensive: the model validator already requires one target, but
@@ -656,6 +658,10 @@ async def send_message(
                 "fields": body.fields,
                 "site_id": str(target_site_id),
                 "chat_message_id": str(msg.id),
+                # A non-crew (homeowner) capture books to the ledger but lands
+                # needs_clarification (amber) for crew confirm — the worker reads
+                # this to stamp the event (Slice D, money-safe default).
+                "sender_side": "homeowner" if user.role is UserRole.homeowner else "crew",
                 **({"reply_context": reply_context} if reply_context else {}),
             },
         )
