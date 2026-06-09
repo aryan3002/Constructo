@@ -16,12 +16,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.db import get_session
+from app.homeowner.scoping import homeowner_site_ids
 from app.models import (
     ActionItem,
     ActionItemEvent,
@@ -86,8 +87,13 @@ class ActionItemDetailOut(ActionItemOut):
 
 
 async def _require_site(session: AsyncSession, user: User, site_id: UUID) -> None:
+    # Human-governed sharing: a homeowner may keep her OWN to-dos for a site she is
+    # a member of. The list/load paths scope her to items she created or is assigned
+    # — she never sees or edits the crew's internal to-do list.
     if user.role is UserRole.homeowner:
-        raise AppError(403, "forbidden", "Homeowner action items are not available yet")
+        if site_id not in await homeowner_site_ids(session, user):
+            raise AppError(403, "forbidden", "You are not on this site")
+        return
     visible = await effective_visible_site_ids(session, user)
     if site_id not in visible:
         raise AppError(403, "forbidden", "You are not assigned to this site")
@@ -112,6 +118,9 @@ async def _load_owned(session: AsyncSession, user: User, item_id: UUID) -> Actio
     if item is None:
         raise AppError(404, "not_found", "Action item not found")
     await _require_site(session, user, item.site_id)
+    # A homeowner may only touch her own to-dos (created by, or assigned to, her).
+    if user.role is UserRole.homeowner and user.id not in (item.created_by, item.assignee_id):
+        raise AppError(403, "forbidden", "Not your to-do")
     return item
 
 
@@ -153,6 +162,11 @@ async def list_action_items(
 ) -> list[ActionItemOut]:
     await _require_site(session, user, site_id)
     stmt = select(ActionItem).where(ActionItem.site_id == site_id)
+    if user.role is UserRole.homeowner:
+        # She sees only her own to-dos, never the crew's internal task list.
+        stmt = stmt.where(
+            or_(ActionItem.created_by == user.id, ActionItem.assignee_id == user.id)
+        )
     if status is not None:
         stmt = stmt.where(ActionItem.status == status)
     if mine:

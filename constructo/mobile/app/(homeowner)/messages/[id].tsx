@@ -11,7 +11,7 @@
  * camera/voice/@ask arrive with their slices.
  */
 import { useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
@@ -21,6 +21,9 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../src/theme/tokens'
 import { BodyStrong, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
+import { actionItemsApi } from '../../../src/api/actionItems'
+import { useAuth } from '../../../src/auth/AuthContext'
+import type { ChatMessage } from '../../../src/api/chat'
 import {
   ChatComposer,
   MessageFeed,
@@ -47,6 +50,11 @@ const STR = {
     empty: 'Say hello to your site team — they’ll see it right away.',
     err: 'We couldn’t load this conversation just now.',
     back: 'Back',
+    reply: 'Reply',
+    makeTodo: 'Make a to-do',
+    todoErr: 'We couldn’t make that to-do just now.',
+    todos: 'To-dos',
+    cancel: 'Cancel',
   },
   hi: {
     builder: 'आपका बिल्डर',
@@ -56,6 +64,11 @@ const STR = {
     empty: 'अपनी साइट टीम को नमस्ते कहें — वे तुरंत देख लेंगे।',
     err: 'यह बातचीत अभी लोड नहीं हो सकी।',
     back: 'वापस',
+    reply: 'जवाब दें',
+    makeTodo: 'काम बनाएं',
+    todoErr: 'अभी यह काम नहीं बना सके।',
+    todos: 'काम',
+    cancel: 'रद्द करें',
   },
 } as const
 
@@ -82,6 +95,30 @@ export default function HomeownerThread() {
 
   const thread = useChatThread({ conversationId: id })
   const [text, setText] = useState('')
+  const { siteId } = useAuth()
+
+  // Make a to-do from a message (Slice C) — her own action item, linked back to
+  // the message. site_id comes from her restored auth state (the builder channel
+  // is her site). She sees only her own to-dos in the To-dos screen.
+  const makeTodo = async (m: ChatMessage) => {
+    const title = (m.body ?? '').trim()
+    if (!siteId || !title) return
+    try {
+      await actionItemsApi.create({ site_id: siteId, title, source_message_id: m.id })
+      router.push('/(homeowner)/todos')
+    } catch {
+      Alert.alert(t.makeTodo, t.todoErr)
+    }
+  }
+
+  // Long-press a message → Reply or Make a to-do.
+  const onLongPress = (m: ChatMessage) => {
+    Alert.alert(headerTitle, undefined, [
+      { text: t.reply, onPress: () => thread.setReply(m) },
+      { text: t.makeTodo, onPress: () => void makeTodo(m) },
+      { text: t.cancel, style: 'cancel' },
+    ])
+  }
 
   // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
   const [asks, setAsks] = useState<AskEntry[]>([])
@@ -200,6 +237,16 @@ export default function HomeownerThread() {
             </Small>
           ) : null}
         </View>
+        {/* Her To-dos — also reachable by long-pressing a message → Make a to-do. */}
+        <Pressable
+          onPress={() => router.push('/(homeowner)/todos')}
+          accessibilityRole="button"
+          accessibilityLabel={t.todos}
+          hitSlop={10}
+          style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Feather name="check-square" size={22} color={c.accentDeep} />
+        </Pressable>
       </View>
 
       {thread.isLoading ? (
@@ -218,7 +265,7 @@ export default function HomeownerThread() {
             items={items}
             mineSide="homeowner"
             time={timeLabel}
-            onLongPressMessage={(m) => thread.setReply(m)}
+            onLongPressMessage={onLongPress}
             emptyState={
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />

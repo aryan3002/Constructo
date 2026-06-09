@@ -49,6 +49,8 @@ function HomeownerTabs() {
         <Tabs.Screen name="design" options={{ title: t('nav.design') }} />
         {/* Thread detail — pushed from the Messages inbox, no tab bar entry */}
         <Tabs.Screen name="messages/[id]" options={{ href: null }} />
+        {/* Her To-dos — pushed from the chat thread, no tab bar entry */}
+        <Tabs.Screen name="todos" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
         {/* Settings cluster — pushed from the Settings hub, no tab bar entry */}
         <Tabs.Screen name="members" options={{ href: null }} />
