@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -25,14 +26,10 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import {
-  ChatComposer,
-  MessageFeed,
-  messagesToFeed,
-  useChatThread,
-  type FeedRow,
-} from '../../../src/chat'
+import { ChatComposer, MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
+import { HOME_ROOM_STR, weaveHomeRoom, type DecisionAction } from '../_home_room.util'
+import { HomeRoomDecisionCard, HomeRoomUpdateCard } from '../_messages_components'
 
 /** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */
 interface AskEntry {
@@ -101,6 +98,52 @@ export default function HomeownerThread() {
   const thread = useChatThread({ conversationId: id })
   const [text, setText] = useState('')
   const { siteId } = useAuth()
+  const qc = useQueryClient()
+
+  // Home Room weave (#158): in her builder channel (kind=homeowner, which has a
+  // site), interleave the published Updates + pending Decisions as on-brand cards
+  // she can act on in place. A group thread has no single site → plain feed.
+  const isBuilder = kind === 'homeowner'
+  const homeRoom = isBuilder && !!siteId
+  const hr = HOME_ROOM_STR[lang as 'en' | 'hi'] ?? HOME_ROOM_STR.en
+
+  const updatesQ = useQuery({
+    queryKey: ['homeowner', 'updates', siteId],
+    queryFn: () => homeowner.updates(siteId ?? undefined),
+    enabled: homeRoom,
+  })
+  const decisionsQ = useQuery({
+    queryKey: ['homeowner', 'decisions', siteId],
+    queryFn: () => homeowner.decisions(siteId ?? undefined),
+    enabled: homeRoom,
+  })
+  const capsQ = useQuery({
+    queryKey: ['homeowner', 'capabilities', siteId],
+    queryFn: () => homeowner.capabilities(siteId ?? undefined),
+    enabled: homeRoom,
+  })
+  const canApprove = capsQ.data?.can_approve ?? false
+
+  // Her in-thread action on a pending decision (approve is owners-only server-side).
+  const onRespondDecision = async (decisionId: string, action: DecisionAction, note?: string) => {
+    try {
+      await homeowner.respondDecision(decisionId, action, note)
+      await Promise.all([
+        decisionsQ.refetch(),
+        qc.invalidateQueries({ queryKey: ['homeowner', 'home'] }),
+      ])
+      Alert.alert(
+        '',
+        action === 'approve'
+          ? hr.approved
+          : action === 'comment'
+            ? hr.commentSent
+            : hr.changeRequested,
+      )
+    } catch {
+      Alert.alert('', hr.respondErr)
+    }
+  }
 
   // Make a to-do from a message (Slice C) — her own action item, linked back to
   // the message. site_id comes from her restored auth state (the builder channel
@@ -173,7 +216,33 @@ export default function HomeownerThread() {
   }
 
   const items: FeedRow[] = useMemo(() => {
-    const base = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en')
+    // Weave her messages (bubbles + capture cards) with the published Updates +
+    // pending Decisions, chronologically; render update/decision rows as the
+    // signature Home Room cards.
+    const woven = weaveHomeRoom(
+      thread.messages,
+      homeRoom ? (updatesQ.data?.items ?? []) : [],
+      homeRoom ? (decisionsQ.data ?? []) : [],
+      (lang as 'en' | 'hi') ?? 'en',
+    )
+    const base: FeedRow[] = woven.map((r) => {
+      if (r.kind === 'update')
+        return { kind: 'custom', key: r.key, node: <HomeRoomUpdateCard update={r.update} /> }
+      if (r.kind === 'decision')
+        return {
+          kind: 'custom',
+          key: r.key,
+          node: (
+            <HomeRoomDecisionCard
+              decision={r.decision}
+              canApprove={canApprove}
+              str={hr}
+              onRespond={(a, n) => onRespondDecision(r.decision.id, a, n)}
+            />
+          ),
+        }
+      return r.item
+    })
     const askRows: FeedRow[] = asks.map((a) => ({
       kind: 'custom',
       key: `ask:${a.id}`,
@@ -188,7 +257,7 @@ export default function HomeownerThread() {
     }))
     return [...base, ...askRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.messages, lang, asks])
+  }, [thread.messages, lang, asks, homeRoom, updatesQ.data, decisionsQ.data, canApprove, hr])
 
   const onSend = async () => {
     const body = text.trim()
