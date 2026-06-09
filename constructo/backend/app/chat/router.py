@@ -495,10 +495,12 @@ async def send_message(
             raise AppError(404, "not_found", "Conversation not found")
         await require_access(session, user, conv)
         target_site_id = conv.site_id
-        # The homeowner 1:1 channel is talk-only (doc 18 Phase 3): a human room
-        # with masking/translation, NOT a capture surface — no RawMessage, no
-        # extraction, no action-item proposal.
-        talk_only = conv.kind is ConversationKind.homeowner
+        # The homeowner 1:1 channel now feeds the SAME capture→event pipeline as a
+        # site-group (Slice D): her captures book SiteEvents to her site, stamped
+        # needs_clarification (amber) for crew confirm — keyed off `sender_side`
+        # in the raw below. A site-less company-wide group stays talk-only (there
+        # is no site to file events to).
+        talk_only = conv.kind is ConversationKind.group and conv.site_id is None
     else:
         if body.site_id is None:
             # defensive: the model validator already requires one target, but
@@ -656,6 +658,10 @@ async def send_message(
                 "fields": body.fields,
                 "site_id": str(target_site_id),
                 "chat_message_id": str(msg.id),
+                # A non-crew (homeowner) capture books to the ledger but lands
+                # needs_clarification (amber) for crew confirm — the worker reads
+                # this to stamp the event (Slice D, money-safe default).
+                "sender_side": "homeowner" if user.role is UserRole.homeowner else "crew",
                 **({"reply_context": reply_context} if reply_context else {}),
             },
         )
@@ -683,7 +689,8 @@ CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
 @router.post("/media", response_model=MediaUploadOut, status_code=201)
 async def upload_media(
     file: UploadFile = File(...),
-    site_id: UUID = Form(...),
+    site_id: UUID | None = Form(None),
+    conversation_id: UUID | None = Form(None),
     kind: str = Form("document"),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -691,8 +698,23 @@ async def upload_media(
     """Upload chat media (1.2 Camera-as-Sensor). The server streams the file to
     object storage (R2 in prod, local in CI — same ``put_bytes`` contract) and
     returns the bare key; the client then sends a message carrying it as
-    ``attachment_key``, and the worker OCRs/STTs it into a Card."""
-    await _require_site(session, user, site_id)
+    ``attachment_key``, and the worker OCRs/STTs it into a Card.
+
+    Addressed by ``site_id`` (crew thread) OR ``conversation_id`` — the latter
+    lets a homeowner (or any member) upload to her builder channel / a group she
+    is in, gated by the same ``can_access`` rule as sending (Slice D)."""
+    if conversation_id is not None:
+        conv = await session.get(Conversation, conversation_id)
+        if conv is None:
+            raise AppError(404, "not_found", "Conversation not found")
+        await require_access(session, user, conv)
+        if conv.site_id is None:
+            raise AppError(422, "no_site", "This conversation has no site to attach media to")
+        site_id = conv.site_id
+    elif site_id is not None:
+        await _require_site(session, user, site_id)
+    else:
+        raise AppError(422, "missing_target", "Provide site_id or conversation_id")
     data = await file.read()
     if not data:
         raise AppError(422, "empty_file", "No file content")

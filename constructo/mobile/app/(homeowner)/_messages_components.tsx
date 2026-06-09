@@ -21,12 +21,8 @@ import { Feather } from '@expo/vector-icons'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
-import { Body, Mono, PhotoTile, Small, type PhotoTileData } from '../../src/ui'
+import { Body, Mono, Small } from '../../src/ui'
 import type { ConversationSummary } from '../../src/api/chat'
-
-/** Chat bubble radius — the skill's `--radius-bubble` (19). Softer than the
- *  22-card "pebble", a touch tighter so a bubble reads as speech, not a panel. */
-export const BUBBLE_RADIUS = 19
 
 const STR = {
   en: {
@@ -42,89 +38,6 @@ const STR = {
     photoCaption: 'आपकी साइट टीम से फ़ोटो',
   },
 } as const
-
-/** A single Home Room chat bubble. `mine` (the homeowner) right-aligns on a soft
- *  sage tint with ink text; the builder/team left-aligns on the warm surface
- *  card. Real-photo attachments render through the kit `PhotoTile`. */
-export function DaylightBubble({
-  body,
-  mine,
-  timestamp,
-  attachmentUrl,
-}: {
-  body: string | null
-  mine: boolean
-  timestamp: string
-  attachmentUrl?: string | null
-}) {
-  const { lang } = useT()
-  const { theme } = useTheme()
-  const c = theme.colors
-  const t = STR[lang as 'en' | 'hi'] ?? STR.en
-
-  // Her own message: soft sage tint (green-tint as a calm solid), ink text.
-  // The builder's: warm surface card with a hairline + soft "lifted paper" lift.
-  const bg = mine ? AP.chip : c.card
-
-  const hasBody = !!body?.trim()
-  const photo: PhotoTileData | null = attachmentUrl
-    ? { id: attachmentUrl, imageUri: attachmentUrl, caption: hasBody ? body : null }
-    : null
-
-  return (
-    <View
-      style={{
-        alignItems: mine ? 'flex-end' : 'flex-start',
-        marginBottom: SPACE.md,
-        paddingHorizontal: SPACE.gutter,
-      }}
-    >
-      {/* A real-photo attachment is its own PhotoTile (kit), not a raw <Image>. */}
-      {photo ? (
-        <View style={{ width: 260, maxWidth: '86%', marginBottom: hasBody ? SPACE.xs : 0 }}>
-          <PhotoTile
-            photo={photo}
-            variant="hero"
-            labels={{
-              caption: t.photoCaption,
-              translate: '',
-              save: '',
-              share: '',
-              hide: '',
-              video: '',
-              starred: '',
-            }}
-          />
-        </View>
-      ) : null}
-
-      {/* The text bubble. Omitted for a bare photo — the tile carries the caption. */}
-      {hasBody ? (
-        <View
-          style={[
-            {
-              maxWidth: '86%',
-              backgroundColor: bg,
-              borderRadius: BUBBLE_RADIUS,
-              // A spoken-bubble tail on the sender's side.
-              borderBottomRightRadius: mine ? 6 : BUBBLE_RADIUS,
-              borderBottomLeftRadius: mine ? BUBBLE_RADIUS : 6,
-              paddingHorizontal: SPACE.lg,
-              paddingVertical: SPACE.md,
-            },
-            mine ? null : { borderWidth: 1, borderColor: c.line, ...theme.shadowCard },
-          ]}
-        >
-          <Body color={c.text}>{body}</Body>
-        </View>
-      ) : null}
-
-      <Mono muted style={{ marginTop: 4, marginHorizontal: 4, color: c.textMute }}>
-        {timestamp}
-      </Mono>
-    </View>
-  )
-}
 
 /** An inbox row — her builder channel (pinned) or a group. ≥48px tap (64
  *  minHeight), warm surface card, Mono recency, an unread pill (sage dot +

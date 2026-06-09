@@ -16,7 +16,7 @@ import { Image, LayoutAnimation, Platform, Pressable, UIManager, View } from 're
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../theme/ThemeProvider'
-import { SPACE, STATUS, TAP } from '../theme/tokens'
+import { AP, SPACE, STATUS, TAP } from '../theme/tokens'
 import { Body, BodyStrong, Micro, Mono, Small, StatusPill } from '../ui'
 import type { ChatEvent } from '../api/chat'
 
@@ -245,13 +245,24 @@ export function MessageBubble({
 }) {
   const { theme } = useTheme()
   const c = theme.colors
+  const daylight = theme.name === 'daylight'
 
-  const ownBubble = {
-    alignSelf: 'flex-end' as const,
-    backgroundColor: 'rgba(242,161,0,0.16)',
-    borderColor: 'rgba(242,161,0,0.45)',
-    borderWidth: 1,
-  }
+  // Own bubble: blueprint keeps its translucent amber (unchanged); daylight uses
+  // the warm sage chip the homeowner DaylightBubble used, so the look is preserved
+  // when the homeowner thread renders through this shared bubble.
+  const ownBubble = daylight
+    ? {
+        alignSelf: 'flex-end' as const,
+        backgroundColor: AP.chip,
+        borderColor: AP.chip,
+        borderWidth: 1,
+      }
+    : {
+        alignSelf: 'flex-end' as const,
+        backgroundColor: 'rgba(242,161,0,0.16)',
+        borderColor: 'rgba(242,161,0,0.45)',
+        borderWidth: 1,
+      }
   const otherBubble = {
     alignSelf: 'flex-start' as const,
     backgroundColor: c.card,

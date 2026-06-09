@@ -129,6 +129,11 @@ async def handle_ingested(
         raw = _to_contract(raw_row)
         events = await extract(raw, site_id, llm=llm, stt=stt, ocr=ocr)
 
+        # A non-crew (homeowner) capture books to the ledger but always lands
+        # needs_clarification (amber) — crew confirm/correct it via the existing
+        # dispute/dedupe rails before it's treated as settled truth (Slice D).
+        from_homeowner = (raw_row.raw or {}).get("sender_side") == "homeowner"
+
         ids: list[UUID] = []
         for ev in events:
             model = SiteEventModel(
@@ -139,7 +144,7 @@ async def handle_ingested(
                 summary=ev.summary,
                 fields=ev.fields,
                 confidence=ev.confidence,
-                needs_clarification=ev.needs_clarification,
+                needs_clarification=ev.needs_clarification or from_homeowner,
                 source_message_ids=ev.source_message_ids,
                 version=ev.version,
                 supersedes_event_id=ev.supersedes_event_id,
