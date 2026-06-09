@@ -51,6 +51,8 @@ import {
   CalmCard,
   Card,
   Display,
+  Eyebrow,
+  FadeInUp,
   H2,
   MonoSm,
   Screen,
@@ -96,6 +98,8 @@ const STR = {
     empty: 'No photos yet — your builder will start sharing soon.',
     emptyMine: 'Nothing here yet. Tap + to add a photo from your visit.',
     noResults: 'No photos match that. Try another room, stage, or date.',
+    noResultsTitle: 'Nothing matched',
+    emptyTitle: 'No photos yet',
     quietTitle: 'Quiet on site right now',
     quietNextPrefix: 'Next photos expected around',
     error: 'Could not load photos. Pull to refresh in a moment.',
@@ -157,6 +161,8 @@ const STR = {
     empty: 'अभी कोई तस्वीर नहीं — आपका बिल्डर जल्द साझा करना शुरू करेगा।',
     emptyMine: 'अभी यहाँ कुछ नहीं। अपनी विज़िट की तस्वीर जोड़ने के लिए + दबाएँ।',
     noResults: 'इससे कोई तस्वीर मेल नहीं खाई। कोई और कमरा, चरण या तारीख़ आज़माएँ।',
+    noResultsTitle: 'कुछ मेल नहीं खाया',
+    emptyTitle: 'अभी कोई तस्वीर नहीं',
     quietTitle: 'अभी साइट पर शांति है',
     quietNextPrefix: 'अगली तस्वीरें लगभग',
     error: 'तस्वीरें लोड नहीं हो सकीं। थोड़ी देर में फिर कोशिश करें।',
@@ -265,6 +271,17 @@ function groupPhotos(
 
 /** Below this count the grid feels "sparse" → show a calm quiet tile alongside. */
 const SPARSE_THRESHOLD = 3
+
+/**
+ * SectionKicker — a calm clay/muted uppercase section kicker (the "Eyebrow"
+ * role from the design system). The frozen kit doesn't export a standalone
+ * `Eyebrow` component yet, so we render the same treatment Home uses for its
+ * shortcut-rail kickers: a muted, letter-spaced, uppercased {@link Small}.
+ */
+function SectionKicker({ children }: { children: string }) {
+  // The clay kit Eyebrow (clay-700, uppercase) — so Photos kickers match Home.
+  return <Eyebrow>{children}</Eyebrow>
+}
 
 export default function Photos() {
   const { theme } = useTheme()
@@ -381,25 +398,31 @@ export default function Photos() {
     [queryClient, s],
   )
 
+  // iOS gotcha: presenting the picker while the sheet Modal is still dismissing
+  // makes it silently fail to open. So we launch the picker FIRST (it presents
+  // over the open sheet), then close the sheet once it returns — never the other
+  // way round.
   const onTakePhoto = useCallback(async () => {
-    setUploadOpen(false)
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
+      setUploadOpen(false)
       Alert.alert(s.permTitle, s.permCamera)
       return
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+    setUploadOpen(false)
     if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
   }, [s, doUpload])
 
   const onChooseLibrary = useCallback(async () => {
-    setUploadOpen(false)
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
+      setUploadOpen(false)
       Alert.alert(s.permTitle, s.permLibrary)
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+    setUploadOpen(false)
     if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
   }, [s, doUpload])
 
@@ -487,12 +510,22 @@ export default function Photos() {
     { id: 'mine', label: s.mine },
   ]
 
+  // Calm quiet-period body: backend reason (already translated) + next-expected.
+  const quietBody = useMemo(() => {
+    if (!activeQuiet) return undefined
+    const nextDate = shortDate(activeQuiet.next_expected_at, lang)
+    const parts: string[] = []
+    if (activeQuiet.reason) parts.push(activeQuiet.reason)
+    if (nextDate) parts.push(`${s.quietNextPrefix} ${nextDate}.`)
+    return parts.join(' ') || undefined
+  }, [activeQuiet, lang, s])
+
   return (
     <Screen style={{ paddingBottom: navClearance }}>
-      <View style={{ gap: 2 }}>
+      <FadeInUp style={{ gap: 2 }}>
         <Display>{s.title}</Display>
         <Small muted>{s.subtitle}</Small>
-      </View>
+      </FadeInUp>
 
       {/* AI search bar (text + 🎤 mic) */}
       <View
@@ -592,14 +625,9 @@ export default function Photos() {
             </View>
           </Card>
         ) : sitePhotos.length === 0 ? (
-          <Card>
-            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
-              <Feather name="camera" size={28} color={c.textMute} />
-              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
-                {s.emptyMine}
-              </Body>
-            </View>
-          </Card>
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.mine} body={s.emptyMine} />
+          </FadeInUp>
         ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
             {sitePhotos.map((p) => (
@@ -632,48 +660,26 @@ export default function Photos() {
           </View>
         </Card>
       ) : sitePhotos.length === 0 ? (
-        // Empty / quiet / no-search-results — all calm, never red.
+        // Empty / quiet / no-search-results — all calm designed states, never red.
         q ? (
-          <Card>
-            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
-              <Feather name="search" size={28} color={c.textMute} />
-              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
-                {s.noResults}
-              </Body>
-            </View>
-          </Card>
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.noResultsTitle} body={s.noResults} />
+          </FadeInUp>
         ) : activeQuiet ? (
-          (() => {
-            const nextDate = shortDate(activeQuiet.next_expected_at, lang)
-            const bodyParts: string[] = []
-            if (activeQuiet.reason) bodyParts.push(activeQuiet.reason)
-            if (nextDate) bodyParts.push(`${s.quietNextPrefix} ${nextDate}.`)
-            return (
-              <CalmCard
-                status="quiet"
-                title={s.quietTitle}
-                body={bodyParts.join(' ') || undefined}
-              />
-            )
-          })()
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
+          </FadeInUp>
         ) : (
-          <Card>
-            <View style={{ alignItems: 'center', paddingVertical: SPACE.xl }}>
-              <Feather name="image" size={28} color={c.textMute} />
-              <Body muted style={{ textAlign: 'center', marginTop: SPACE.md }}>
-                {s.empty}
-              </Body>
-            </View>
-          </Card>
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.emptyTitle} body={s.empty} />
+          </FadeInUp>
         )
       ) : (
         <View style={{ gap: SPACE.lg }}>
-          {/* "Latest" hero (only on All, no search) */}
+          {/* "Latest" hero (only on All, no search) — calm rise on mount */}
           {latest ? (
-            <View style={{ gap: SPACE.sm }}>
-              <Small muted style={{ fontWeight: '600', letterSpacing: 0.5 }}>
-                {s.latest.toUpperCase()}
-              </Small>
+            <FadeInUp style={{ gap: SPACE.sm }}>
+              <SectionKicker>{s.latest}</SectionKicker>
               <PhotoTile
                 photo={toTile(latest)}
                 variant="hero"
@@ -681,34 +687,20 @@ export default function Photos() {
                 onPress={() => setActive(latest)}
                 onTranslate={onTranslate}
               />
-            </View>
+            </FadeInUp>
           ) : null}
 
           {/* Quiet tile when the site is sparse (calm, never red, fade only) */}
           {!q && activeQuiet && sitePhotos.length <= SPARSE_THRESHOLD ? (
-            (() => {
-              const nextDate = shortDate(activeQuiet.next_expected_at, lang)
-              const bodyParts: string[] = []
-              if (activeQuiet.reason) bodyParts.push(activeQuiet.reason)
-              if (nextDate) bodyParts.push(`${s.quietNextPrefix} ${nextDate}.`)
-              return (
-                <CalmCard
-                  status="quiet"
-                  title={s.quietTitle}
-                  body={bodyParts.join(' ') || undefined}
-                />
-              )
-            })()
+            <FadeInUp rise={false} linear>
+              <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
+            </FadeInUp>
           ) : null}
 
-          {/* Grouped grid */}
-          {groups.map((group) => (
-            <View key={group.key} style={{ gap: SPACE.sm }}>
-              {group.label ? (
-                <Small muted style={{ fontWeight: '600' }}>
-                  {group.label}
-                </Small>
-              ) : null}
+          {/* Grouped grid — each group rises gently in sequence */}
+          {groups.map((group, i) => (
+            <FadeInUp key={group.key} delay={i * 40} style={{ gap: SPACE.sm }}>
+              {group.label ? <SectionKicker>{group.label}</SectionKicker> : null}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
                 {group.items.map((photo) => (
                   <PhotoTile
@@ -721,7 +713,7 @@ export default function Photos() {
                   />
                 ))}
               </View>
-            </View>
+            </FadeInUp>
           ))}
         </View>
       )}

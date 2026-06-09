@@ -1,25 +1,29 @@
 /**
- * StatusPill / StatusDot — the shared status spine rendered as color + a
- * DISTINCT glyph + a text label (never color alone, for accessibility). Tints
- * are derived from the status hue at low alpha so they read on both themes.
+ * StatusPill / StatusDot — the locked "status = color + icon + word" rule (never
+ * color alone, for accessibility). Colors resolve from the ACTIVE theme, so the
+ * homeowner (Daylight) surface gets the Direction-C spine (sage / clay / amber /
+ * red + neutral, NO blue) and the contractor (Blueprint) keeps its shared spine.
+ * Direction C: the word + line-icon sit on a soft tint of the status hue — red
+ * appears only for genuine delay/risk.
  */
 import type * as React from 'react'
 import { View, type ViewStyle } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { STATUS, STATUS_LABEL, type Status } from '../theme/tokens'
+import { useTheme } from '../theme/ThemeProvider'
+import { STATUS_LABEL, type Status } from '../theme/tokens'
 import { Micro, Small } from './Typography'
 
-/** Distinct premium icon per status (shape cue independent of color). */
+/** Distinct line icon per status (shape cue independent of color). */
 const ICON: Record<Status, React.ComponentProps<typeof Feather>['name']> = {
-  ok: 'check',
-  warn: 'alert-triangle',
-  risk: 'alert-octagon',
-  info: 'info',
-  quiet: 'clock',
+  ok: 'check-circle', // on track / done
+  warn: 'alert-circle', // needs you — a soft circle (a choice, not an alarm)
+  risk: 'alert-triangle', // genuine delay / risk
+  info: 'repeat', // change / neutral update (⇄)
+  quiet: 'clock', // quiet period
 }
 
-/** Hex + alpha → rgba tint (e.g. '#1e9e5a' @ 0.12). */
+/** Hex + alpha → rgba tint (e.g. '#3e7a66' @ 0.12). */
 function tint(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16)
   const r = (n >> 16) & 255
@@ -29,6 +33,7 @@ function tint(hex: string, alpha: number): string {
 }
 
 export function StatusDot({ status, size = 12 }: { status: Status; size?: number }) {
+  const { theme } = useTheme()
   return (
     <View
       accessibilityRole="image"
@@ -37,7 +42,7 @@ export function StatusDot({ status, size = 12 }: { status: Status; size?: number
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: STATUS[status],
+        backgroundColor: theme.colors[status],
       }}
     />
   )
@@ -47,13 +52,21 @@ export interface StatusPillProps {
   status: Status
   label?: string
   size?: 'sm' | 'md'
+  /** Render the word in uppercase (eyebrow-style pills, e.g. "NEEDS YOUR CHOICE"). */
+  uppercase?: boolean
+  /** Override the default icon. */
+  icon?: React.ComponentProps<typeof Feather>['name']
   style?: ViewStyle
 }
 
-export function StatusPill({ status, label, size = 'md', style }: StatusPillProps) {
-  const color = STATUS[status]
+export function StatusPill({ status, label, size = 'md', uppercase, icon, style }: StatusPillProps) {
+  const { theme } = useTheme()
+  const color = theme.colors[status]
   const text = label ?? STATUS_LABEL[status]
-  const pad = size === 'sm' ? { paddingVertical: 2, paddingHorizontal: 8 } : { paddingVertical: 4, paddingHorizontal: 10 }
+  const pad =
+    size === 'sm'
+      ? { paddingVertical: 5, paddingHorizontal: 9 }
+      : { paddingVertical: 7, paddingHorizontal: 12 }
   const Label = size === 'sm' ? Micro : Small
   return (
     <View
@@ -63,30 +76,24 @@ export function StatusPill({ status, label, size = 'md', style }: StatusPillProp
         {
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 6,
+          gap: size === 'sm' ? 5 : 7,
           alignSelf: 'flex-start',
           borderRadius: 9999,
-          borderWidth: 1,
-          borderColor: tint(color, 0.3),
-          backgroundColor: tint(color, 0.12),
+          backgroundColor: tint(color, 0.13),
         },
         pad,
         style,
       ]}
     >
-      <View
+      <Feather name={icon ?? ICON[status]} size={size === 'sm' ? 13 : 15} color={color} />
+      <Label
+        color={color}
         style={{
-          width: 16,
-          height: 16,
-          borderRadius: 8,
-          backgroundColor: color,
-          alignItems: 'center',
-          justifyContent: 'center',
+          fontWeight: '600',
+          textTransform: uppercase ? 'uppercase' : 'none',
+          letterSpacing: uppercase ? 0.6 : 0,
         }}
       >
-        <Feather name={ICON[status]} size={10} color="#ffffff" />
-      </View>
-      <Label color={color} style={{ fontWeight: '600' }}>
         {text}
       </Label>
     </View>

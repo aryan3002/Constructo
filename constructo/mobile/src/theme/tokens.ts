@@ -124,24 +124,31 @@ const BLUEPRINT_COLORS: ThemeColors = {
   ...STATUS_TINT,
 }
 
-// Daylight = the homeowner surface, on the "Calm Cockpit" system (§3.1):
-// warm paper + Calm Pine green + a Warm Clay celebration accent. Warm paper
-// background, never pure white; red reserved for genuine risk.
+// Daylight = the homeowner surface, on the "Calm Cockpit" system — Direction C
+// "Blend" (locked). Warm SAND canvas (never clinical white), SAGE-green primary +
+// on-track, Warm CLAY celebration/milestone, AMBER "needs you" choices, RED for
+// genuine delay ONLY, neutral grey for progress/quiet/info (a disciplined 4-hue +
+// neutral system — NO blue). All text colors verified >= 4.5:1 on the sand canvas.
 const DAYLIGHT_COLORS: ThemeColors = {
-  bg: '#faf6ee', // Warm Paper — app canvas (never pure white)
-  card: '#ffffff', // cards / content surfaces
-  paper: '#f5f0e5', // surfaceLow — inset surfaces / search fields
-  line: '#d9d2c2', // hairlines / dividers
-  accent: '#1e7a63', // Calm Pine — primary actions, active nav, "on track"
-  accentDeep: '#155c4a', // pressed/hover primary
-  accentWarm: '#cde7dd', // primaryContainer — soft green chips / selected states
-  secondary: '#c5683b', // Warm Clay — celebration / milestones ONLY (never warnings)
-  secondaryContainer: '#f4d9c6', // soft clay chips, weekly-summary accent bg
+  bg: '#f3efe6', // sand-200 — app canvas (warm sand, never pure white)
+  card: '#fcfaf3', // surface — card surfaces
+  paper: '#f8f4ec', // sand-100 — letter / elevated panel
+  line: '#e3dccb', // hairline (≈ rgba(42,37,25,.09) over sand)
+  accent: '#3e7a66', // sage green-600 — primary actions, active nav, on-track fill
+  accentDeep: '#2f6151', // green-700 — pressed, on-track text, links
+  accentWarm: '#cfe3d9', // soft sage chip / selected (green-tint as solid)
+  secondary: '#ae5635', // clay-600 — celebration / milestones ONLY (never warnings)
+  secondaryContainer: '#efdccb', // soft clay chips, weekly-summary accent bg
   onAccent: '#ffffff',
-  text: '#1e2230', // body / headings
-  textMute: '#5b6166', // metadata, captions, inactive nav
-  ...STATUS,
-  ...STATUS_TINT,
+  text: '#2a2519', // ink-900 — headlines + primary text (warm near-black)
+  textMute: '#6a6047', // ink-600 — secondary text (5.42:1 on sand)
+  // Direction-C status spine (homeowner-specific — NOT the shared blueprint spine):
+  ok: '#2f6151', // on-track → green-700 text (6.20:1 on sand)
+  warn: '#7d5a13', // needs-you → amber-700 (5.47:1) — a choice, not a risk
+  risk: '#a4382a', // genuine delay / money risk ONLY → red-600 (5.76:1)
+  info: '#6a6047', // progress / neutral update → neutral ink (no blue hue)
+  quiet: '#8c7f66', // quiet-period → muted sand-grey (calm, never red)
+  infoTint: 'rgba(42,37,25,0.07)', // neutral tint behind a progress/info glyph
 }
 
 /**
@@ -150,14 +157,20 @@ const DAYLIGHT_COLORS: ThemeColors = {
  * homeowner surface uses these.) Values track the §3.1 palette.
  */
 export const AP = {
-  surfaceLow: '#f5f0e5', // surfaceLow — inset surfaces
-  surfaceContainer: '#efe9dc', // a touch below surfaceLow
-  onDark: '#ffffff', // text on the Calm-Pine cards
-  onDarkMuted: '#cde7dd', // primaryContainer (eyebrows on pine)
-  chip: '#cde7dd', // primaryContainer (soft green chip bg)
-  onChip: '#155c4a', // accentDeep (text on green chip)
-  outline: '#8c8a82', // muted outline / quiet tone
-  ringTrack: '#e7e1d2', // time-bar / track behind the Calm-Pine fill
+  surfaceLow: '#f7f2e8', // surface-2 — inset surfaces / search fields
+  surfaceContainer: '#ece5d7', // sand-300 — sunken / track
+  onDark: '#ffffff', // text on the sage-green cards
+  onDarkMuted: '#cfe3d9', // soft sage (eyebrows on green)
+  chip: '#cfe3d9', // soft sage chip bg (green-tint as solid)
+  onChip: '#2f6151', // green-700 (text on sage chip)
+  outline: '#8c7f66', // muted outline / quiet tone (ink-400)
+  ringTrack: '#ece5d7', // sand-300 — time-bar track behind the sage fill
+  // Eyebrow / clay text (uppercase kickers, you-are-here marker, milestones):
+  clay: '#92482a', // clay-700 — eyebrow text on sand (5.75:1)
+  clayMarker: '#ae5635', // clay-600 — the "you are here" dot
+  // Warm letter panel + dashed-quiet surfaces (Card variants):
+  letter: '#f8f4ec', // sand-100 — weekly-summary "letter" panel
+  borderStrong: '#d7cfbc', // hairline-strong (≈ rgba(42,37,25,.15))
 } as const
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -177,15 +190,17 @@ export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     name: 'daylight',
     colors: DAYLIGHT_COLORS,
-    // Calm Cockpit (§3.4): chip/input 12, card 16, hero 20, sheet 24, pill 9999.
-    radii: { chip: 12, card: 16, hero: 20, sheet: 24, pill: 9999, control: 12 },
-    // Soft, warm, residential ambient shadow (§3.5: 0 8px 24px rgba(60,50,30,.06)).
+    // Direction C — soft, residential "pebbles, not boxes": buttons/inputs 14,
+    // primary cards 22, hero 28, sheet 24, pill full. (Tiles use 18 directly.)
+    radii: { chip: 14, card: 22, hero: 28, sheet: 24, pill: 9999, control: 14 },
+    // Warm, soft "lifted paper" lift — ink-tinted, never a hard black drop
+    // (skill --shadow-card: 0 14px 30px -24px rgba(42,37,25,.50)).
     shadowCard: {
-      shadowColor: '#3c321e',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.06,
+      shadowColor: '#2a2519',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.1,
       shadowRadius: 24,
-      elevation: 2,
+      elevation: 3,
     },
   },
 }
@@ -199,17 +214,25 @@ export const THEMES: Record<ThemeName, Theme> = {
  * 13px mono eyebrow (`monoSm`) is the one exception and is mono-only.
  */
 export const TYPE = {
-  display: { fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
-  h1: { fontSize: 28, lineHeight: 34, letterSpacing: -0.3 },
-  h2: { fontSize: 22, lineHeight: 28, letterSpacing: -0.2 },
-  title: { fontSize: 18, lineHeight: 24 },
-  bodyLg: { fontSize: 18, lineHeight: 28 },
+  // NOTE: Eczar is a tall serif — on iOS, RN's <Text> CLIPS the ascenders when
+  // lineHeight is near the fontSize. The heading line-heights below are kept
+  // generous (~1.27–1.36×) so the serif tops never cut off. Don't tighten them.
+  /** Hero "You're okay." — the 3-second answer (Eczar serif, 500). */
+  display: { fontSize: 44, lineHeight: 60, letterSpacing: -0.7 },
+  /** Screen titles (Eczar 600). */
+  h1: { fontSize: 28, lineHeight: 38, letterSpacing: -0.3 },
+  /** Section / letter headings (Eczar 600). */
+  h2: { fontSize: 22, lineHeight: 30, letterSpacing: -0.2 },
+  /** Card titles (Eczar 600 — the skill's h3). */
+  title: { fontSize: 18, lineHeight: 25 },
+  /** Primary reading copy / status sentence (Hind). */
+  bodyLg: { fontSize: 18, lineHeight: 27 },
   body: { fontSize: 16, lineHeight: 24 },
   /** labels / captions / nav — the 14px floor. */
   small: { fontSize: 14, lineHeight: 20 },
-  /** eyebrow caption — kept at the 14px floor (was 12). */
-  micro: { fontSize: 14, lineHeight: 18 },
-  /** ₹ amounts / counts (mono). */
+  /** eyebrow caption — kept at the 14px floor (skill 11.5; we honour the a11y floor). */
+  micro: { fontSize: 14, lineHeight: 18, letterSpacing: 0.6 },
+  /** ₹ amounts / counts (IBM Plex Mono). */
   dataNum: { fontSize: 16, lineHeight: 22 },
   /** dates / timestamps / mono eyebrows — mono-only sub-14 exception. */
   monoSm: { fontSize: 13, lineHeight: 18, letterSpacing: 0.3 },

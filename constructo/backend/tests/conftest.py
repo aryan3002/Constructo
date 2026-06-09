@@ -2,6 +2,7 @@
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -22,6 +23,21 @@ def _split_url(url: str) -> tuple[str, str]:
 TEST_DB_NAME = _split_url(settings.database_url)[1] + "_test"
 TEST_DATABASE_URL = _split_url(settings.database_url)[0] + "/" + TEST_DB_NAME
 ADMIN_DATABASE_URL = _split_url(settings.database_url)[0] + "/postgres"
+
+
+@pytest.fixture(autouse=True)
+def _force_local_storage(monkeypatch):
+    """Pin media storage to the LOCAL backend for every test, regardless of the
+    developer's ambient ``.env`` — which may set ``STORAGE_BACKEND=s3`` to point at
+    prod R2. CI runs without R2 creds (``storage_backend`` defaults to ``"local"``),
+    so this makes local pytest match CI and keeps the media tests offline/hermetic.
+    Tests that exercise S3 construct ``S3Storage()`` directly and are unaffected."""
+    monkeypatch.setattr("app.config.settings.storage_backend", "local")
+    from app.storage import get_storage
+
+    get_storage.cache_clear()
+    yield
+    get_storage.cache_clear()
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

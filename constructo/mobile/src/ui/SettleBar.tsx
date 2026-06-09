@@ -17,6 +17,7 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, View } from 'react-native'
 
+import { AP } from '../theme/tokens'
 import { Micro } from './Typography'
 import { useReducedMotion } from './motion'
 
@@ -37,6 +38,8 @@ export interface SettleBarProps {
   trackColor: string
   /** Muted label color for the endpoint dates. */
   labelColor?: string
+  /** Warm "you-are-here" marker color (Direction C: clay). Pass null to hide. */
+  markerColor?: string | null
   height?: number
 }
 
@@ -52,6 +55,7 @@ export function SettleBar({
   color,
   trackColor,
   labelColor,
+  markerColor = AP.clayMarker,
   height = 12,
 }: SettleBarProps) {
   const fill = clamp01(fraction)
@@ -121,6 +125,26 @@ export function SettleBar({
           />
         ) : null}
       </View>
+
+      {/* Warm "you-are-here" marker (Direction C: clay dot with a soft white ring),
+          sitting on the fill edge — the signature of position-in-TIME, never a %. */}
+      {markerColor != null ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: height / 2 - 9,
+            left: `${fill * 100}%`,
+            width: 18,
+            height: 18,
+            marginLeft: -9,
+            borderRadius: 9,
+            backgroundColor: markerColor,
+            borderWidth: 3,
+            borderColor: AP.onDark,
+          }}
+        />
+      ) : null}
 
       {/* Endpoint dates — the only text on the bar; no completion number. */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

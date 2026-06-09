@@ -350,7 +350,7 @@ export default function CrewChat() {
     scrollToEnd()
     try {
       const uploaded = await chatApi.uploadMedia(
-        site.id,
+        { siteId: site.id },
         { uri: asset.uri, name: asset.fileName ?? 'challan.jpg', type: mime },
         'document',
       )
@@ -382,7 +382,7 @@ export default function CrewChat() {
       scrollToEnd()
       try {
         const uploaded = await chatApi.uploadMedia(
-          site.id,
+          { siteId: site.id },
           { uri: audio.uri, name: audio.name, type: audio.mime },
           'voice',
         )

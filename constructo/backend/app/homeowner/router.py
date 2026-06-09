@@ -46,6 +46,7 @@ from app.homeowner.design_fingerprint import (
     SelectionInput,
     build_fingerprint,
 )
+from app.homeowner.milestone_reference import typical_duration_days
 from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
 from app.homeowner.render import get_translation, render_text
 from app.homeowner.schemas import (
@@ -941,6 +942,7 @@ def _milestone_out(m: Milestone) -> MilestoneOut:
         expected_on=m.expected_on,
         completed_on=m.completed_on,
         order=m.order,
+        typical_duration_days=typical_duration_days(m.name),
     )
 
 
@@ -977,6 +979,9 @@ def _update_out(u: Update) -> UpdateOut:
     return UpdateOut(
         id=u.id, site_id=u.site_id, type=u.type, title=u.title, body=u.body,
         published_at=u.published_at,
+        revised_date=u.revised_date, impact_days=u.impact_days,
+        impact_cost_delta=float(u.impact_cost_delta) if u.impact_cost_delta is not None else None,
+        reason=u.reason,
     )
 
 
@@ -1030,9 +1035,16 @@ async def _render_update(
         session, client, canonical=u.body, lang=lang,
         source_table="updates", source_id=u.id, source_field="body",
     )
-    if title == u.title and body == u.body:
+    # The structured delay reason is plain-language too — translate it (the numeric
+    # guard keeps any embedded dates/rupees byte-identical). The numeric fields
+    # (revised_date, impact_*) are never translated; the client formats them.
+    reason = await render_text(
+        session, client, canonical=u.reason, lang=lang,
+        source_table="updates", source_id=u.id, source_field="reason",
+    )
+    if title == u.title and body == u.body and reason == u.reason:
         return u
-    return u.model_copy(update={"title": title, "body": body})
+    return u.model_copy(update={"title": title, "body": body, "reason": reason})
 
 
 async def _render_weekly(
@@ -1953,7 +1965,8 @@ async def my_capabilities(
             (r.design_space_id for r in rows if r.can_design and r.design_space_id), None
         )
     return CapabilitiesOut(
+        site_id=sid,
         **capabilities_for(
             sub_role, can_design_flag=can_design_flag, design_space_id=design_space_id
-        )
+        ),
     )

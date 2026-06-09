@@ -94,6 +94,16 @@ class Update(Base):
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured delay story (Calm Cockpit §5/§8). Only ``type=delay`` rows set
+    # these; they are nullable at the DB level so the other five update types (and
+    # legacy delay rows) stay backward-safe. The publish API enforces that a new
+    # delay always carries revised_date + reason + at least one impact, so the
+    # homeowner UI never has to fabricate the story to render the red treatment.
+    revised_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    impact_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Rupees (mirrors Change.cost_delta) — the mobile client formats lakh/crore.
+    impact_cost_delta: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_by: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

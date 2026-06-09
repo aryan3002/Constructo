@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind, UpdateType
 
@@ -35,6 +35,28 @@ class PublishUpdateIn(BaseModel):
     type: UpdateType
     title: str = Field(min_length=1)
     body: str | None = None
+    # Structured delay story — required together for ``type=delay``, forbidden on
+    # every other type (Calm Cockpit §5/§8: red means a genuine delay, and a
+    # delay must never appear without a revised date + reason + impact).
+    revised_date: date | None = None
+    impact_days: int | None = None
+    impact_cost_delta: float | None = None  # rupees (mirrors ChangeCreateIn.cost_delta)
+    reason: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _check_delay_story(self) -> PublishUpdateIn:
+        delay_fields = (self.revised_date, self.impact_days, self.impact_cost_delta, self.reason)
+        if self.type is UpdateType.delay:
+            has_impact = self.impact_days is not None or self.impact_cost_delta is not None
+            if self.revised_date is None or self.reason is None or not has_impact:
+                raise ValueError(
+                    "a delay update requires revised_date, reason, and at least one of "
+                    "impact_days / impact_cost_delta"
+                )
+        elif any(f is not None for f in delay_fields):
+            raise ValueError("revised_date / impact_days / impact_cost_delta / reason are only "
+                             "valid on type=delay updates")
+        return self
 
 
 class PublishWeeklySummaryIn(BaseModel):

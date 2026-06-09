@@ -1,38 +1,45 @@
 /**
- * Notifications — per-category cadence control (handoff §5).
+ * Notifications — a calm cadence chooser (Calm Cockpit, handoff §5).
  *
- * Each category (Site updates, Weekly summary, Design & decisions) gets a
- * segmented choice: As it happens · Daily · Weekly · Pause. The choice is the
- * caller's own preference, persisted into their member `notif_prefs.cadence`
- * jsonb via the existing self-PATCH (`PATCH /homeowner/members/{id}`) — the
- * same path the push-token persister uses, so no migration. Other prefs in the
- * blob (e.g. push_token) are preserved on write.
+ * Each category (Site updates, Weekly summary, Design & decisions) offers one
+ * clear choice of cadence — **As it happens · Daily · Weekly · Pause** — rendered
+ * as a selectable group of rows with live subtitles (the kit's SettingsRow feel),
+ * each row explaining what that cadence means so the pick is never a guess. The
+ * choice is the caller's own preference, persisted into their member
+ * `notif_prefs.cadence` jsonb via the existing self-PATCH
+ * (`PATCH /homeowner/members/{id}`) — the same path the push-token persister
+ * uses, so no migration. Other prefs in the blob (e.g. push_token) are preserved.
  *
- * A calm, always-visible note explains that **urgent spikes always punch
- * through** any cadence (a genuine delay or money risk still reaches you). A
- * category with no real delivery hook yet is honestly labelled "Coming soon"
- * (handoff §6 — honest placeholders, never a fabricated promise).
+ * A calm, always-visible reassurance — anchored by an `ok` StatusPill — explains
+ * that **urgent spikes always punch through** any cadence below (a genuine delay
+ * or money risk still reaches you, even on Pause or Weekly). A category with no
+ * real delivery hook yet is honestly labelled "Coming soon" (handoff §6 — honest
+ * placeholders, never a fabricated promise).
  *
- * Pushed screen (`href:null` in _layout). Feather icons, no emoji, no %,
- * warm-paper tokens. Strings in the per-screen en/hi pattern.
+ * Pushed screen (`href:null` in _layout), `Screen floatingNav` for bottom
+ * clearance. Eyebrow kickers, Feather icons (no emoji, no %), warm-paper tokens.
+ * Strings in the per-screen en/hi pattern (single language per screen).
  */
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { homeowner, ApiError } from '../../src/api/client'
+import { homeowner } from '../../src/api/client'
 import type { HomeownerMember } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../src/theme/tokens'
 import {
-  BodyStrong,
-  Card,
+  Body,
   Display,
+  Eyebrow,
   Micro,
+  QuietState,
   Screen,
+  SettingsGroup,
   Small,
+  StatusPill,
 } from '../../src/ui'
 import {
   CADENCE_LABEL,
@@ -44,28 +51,68 @@ import {
   type Lang,
 } from './_settings.util'
 
+/** A Feather glyph + one-line meaning per cadence — turns the bare label into a
+ *  reassuring, self-explaining choice (the live subtitle each row carries). */
+const CADENCE_META: Record<
+  Cadence,
+  { icon: React.ComponentProps<typeof Feather>['name']; meaning: Record<Lang, string> }
+> = {
+  as_it_happens: {
+    icon: 'zap',
+    meaning: {
+      en: 'A nudge the moment something happens.',
+      hi: 'जैसे ही कुछ हो, तुरंत सूचना।',
+    },
+  },
+  daily: {
+    icon: 'sun',
+    meaning: {
+      en: 'One gentle round-up each evening.',
+      hi: 'हर शाम एक शांत सारांश।',
+    },
+  },
+  weekly: {
+    icon: 'calendar',
+    meaning: {
+      en: 'Just the weekly letter — nothing in between.',
+      hi: 'सिर्फ़ साप्ताहिक पत्र — बीच में कुछ नहीं।',
+    },
+  },
+  pause: {
+    icon: 'moon',
+    meaning: {
+      en: 'No routine nudges. Open the app whenever you like.',
+      hi: 'कोई नियमित सूचना नहीं। जब चाहें ऐप खोलें।',
+    },
+  },
+}
+
 const STR = {
   en: {
     title: 'Notifications',
     subtitle: 'Choose how often each kind of update reaches you.',
     spikeTitle: 'Urgent always reaches you',
     spikeBody:
-      'A genuine delay or money risk punches through any setting below — you are never left in the dark on the things that matter.',
+      'A genuine delay or money risk punches through any setting below — even on Pause or Weekly, you are never left in the dark on the things that matter.',
+    alwaysOn: 'Always on',
     comingSoon: 'Coming soon',
-    comingSoonNote: 'Controls here are saved, but this kind of alert isn’t sending yet.',
+    comingSoonNote: 'Your choice is saved, but this kind of alert isn’t sending yet.',
     saveError: 'Couldn’t save that. Please try again.',
-    noMember: 'We couldn’t load your notification settings.',
+    noMemberTitle: 'Settings unavailable',
+    noMember: 'We couldn’t load your notification settings just now.',
   },
   hi: {
     title: 'सूचनाएँ',
     subtitle: 'चुनें कि हर तरह की जानकारी आप तक कितनी बार पहुँचे।',
     spikeTitle: 'ज़रूरी बात हमेशा पहुँचेगी',
     spikeBody:
-      'सच्ची देरी या पैसे का जोखिम नीचे किसी भी सेटिंग को पार कर पहुँचेगा — ज़रूरी बातों में आप कभी अंधेरे में नहीं रहेंगे।',
+      'सच्ची देरी या पैसे का जोखिम नीचे किसी भी सेटिंग को पार कर पहुँचेगा — रोका हुआ या साप्ताहिक होने पर भी, ज़रूरी बातों में आप कभी अंधेरे में नहीं रहेंगे।',
+    alwaysOn: 'हमेशा चालू',
     comingSoon: 'जल्द आ रहा है',
-    comingSoonNote: 'यहाँ सेटिंग सहेज ली जाती है, पर इस तरह की सूचना अभी नहीं भेजी जा रही।',
+    comingSoonNote: 'आपकी पसंद सहेज ली जाती है, पर इस तरह की सूचना अभी नहीं भेजी जा रही।',
     saveError: 'सहेज नहीं पाए। कृपया फिर कोशिश करें।',
-    noMember: 'आपकी सूचना सेटिंग लोड नहीं हो सकीं।',
+    noMemberTitle: 'सेटिंग उपलब्ध नहीं',
+    noMember: 'अभी आपकी सूचना सेटिंग लोड नहीं हो सकीं।',
   },
 } as const
 
@@ -91,8 +138,8 @@ export default function Notifications() {
     mutationFn: ({ id, next }: { id: string; next: Record<string, unknown> }) =>
       homeowner.updateNotifPrefs(id, next),
     onMutate: ({ next }) => {
-      // Optimistic: patch the cached member so the segmented control updates
-      // instantly (calm — no spinner mid-tap).
+      // Optimistic: patch the cached member so the chosen row updates instantly
+      // (calm — no spinner mid-tap).
       qc.setQueryData<HomeownerMember[]>(['homeowner-members-self'], (old) =>
         old ? old.map((m, i) => (i === 0 ? { ...m, notif_prefs: next } : m)) : old,
       )
@@ -112,124 +159,184 @@ export default function Notifications() {
 
   return (
     <Screen floatingNav>
-      <View style={{ gap: SPACE.sm }}>
+      <View style={{ gap: SPACE.xs }}>
+        <Eyebrow>{tx.title}</Eyebrow>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>
       </View>
 
-      {/* Spikes-always-punch-through note (calm info card, never alarming). */}
-      <Card
+      {/* Spikes-always-punch-through reassurance — calm sage chip, never alarming. */}
+      <View
         style={{
           flexDirection: 'row',
           gap: SPACE.md,
           backgroundColor: AP.chip,
-          borderColor: 'transparent',
+          borderRadius: theme.radii.card,
+          padding: SPACE.lg,
         }}
       >
-        <Feather name="alert-circle" size={20} color={theme.colors.accentDeep} />
+        <Feather name="shield" size={22} color={AP.onChip} />
         <View style={{ flex: 1, gap: SPACE.xs }}>
-          <BodyStrong style={{ color: AP.onChip }}>{tx.spikeTitle}</BodyStrong>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Body color={AP.onChip} style={{ fontWeight: '600', flexShrink: 1 }}>
+              {tx.spikeTitle}
+            </Body>
+            <StatusPill status="ok" label={tx.alwaysOn} size="sm" />
+          </View>
           <Small style={{ color: AP.onChip }}>{tx.spikeBody}</Small>
         </View>
-      </Card>
+      </View>
 
       {error ? (
-        <Small style={{ color: theme.colors.risk }}>{error}</Small>
+        <StatusPill status="risk" label={error} icon="alert-triangle" />
       ) : null}
 
       {selfQ.isLoading ? (
-        <ActivityIndicator color={theme.colors.accent} />
+        <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center' }}>
+          <ActivityIndicator color={theme.colors.accent} />
+        </View>
       ) : !self ? (
-        <Small muted>{tx.noMember}</Small>
+        <QuietState
+          tone="quiet"
+          icon="bell-off"
+          title={tx.noMemberTitle}
+          message={tx.noMember}
+        />
       ) : (
-        NOTIF_CATEGORIES.map((cat) => (
-          <Card key={cat.key} style={{ gap: SPACE.md }}>
-            <View style={{ gap: SPACE.xs }}>
-              <View
-                style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}
-              >
-                <BodyStrong>{cat.label[L]}</BodyStrong>
-                {!cat.wired ? (
-                  <View
-                    style={{
-                      backgroundColor: AP.surfaceLow,
-                      borderRadius: theme.radii.pill,
-                      paddingHorizontal: SPACE.sm,
-                      paddingVertical: 2,
-                    }}
-                  >
-                    <Micro muted>{tx.comingSoon}</Micro>
-                  </View>
-                ) : null}
+        NOTIF_CATEGORIES.map((cat) => {
+          const current = readCadence(prefs, cat.key)
+          return (
+            <View key={cat.key} style={{ gap: SPACE.sm }}>
+              {/* Category header — Eyebrow kicker + title + one calm description. */}
+              <View style={{ gap: SPACE.xs, paddingHorizontal: SPACE.xs }}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}
+                >
+                  <Eyebrow style={{ flexShrink: 1 }}>{cat.label[L]}</Eyebrow>
+                  {!cat.wired ? (
+                    <View
+                      style={{
+                        backgroundColor: AP.surfaceLow,
+                        borderRadius: theme.radii.pill,
+                        paddingHorizontal: SPACE.sm,
+                        paddingVertical: 2,
+                      }}
+                    >
+                      <Micro muted>{tx.comingSoon}</Micro>
+                    </View>
+                  ) : null}
+                </View>
+                <Small muted>{cat.desc[L]}</Small>
               </View>
-              <Small muted>{cat.desc[L]}</Small>
+
+              {/* The cadence chooser — selectable rows with live meanings (§5). */}
+              <SettingsGroup>
+                {CADENCES.map((c, i) => (
+                  <CadenceRow
+                    key={c}
+                    cadence={c}
+                    selected={c === current}
+                    last={i === CADENCES.length - 1}
+                    lang={L}
+                    theme={theme}
+                    onPress={() => setCadence(cat.key, c)}
+                  />
+                ))}
+              </SettingsGroup>
+
+              {!cat.wired ? (
+                <Small muted style={{ fontStyle: 'italic', paddingHorizontal: SPACE.xs }}>
+                  {tx.comingSoonNote}
+                </Small>
+              ) : null}
             </View>
-
-            <CadencePicker
-              value={readCadence(prefs, cat.key)}
-              onChange={(c) => setCadence(cat.key, c)}
-              lang={L}
-              theme={theme}
-            />
-
-            {!cat.wired ? (
-              <Small muted style={{ fontStyle: 'italic' }}>
-                {tx.comingSoonNote}
-              </Small>
-            ) : null}
-          </Card>
-        ))
+          )
+        })
       )}
     </Screen>
   )
 }
 
-function CadencePicker({
-  value,
-  onChange,
+/**
+ * CadenceRow — one selectable cadence in a category group. Reads like a
+ * SettingsRow (icon chip · label + live meaning · trailing marker) but is a
+ * radio-style pick: the chosen row gets a sage check and a soft sage wash; the
+ * rest stay calm. ≥48px tap target, color+icon+word (never color alone).
+ */
+function CadenceRow({
+  cadence,
+  selected,
+  last,
   lang,
   theme,
+  onPress,
 }: {
-  value: Cadence
-  onChange: (c: Cadence) => void
+  cadence: Cadence
+  selected: boolean
+  last: boolean
   lang: Lang
   theme: ReturnType<typeof useTheme>['theme']
+  onPress: () => void
 }) {
+  const meta = CADENCE_META[cadence]
+  const iconColor = selected ? theme.colors.accentDeep : theme.colors.textMute
+
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-      {CADENCES.map((c) => {
-        const active = c === value
-        return (
-          <Pressable
-            key={c}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            onPress={() => onChange(c)}
-            style={{
-              borderRadius: theme.radii.pill,
-              borderWidth: 1,
-              borderColor: active ? theme.colors.accent : theme.colors.line,
-              backgroundColor: active ? theme.colors.accentWarm : theme.colors.card,
-              paddingHorizontal: SPACE.md,
-              paddingVertical: SPACE.sm,
-              minHeight: TAP,
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'row',
-              gap: 6,
-            }}
-          >
-            {active ? (
-              <Feather name="check" size={14} color={theme.colors.accentDeep} />
-            ) : null}
-            <Small
-              style={{ color: active ? theme.colors.accentDeep : theme.colors.text }}
-            >
-              {CADENCE_LABEL[c][lang]}
-            </Small>
-          </Pressable>
-        )
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${CADENCE_LABEL[cadence][lang]} — ${meta.meaning[lang]}`}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACE.md,
+        minHeight: TAP + 8,
+        paddingHorizontal: SPACE.lg,
+        paddingVertical: SPACE.md,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: theme.colors.line,
+        backgroundColor: selected
+          ? AP.chip
+          : pressed
+            ? AP.surfaceLow
+            : 'transparent',
       })}
-    </View>
+    >
+      {/* Icon chip — the cadence's shape cue. */}
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: theme.radii.chip,
+          backgroundColor: selected ? theme.colors.card : AP.surfaceLow,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Feather name={meta.icon} size={18} color={iconColor} />
+      </View>
+
+      {/* Label + live meaning. */}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Body
+          color={selected ? theme.colors.accentDeep : theme.colors.text}
+          style={selected ? { fontWeight: '600' } : undefined}
+          numberOfLines={1}
+        >
+          {CADENCE_LABEL[cadence][lang]}
+        </Body>
+        <Small muted numberOfLines={2}>
+          {meta.meaning[lang]}
+        </Small>
+      </View>
+
+      {/* Trailing marker — a sage check when chosen, an empty ring otherwise. */}
+      {selected ? (
+        <Feather name="check-circle" size={22} color={theme.colors.accent} />
+      ) : (
+        <Feather name="circle" size={22} color={theme.colors.line} />
+      )}
+    </Pressable>
   )
 }

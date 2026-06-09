@@ -28,16 +28,20 @@ import type { HomeownerMember } from '../../src/api/types'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE, TAP } from '../../src/theme/tokens'
+import { AP, SPACE, TAP, type Status } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
   Button,
+  CalmCard,
   Card,
   Display,
-  Micro,
+  Eyebrow,
+  FadeInUp,
   Screen,
   Small,
+  StatusPill,
+  useInputStyle,
 } from '../../src/ui'
 import {
   emptyDraft,
@@ -56,8 +60,12 @@ import {
 // ---- copy ----------------------------------------------------------------
 const STR = {
   en: {
-    title: 'Your household',
+    eyebrow: 'Your household',
+    title: 'Who else should stay in the loop?',
     subtitle: 'Add family members so they can follow the build. You can always do this later.',
+    reassureTitle: "No rush — you're in control.",
+    reassureBody:
+      'Invite as few or as many as you like. Everyone you add can follow along; only co-owners can approve costs.',
     cap: `Up to ${MAX_HOUSEHOLD} members total`,
     addMember: 'Add a member',
     namePlaceholder: 'Name (e.g. Priya)',
@@ -81,8 +89,12 @@ const STR = {
     error: 'Something went wrong',
   },
   hi: {
-    title: 'आपका परिवार',
+    eyebrow: 'आपका परिवार',
+    title: 'और किसे जुड़े रहना चाहिए?',
     subtitle: 'परिवार के सदस्य जोड़ें ताकि वे निर्माण का हाल देख सकें। बाद में भी जोड़ सकते हैं।',
+    reassureTitle: 'कोई जल्दी नहीं — नियंत्रण आपके पास है।',
+    reassureBody:
+      'जितने चाहें उतने सदस्य जोड़ें। जोड़े गए सभी लोग हाल देख सकेंगे; केवल सह-मालिक खर्च मंज़ूर कर सकते हैं।',
     cap: `अधिकतम ${MAX_HOUSEHOLD} सदस्य`,
     addMember: 'सदस्य जोड़ें',
     namePlaceholder: 'नाम (जैसे प्रिया)',
@@ -109,6 +121,14 @@ const STR = {
 
 /** A premium Feather glyph per invitable role — a shape cue beside the chip. */
 const ROLE_ICON: Record<InvitableSubRole, React.ComponentProps<typeof Feather>['name']> = {
+  co_owner: 'home',
+  family: 'users',
+  advisor: 'feather',
+}
+
+/** A shape cue per role for the roster (all four sub-roles). */
+const ROSTER_ICON: Record<HomeownerMember['sub_role'], React.ComponentProps<typeof Feather>['name']> = {
+  primary_owner: 'home',
   co_owner: 'home',
   family: 'users',
   advisor: 'feather',
@@ -196,44 +216,42 @@ export default function Household() {
     }
   }
 
-  const inputStyle = {
-    minHeight: TAP,
-    borderWidth: 1,
-    borderColor: theme.colors.line,
-    borderRadius: theme.radii.control,
-    paddingHorizontal: SPACE.lg,
-    backgroundColor: AP.surfaceLow,
-    color: theme.colors.text,
-    fontSize: 16,
-    letterSpacing: 0,
-  } as const
+  // Shared input style (fixes the iOS custom-font placeholder-tracking bug).
+  const inputStyle = useInputStyle()
 
   return (
     <Screen floatingNav>
-      <View style={{ gap: SPACE.sm }}>
+      {/* Lead with the calm, not a 12-field form: clay eyebrow + serif greeting. */}
+      <FadeInUp style={{ gap: SPACE.sm }}>
+        <Eyebrow>{tx.eyebrow}</Eyebrow>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <Feather name="users" size={13} color={theme.colors.textMute} />
           <Small muted>{tx.cap}</Small>
         </View>
-      </View>
+      </FadeInUp>
 
-      {/* Flash message — calm pine confirm with a check. */}
+      {/* Reassurance before the form — graceful authority, never a wall of fields. */}
+      <FadeInUp delay={40}>
+        <CalmCard title={tx.reassureTitle} body={tx.reassureBody} status="ok" />
+      </FadeInUp>
+
+      {/* Flash message — a warm clay celebration when an invite lands. */}
       {flashMsg ? (
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: SPACE.sm,
-            backgroundColor: AP.chip,
+            backgroundColor: theme.colors.secondaryContainer,
             borderRadius: theme.radii.control,
             paddingHorizontal: SPACE.lg,
             paddingVertical: SPACE.md,
           }}
         >
-          <Feather name="check-circle" size={16} color={AP.onChip} />
-          <Small style={{ color: AP.onChip, fontWeight: '600' }}>{flashMsg}</Small>
+          <Feather name="check-circle" size={16} color={theme.colors.secondary} />
+          <Small style={{ color: theme.colors.secondary, fontWeight: '600' }}>{flashMsg}</Small>
         </View>
       ) : null}
 
@@ -330,9 +348,7 @@ export default function Household() {
 
       {/* Roster */}
       <View style={{ gap: SPACE.sm }}>
-        <Micro style={{ letterSpacing: 2, color: theme.colors.textMute }}>
-          {tx.roster.toUpperCase()}
-        </Micro>
+        <Eyebrow>{tx.roster}</Eyebrow>
 
         {rosterQ.isLoading ? (
           <ActivityIndicator color={theme.colors.accent} />

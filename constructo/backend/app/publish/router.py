@@ -164,6 +164,8 @@ async def publish_update(
     await _assert_site(session, user, body.site_id)
     update = Update(
         site_id=body.site_id, type=body.type, title=body.title, body=body.body,
+        revised_date=body.revised_date, impact_days=body.impact_days,
+        impact_cost_delta=body.impact_cost_delta, reason=body.reason,
         published_by=user.id,
     )
     session.add(update)

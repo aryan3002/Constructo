@@ -1,44 +1,54 @@
 /**
- * Homeowner Home — the flagship "Calm Cockpit" screen (handoff §5).
+ * Homeowner Home — the flagship "Calm Cockpit" screen, Direction C ("Blend").
+ *
+ * The product's one job is REASSURE → earned absence: open it, learn "you're
+ * okay — nothing needs you today," close it calm. So Home LEADS WITH THE ANSWER
+ * on open warm sand — a clay "TODAY" eyebrow + the serif (Eczar) 3-second answer
+ * + a reassuring line + a status pill — NOT a photo-over-text hero (that was the
+ * superseded direction). The living-home warmth returns as a real-photo "latest
+ * from site" strip lower down (evidence, never an AI/3D render — §8).
  *
  * One shell, three states — cards are CONDITIONAL (render only with content):
- *   - on-track:        LivingHomeHero (green chip) + StatusCard + ShortcutRail
- *                      + Latest-from-site strip + WeeklySummaryCard.
- *   - needs-attention: hero (amber chip, compact) + NeedsAttentionCard ABOVE
- *                      the StatusCard. One item at a time.
- *   - quiet:           hero (grey chip, compact) + the calm QuietCard explaining
- *                      the contractor-confirmed silence (never red, never pulse).
+ *   - on-track:        answer ("You're okay.") + StatusCard time-bar
+ *                      + latest-from-site photo + shortcut tiles + weekly letter.
+ *   - needs-attention: amber answer + the signature DecisionCard (a pre-briefed
+ *                      choice, never red) ABOVE the time-bar. One item at a time.
+ *   - quiet:           muted answer + QuietCard explaining the contractor-
+ *                      confirmed silence (never red, never pulse).
  *
- * The living-home hero IS the header (§2.3): a real photo, "CONSTRUCTO"
- * wordmark + an avatar/settings button — no standard top bar. Honest time-bar
- * only (never a %); premium Feather icons (never emoji); warm paper; red only
- * for genuine risk (§8).
- *
- * Keeps this screen's local `STR` (en/hi) table — the shared i18n catalog
- * migration is a separate WIP and is intentionally not adopted here.
+ * Honest time-bar only (never a %); premium Feather icons (never emoji); warm
+ * sand canvas; red only for genuine risk. Keeps this screen's local `STR`
+ * (en/hi) table — the shared i18n catalog migration is a separate WIP.
  */
-import { ActivityIndicator, ScrollView, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
+import { Link, useRouter } from 'expo-router'
+import { Feather } from '@expo/vector-icons'
+import { ActivityIndicator } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { homeowner } from '../../src/api/client'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
+import { AP, SPACE, type Status } from '../../src/theme/tokens'
 import {
+  BodyLg,
   Button,
   CalmCard,
+  DecisionCard,
+  Display,
+  Eyebrow,
+  FadeInUp,
   HomeWidget,
-  LivingHomeHero,
-  NeedsAttentionCard,
+  PhotoTile,
   Screen,
   Small,
   StatusCard,
+  StatusPill,
   WeeklySummaryCard,
   FLOATING_NAV_CLEARANCE,
-  FadeInUp,
 } from '../../src/ui'
-import type { LivingHomeHeroStatusChip } from '../../src/ui'
+import type { PhotoTileData } from '../../src/ui'
 import type { QuietPeriod } from '../../src/api/types'
 
 const STR = {
@@ -47,9 +57,15 @@ const STR = {
     morning: 'Good morning',
     afternoon: 'Good afternoon',
     evening: 'Good evening',
-    headline: 'Your home is taking shape.',
-    headlineAttention: 'One thing needs you.',
-    headlineQuiet: "It's quiet on site.",
+    today: 'Today',
+    // The 3-second answer (Eczar serif), per state.
+    answerOk: "You're okay.",
+    answerAttention: 'One thing for you.',
+    answerQuiet: 'All quiet on site.',
+    // The reassuring line under the answer.
+    subOk: "Nothing needs you today. We'll tell you the moment it does.",
+    subAttention: 'Take a look when you have a minute — no rush.',
+    subQuiet: 'Your site team is on it. Calm is good news.',
     onTrack: 'On track',
     needsYou: 'Needs you',
     quietChip: 'Quiet',
@@ -59,15 +75,14 @@ const STR = {
     startingSoon: 'Starting soon',
     progressBody: "Here's where your build stands today.",
     reviewed: 'Reviewed by site',
+    youAreHere: 'you are here',
     nextUp: 'NEXT UP',
     latest: 'Latest from site',
+    latestFromSite: 'LATEST FROM SITE',
     approvedChanges: 'APPROVED CHANGES',
     changeLine: '{n} change(s) recorded so far',
     askBuilder: 'Ask your builder',
-    needsEyebrow: 'Needs you · 1 of 1',
     review: 'Review',
-    allCalm: 'All calm today.',
-    allCalmBodyFallback: 'Your site team is on it.',
     latestCount: '{n} photos',
     thisWeek: 'This week',
     thisWeekEyebrow: 'This week',
@@ -79,15 +94,26 @@ const STR = {
     tryAgain: 'Try again',
     quietTitle: 'Quiet on site right now',
     quietNextPrefix: 'Next update expected around',
+    // PhotoTile a11y/action labels.
+    captionFallback: 'Site photo',
+    save: 'Save',
+    share: 'Share',
+    hide: 'Hide',
+    videoLabel: 'Video',
+    savedLabel: 'Saved',
   },
   hi: {
     settings: 'सेटिंग्स खोलें',
     morning: 'सुप्रभात',
     afternoon: 'नमस्ते',
     evening: 'शुभ संध्या',
-    headline: 'आपका घर आकार ले रहा है।',
-    headlineAttention: 'एक चीज़ को आपकी ज़रूरत है।',
-    headlineQuiet: 'साइट पर अभी शांति है।',
+    today: 'आज',
+    answerOk: 'सब ठीक है।',
+    answerAttention: 'आपके लिए एक बात।',
+    answerQuiet: 'साइट पर शांति है।',
+    subOk: 'आज आपकी कोई ज़रूरत नहीं। जैसे ही होगी, हम बता देंगे।',
+    subAttention: 'फ़ुरसत में एक नज़र डाल लें — कोई जल्दी नहीं।',
+    subQuiet: 'आपकी साइट टीम काम पर है। शांति अच्छी ख़बर है।',
     onTrack: 'सब ठीक चल रहा है',
     needsYou: 'आपकी ज़रूरत',
     quietChip: 'शांत',
@@ -97,15 +123,14 @@ const STR = {
     startingSoon: 'जल्द शुरू',
     progressBody: 'आज आपके निर्माण की स्थिति यह है।',
     reviewed: 'साइट द्वारा जाँचा गया',
+    youAreHere: 'आप यहाँ हैं',
     nextUp: 'आगे',
     latest: 'साइट से ताज़ा',
+    latestFromSite: 'साइट से ताज़ा',
     approvedChanges: 'मंज़ूर बदलाव',
     changeLine: 'अब तक {n} बदलाव दर्ज',
     askBuilder: 'बिल्डर से पूछें',
-    needsEyebrow: 'आपकी ज़रूरत · 1 में से 1',
     review: 'देखें',
-    allCalm: 'आज सब शांत है।',
-    allCalmBodyFallback: 'आपकी साइट टीम काम पर है।',
     latestCount: '{n} फ़ोटो',
     thisWeek: 'इस हफ़्ते',
     thisWeekEyebrow: 'इस हफ़्ते',
@@ -117,6 +142,12 @@ const STR = {
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
     quietNextPrefix: 'अगला अपडेट लगभग',
+    captionFallback: 'साइट फ़ोटो',
+    save: 'सहेजें',
+    share: 'साझा करें',
+    hide: 'छिपाएँ',
+    videoLabel: 'वीडियो',
+    savedLabel: 'सहेजा गया',
   },
 } as const
 
@@ -125,6 +156,15 @@ function greetingFor(g: { morning: string; afternoon: string; evening: string })
   if (h < 12) return g.morning
   if (h < 17) return g.afternoon
   return g.evening
+}
+
+/** "Friday, 7 June" — a calm, single-language date line for the top bar. */
+function weekdayDate(lang: 'en' | 'hi'): string {
+  return new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
 }
 
 /** Elapsed fraction of the build (started → handover), clamped 0..1. */
@@ -154,7 +194,7 @@ function dayMonth(iso: string | null): string | null {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-/** "6 Jun" — calm short date for quiet-card next-expected display. */
+/** "6 Jun" — calm short date for quiet-card / photo display. */
 function shortDate(iso: string | null): string | null {
   if (!iso) return null
   const d = new Date(iso)
@@ -165,16 +205,15 @@ function shortDate(iso: string | null): string | null {
 /**
  * QuietCard — a calm CalmCard explaining a confirmed quiet period.
  *
- * The `reason` text comes from the backend already in the user's language
- * (once H6.T translation is live). We render it as-is — never hardcode
- * English for dynamic backend strings. Static chrome (title, next-prefix)
- * uses the STR table. Mounts with a plain fade only (CalmCard never pulses).
+ * The `reason` text comes from the backend already in the user's language. We
+ * render it as-is — never hardcode English for dynamic backend strings. Static
+ * chrome (title, next-prefix) uses the STR table. Mounts with a plain fade only
+ * (CalmCard never pulses).
  */
 function QuietCard({ quiet, lang }: { quiet: QuietPeriod; lang: 'en' | 'hi' }) {
   const t = STR[lang]
   const nextDate = shortDate(quiet.next_expected_at)
 
-  // Body: backend reason (already translated) + optional next-expected date.
   const bodyParts: string[] = []
   if (quiet.reason) bodyParts.push(quiet.reason)
   if (nextDate) bodyParts.push(`${t.quietNextPrefix} ${nextDate}.`)
@@ -210,11 +249,39 @@ function weekRange(weekStart: string): string | null {
   return `${fmt(s)} – ${fmt(e)}`
 }
 
+/** The small status badge beside the answer (sage/amber/muted circle + glyph). */
+function AnswerBadge({ tone, icon }: { tone: Status; icon: React.ComponentProps<typeof Feather>['name'] }) {
+  const { theme } = useTheme()
+  const bg = theme.colors[tone]
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: bg,
+        // soft tone halo (never harsh)
+        shadowColor: bg,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.22,
+        shadowRadius: 12,
+      }}
+    >
+      <Feather name={icon} size={26} color="#ffffff" />
+    </View>
+  )
+}
+
 export default function Home() {
   const { lang } = useT()
   const { theme } = useTheme()
   const c = theme.colors
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const t = STR[lang]
 
   const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
@@ -244,14 +311,13 @@ export default function Home() {
   const { property, milestone_now, milestone_next, needs_attention, recent_activity, spend_summary, quiet } =
     homeQ.data
   const photos = photosQ.data?.items ?? []
-  const heroUri = photos[0]?.image_url
+  const latest = photos[0]
   const weekly = weeklyQ.data?.[0]
 
   const startOn = property?.started_on ?? null
   const handoverOn = property?.expected_handover_on ?? null
   const timeFrac = elapsedFraction(startOn, handoverOn)
   const frac = timeFrac ?? 0
-  // Honest time-bar labels (no completion number — Hard Rule §8).
   const hasTimeline = timeFrac !== null
   const startLabel = `${t.started} ${dayMonth(startOn) ?? ''}`.trim()
   const handoverMonth = handoverOn
@@ -264,61 +330,111 @@ export default function Home() {
   const statusSentence =
     milestone_now?.name ? recent_activity[0]?.body ?? t.progressBody : t.progressBody
 
-  // ---- Resolve the screen state → hero chip + headline. ----
-  // Precedence: needs-attention > quiet > on-track (an exception always wins).
+  // ---- Resolve the screen state. Exception always wins: needs > quiet > ok. ----
   const state: 'needs-attention' | 'quiet' | 'on-track' = firstAttention
     ? 'needs-attention'
     : quiet
       ? 'quiet'
       : 'on-track'
 
-  const heroChip: LivingHomeHeroStatusChip =
+  const answer =
+    state === 'needs-attention' ? t.answerAttention : state === 'quiet' ? t.answerQuiet : t.answerOk
+  const subline =
+    state === 'needs-attention' ? t.subAttention : state === 'quiet' ? t.subQuiet : t.subOk
+  const badge: { tone: Status; icon: React.ComponentProps<typeof Feather>['name'] } =
     state === 'needs-attention'
-      ? { tone: 'warn', icon: 'alert-triangle', label: t.needsYou }
+      ? { tone: 'warn', icon: 'bell' }
       : state === 'quiet'
-        ? { tone: 'quiet', icon: 'clock', label: t.quietChip }
-        : { tone: 'ok', icon: 'check', label: t.onTrack }
+        ? { tone: 'quiet', icon: 'clock' }
+        : { tone: 'ok', icon: 'check' }
+  const pillStatus: Status = state === 'needs-attention' ? 'warn' : state === 'quiet' ? 'quiet' : 'ok'
+  const pillLabel = state === 'needs-attention' ? t.needsYou : state === 'quiet' ? t.quietChip : t.onTrack
 
-  const headline =
-    state === 'needs-attention'
-      ? t.headlineAttention
-      : state === 'quiet'
-        ? t.headlineQuiet
-        : t.headline
+  const latestPhoto: PhotoTileData | null = latest
+    ? {
+        id: latest.id,
+        imageUri: latest.image_url,
+        caption: latest.caption,
+        room: latest.room_tag,
+        date: shortDate(latest.published_at),
+        starred: latest.is_starred,
+      }
+    : null
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}
+      contentContainerStyle={{
+        paddingTop: insets.top + SPACE.sm,
+        paddingHorizontal: SPACE.gutter,
+        paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE,
+        gap: SPACE.lg,
+      }}
     >
-      {/* ---- Living-home hero (IS the header) ---- */}
-      <LivingHomeHero
-        imageUri={heroUri}
-        greeting={greetingFor(t)}
-        propertyName={property?.display_name}
-        headline={headline}
-        statusChip={heroChip}
-        onAvatarHref="/(homeowner)/settings"
-        avatarLabel={t.settings}
-        startingSoonLabel={t.startingSoon}
-        compact={state !== 'on-track'}
-      />
+      {/* ---- Top bar: greeting + date (left) · settings (right). No photo hero. ---- */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <BodyLg style={{ fontWeight: '600' }}>{greetingFor(t)}</BodyLg>
+          <Small muted style={{ marginTop: 2 }} numberOfLines={1}>
+            {property?.display_name ? `${property.display_name} · ${weekdayDate(lang)}` : weekdayDate(lang)}
+          </Small>
+        </View>
+        <Link href="/(homeowner)/settings" asChild>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.settings}
+            hitSlop={8}
+            style={({ pressed }) => ({
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: c.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Feather name="settings" size={20} color={c.text} />
+          </Pressable>
+        </Link>
+      </View>
 
-      {/* ---- Overlapping content (StatusCard lifts ~24px into the hero) ---- */}
-      <View style={{ paddingHorizontal: SPACE.gutter, gap: SPACE.md, marginTop: -24 }}>
-        {/* Needs-attention card sits ABOVE the StatusCard, one item only. */}
-        {state === 'needs-attention' && firstAttention ? (
-          <NeedsAttentionCard
-            eyebrow={t.needsEyebrow}
+      {/* ---- The answer on open sand — the 3-second REASSURE moment. ---- */}
+      <FadeInUp style={{ gap: SPACE.md, marginTop: SPACE.xs }}>
+        <AnswerBadge tone={badge.tone} icon={badge.icon} />
+        <View style={{ gap: SPACE.xs }}>
+          <Eyebrow>{t.today}</Eyebrow>
+          <Display
+            accessibilityRole="header"
+            accessibilityLabel={`${answer} ${subline}`}
+          >
+            {answer}
+          </Display>
+        </View>
+        <BodyLg muted numberOfLines={3}>
+          {subline}
+        </BodyLg>
+        <StatusPill status={pillStatus} label={pillLabel} />
+      </FadeInUp>
+
+      {/* ---- Needs-you: the signature DecisionCard (calm amber, one item). ---- */}
+      {state === 'needs-attention' && firstAttention ? (
+        <FadeInUp>
+          <DecisionCard
+            eyebrow={t.needsYou}
             title={firstAttention.title}
-            context={firstAttention.detail}
+            whenLabel={firstAttention.detail ?? undefined}
             reviewLabel={t.review}
-            href="/requests"
-            accessibilityLabel={`${t.needsYou}: ${firstAttention.title}`}
+            onReview={() => router.push('/requests')}
+            style={{ borderRadius: theme.radii.card }}
           />
-        ) : null}
+        </FadeInUp>
+      ) : null}
 
-        {/* Status card — honest TIME-BAR (never a %) + warm sentence + trust badge. */}
+      {/* ---- Honest TIME-BAR (never a %) + current phase + reassuring sentence. ---- */}
+      <FadeInUp delay={40}>
         <StatusCard
           milestoneTitle={milestone_now?.name ?? t.inProgress}
           statusSentence={statusSentence}
@@ -328,75 +444,82 @@ export default function Home() {
           startLabel={startLabel}
           endLabel={endLabel}
           tickFraction={tickFrac}
+          youAreHereLabel={t.youAreHere}
         />
+      </FadeInUp>
 
-        {/* Quiet card — explains the contractor-confirmed silence (no red/pulse). */}
-        {state === 'quiet' && quiet ? <QuietCard quiet={quiet} lang={lang} /> : null}
+      {/* ---- Quiet: explain the contractor-confirmed silence (no red/pulse). ---- */}
+      {state === 'quiet' && quiet ? <QuietCard quiet={quiet} lang={lang} /> : null}
 
-        {/* ---- ShortcutRail row 1: Next Up + Latest photos ---- */}
-        {milestone_next || photos.length > 0 ? (
-          <FadeInUp style={{ flexDirection: 'row', gap: SPACE.sm }}>
-            {milestone_next ? (
-              <HomeWidget
-                eyebrow={t.nextUp}
-                primary={milestone_next.name}
-                secondary={
-                  milestone_next.expected_on ? `~${monthYear(milestone_next.expected_on) ?? ''}` : undefined
-                }
-                bgColor={c.accent}
-                href="/(homeowner)/updates"
-                accessibilityLabel={`${t.nextUp}: ${milestone_next.name}`}
-              />
-            ) : null}
-            {photos.length > 0 ? (
-              <HomeWidget
-                eyebrow={t.latest}
-                primary={t.latestCount.replace('{n}', String(photos.length))}
-                secondary={t.thisWeek}
-                bgImageUri={photos[0]?.image_url}
-                href="/(homeowner)/photos"
-                accessibilityLabel={`${photos.length} site photos — view gallery`}
-              />
-            ) : null}
-          </FadeInUp>
-        ) : null}
-
-        {/* ---- ShortcutRail row 2: Approved Changes + Ask Builder ---- */}
-        <FadeInUp delay={40} style={{ flexDirection: 'row', gap: SPACE.sm }}>
-          {spend_summary && spend_summary.change_count > 0 ? (
-            <HomeWidget
-              eyebrow={t.approvedChanges}
-              primary={formatRupees(spend_summary.total_change_cost_delta)}
-              secondary={t.changeLine.replace('{n}', String(spend_summary.change_count))}
-              href="/(homeowner)/updates"
-              accessibilityLabel={`${spend_summary.change_count} approved changes totalling ${formatRupees(spend_summary.total_change_cost_delta)}`}
-            />
-          ) : null}
-          {/* Ask Builder — always present as anchor */}
-          <HomeWidget
-            eyebrow={t.askShort}
-            primary={t.askBuilder}
-            secondary={t.askVoice}
-            href="/ask"
-            accessibilityLabel={t.askBuilder}
+      {/* ---- Latest from site — real photo, keeps the home feeling alive. ---- */}
+      {latestPhoto ? (
+        <FadeInUp delay={60} style={{ gap: SPACE.sm }}>
+          <Eyebrow>{t.latestFromSite}</Eyebrow>
+          <PhotoTile
+            photo={latestPhoto}
+            variant="hero"
+            onPress={() => router.push('/(homeowner)/photos')}
+            labels={{
+              caption: t.captionFallback,
+              translate: t.askBuilder,
+              save: t.save,
+              share: t.share,
+              hide: t.hide,
+              video: t.videoLabel,
+              starred: t.savedLabel,
+            }}
           />
         </FadeInUp>
+      ) : null}
 
-        {/* ---- Weekly summary (warm-clay) — Home only, when a letter exists ---- */}
-        {weekly?.text ? (
-          <FadeInUp delay={80}>
-            <WeeklySummaryCard
-              eyebrowPrefix={t.thisWeekEyebrow}
-              rangeLabel={weekRange(weekly.week_start) ?? ''}
-              summary={weekly.text}
-              listenLabel={t.listen}
-              readMoreLabel={t.readLetter}
-              readMoreHref="/(homeowner)/updates"
-              lang={lang}
-            />
-          </FadeInUp>
+      {/* ---- Shortcut tiles: Next up · Changes · Ask (Photos lives above). ---- */}
+      <FadeInUp delay={80} style={{ flexDirection: 'row', gap: SPACE.sm }}>
+        {milestone_next ? (
+          <HomeWidget
+            eyebrow={t.nextUp}
+            primary={milestone_next.name}
+            secondary={milestone_next.expected_on ? `~${monthYear(milestone_next.expected_on) ?? ''}` : undefined}
+            bgColor={c.accent}
+            href="/(homeowner)/updates"
+            accessibilityLabel={`${t.nextUp}: ${milestone_next.name}`}
+          />
         ) : null}
-      </View>
+        {spend_summary && spend_summary.change_count > 0 ? (
+          <HomeWidget
+            eyebrow={t.approvedChanges}
+            primary={formatRupees(spend_summary.total_change_cost_delta)}
+            secondary={t.changeLine.replace('{n}', String(spend_summary.change_count))}
+            href="/(homeowner)/updates"
+            accessibilityLabel={`${spend_summary.change_count} approved changes totalling ${formatRupees(spend_summary.total_change_cost_delta)}`}
+          />
+        ) : null}
+      </FadeInUp>
+
+      {/* Ask your builder — always present as a calm anchor. */}
+      <FadeInUp delay={100} style={{ flexDirection: 'row', gap: SPACE.sm }}>
+        <HomeWidget
+          eyebrow={t.askShort}
+          primary={t.askBuilder}
+          secondary={t.askVoice}
+          href="/ask"
+          accessibilityLabel={t.askBuilder}
+        />
+      </FadeInUp>
+
+      {/* ---- Weekly summary letter (warm-clay) — when one exists. ---- */}
+      {weekly?.text ? (
+        <FadeInUp delay={120}>
+          <WeeklySummaryCard
+            eyebrowPrefix={t.thisWeekEyebrow}
+            rangeLabel={weekRange(weekly.week_start) ?? ''}
+            summary={weekly.text}
+            listenLabel={t.listen}
+            readMoreLabel={t.readLetter}
+            readMoreHref="/(homeowner)/updates"
+            lang={lang}
+          />
+        </FadeInUp>
+      ) : null}
     </ScrollView>
   )
 }
