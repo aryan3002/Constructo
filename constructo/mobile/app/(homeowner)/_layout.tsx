@@ -49,6 +49,9 @@ function HomeownerTabs() {
         <Tabs.Screen name="design" options={{ title: t('nav.design') }} />
         {/* Thread detail — pushed from the Messages inbox, no tab bar entry */}
         <Tabs.Screen name="messages/[id]" options={{ href: null }} />
+        {/* Design write sub-routes — pushed from the Design tab, no tab bar entry */}
+        <Tabs.Screen name="design/select" options={{ href: null }} />
+        <Tabs.Screen name="design/profile" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
         {/* Settings cluster — pushed from the Settings hub, no tab bar entry */}
         <Tabs.Screen name="members" options={{ href: null }} />

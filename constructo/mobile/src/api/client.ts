@@ -8,6 +8,7 @@ import { getToken } from '../store/secure'
 import type {
   Capabilities,
   ChangesLog,
+  ConsistencyCheck,
   DesignConflict,
   DesignProfile,
   DesignReference,
@@ -163,6 +164,42 @@ export const homeowner = {
     site_id?: string
   }) =>
     request<DesignSelection>('/api/v1/homeowner/design/conflicts/resolve', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /**
+   * Save a confirmed design profile, or (when `profile` is omitted) AI-DRAFT one
+   * from her intake fingerprint. PUT /design/profile. Honest-AI: omitting
+   * `profile` drafts AND persists immediately (not a discardable preview) — the
+   * UI confirms by PUTting the edited profile back. Gated server-side (can_design).
+   */
+  saveDesignProfile: (body: { site_id?: string; profile?: Record<string, unknown> }) =>
+    request<DesignProfile>('/api/v1/homeowner/design/profile', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  /**
+   * Add a design selection (room-scoped + status-aware). POST /design/selections,
+   * gated server-side by `_gate_design_write` — a room-narrowed member may only
+   * write their own `space_id`; status defaults to "proposed" when omitted.
+   */
+  addSelection: (body: {
+    item: string
+    choice: string
+    space_id?: string
+    status?: string
+    site_id?: string
+  }) =>
+    request<DesignSelection>('/api/v1/homeowner/design/selections', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /**
+   * Advisory fit feedback for an (item, choice) against the saved profile.
+   * POST /design/consistency-check — NEVER blocking; returns { fits, feedback }.
+   */
+  consistencyCheck: (body: { item: string; choice: string; site_id?: string }) =>
+    request<ConsistencyCheck>('/api/v1/homeowner/design/consistency-check', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

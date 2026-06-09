@@ -27,14 +27,14 @@
  * placeholders (never fake an approval/digest), single language per screen.
  */
 import { useState } from 'react'
-import { Alert, Linking, TextInput, View } from 'react-native'
+import { Alert, Linking, View } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Link } from 'expo-router'
 
-import { homeowner, request } from '../../src/api/client'
+import { homeowner } from '../../src/api/client'
 import type {
   ConsistencyCheck,
   DesignConflict,
@@ -114,13 +114,18 @@ export default function Design() {
   })
   const refs = referencesQ.data ?? []
 
+  // Capabilities drive every WRITE affordance: only a `can_design` member may
+  // make selections / confirm the profile / add inspiration. A non-design member
+  // gets a calm read-only view (write affordances simply absent — never a lock).
+  const capsQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canDesign = capsQ.data?.can_design ?? false
+
   // Per-selection consistency advice, keyed by selection id.
   const [advice, setAdvice] = useState<Record<string, ConsistencyCheck>>({})
   const [checkingId, setCheckingId] = useState<string | null>(null)
-
-  // Add-selection form state.
-  const [item, setItem] = useState('')
-  const [choice, setChoice] = useState('')
 
   const addRefMut = useMutation({
     mutationFn: (image_url: string) => homeowner.references({ image_url, source: 'upload' }),
@@ -148,20 +153,6 @@ export default function Design() {
     onError: (err: Error) => Alert.alert(STR.errorTitle, err.message),
   })
 
-  const addSelectionMut = useMutation({
-    mutationFn: () =>
-      request<DesignSelection>('/api/v1/homeowner/design/selections', {
-        method: 'POST',
-        body: JSON.stringify({ item: item.trim(), choice: choice.trim() }),
-      }),
-    onSuccess: () => {
-      setItem('')
-      setChoice('')
-      void qc.invalidateQueries({ queryKey: ['design', 'selections'] })
-    },
-    onError: (err: Error) => Alert.alert(STR.errorTitle, err.message),
-  })
-
   async function pickInspiration() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
@@ -179,10 +170,7 @@ export default function Design() {
   async function checkFit(sel: DesignSelection) {
     setCheckingId(sel.id)
     try {
-      const res = await request<ConsistencyCheck>(
-        '/api/v1/homeowner/design/consistency-check',
-        { method: 'POST', body: JSON.stringify({ item: sel.item, choice: sel.choice }) },
-      )
+      const res = await homeowner.consistencyCheck({ item: sel.item, choice: sel.choice })
       setAdvice((prev) => ({ ...prev, [sel.id]: res }))
     } catch (err) {
       Alert.alert(STR.errorTitle, (err as Error).message)
@@ -199,17 +187,6 @@ export default function Design() {
     } catch {
       Alert.alert(STR.errorTitle, STR.openFile)
     }
-  }
-
-  const inputStyle = {
-    borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: theme.radii.control,
-    paddingHorizontal: SPACE.md,
-    paddingVertical: SPACE.sm,
-    color: c.text,
-    fontSize: 16,
-    letterSpacing: 0, // prevent iOS custom-font tracking from leaking into placeholder
   }
 
   const profile = profileQ.data
@@ -270,6 +247,23 @@ export default function Design() {
         <View style={{ gap: 2 }}>
           <Display>{STR.title}</Display>
           <Small muted>{STR.subtitle}</Small>
+          {/* Graceful read-only notice — a member without a design say sees this
+              instead of (absent) write buttons; never a lock. */}
+          {capsQ.data && !canDesign ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.xs,
+                marginTop: SPACE.xs,
+              }}
+            >
+              <Feather name="eye" size={13} color={c.textMute} />
+              <Micro muted style={{ flex: 1 }}>
+                {STR.readOnlyNotice}
+              </Micro>
+            </View>
+          ) : null}
         </View>
       </FadeInUp>
 
@@ -356,6 +350,19 @@ export default function Design() {
                   </View>
                 </View>
               ) : null}
+
+              {/* Confirm / re-draft her style profile (the PUT /design/profile
+                  loop). Gated: only a member with a design say. */}
+              {canDesign ? (
+                <Link href="/(homeowner)/design/profile" asChild>
+                  <Button
+                    title={STR.refreshStyle}
+                    variant="ghost"
+                    size="md"
+                    leading={<Feather name="refresh-cw" size={15} color={c.accent} />}
+                  />
+                </Link>
+              ) : null}
             </View>,
           )
         )}
@@ -393,13 +400,16 @@ export default function Design() {
                         <Body>{opt.choice}</Body>
                         <Small muted>{opt.by}</Small>
                       </View>
-                      <Button
-                        title={STR.decideTogether}
-                        variant="secondary"
-                        size="md"
-                        loading={resolveMut.isPending}
-                        onPress={() => resolveMut.mutate({ conflict, choice: opt.choice })}
-                      />
+                      {/* Only a member with a design say picks; others see it read-only. */}
+                      {canDesign ? (
+                        <Button
+                          title={STR.decideTogether}
+                          variant="secondary"
+                          size="md"
+                          loading={resolveMut.isPending}
+                          onPress={() => resolveMut.mutate({ conflict, choice: opt.choice })}
+                        />
+                      ) : null}
                     </View>
                   ))}
                 </View>
@@ -674,32 +684,17 @@ export default function Design() {
             </View>
           )}
 
-          {/* Add-a-selection form */}
-          {surface(
-            <View style={{ gap: SPACE.sm }}>
-              <BodyStrong>{STR.addSelectionTitle}</BodyStrong>
-              <TextInput
-                value={item}
-                onChangeText={setItem}
-                placeholder={STR.itemLabel}
-                placeholderTextColor={c.textMute}
-                style={inputStyle}
-              />
-              <TextInput
-                value={choice}
-                onChangeText={setChoice}
-                placeholder={STR.choiceLabel}
-                placeholderTextColor={c.textMute}
-                style={inputStyle}
-              />
+          {/* Make a selection — opens the room-scoped, status-aware sheet with a
+              pre-commit fit check. Gated: only a member with a design say. */}
+          {canDesign ? (
+            <Link href="/(homeowner)/design/select" asChild>
               <Button
                 title={STR.addSelection}
-                loading={addSelectionMut.isPending}
-                disabled={item.trim().length === 0 || choice.trim().length === 0}
-                onPress={() => addSelectionMut.mutate()}
+                variant="secondary"
+                leading={<Feather name="plus" size={16} color={c.accentDeep} />}
               />
-            </View>,
-          )}
+            </Link>
+          ) : null}
         </View>
       </FadeInUp>
 
@@ -767,12 +762,14 @@ export default function Design() {
             </View>
           )}
 
-          <Button
-            title={STR.addInspiration}
-            variant="secondary"
-            loading={addRefMut.isPending}
-            onPress={() => void pickInspiration()}
-          />
+          {canDesign ? (
+            <Button
+              title={STR.addInspiration}
+              variant="secondary"
+              loading={addRefMut.isPending}
+              onPress={() => void pickInspiration()}
+            />
+          ) : null}
         </View>
       </FadeInUp>
 
