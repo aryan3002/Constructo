@@ -30,7 +30,7 @@ import {
   StatusDot,
   TimelineItem,
 } from '../../../src/ui'
-import { STATUS, type Status } from '../../../src/theme/tokens'
+import { type Status } from '../../../src/theme/tokens'
 import {
   supervisorApi,
   type Site,
@@ -83,10 +83,10 @@ const EVENT_LABEL: Record<SiteEventType, { en: string; hi: string }> = {
   unknown: { en: 'Update', hi: 'अपडेट' },
 }
 
-function eventTint(t: SiteEventType): string {
-  if (t === 'issue') return STATUS.risk
-  if (t === 'approval' || t === 'payment_request') return STATUS.warn
-  return STATUS.info
+function eventTint(t: SiteEventType, c: { risk: string; warn: string; info: string }): string {
+  if (t === 'issue') return c.risk
+  if (t === 'approval' || t === 'payment_request') return c.warn
+  return c.info
 }
 
 /** Map a site status string onto the shared status spine. */
@@ -223,7 +223,7 @@ function SiteDetail({ siteId }: { siteId: string }) {
               typeLabel={EVENT_LABEL[e.event_type][lang]}
               summary={e.summary}
               occurredOn={e.occurred_on}
-              tint={eventTint(e.event_type)}
+              tint={eventTint(e.event_type, c)}
               isLast={i === events.length - 1}
             />
           ))}

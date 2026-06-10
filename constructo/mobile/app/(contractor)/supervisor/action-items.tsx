@@ -27,7 +27,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { Body, BodyStrong, Button, EmptyState, EvidenceChip, Eyebrow, Mono, Small, StatusPill } from '../../../src/ui'
 import { actionItemsApi, type ActionItem } from '../../../src/api/actionItems'
-import { SPACE, STATUS } from './_components'
+import { SPACE } from './_components'
 
 const STR = {
   en: {
@@ -131,7 +131,7 @@ export default function ActionItems() {
           <Feather
             name={isDone ? 'check-circle' : 'circle'}
             size={24}
-            color={isDone ? STATUS.ok : c.textMute}
+            color={isDone ? c.ok : c.textMute}
           />
         </Pressable>
         <View style={{ flex: 1, gap: 3 }}>

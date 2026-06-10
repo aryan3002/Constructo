@@ -31,7 +31,7 @@ import { useRouter } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
+import { SPACE, TAP } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Button, Small } from '../../../src/ui'
 import { useInputStyle } from '../../../src/ui/useInputStyle'
 import { ApiError } from '../../../src/api/client'
@@ -499,7 +499,7 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
             </View>
           ) : null}
 
-          {error ? <Small color={STATUS.risk}>{error}</Small> : null}
+          {error ? <Small color={c.risk}>{error}</Small> : null}
         </View>
       </ScrollView>
 
@@ -658,7 +658,7 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
           <ActivityIndicator color={c.accent} />
         </View>
       ) : membersQ.error ? (
-        <Small color={STATUS.risk} style={{ paddingVertical: SPACE.lg }}>
+        <Small color={c.risk} style={{ paddingVertical: SPACE.lg }}>
           {t.loadFailed}
         </Small>
       ) : (
@@ -819,13 +819,13 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
               )}
             </View>
 
-            {error ? <Small color={STATUS.risk}>{error}</Small> : null}
+            {error ? <Small color={c.risk}>{error}</Small> : null}
 
             {/* Archive (destructive) */}
             <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
               {confirmArchive ? (
                 <View style={{ gap: SPACE.xs }}>
-                  <Body color={STATUS.risk}>{t.confirmArchive}</Body>
+                  <Body color={c.risk}>{t.confirmArchive}</Body>
                   <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
                     <Button
                       title={t.yes}
