@@ -86,3 +86,8 @@ class Component(Base):
         nullable=False,
         server_default=ComponentStatus.not_started.value,
     )
+    location: Mapped[str | None] = mapped_column(String, nullable=True)  # wall / sub-location
+    assignee_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
