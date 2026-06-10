@@ -259,7 +259,7 @@ class OpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - live network path; unit-tested via FakeLLMClient
+    async def complete_vision(  # pragma: no cover - live; real network path
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
         """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
@@ -334,7 +334,7 @@ class AzureOpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - live network path; unit-tested via FakeLLMClient
+    async def complete_vision(  # pragma: no cover - live; real network path
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
         """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
