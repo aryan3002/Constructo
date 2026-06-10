@@ -202,15 +202,24 @@ class FakeLLMClient:
     async def complete_vision(
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
-        """Ignore the image, delegate to :meth:`complete` (network-free).
+        """Ignore the image, return the same result as :meth:`complete` (network-free).
 
         Records ``image_url`` in ``self.calls`` so a test can assert the URL was
-        *passed* without any network, then returns the same echo as ``complete``.
+        *passed* without any network.  The vision call is recorded as a single entry
+        (with ``image_url``) — ``complete`` is *not* called separately so that
+        ``calls[-1]["image_url"]`` is always the most-recent vision call.
         """
+        if self.canned is not None:
+            result = self.canned
+        else:
+            result = await self.complete(system, user, json_schema)
+            # complete() already appended its own call entry; replace it with
+            # the full vision entry so callers see image_url on calls[-1].
+            self.calls.pop()
         self.calls.append(
             {"system": system, "user": user, "image_url": image_url, "json_schema": json_schema}
         )
-        return await self.complete(system, user, json_schema)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +259,10 @@ class OpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+    async def complete_vision(  # pragma: no cover - live; real network path
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
-        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
         if not image_url:
             return await self.complete(system, user, json_schema)
         try:
@@ -325,10 +334,10 @@ class AzureOpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+    async def complete_vision(  # pragma: no cover - live; real network path
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
-        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
         if not image_url:
             return await self.complete(system, user, json_schema)
         try:

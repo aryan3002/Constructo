@@ -4,18 +4,28 @@ A Spec is a material instance bound to a component/wall. Reads are open to any
 company member; create/edit is owner/pm/supervisor; approval is owner/pm.
 Company-scoped, mirroring app/materials/router.py.
 """
+import base64
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import Component, Space, Spec, User, UserRole
+from app.extraction.llm import LLMClient
+from app.models import Component, Material, Space, Spec, User, UserRole
 from app.specs.costing import rollup_by_room
-from app.specs.schemas import RollupOut, SpecApprove, SpecCreate, SpecOut, SpecUpdate
+from app.specs.extraction import extract_material_from_image, get_llm
+from app.specs.schemas import (
+    ExtractedSpecOut,
+    RollupOut,
+    SpecApprove,
+    SpecCreate,
+    SpecOut,
+    SpecUpdate,
+)
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
 
@@ -70,6 +80,48 @@ async def costing_rollup(
         for s, room_name in rows
     ]
     return RollupOut.model_validate(rollup_by_room(lines))
+
+
+@router.post("/extract", response_model=ExtractedSpecOut, status_code=201)
+async def extract_spec(
+    site_id: UUID = Form(...),
+    component_id: UUID = Form(...),
+    image: UploadFile = File(...),
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> ExtractedSpecOut:
+    raw = await image.read()
+    mime = image.content_type or "image/jpeg"
+    data_url = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+    fields = await extract_material_from_image(llm, data_url)
+
+    material = Material(
+        company_id=user.company_id,
+        name=fields.get("name") or fields.get("brand") or "Proposed material",
+        category=fields.get("category"),
+        brand=fields.get("brand"),
+        sku=fields.get("product_code"),
+        colour=fields.get("colour"),
+        finish=fields.get("finish"),
+        size=fields.get("size"),
+        thickness=fields.get("thickness"),
+    )
+    session.add(material)
+    await session.flush()
+
+    spec = Spec(
+        company_id=user.company_id,
+        site_id=site_id,
+        component_id=component_id,
+        material_id=material.id,
+        label=fields.get("category") or "Proposed",
+        notes="Proposed from a photo — confirm.",
+    )
+    session.add(spec)
+    await session.commit()
+    await session.refresh(spec)
+    return ExtractedSpecOut(spec=SpecOut.model_validate(spec), extracted=fields)
 
 
 @router.get("/{spec_id}", response_model=SpecOut)
