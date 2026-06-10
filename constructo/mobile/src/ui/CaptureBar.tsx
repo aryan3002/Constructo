@@ -131,12 +131,12 @@ export function CaptureBar({
                     width: 3,
                     borderRadius: 2,
                     backgroundColor: c.risk,
-                    height: reduced
-                      ? h
-                      : pulse.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [6, h + 4],
-                        }),
+                    // Fixed height + animated scaleY: the native driver supports
+                    // `transform` (not `height`), so the wave can pulse natively.
+                    height: h,
+                    transform: reduced
+                      ? undefined
+                      : [{ scaleY: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }],
                   }}
                 />
               ))}
