@@ -8,7 +8,7 @@
  * Reached from the owner site detail with a `site_id` param.
  */
 import { useState } from 'react'
-import { ActivityIndicator, Pressable, TextInput, View } from 'react-native'
+import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 
@@ -16,7 +16,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { owner, type DisputePackResult, type PackAskResult } from '../../../src/api/owner'
-import { Body, BodyStrong, Card, H1, Mono, Screen, Small } from '../../../src/ui'
+import { Body, Button, Card, H1, Mono, MoneyCell, Screen, Small } from '../../../src/ui'
 
 const STR = {
   en: {
@@ -59,23 +59,6 @@ const STR = {
   },
 } as const
 
-/** Indian-grouped rupee (no Hermes Intl reliance). */
-function inr(v: number): string {
-  const s = Math.abs(Math.round(v)).toString()
-  let grouped = s
-  if (s.length > 3) {
-    const last3 = s.slice(-3)
-    let rest = s.slice(0, -3)
-    const parts: string[] = []
-    while (rest.length > 2) {
-      parts.unshift(rest.slice(-2))
-      rest = rest.slice(0, -2)
-    }
-    if (rest) parts.unshift(rest)
-    grouped = `${parts.join(',')},${last3}`
-  }
-  return `₹${grouped}`
-}
 
 export default function DisputePack() {
   const { lang } = useT()
@@ -152,23 +135,16 @@ export default function DisputePack() {
             fontSize: 16,
           }}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.build}
+        <Button
+          title={t.build}
+          variant="primary"
+          size="md"
+          block
+          loading={loading}
           disabled={!vendor.trim() || loading}
           onPress={build}
-          style={({ pressed }) => ({
-            marginTop: SPACE.sm,
-            minHeight: 48,
-            borderRadius: theme.radii.control,
-            backgroundColor: c.accent,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: !vendor.trim() || loading ? 0.5 : pressed ? 0.9 : 1,
-          })}
-        >
-          {loading ? <ActivityIndicator color={c.onAccent} /> : <BodyStrong color={c.onAccent}>{t.build}</BodyStrong>}
-        </Pressable>
+          style={{ marginTop: SPACE.sm }}
+        />
       </Card>
 
       {error ? (
@@ -183,27 +159,34 @@ export default function DisputePack() {
           <Card>
             <Body style={{ color: c.text }}>{pack.narrative}</Body>
             <View style={{ flexDirection: 'row', marginTop: SPACE.md, gap: SPACE.md }}>
-              <View style={{ flex: 1 }}>
-                <Mono style={{ fontSize: 16, color: c.text }}>{inr(pack.settlement.paid_out)}</Mono>
-                <Small muted>{t.paid}</Small>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Mono style={{ fontSize: 16, color: c.text }}>{inr(pack.settlement.invoiced)}</Mono>
-                <Small muted>{t.invoiced}</Small>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Mono style={{ fontSize: 16, color: pack.settlement.warn ? c.risk : c.text }}>
-                  {inr(pack.settlement.unadjusted_advance)}
-                </Mono>
-                <Small muted>{t.unadjusted}</Small>
-              </View>
+              <MoneyCell
+                amount={pack.settlement.paid_out}
+                sign="none"
+                size="md"
+                label={t.paid}
+                style={{ flex: 1 }}
+              />
+              <MoneyCell
+                amount={pack.settlement.invoiced}
+                sign="none"
+                size="md"
+                label={t.invoiced}
+                style={{ flex: 1 }}
+              />
+              <MoneyCell
+                amount={pack.settlement.unadjusted_advance}
+                sign={pack.settlement.warn ? 'out' : 'none'}
+                size="md"
+                label={t.unadjusted}
+                style={{ flex: 1 }}
+              />
             </View>
           </Card>
 
           {/* Ask the pack */}
           <Card>
             <Small muted style={{ letterSpacing: 1 }}>{t.ask.toUpperCase()}</Small>
-            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.xs }}>
+            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.xs, alignItems: 'center' }}>
               <TextInput
                 value={question}
                 onChangeText={setQuestion}
@@ -222,22 +205,14 @@ export default function DisputePack() {
                   fontSize: 15,
                 }}
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t.askBtn}
+              <Button
+                title={t.askBtn}
+                variant="primary"
+                size="md"
+                loading={asking}
                 disabled={!question.trim() || asking}
                 onPress={ask}
-                style={({ pressed }) => ({
-                  paddingHorizontal: SPACE.lg,
-                  borderRadius: theme.radii.control,
-                  backgroundColor: c.accent,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: !question.trim() || asking ? 0.5 : pressed ? 0.9 : 1,
-                })}
-              >
-                {asking ? <ActivityIndicator color={c.onAccent} /> : <BodyStrong color={c.onAccent}>{t.askBtn}</BodyStrong>}
-              </Pressable>
+              />
             </View>
             {answer ? (
               <Body style={{ marginTop: SPACE.sm, color: answer.answerable ? c.text : c.textMute }}>

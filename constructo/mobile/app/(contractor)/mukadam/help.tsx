@@ -4,15 +4,14 @@
  * only "reading" screen for a low-literacy role. Plus Sign out. Icon + WORD,
  * big text, ≥56px targets.
  */
-import { Alert, Linking, Pressable, View } from 'react-native'
+import { Alert, Linking, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Card, Display, H2, Screen, Small } from '../../../src/ui'
-import { VoiceOutButton, MUKADAM_TAP } from './_voice'
+import { Body, Button, Card, Display, H2, Screen } from '../../../src/ui'
+import { VoiceOutButton } from './_voice'
 
 // TODO(config): wire the real site/office support number from the bound site.
 const SUPPORT_PHONE = '+910000000000'
@@ -50,8 +49,6 @@ const STR = {
 
 export default function Help() {
   const { lang } = useT()
-  const { theme } = useTheme()
-  const c = theme.colors
   const str = STR[lang]
   const { signOut } = useAuth()
   const router = useRouter()
@@ -92,43 +89,22 @@ export default function Help() {
         </View>
       </Card>
 
-      {/* Call a human — big, icon + word. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={str.call}
+      {/* Call a human — big primary action (ink); phone call is not an AI "yes"). */}
+      <Button
+        title={str.call}
+        variant="primary"
+        size="lg"
+        block
         onPress={callOffice}
-        style={({ pressed }) => [
-          {
-            minHeight: 64,
-            borderRadius: theme.radii.control,
-            backgroundColor: c.accent,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: pressed ? 0.92 : 1,
-          },
-          theme.shadowCard,
-        ]}
-      >
-        <BodyStrong color={c.onAccent} style={{ fontSize: 18 }}>{str.call}</BodyStrong>
-      </Pressable>
+      />
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={str.signOut}
+      <Button
+        title={str.signOut}
+        variant="secondary"
+        size="md"
+        block
         onPress={onSignOut}
-        style={({ pressed }) => ({
-          minHeight: MUKADAM_TAP,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: theme.radii.control,
-          borderWidth: 1,
-          borderColor: c.line,
-          backgroundColor: c.card,
-          opacity: pressed ? 0.9 : 1,
-        })}
-      >
-        <Small style={{ fontWeight: '600' }}>{str.signOut}</Small>
-      </Pressable>
+      />
     </Screen>
   )
 }

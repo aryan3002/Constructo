@@ -16,14 +16,16 @@ import { ActivityIndicator, Pressable, View } from 'react-native'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, severityToStatus, type Status } from '../../../src/theme/tokens'
 import {
+  Body,
   BodyStrong,
   Button,
-  EvidenceCard,
+  Card,
+  EmptyState,
   Micro,
-  Mono,
+  NeedsYouCard,
   Small,
-  StatusDot,
   StatusPill,
+  type EvidenceChipProps,
   type EvidenceItem,
 } from '../../../src/ui'
 import type { Risk } from '../../../src/api/owner'
@@ -114,18 +116,19 @@ export function LoadingBlock() {
 }
 
 export function ErrorBlock({ message, onRetry, retryLabel }: { message: string; onRetry: () => void; retryLabel: string }) {
-  const { theme } = useTheme()
   return (
-    <View style={{ gap: SPACE.md, paddingVertical: SPACE.xl }}>
-      <Small color={theme.colors.risk}>{message}</Small>
-      <Button title={retryLabel} variant="secondary" onPress={onRetry} />
-    </View>
+    <EmptyState
+      variant="empty"
+      icon="alert-triangle"
+      title={message}
+      action={<Button title={retryLabel} variant="secondary" onPress={onRetry} />}
+    />
   )
 }
 
 // ---------------------------------------------------------------------------
-// BriefCommandCard — THE hero. A cross-site risk rendered as proof-on-tap
-// evidence with inline decision chips (Approve / Hold / Assign).
+// BriefCommandCard — THE hero. A cross-site risk rendered as a NeedsYouCard
+// (proof-on-tap evidence + ranked status + Approve / Hold / Assign actions).
 // ---------------------------------------------------------------------------
 export interface BriefDecision {
   approve: () => void
@@ -136,7 +139,7 @@ export interface BriefDecision {
 export function BriefCommandCard({
   risk,
   siteName,
-  magnitude,
+  rank,
   pending,
   resolvedLabel,
   proofLabel,
@@ -145,8 +148,7 @@ export function BriefCommandCard({
 }: {
   risk: Risk
   siteName: string
-  /** Right-aligned magnitude in mono (e.g. "₹4.2L" or "−8 today"). */
-  magnitude?: string
+  rank?: number
   pending: boolean
   /** When set, the card has collapsed into its decision consequence. */
   resolvedLabel?: string
@@ -154,69 +156,38 @@ export function BriefCommandCard({
   chips: { approve: string; hold: string; assign: string }
   onChip: (action: 'approve' | 'hold' | 'assign') => void
 }) {
-  const { theme } = useTheme()
   const status: Status = severityToStatus(risk.severity)
   const domain = risk.kind.replace(/_/g, ' ')
 
   if (resolvedLabel) {
     return (
-      <View
-        style={{
-          backgroundColor: theme.colors.card,
-          borderRadius: theme.radii.card,
-          borderWidth: 1,
-          borderColor: theme.colors.line,
-          padding: SPACE.lg,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: SPACE.md,
-        }}
-      >
-        <StatusDot status="ok" />
-        <Small muted style={{ flex: 1 }}>{resolvedLabel}</Small>
-      </View>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+        <StatusPill status="ok" size="sm" label={resolvedLabel} />
+      </Card>
     )
   }
 
+  // Build evidence chips from event ids.
+  const evidenceChips: EvidenceChipProps[] = idsToEvidence(risk.evidence_event_ids, proofLabel).map(
+    (item) => ({ kind: 'message' as const, label: item.label ?? proofLabel }),
+  )
+
   return (
-    <View style={{ gap: 0 }}>
-      {/* header strip: severity · site · domain — magnitude */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: SPACE.lg,
-          paddingTop: SPACE.sm,
-        }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flex: 1 }}>
-          <StatusPill status={status} size="sm" />
-          <Micro muted numberOfLines={1} style={{ flexShrink: 1 }}>
-            {siteName} · {domain}
-          </Micro>
-        </View>
-        {magnitude ? <Mono color={theme.colors.text}>{magnitude}</Mono> : null}
-      </View>
-
-      <EvidenceCard
-        claim={risk.message}
+    <View style={{ gap: SPACE.sm }}>
+      <NeedsYouCard
+        rank={rank}
         status={status}
-        evidence={idsToEvidence(risk.evidence_event_ids, proofLabel)}
+        statusLabel={domain}
+        title={risk.message}
+        detail={siteName}
+        evidence={evidenceChips}
+        primaryLabel={chips.approve}
+        tone={status === 'risk' ? 'cautionary' : 'affirmative'}
+        canApprove={true}
+        onPrimary={pending ? undefined : () => onChip('approve')}
       />
-
-      {/* inline decision chips */}
-      <View
-        style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: SPACE.sm,
-          paddingHorizontal: SPACE.lg,
-          paddingBottom: SPACE.lg,
-          marginTop: -SPACE.sm,
-        }}
-      >
-        <Button title={chips.approve} size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
+      {/* Hold + Assign — rendered separately so Hold gets its danger ink-outline */}
+      <View style={{ flexDirection: 'row', gap: SPACE.sm, paddingHorizontal: SPACE.xs }}>
         <Button title={chips.hold} variant="danger" size="md" disabled={pending} onPress={() => onChip('hold')} />
         <Button title={chips.assign} variant="secondary" size="md" disabled={pending} onPress={() => onChip('assign')} />
       </View>
@@ -240,34 +211,17 @@ export function PulseCard({
   headline: string
   supporting?: string
 }) {
-  const { theme } = useTheme()
   return (
-    <View
-      style={[
-        {
-          flex: 1,
-          backgroundColor: theme.colors.card,
-          borderRadius: theme.radii.card,
-          borderWidth: 1,
-          borderColor: theme.colors.line,
-          padding: SPACE.md,
-          gap: SPACE.xs,
-          minHeight: 96,
-        },
-        theme.shadowCard,
-      ]}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Micro muted style={{ letterSpacing: 1 }}>
+    <Card style={{ flex: 1, gap: SPACE.xs, minHeight: 96 }} padded>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.xs }}>
+        <Micro muted style={{ letterSpacing: 1, flexShrink: 1 }}>
           {glyph} {label.toUpperCase()}
         </Micro>
-        <StatusDot status={status} size={10} />
+        <StatusPill status={status} size="sm" />
       </View>
-      <Mono color={theme.colors.text} style={{ fontSize: 16, lineHeight: 22 }}>
-        {headline}
-      </Mono>
+      <Body style={{ fontWeight: '600' }}>{headline}</Body>
       {supporting ? <Small muted numberOfLines={2}>{supporting}</Small> : null}
-    </View>
+    </Card>
   )
 }
 
@@ -308,7 +262,7 @@ export function SiteRollupRow({
         theme.shadowCard,
       ]}
     >
-      <StatusDot status={status} />
+      <StatusPill status={status} size="sm" />
       <View style={{ flex: 1 }}>
         <BodyStrong numberOfLines={1}>{name}</BodyStrong>
         {meta ? <Small muted numberOfLines={1}>{meta}</Small> : null}
@@ -320,6 +274,8 @@ export function SiteRollupRow({
 
 // ---------------------------------------------------------------------------
 // ApprovalRow — one pending decision in the inbox.
+// Renders as a NeedsYouCard (the owner-decides pattern) with a leading
+// selection checkbox for batch-approve outside the card boundary.
 // ---------------------------------------------------------------------------
 export function ApprovalRow({
   title,
@@ -347,60 +303,63 @@ export function ApprovalRow({
   onChip: (action: 'approve' | 'hold' | 'assign') => void
 }) {
   const { theme } = useTheme()
+  const c = theme.colors
+
+  // Build evidence chips for NeedsYouCard.
+  const evidenceChips: EvidenceChipProps[] = evidence.map((item) => ({
+    kind: 'message' as const,
+    label: item.label ?? title,
+  }))
+
+  // SLA as a terse "by when" line.
+  const sla = [tag, slaLabel].filter(Boolean).join(' · ') || undefined
+
   return (
-    <View
-      style={[
-        {
-          backgroundColor: theme.colors.card,
-          borderRadius: theme.radii.card,
-          borderWidth: 1,
-          borderColor: selected ? theme.colors.accent : theme.colors.line,
-          padding: SPACE.lg,
-          gap: SPACE.sm,
-        },
-        theme.shadowCard,
-      ]}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
-        {/* select checkbox for batch-approve */}
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: selected }}
-          onPress={onToggleSelect}
-          hitSlop={8}
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 6,
-            borderWidth: 2,
-            borderColor: selected ? theme.colors.accent : theme.colors.line,
-            backgroundColor: selected ? theme.colors.accent : 'transparent',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: 2,
-          }}
-        >
-          {selected ? <Micro color={theme.colors.onAccent} style={{ fontSize: 14, lineHeight: 16 }}>✓</Micro> : null}
-        </Pressable>
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
-            <StatusPill status={status} size="sm" />
-            {tag ? <Micro muted>{tag}</Micro> : null}
-            {slaLabel ? <Mono color={theme.colors.risk} style={{ fontSize: 12 }}>{slaLabel}</Mono> : null}
-          </View>
-          <BodyStrong>{title}</BodyStrong>
-          {detail ? <Small muted>{detail}</Small> : null}
-        </View>
-      </View>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+      {/* Batch-select checkbox — outside the card, preserves NeedsYouCard layout */}
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: selected }}
+        onPress={onToggleSelect}
+        hitSlop={8}
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 6,
+          borderWidth: 2,
+          borderColor: selected ? c.accent : c.line,
+          backgroundColor: selected ? c.accent : 'transparent',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: SPACE.lg,
+        }}
+      >
+        {selected ? <Micro color={c.onAccent} style={{ fontSize: 14, lineHeight: 16 }}>✓</Micro> : null}
+      </Pressable>
 
-      {evidence.length > 0 ? (
-        <EvidenceCard claim={title} status={status} evidence={evidence} />
-      ) : null}
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-        <Button title={chips.approve} size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
-        <Button title={chips.hold} variant="danger" size="md" disabled={pending} onPress={() => onChip('hold')} />
-        <Button title={chips.assign} variant="secondary" size="md" disabled={pending} onPress={() => onChip('assign')} />
+      <View style={{ flex: 1, gap: SPACE.xs }}>
+        <NeedsYouCard
+          status={status}
+          statusLabel={status === 'risk' ? 'Escalated' : status === 'info' ? 'Homeowner' : 'Pending'}
+          title={title}
+          detail={detail ?? undefined}
+          evidence={evidenceChips}
+          sla={sla}
+          primaryLabel={chips.approve}
+          secondaryLabel={chips.hold}
+          tone={status === 'risk' ? 'cautionary' : 'affirmative'}
+          canApprove={true}
+          onPrimary={pending ? undefined : () => onChip('approve')}
+          onSecondary={pending ? undefined : () => onChip('hold')}
+        />
+        {/* Assign — tertiary action below the card */}
+        <Button
+          title={chips.assign}
+          variant="secondary"
+          size="md"
+          disabled={pending}
+          onPress={() => onChip('assign')}
+        />
       </View>
     </View>
   )

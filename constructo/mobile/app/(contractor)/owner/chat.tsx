@@ -8,15 +8,14 @@
  * calm empty state (a single bilingual line, not a dump).
  */
 import { useState } from 'react'
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
-import { Feather } from '@expo/vector-icons'
+import { RefreshControl, ScrollView, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, H1, Small } from '../../../src/ui'
+import { SPACE } from '../../../src/theme/tokens'
+import { Body, Button, EmptyState, H1 } from '../../../src/ui'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../../src/api/chat'
 import { ErrorBlock, LoadingBlock } from './_components'
@@ -99,29 +98,17 @@ export default function OwnerChatInbox() {
           <Body muted>{t.subtitle}</Body>
         </View>
         {isOwner ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.newGroup}
+          <Button
+            title={t.newGroup}
+            variant="accent"
+            size="md"
             onPress={() => setNewGroupOpen(true)}
-            style={({ pressed }) => ({
-              minHeight: TAP,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              paddingHorizontal: SPACE.md,
-              borderRadius: theme.radii.control,
-              backgroundColor: theme.colors.accent,
-              opacity: pressed ? 0.9 : 1,
-            })}
-          >
-            <Feather name="plus" size={16} color={theme.colors.onAccent} />
-            <BodyStrong style={{ color: theme.colors.onAccent }}>{t.newGroup}</BodyStrong>
-          </Pressable>
+          />
         ) : null}
       </View>
 
       {items.length === 0 ? (
-        <Small muted style={{ paddingVertical: SPACE.xl }}>{t.empty}</Small>
+        <EmptyState variant="empty" body={t.empty} />
       ) : (
         <View style={{ gap: SPACE.sm }}>
           {items.map((c) => (

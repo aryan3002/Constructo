@@ -19,26 +19,25 @@ import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import {
-  Body,
   BodyStrong,
   Button,
   Card,
   Display,
+  EmptyState,
+  Eyebrow,
   H2,
-  Mono,
   Screen,
-  Small,
   StatusDot,
   TimelineItem,
 } from '../../../src/ui'
-import { STATUS, type Status } from '../../../src/theme/tokens'
+import { type Status } from '../../../src/theme/tokens'
 import {
   supervisorApi,
   type Site,
   type SiteEvent,
   type SiteEventType,
 } from '../../../src/api/supervisor'
-import { CalmEmpty, ErrorState, Loading, SPACE } from './_components'
+import { ErrorState, Loading, SPACE } from './_components'
 import type { Paginated } from '../../../src/api/types'
 
 const STR = {
@@ -84,10 +83,10 @@ const EVENT_LABEL: Record<SiteEventType, { en: string; hi: string }> = {
   unknown: { en: 'Update', hi: 'अपडेट' },
 }
 
-function eventTint(t: SiteEventType): string {
-  if (t === 'issue') return STATUS.risk
-  if (t === 'approval' || t === 'payment_request') return STATUS.warn
-  return STATUS.info
+function eventTint(t: SiteEventType, c: { risk: string; warn: string; info: string }): string {
+  if (t === 'issue') return c.risk
+  if (t === 'approval' || t === 'payment_request') return c.warn
+  return c.info
 }
 
 /** Map a site status string onto the shared status spine. */
@@ -134,12 +133,14 @@ export default function MySites() {
       ) : null}
 
       {sitesQ.isSuccess && sites.length === 0 ? (
-        <CalmEmpty title={str.emptySitesTitle} body={str.emptySitesBody} />
+        <EmptyState variant="empty" title={str.emptySitesTitle} body={str.emptySitesBody} />
       ) : null}
 
       {sites.length > 0 ? (
         <>
-          {/* Assigned-site chips — static, no switcher. */}
+          {/* Assigned-site chips — static, no switcher.
+              Active chip: ink fill (not marigold — only capture + single affirmative
+              uses marigold). Each chip shows a StatusDot for online/status cue. */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
             {sites.map((s) => {
               const isActive = s.id === active
@@ -155,14 +156,14 @@ export default function MySites() {
                     alignItems: 'center',
                     gap: SPACE.sm,
                     borderRadius: 9999,
-                    borderWidth: 1,
-                    borderColor: isActive ? c.accent : c.line,
-                    backgroundColor: isActive ? c.accent : c.card,
+                    borderWidth: isActive ? 1.5 : 1,
+                    borderColor: isActive ? c.text : c.line,
+                    backgroundColor: isActive ? c.text : c.card,
                     paddingHorizontal: SPACE.md,
                   }}
                 >
                   <StatusDot status={siteStatus(s.status)} size={10} />
-                  <BodyStrong color={isActive ? c.onAccent : c.text}>{s.name}</BodyStrong>
+                  <BodyStrong color={isActive ? c.paper : c.text}>{s.name}</BodyStrong>
                 </Pressable>
               )
             })}
@@ -199,9 +200,7 @@ function SiteDetail({ siteId }: { siteId: string }) {
 
   return (
     <View style={{ gap: SPACE.md }}>
-      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>
-        {str.recent}
-      </Small>
+      <Eyebrow style={{ marginTop: SPACE.sm }}>{str.recent}</Eyebrow>
 
       {eventsQ.isLoading ? <Loading /> : null}
       {eventsQ.isError ? (
@@ -213,7 +212,7 @@ function SiteDetail({ siteId }: { siteId: string }) {
       ) : null}
 
       {eventsQ.isSuccess && events.length === 0 ? (
-        <CalmEmpty title={str.emptyEvents} />
+        <EmptyState variant="empty" title={str.emptyEvents} />
       ) : null}
 
       {events.length > 0 ? (
@@ -224,7 +223,7 @@ function SiteDetail({ siteId }: { siteId: string }) {
               typeLabel={EVENT_LABEL[e.event_type][lang]}
               summary={e.summary}
               occurredOn={e.occurred_on}
-              tint={eventTint(e.event_type)}
+              tint={eventTint(e.event_type, c)}
               isLast={i === events.length - 1}
             />
           ))}
@@ -232,13 +231,11 @@ function SiteDetail({ siteId }: { siteId: string }) {
       ) : null}
 
       {/* Drawings — read-only. No endpoint yet → calm placeholder (NOTE). */}
-      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>
-        {str.drawings}
-      </Small>
+      <Eyebrow style={{ marginTop: SPACE.sm }}>{str.drawings}</Eyebrow>
       <Card>
         <View style={{ gap: SPACE.xs }}>
           <H2>📐 {str.drawingsPlaceholder}</H2>
-          <Body muted>{str.drawingsBody}</Body>
+          <BodyStrong muted>{str.drawingsBody}</BodyStrong>
         </View>
       </Card>
     </View>

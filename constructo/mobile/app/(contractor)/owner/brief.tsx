@@ -21,7 +21,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, severityToStatus, type Status } from '../../../src/theme/tokens'
 import { owner, type BriefSite, type OwnerBrief, type Risk } from '../../../src/api/owner'
-import { Body, BodyStrong, Button, Card, Display, Mono, Small } from '../../../src/ui'
+import { Body, Button, Display, EmptyState, Mono, Small } from '../../../src/ui'
 import {
   BriefCommandCard,
   ErrorBlock,
@@ -176,15 +176,16 @@ export default function Brief() {
     )
   }
 
-  // First-run / no data → calm connect card.
+  // First-run / no data → calm connect empty state.
   if (!briefQ.data || sites.length === 0) {
     return (
       <Wrap>
-        <Card>
-          <Display style={{ fontSize: 22, lineHeight: 28 }}>{t.connectTitle}</Display>
-          <Body muted style={{ marginTop: SPACE.sm }}>{t.connectBody}</Body>
-          <Button title={t.connect} block size="lg" style={{ marginTop: SPACE.lg }} onPress={() => { /* connect-group flow (O5) — phased */ }} />
-        </Card>
+        <EmptyState
+          variant="empty"
+          title={t.connectTitle}
+          body={t.connectBody}
+          action={<Button title={t.connect} size="lg" onPress={() => { /* connect-group flow (O5) — phased */ }} />}
+        />
       </Wrap>
     )
   }
@@ -225,17 +226,15 @@ export default function Brief() {
 
       {/* exceptions */}
       {allCalm ? (
-        <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.ok }}>
-          <BodyStrong>{t.calmTitle}</BodyStrong>
-          <Body muted style={{ marginTop: SPACE.xs }}>{t.calmBody}</Body>
-        </Card>
+        <EmptyState variant="clear" title={t.calmTitle} body={t.calmBody} />
       ) : (
         <View style={{ gap: SPACE.md }}>
-          {top.map(({ risk, site, key }) => (
+          {top.map(({ risk, site, key }, idx) => (
             <BriefCommandCard
               key={key}
               risk={risk}
               siteName={site.name}
+              rank={idx + 1}
               pending={decide.isPending}
               resolvedLabel={resolved[key]}
               proofLabel={t.proof}

@@ -13,7 +13,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../src/theme/tokens'
 import { todayIso } from '../../../src/api/config'
 import { owner, type OwnerBrief, type Site } from '../../../src/api/owner'
-import { Body, Card, H1, Screen } from '../../../src/ui'
+import { Body, EmptyState, H1, Screen } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock, SiteRollupRow } from './_components'
 
 const STR = {
@@ -88,7 +88,7 @@ export default function Sites() {
       </View>
 
       {sites.length === 0 ? (
-        <Card><Body muted>{t.empty}</Body></Card>
+        <EmptyState variant="empty" title={t.empty} />
       ) : (
         <View style={{ gap: SPACE.sm }}>
           {[...sites]

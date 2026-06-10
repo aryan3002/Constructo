@@ -12,9 +12,21 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, STATUS, type Status } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Button, Card, Display, H2, Mono, Screen, Small, StatusPill } from '../../../src/ui'
-import { mukadamApi, formatRupees, type MyPayment } from '../../../src/api/mukadam'
+import { SPACE, type Status } from '../../../src/theme/tokens'
+import {
+  Body,
+  BodyStrong,
+  Button,
+  Card,
+  Display,
+  EmptyState,
+  formatINR,
+  MoneyCell,
+  Screen,
+  Small,
+  StatusPill,
+} from '../../../src/ui'
+import { mukadamApi, type MyPayment } from '../../../src/api/mukadam'
 import { VoiceOutButton } from './_voice'
 
 const STR = {
@@ -90,7 +102,10 @@ export default function MyPayments() {
   // What the 🔊 voice-out reads aloud — a non-reader must HEAR their status.
   const readAloud = payments.length
     ? `${str.title}. ${payments
-        .map((p) => `${formatRupees(p.amount)}, ${statusMeta(p.status, str).label}`)
+        .map((p) => {
+          const { prefix, currency, value } = formatINR(Number(p.amount) || 0)
+          return `${prefix}${currency}${value}, ${statusMeta(p.status, str).label}`
+        })
         .join('. ')}`
     : `${str.title}. ${str.empty}`
 
@@ -108,14 +123,12 @@ export default function MyPayments() {
       ) : q.isError ? (
         <Card>
           <View style={{ gap: SPACE.md }}>
-            <Body color={STATUS.risk}>{str.error}</Body>
+            <Body color={c.risk}>{str.error}</Body>
             <Button title={str.retry} variant="secondary" onPress={() => void q.refetch()} />
           </View>
         </Card>
       ) : payments.length === 0 ? (
-        <Card>
-          <Body muted>{str.empty}</Body>
-        </Card>
+        <EmptyState variant="empty" title={str.empty} />
       ) : (
         <Card padded={false}>
           {payments.map((p: MyPayment, i) => {
@@ -140,7 +153,7 @@ export default function MyPayments() {
                     gap: SPACE.md,
                   }}
                 >
-                  <Mono style={{ fontSize: 26 }}>{formatRupees(p.amount)}</Mono>
+                  <MoneyCell amount={Number(p.amount) || 0} size="lg" />
                   <StatusPill status={meta.status} label={meta.label} />
                 </View>
                 <Small muted>

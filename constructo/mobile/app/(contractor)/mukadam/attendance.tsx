@@ -18,8 +18,21 @@ import * as ImagePicker from 'expo-image-picker'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, STATUS } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Card, Display, H2, Mono, Screen, Small, SyncStatus } from '../../../src/ui'
+import { SPACE } from '../../../src/theme/tokens'
+import {
+  Body,
+  BodyStrong,
+  Button,
+  Card,
+  Display,
+  EvidenceChip,
+  Mono,
+  MonoSm,
+  Screen,
+  Small,
+  StatusPill,
+  SyncStatus,
+} from '../../../src/ui'
 import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { captureSites, type CaptureMedia } from '../../../src/api/capture'
@@ -192,7 +205,7 @@ export default function Attendance() {
         {/* Static site chip + date — never a switcher. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: STATUS.ok }} />
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.ok }} />
             <BodyStrong>{site?.name ?? str.siteFallback}</BodyStrong>
           </View>
           <Mono muted>{`${str.today} · ${dateStr}`}</Mono>
@@ -205,19 +218,20 @@ export default function Attendance() {
 
         {marked ? (
           // Big, optimistic, HONEST confirmation.
-          <Card>
+          <Card flag="ok">
             <View style={{ gap: SPACE.md, alignItems: 'center', paddingVertical: SPACE.lg }}>
-              <BodyStrong style={{ fontSize: 56 }}>✓</BodyStrong>
-              <H2 color={STATUS.ok}>{str.markedTitle}</H2>
-              <Mono style={{ fontSize: 40 }}>{`${count} ${str.headcount}`}</Mono>
+              <StatusPill status="ok" label={str.markedTitle} />
+              <Mono style={{ fontSize: 48, lineHeight: 56 }}>{String(count)}</Mono>
+              <MonoSm color={c.textMute} style={{ textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                {str.headcount}
+              </MonoSm>
               <Body muted style={{ textAlign: 'center' }}>{str.markedBody}</Body>
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                title={str.markAnother}
+                variant="primary"
                 onPress={reset}
-                style={{ minHeight: MUKADAM_TAP, justifyContent: 'center', paddingHorizontal: SPACE.lg }}
-              >
-                <BodyStrong color={c.accentDeep}>{str.markAnother}</BodyStrong>
-              </Pressable>
+                size="md"
+              />
             </View>
           </Card>
         ) : (
@@ -233,30 +247,20 @@ export default function Attendance() {
 
             {/* Answer way 2: REAL hold-to-talk voice proof (records audio → STT). */}
             {voiceAudio ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: SPACE.sm,
-                  minHeight: 96,
-                  borderRadius: theme.radii.card,
-                  borderWidth: 2,
-                  borderColor: STATUS.ok,
-                  backgroundColor: 'rgba(30,158,90,0.08)',
-                  paddingHorizontal: SPACE.lg,
-                }}
-              >
-                <Feather name="check-circle" size={24} color={STATUS.ok} />
-                <BodyStrong color={STATUS.ok}>{str.voiceAdded}</BodyStrong>
+              <Card flag="ok" style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: 80 }}>
+                <View style={{ flex: 1, gap: SPACE.xs }}>
+                  <StatusPill status="ok" label={str.voiceAdded} size="sm" />
+                  <EvidenceChip kind="voice" label={voiceAudio.name} />
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={str.markAnother}
                   onPress={() => setVoiceAudio(undefined)}
-                  style={{ marginLeft: 'auto', minHeight: MUKADAM_TAP, justifyContent: 'center' }}
+                  style={{ minHeight: MUKADAM_TAP, justifyContent: 'center', paddingHorizontal: SPACE.sm }}
                 >
                   <Feather name="x" size={22} color={c.textMute} />
                 </Pressable>
-              </View>
+              </Card>
             ) : (
               <HoldToTalk
                 label={str.voice}
@@ -283,27 +287,15 @@ export default function Attendance() {
               </View>
             </Card>
 
-            {/* The one decisive action — huge amber primary. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={str.mark}
-              accessibilityState={{ disabled: count === 0 }}
+            {/* The one decisive action — the single marigold "yes". */}
+            <Button
+              title={str.mark}
+              variant="accent"
+              size="lg"
+              block
               disabled={count === 0}
               onPress={markPresent}
-              style={({ pressed }) => [
-                {
-                  minHeight: 72,
-                  borderRadius: theme.radii.control,
-                  backgroundColor: c.accent,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: count === 0 ? 0.45 : pressed ? 0.92 : 1,
-                },
-                theme.shadowCard,
-              ]}
-            >
-              <Display color={c.onAccent}>{str.mark}</Display>
-            </Pressable>
+            />
           </>
         )}
       </Screen>
@@ -338,9 +330,9 @@ function CaptureTile({
         minHeight: 96,
         flexDirection: 'row',
         borderRadius: theme.radii.card,
-        borderWidth: 2,
-        borderColor: done ? STATUS.ok : c.line,
-        backgroundColor: done ? 'rgba(30,158,90,0.08)' : c.card,
+        borderWidth: done ? 1.5 : 1,
+        borderColor: done ? c.ok : c.line,
+        backgroundColor: done ? c.paper : c.card,
         alignItems: 'center',
         gap: SPACE.md,
         paddingVertical: SPACE.md,
@@ -348,13 +340,13 @@ function CaptureTile({
         opacity: pressed ? 0.9 : 1,
       })}
     >
-      <Feather name={done ? 'check-circle' : icon} size={32} color={done ? STATUS.ok : c.accentDeep} />
+      <Feather name={done ? 'check-circle' : icon} size={32} color={done ? c.ok : c.text} />
       <View style={{ flex: 1 }}>
         <BodyStrong>{label}</BodyStrong>
         {done ? (
-          <Small color={STATUS.ok}>{doneLabel}</Small>
+          <Small color={c.ok}>{doneLabel}</Small>
         ) : hint ? (
-          <Small muted style={{ fontSize: 12 }}>{hint}</Small>
+          <Small muted>{hint}</Small>
         ) : null}
       </View>
     </Pressable>

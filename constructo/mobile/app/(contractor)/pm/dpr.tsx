@@ -7,11 +7,13 @@
  *     only thing that flips draft → sent.
  *   - Sections are evidence-anchored; a thin/empty day shows an honest minimal
  *     draft (an explicit note), never invented fiction.
+ *   - PM PROPOSES, NEVER APPROVES — any money action reads as "propose to owner".
  *
- * Strings come from the t() i18n catalog; icons are premium Feather glyphs.
+ * Neev re-skin: ConfirmCard (AI draft), MoneyCell, StatusPill, Card flag, EvidenceChip,
+ * EmptyState, Screen, SyncStatus, useInputStyle. No hardcoded hex or font families.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, Share, TextInput, View } from 'react-native'
+import { Share, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -29,40 +31,131 @@ import {
   BodyStrong,
   Button,
   Card,
+  ConfirmCard,
+  type ConfirmField,
+  type Confidence,
+  EvidenceChip,
+  EmptyState,
   H1,
+  MonoSm,
+  Screen,
   Small,
-  StatusDot,
+  StatusPill,
+  SyncStatus,
+  useInputStyle,
 } from '../../../src/ui'
+
+/** Strings — English default, Hindi via lang toggle. ONE language per screen. */
+const STR = {
+  en: {
+    title: 'Daily Progress Report',
+    subtitle: 'Auto-drafted from today’s site activity. Review and send.',
+    chooseSite: 'Choose a site',
+    noSites: 'No sites yet',
+    noSitesBody: 'Your DPR lights up once a site starts capturing activity.',
+    loading: 'Loading…',
+    error: 'We could not load the DPR just now.',
+    retry: 'Retry',
+    draftBadge: 'Draft',
+    sentBadge: 'Sent',
+    thinDay: 'A thin day — only what was actually captured is shown. Nothing is invented.',
+    aiLabel: 'AI DRAFT',
+    aiHeading: "Here's what I heard",
+    confidence: 'Confidence',
+    confirmLabel: 'Looks right — Send',
+    holdLabel: 'Check & send',
+    editLabel: 'Edit',
+    summary: 'Summary',
+    summaryHint: 'You can edit this before sending.',
+    saveEdit: 'Save',
+    edited: 'Saved',
+    labor: 'Labour',
+    onSite: '{count} on site',
+    laborUnknown: 'Headcount not captured',
+    materials: 'Materials',
+    workDone: 'Work done',
+    blockers: 'Blockers',
+    next: 'Next',
+    unconfirmed: 'unconfirmed',
+    emptySection: 'Nothing captured.',
+    send: 'Send report',
+    sent: 'Sent · logged',
+    shareReport: 'Share report',
+    proof: 'Proof',
+  },
+  hi: {
+    title: 'दैनिक प्रगति रिपोर्ट',
+    subtitle: 'आज की साइट गतिविधि से अपने-आप तैयार। जाँचें और भेजें।',
+    chooseSite: 'साइट चुनें',
+    noSites: 'अभी कोई साइट नहीं',
+    noSitesBody: 'साइट गतिविधि दर्ज करना शुरू करते ही आपकी DPR जीवंत हो जाएगी।',
+    loading: 'लोड हो रहा है…',
+    error: 'अभी DPR लोड नहीं हो सकी।',
+    retry: 'फिर कोशिश करें',
+    draftBadge: 'ड्राफ़्ट',
+    sentBadge: 'भेजा गया',
+    thinDay: 'कम गतिविधि वाला दिन — सिर्फ़ वही दिखाया गया है जो वाकई दर्ज हुआ। कुछ भी बनाया नहीं गया।',
+    aiLabel: 'AI DRAFT',
+    aiHeading: 'यह मैंने सुना',
+    confidence: 'भरोसा',
+    confirmLabel: 'ठीक है — भेजें',
+    holdLabel: 'जाँचें और भेजें',
+    editLabel: 'बदलें',
+    summary: 'सारांश',
+    summaryHint: 'भेजने से पहले आप इसे बदल सकते हैं।',
+    saveEdit: 'सेव करें',
+    edited: 'सेव हो गया',
+    labor: 'मज़दूर',
+    onSite: 'साइट पर {count}',
+    laborUnknown: 'हाज़िरी दर्ज नहीं',
+    materials: 'सामग्री',
+    workDone: 'हुआ काम',
+    blockers: 'रुकावटें',
+    next: 'आगे',
+    unconfirmed: 'अपुष्ट',
+    emptySection: 'कुछ दर्ज नहीं।',
+    send: 'रिपोर्ट भेजें',
+    sent: 'भेजा गया · दर्ज',
+    shareReport: 'रिपोर्ट साझा करें',
+    proof: 'प्रमाण',
+  },
+  // NOTE: no `as const` — keep en/hi the same widened shape so STR[lang] flows
+  // into the language-aware helpers (LaborCard/MaterialsCard/buildDprText).
+}
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
 /** Assemble a plain-text DPR (digit-safe; no emoji) for the OS share sheet, so
  *  the report survives outside the app (e.g. relayed to WhatsApp). */
-function buildDprText(dpr: Dpr, t: (k: string, v?: Record<string, string | number>) => string): string {
+function buildDprText(dpr: Dpr, str: typeof STR['en']): string {
   const s = dpr.sections
   const lines: string[] = [`DPR — ${dpr.report_date}`]
   if (s.summary) lines.push('', s.summary)
-  lines.push(
-    '',
-    `${t('pm.labor')}: ${s.labor.headcount != null ? t('pm.onSite', { count: s.labor.headcount }) : t('pm.laborUnknown')}`,
-  )
+  const headcount =
+    s.labor.headcount != null
+      ? str.onSite.replace('{count}', String(s.labor.headcount))
+      : str.laborUnknown
+  lines.push('', `${str.labor}: ${headcount}`)
   const block = (title: string, items: string[]) => {
     if (items.length === 0) return
     lines.push('', `${title}:`)
     for (const it of items) lines.push(`- ${it}`)
   }
-  block(t('pm.materials'), s.materials.deliveries.map((d) => d.summary))
-  block(t('pm.workDone'), s.work_done.items.map((w) => w.summary))
-  block(t('pm.blockers'), s.blockers.items.map((b) => b.description))
-  block(t('pm.next'), s.next.items)
+  block(str.materials, s.materials.deliveries.map((d) => d.summary))
+  block(str.workDone, s.work_done.items.map((w) => w.summary))
+  block(str.blockers, s.blockers.items.map((b) => b.description))
+  block(str.next, s.next.items)
   return lines.join('\n')
 }
 
 export default function PmDpr() {
-  const { t, lang } = useT()
+  const { lang } = useT()
   const { theme } = useTheme()
+  const c = theme.colors
+  const str = STR[lang]
   const qc = useQueryClient()
   const date = todayISO()
+  const inputStyle = useInputStyle()
 
   const [siteId, setSiteId] = useState<string | null>(null)
   const [summaryDraft, setSummaryDraft] = useState<string | null>(null)
@@ -122,101 +215,172 @@ export default function PmDpr() {
     editM.mutate({ ...dpr.sections, summary: summaryDraft })
   }
 
+  // Derive ConfirmCard fields from the DPR sections so the AI draft is visible
+  // and reviewable with honest confidence before sending.
+  const confirmFields = useMemo((): ConfirmField[] => {
+    if (!dpr) return []
+    const s = dpr.sections
+    const fields: ConfirmField[] = []
+    if (s.labor.headcount != null) {
+      fields.push({
+        label: str.labor,
+        value: str.onSite.replace('{count}', String(s.labor.headcount)),
+        numeric: false,
+      })
+    }
+    if (s.materials.deliveries.length > 0) {
+      fields.push({
+        label: str.materials,
+        value: s.materials.deliveries.map((d) => d.summary).join('; '),
+        // Any delivery that needs clarification from the AI is low-confidence.
+        lowConfidence: s.materials.deliveries.some((d) => d.needs_clarification),
+      })
+    }
+    if (s.work_done.items.length > 0) {
+      fields.push({
+        label: str.workDone,
+        value: s.work_done.items.map((w) => w.summary).join('; '),
+      })
+    }
+    if (s.blockers.items.length > 0) {
+      fields.push({
+        label: str.blockers,
+        value: s.blockers.items.map((b) => b.description).join('; '),
+        lowConfidence: true,
+      })
+    }
+    return fields
+  }, [dpr, str])
+
+  // Honest confidence: any low-confidence delivery or empty day → warn/low.
+  const confidence: Confidence = useMemo(() => {
+    if (!dpr) return 'high'
+    if (isEmptyDay) return 'low'
+    if (dpr.sections.materials.deliveries.some((d) => d.needs_clarification)) return 'medium'
+    return 'high'
+  }, [dpr, isEmptyDay])
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{
-        padding: SPACE.lg,
-        paddingTop: SPACE.xl,
-        paddingBottom: SPACE.xxl,
-        gap: SPACE.md,
-      }}
-    >
-      {/* header */}
-      <View style={{ gap: SPACE.xs }}>
-        <H1>{t('pm.dprTitle')}</H1>
-        <Body muted>{t('pm.dprSubtitle')}</Body>
-      </View>
+    <>
+      <SyncStatus />
+      <Screen>
+        {/* header */}
+        <View style={{ gap: SPACE.xs }}>
+          <H1>{str.title}</H1>
+          <Body muted>{str.subtitle}</Body>
+        </View>
 
-      {/* site picker */}
-      {sitesQ.data && sitesQ.data.length > 0 ? (
-        <SitePicker
-          sites={sitesQ.data}
-          value={siteId}
-          onChange={(id) => {
-            setSiteId(id)
-            setSummaryDraft(null)
-          }}
-        />
-      ) : sitesQ.data ? (
-        <Card>
-          <BodyStrong>{t('pm.noSites')}</BodyStrong>
-          <Body muted style={{ marginTop: SPACE.xs }}>
-            {t('pm.noSitesBody')}
-          </Body>
-        </Card>
-      ) : null}
-
-      {/* states */}
-      {dprQ.isLoading ? (
-        <Card>
-          <Body muted>{t('common.loading')}</Body>
-        </Card>
-      ) : dprQ.error ? (
-        <Card>
-          <Body>{t('pm.error')}</Body>
-          <Button
-            title={t('common.retry')}
-            variant="secondary"
-            style={{ marginTop: SPACE.sm }}
-            onPress={() => void dprQ.refetch()}
+        {/* site picker */}
+        {sitesQ.data && sitesQ.data.length > 0 ? (
+          <SitePicker
+            sites={sitesQ.data}
+            value={siteId}
+            label={str.chooseSite}
+            onChange={(id) => {
+              setSiteId(id)
+              setSummaryDraft(null)
+            }}
           />
-        </Card>
-      ) : dpr ? (
-        <>
-          {/* status badge */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-            <StatusDot status={sent ? 'ok' : 'info'} />
-            <Small style={{ color: sent ? theme.colors.ok : theme.colors.info }}>
-              {sent ? t('pm.sentBadge') : t('pm.draftBadge')}
-            </Small>
-            <Small muted>· {dpr.report_date}</Small>
-          </View>
+        ) : sitesQ.data ? (
+          <EmptyState
+            variant="empty"
+            title={str.noSites}
+            body={str.noSitesBody}
+          />
+        ) : null}
 
-          {/* honest thin-day note */}
-          {isEmptyDay ? (
-            <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.warn }}>
-              <Body muted>{t('pm.thinDay')}</Body>
-            </Card>
-          ) : null}
+        {/* states */}
+        {dprQ.isLoading ? (
+          <EmptyState
+            variant="offline"
+            icon="loader"
+            title={str.loading}
+          />
+        ) : dprQ.error ? (
+          <EmptyState
+            variant="empty"
+            icon="alert-circle"
+            title={str.error}
+            action={
+              <Button
+                title={str.retry}
+                variant="secondary"
+                onPress={() => void dprQ.refetch()}
+              />
+            }
+          />
+        ) : dpr ? (
+          <>
+            {/* status badge */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <StatusPill
+                status={sent ? 'ok' : 'info'}
+                size="sm"
+                label={sent ? str.sentBadge : str.draftBadge}
+              />
+              <MonoSm muted>· {dpr.report_date}</MonoSm>
+            </View>
 
-          {/* summary (editable until sent) */}
-          <Card>
-            <Small muted style={{ letterSpacing: 1 }}>
-              {t('pm.summary').toUpperCase()}
-            </Small>
-            {sent ? (
-              <Body style={{ marginTop: SPACE.xs }}>{dpr.sections.summary}</Body>
+            {/* thin-day honest note */}
+            {isEmptyDay ? (
+              <Card flag="warn">
+                <Body muted>{str.thinDay}</Body>
+              </Card>
+            ) : null}
+
+            {/* ConfirmCard — the AI-drafted report: confidence visible, low conf holds send. */}
+            {!sent ? (
+              <ConfirmCard
+                aiLabel={str.aiLabel}
+                heading={str.aiHeading}
+                transcript={summaryDraft ?? undefined}
+                fields={confirmFields}
+                confidence={confidence}
+                confirmLabel={str.confirmLabel}
+                holdConfirmLabel={str.holdLabel}
+                editLabel={str.editLabel}
+                onConfirm={() => sendM.mutate()}
+                onEdit={() => {/* summary edit is below — user taps that card */}}
+              />
             ) : (
-              <>
+              /* sent state: show the logged summary as a plain card */
+              <Card flag="ok">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.sm }}>
+                  <Feather name="check-circle" size={16} color={c.ok} />
+                  <Small color={c.ok}>{str.sent}</Small>
+                </View>
+                {dpr.sections.summary ? (
+                  <Body>{dpr.sections.summary}</Body>
+                ) : null}
+              </Card>
+            )}
+
+            {/* summary edit (only when not yet sent) */}
+            {!sent ? (
+              <Card>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.sm }}>
+                  <Feather name="edit-2" size={14} color={c.textMute} />
+                  <MonoSm
+                    color={c.textMute}
+                    style={{ textTransform: 'uppercase', letterSpacing: 0.6 }}
+                  >
+                    {str.summary}
+                  </MonoSm>
+                </View>
                 <TextInput
                   value={summaryDraft ?? ''}
                   onChangeText={setSummaryDraft}
                   multiline
-                  placeholder={t('pm.summary')}
-                  placeholderTextColor={theme.colors.textMute}
-                  style={{
-                    marginTop: SPACE.xs,
-                    minHeight: 72,
-                    padding: SPACE.md,
-                    borderRadius: theme.radii.control,
-                    borderWidth: 1,
-                    borderColor: theme.colors.line,
-                    color: theme.colors.text,
-                    fontFamily: 'Hind-Regular',
-                    fontSize: 15,
-                    textAlignVertical: 'top',
-                  }}
+                  placeholder={str.summary}
+                  placeholderTextColor={c.textMute}
+                  style={[
+                    inputStyle,
+                    {
+                      minHeight: 72,
+                      paddingTop: SPACE.md,
+                      textAlignVertical: 'top',
+                    },
+                  ]}
                 />
                 <View
                   style={{
@@ -226,9 +390,9 @@ export default function PmDpr() {
                     marginTop: SPACE.xs,
                   }}
                 >
-                  <Small muted>{t('pm.summaryHint')}</Small>
+                  <Small muted>{str.summaryHint}</Small>
                   <Button
-                    title={editM.isSuccess && !editM.isPending ? t('pm.edited') : t('pm.saveEdit')}
+                    title={editM.isSuccess && !editM.isPending ? str.edited : str.saveEdit}
                     variant="ghost"
                     size="md"
                     loading={editM.isPending}
@@ -236,58 +400,44 @@ export default function PmDpr() {
                     onPress={saveSummary}
                   />
                 </View>
-              </>
-            )}
-          </Card>
+              </Card>
+            ) : null}
 
-          {/* sections */}
-          <LaborCard dpr={dpr} />
-          <MaterialsCard dpr={dpr} />
-          <ListCard
-            icon="check-square"
-            title={t('pm.workDone')}
-            items={dpr.sections.work_done.items.map((w) => w.summary)}
-          />
-          <ListCard
-            icon="alert-triangle"
-            title={t('pm.blockers')}
-            items={dpr.sections.blockers.items.map((b) => b.description)}
-            tone="risk"
-          />
-          <ListCard
-            icon="arrow-right"
-            title={t('pm.next')}
-            items={dpr.sections.next.items}
-          />
-
-          {/* SEND — the only path that commits draft → sent (CA1). */}
-          {sent ? (
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingVertical: SPACE.sm }}
-            >
-              <Feather name="check-circle" size={18} color={theme.colors.ok} />
-              <Small style={{ color: theme.colors.ok }}>{t('pm.sent')}</Small>
-            </View>
-          ) : (
-            <Button
-              title={t('pm.send')}
-              block
-              size="lg"
-              loading={sendM.isPending}
-              onPress={() => sendM.mutate()}
+            {/* sections */}
+            <LaborCard dpr={dpr} str={str} />
+            <MaterialsCard dpr={dpr} str={str} />
+            <ListCard
+              icon="check-square"
+              title={str.workDone}
+              items={dpr.sections.work_done.items.map((w) => w.summary)}
+              emptyLabel={str.emptySection}
             />
-          )}
+            <ListCard
+              icon="alert-triangle"
+              title={str.blockers}
+              items={dpr.sections.blockers.items.map((b) => b.description)}
+              tone="risk"
+              emptyLabel={str.emptySection}
+            />
+            <ListCard
+              icon="arrow-right"
+              title={str.next}
+              items={dpr.sections.next.items}
+              emptyLabel={str.emptySection}
+            />
 
-          {/* Share the DPR as plain text — survives outside the app (WhatsApp). */}
-          <Button
-            title={lang === 'hi' ? 'रिपोर्ट साझा करें' : 'Share report'}
-            variant="secondary"
-            block
-            onPress={() => void Share.share({ message: buildDprText(dpr, t) })}
-          />
-        </>
-      ) : null}
-    </ScrollView>
+            {/* Share as plain text — survives outside the app (WhatsApp). */}
+            <Button
+              title={str.shareReport}
+              variant="secondary"
+              block
+              leading={<Feather name="share-2" size={16} color={c.text} />}
+              onPress={() => void Share.share({ message: buildDprText(dpr, str) })}
+            />
+          </>
+        ) : null}
+      </Screen>
+    </>
   )
 }
 
@@ -298,68 +448,83 @@ export default function PmDpr() {
 function SitePicker({
   sites,
   value,
+  label,
   onChange,
 }: {
   sites: Site[]
   value: string | null
+  label: string
   onChange: (id: string) => void
 }) {
-  const { t } = useT()
   const { theme } = useTheme()
+  const c = theme.colors
   return (
     <View style={{ gap: SPACE.xs }}>
-      <Small muted style={{ letterSpacing: 1 }}>
-        {t('pm.chooseSite').toUpperCase()}
-      </Small>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-          {sites.map((s) => {
-            const active = s.id === value
-            return (
-              <Body
-                key={s.id}
-                onPress={() => onChange(s.id)}
-                style={{
-                  paddingVertical: SPACE.sm,
-                  paddingHorizontal: SPACE.md,
-                  borderRadius: theme.radii.pill,
-                  borderWidth: 1,
-                  borderColor: active ? theme.colors.accent : theme.colors.line,
-                  backgroundColor: active ? theme.colors.accent : theme.colors.card,
-                  color: active ? theme.colors.card : theme.colors.text,
-                  overflow: 'hidden',
-                }}
-              >
-                {s.name}
-              </Body>
-            )
-          })}
-        </View>
-      </ScrollView>
+      <MonoSm
+        color={c.textMute}
+        style={{ textTransform: 'uppercase', letterSpacing: 0.6 }}
+      >
+        {label}
+      </MonoSm>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+        {sites.map((s) => {
+          const active = s.id === value
+          return (
+            <Body
+              key={s.id}
+              onPress={() => onChange(s.id)}
+              style={{
+                paddingVertical: SPACE.sm,
+                paddingHorizontal: SPACE.md,
+                borderRadius: theme.radii.pill,
+                borderWidth: active ? 1.5 : 1,
+                borderColor: active ? c.accent : c.line,
+                backgroundColor: active ? c.accent : c.card,
+                color: active ? c.onAccent : c.text,
+                overflow: 'hidden',
+              }}
+            >
+              {s.name}
+            </Body>
+          )
+        })}
+      </View>
     </View>
   )
 }
 
-function SectionHeader({ icon, title }: { icon: React.ComponentProps<typeof Feather>['name']; title: string }) {
+function SectionHeader({
+  icon,
+  title,
+}: {
+  icon: React.ComponentProps<typeof Feather>['name']
+  title: string
+}) {
   const { theme } = useTheme()
+  const c = theme.colors
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-      <Feather name={icon} size={16} color={theme.colors.textMute} />
-      <Small muted style={{ letterSpacing: 1 }}>
-        {title.toUpperCase()}
-      </Small>
+      <Feather name={icon} size={15} color={c.textMute} />
+      <MonoSm
+        color={c.textMute}
+        style={{ textTransform: 'uppercase', letterSpacing: 0.6 }}
+      >
+        {title}
+      </MonoSm>
     </View>
   )
 }
 
-function LaborCard({ dpr }: { dpr: Dpr }) {
-  const { t } = useT()
+function LaborCard({ dpr, str }: { dpr: Dpr; str: typeof STR['en'] }) {
   const labor = dpr.sections.labor
+  const headcount = labor.headcount
   return (
     <Card>
-      <SectionHeader icon="users" title={t('pm.labor')} />
-      <BodyStrong style={{ marginTop: SPACE.xs, fontSize: 18 }}>
-        {labor.headcount != null ? t('pm.onSite', { count: labor.headcount }) : t('pm.laborUnknown')}
+      <SectionHeader icon="users" title={str.labor} />
+      <BodyStrong style={{ marginTop: SPACE.sm, fontSize: 18 }}>
+        {headcount != null
+          ? str.onSite.replace('{count}', String(headcount))
+          : str.laborUnknown}
       </BodyStrong>
       {labor.entries.map((e) => (
         <Small key={e.event_id} muted style={{ marginTop: 2 }}>
@@ -370,22 +535,34 @@ function LaborCard({ dpr }: { dpr: Dpr }) {
   )
 }
 
-function MaterialsCard({ dpr }: { dpr: Dpr }) {
-  const { t } = useT()
+function MaterialsCard({ dpr, str }: { dpr: Dpr; str: typeof STR['en'] }) {
   const deliveries = dpr.sections.materials.deliveries
   return (
     <Card>
-      <SectionHeader icon="package" title={t('pm.materials')} />
+      <SectionHeader icon="package" title={str.materials} />
       {deliveries.length === 0 ? (
-        <Body muted style={{ marginTop: SPACE.xs }}>
-          {t('pm.emptySection')}
+        <Body muted style={{ marginTop: SPACE.sm }}>
+          {str.emptySection}
         </Body>
       ) : (
         deliveries.map((d) => (
-          <View key={d.event_id} style={{ marginTop: SPACE.xs }}>
+          <View
+            key={d.event_id}
+            style={{
+              marginTop: SPACE.sm,
+              gap: SPACE.xs,
+            }}
+          >
             <Body>{d.summary}</Body>
             {d.needs_clarification ? (
-              <Small style={{ color: '#e8a317' }}>≈ {t('pm.unconfirmed')}</Small>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <StatusPill status="warn" size="sm" label={str.unconfirmed} />
+                <EvidenceChip
+                  kind="slip"
+                  label={str.proof}
+                  onPress={() => {}}
+                />
+              </View>
             ) : null}
           </View>
         ))
@@ -399,30 +576,26 @@ function ListCard({
   title,
   items,
   tone,
+  emptyLabel,
 }: {
   icon: React.ComponentProps<typeof Feather>['name']
   title: string
   items: string[]
   tone?: 'risk'
+  emptyLabel: string
 }) {
-  const { t } = useT()
-  const { theme } = useTheme()
   return (
     <Card
-      style={
-        tone === 'risk' && items.length > 0
-          ? { borderLeftWidth: 4, borderLeftColor: theme.colors.risk }
-          : undefined
-      }
+      flag={tone === 'risk' && items.length > 0 ? 'risk' : undefined}
     >
       <SectionHeader icon={icon} title={title} />
       {items.length === 0 ? (
-        <Body muted style={{ marginTop: SPACE.xs }}>
-          {t('pm.emptySection')}
+        <Body muted style={{ marginTop: SPACE.sm }}>
+          {emptyLabel}
         </Body>
       ) : (
         items.map((it, i) => (
-          <Body key={`${i}-${it.slice(0, 12)}`} style={{ marginTop: SPACE.xs }}>
+          <Body key={`${i}-${it.slice(0, 12)}`} style={{ marginTop: SPACE.sm }}>
             • {it}
           </Body>
         ))

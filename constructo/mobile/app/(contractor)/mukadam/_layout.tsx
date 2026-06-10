@@ -12,6 +12,7 @@ import { Tabs } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { FACES } from '../../../src/theme/fonts'
 
 const STR = {
   en: { attendance: 'Attendance', payments: 'My Pay', help: 'Help' },
@@ -43,7 +44,7 @@ export default function MukadamLayout() {
           paddingBottom: 12,
           paddingTop: 8,
         },
-        tabBarLabelStyle: { fontFamily: 'Hind-SemiBold', fontSize: 14 },
+        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 14 },
         tabBarIconStyle: { marginTop: 2 },
       }}
     >

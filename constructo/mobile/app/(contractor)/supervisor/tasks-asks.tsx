@@ -10,26 +10,26 @@
  * idempotent decision state machine (C3 — this is the real endpoint, not a stub).
  */
 import { useCallback, useState } from 'react'
-import { Alert, Pressable, View } from 'react-native'
+import { Alert, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
-import { useTheme } from '../../../src/theme/ThemeProvider'
 import {
   Body,
   BodyStrong,
+  Button,
   Card,
   Display,
+  EmptyState,
   Mono,
   Screen,
-  Small,
   StatusPill,
   SyncStatus,
 } from '../../../src/ui'
 import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../src/api/supervisor'
-import { CalmEmpty, ErrorState, Loading, SPACE, TAP } from './_components'
+import { ErrorState, Loading, SPACE } from './_components'
 
 const STR = {
   en: {
@@ -105,7 +105,7 @@ export default function TasksAsks() {
       ) : null}
 
       {q.isSuccess && pending.length === 0 ? (
-        <CalmEmpty title={str.emptyTitle} body={str.emptyBody} />
+        <EmptyState variant="clear" title={str.emptyTitle} body={str.emptyBody} />
       ) : null}
 
       {pending.map((a) => (
@@ -126,10 +126,9 @@ function AskCard({
   pendingLabel: string
   onRespond: () => void
 }) {
-  const { theme } = useTheme()
-  const c = theme.colors
   return (
-    <Card>
+    // flag="warn" = folded-corner page flag in warn colour, pairs with StatusPill.
+    <Card flag="warn">
       <View style={{ gap: SPACE.sm }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md }}>
           <BodyStrong style={{ flex: 1 }}>{ask.title}</BodyStrong>
@@ -139,21 +138,15 @@ function AskCard({
         <Mono muted style={{ fontSize: 12 }}>
           {ask.created_at}
         </Mono>
-        <Pressable
-          accessibilityRole="button"
+        {/* The single affirmative "yes" — accent (marigold). */}
+        <Button
+          title={`✓ ${respondLabel}`}
+          variant="accent"
+          block
+          size="lg"
           onPress={onRespond}
-          style={({ pressed }) => ({
-            minHeight: TAP,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: theme.radii.control,
-            backgroundColor: c.accent,
-            opacity: pressed ? 0.92 : 1,
-            marginTop: SPACE.xs,
-          })}
-        >
-          <BodyStrong color={c.onAccent}>✓ {respondLabel}</BodyStrong>
-        </Pressable>
+          style={{ marginTop: SPACE.xs }}
+        />
       </View>
     </Card>
   )

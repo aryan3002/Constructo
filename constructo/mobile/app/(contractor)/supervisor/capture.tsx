@@ -30,13 +30,12 @@ import {
 import type { CaptureKind } from '../../../src/api/supervisor'
 import type { Site } from '../../../src/api/types'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { Display, Screen, Small, SyncStatus, Card } from '../../../src/ui'
+import { Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus } from '../../../src/ui'
 import { HoldToTalk, TranscriptConfirm, type RecordedAudio } from '../../../src/audio'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { enqueue, list, type OutboxItem } from '../../../src/offline/outbox'
 import {
   CaptureBar,
-  CalmEmpty,
   KindChipRow,
   KIND_GLYPH,
   SentRow,
@@ -321,11 +320,9 @@ export default function Capture() {
         />
       ) : null}
 
-      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>
-        {str.sentTitle}
-      </Small>
+      <Eyebrow style={{ marginTop: SPACE.sm }}>{str.sentTitle}</Eyebrow>
       {captureItems.length === 0 ? (
-        <CalmEmpty title={str.emptyTitle} body={str.emptyBody} />
+        <EmptyState variant="empty" title={str.emptyTitle} body={str.emptyBody} />
       ) : (
         <Card padded={false} style={{ paddingHorizontal: SPACE.lg }}>
           {captureItems.map((item, i) => {

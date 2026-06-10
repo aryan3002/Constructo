@@ -14,13 +14,19 @@ import {
   BodyStrong,
   Button,
   CalmCard,
+  CaptureBar,
   Card,
+  ConfirmCard,
   Display,
+  EmptyState,
   EvidenceCard,
+  EvidenceChip,
   H1,
   H2,
   Micro,
   Mono,
+  MoneyCell,
+  NeedsYouCard,
   Small,
   StatusPill,
   TimelineItem,
@@ -63,9 +69,11 @@ function KitShowcase({ label }: { label: string }) {
 
       <Section title="Buttons">
         <Button title="Primary action" block />
-        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+          <Button title="Approve" variant="accent" />
           <Button title="Secondary" variant="secondary" />
           <Button title="Ghost" variant="ghost" />
+          <Button title="Hold" variant="danger" />
         </View>
       </Section>
 
@@ -112,6 +120,107 @@ function KitShowcase({ label }: { label: string }) {
           <TimelineItem typeLabel="Delivery" summary="20 bags of cement delivered" occurredOn="Yesterday" />
           <TimelineItem typeLabel="Progress" summary="Plastering started in the kitchen" occurredOn="Today" isLast />
         </View>
+      </Section>
+
+      <Section title="Neev · Money (ink-first, tabular ₹)">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xl }}>
+          <MoneyCell amount={124000} size="lg" label="THIS SITE" />
+          <MoneyCell amount={-4000} size="lg" label="VARIANCE" />
+          <MoneyCell amount={250000} sign="in" size="lg" label="RECEIVED" />
+        </View>
+      </Section>
+
+      <Section title="Neev · Status flag (folded corner)">
+        <Card flag="risk">
+          <BodyStrong>Cement bill — rate ₹20 over PO</BodyStrong>
+          <Small muted>A flagged page in the register — flag pairs with a pill.</Small>
+          <View style={{ marginTop: SPACE.sm, flexDirection: 'row' }}>
+            <StatusPill status="risk" size="sm" label="At risk" />
+          </View>
+        </Card>
+      </Section>
+
+      <Section title="Neev · Evidence chips">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+          <EvidenceChip kind="slip" label="2 slips" count={2} />
+          <EvidenceChip kind="doc" label="PO-0148" />
+          <EvidenceChip kind="voice" label="Voice note" />
+        </View>
+      </Section>
+
+      <Section title="Neev · NeedsYouCard (owner can approve)">
+        <NeedsYouCard
+          rank={1}
+          status="warn"
+          statusLabel="Needs approval"
+          sla="by today"
+          title="Cement bill — rate ₹20 over the PO"
+          detail="Supervisor logged 2 delivery slips against PO-0148."
+          evidence={[
+            { kind: 'slip', label: '2 slips', count: 2 },
+            { kind: 'doc', label: 'PO-0148' },
+          ]}
+          amount={124000}
+          amountLabel="BILL"
+          primaryLabel="Approve"
+          secondaryLabel="Hold"
+        />
+      </Section>
+
+      <Section title="Neev · NeedsYouCard (non-owner → propose lock)">
+        <NeedsYouCard
+          rank={2}
+          status="info"
+          statusLabel="Proposed"
+          title="Advance for the steel order"
+          detail="Site engineer proposed an advance to the vendor."
+          amount={250000}
+          amountLabel="ADVANCE"
+          primaryLabel="Approve"
+          canApprove={false}
+          proposedBy="Site engineer"
+        />
+      </Section>
+
+      <Section title="Neev · ConfirmCard (honest AI — high)">
+        <ConfirmCard
+          transcript="24 mazdoor aaye, 20 bori cement aaya"
+          confidence="high"
+          fields={[
+            { label: 'Workers', value: '24', numeric: true },
+            { label: 'Cement', value: '20 bags', numeric: true },
+          ]}
+        />
+      </Section>
+
+      <Section title="Neev · ConfirmCard (low confidence holds the send)">
+        <ConfirmCard
+          transcript="…cement aaya, kitne theek se nahi…"
+          confidence="low"
+          fields={[
+            { label: 'Workers', value: '24', numeric: true },
+            { label: 'Cement', value: '20 bags?', numeric: true, lowConfidence: true },
+          ]}
+        />
+      </Section>
+
+      <Section title="Neev · CaptureBar (hold-to-talk)">
+        <Card padded={false} style={{ paddingVertical: SPACE.xl }}>
+          <CaptureBar onCapture={() => undefined} onPhoto={() => undefined} onType={() => undefined} />
+        </Card>
+      </Section>
+
+      <Section title="Neev · EmptyState (all clear / offline)">
+        <Card padded={false}>
+          <EmptyState variant="clear" title="All clear" body="Nothing needs you right now." />
+        </Card>
+        <Card padded={false}>
+          <EmptyState
+            variant="offline"
+            title="Offline"
+            body="Keep working — it'll sync the moment you're back online."
+          />
+        </Card>
       </Section>
     </View>
   )

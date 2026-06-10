@@ -6,16 +6,20 @@
  * variance reasons, and a delivery row can pull its GRN (Goods Received Note)
  * proof on tap. READ-ONLY and tracking-only — there is no "hold" / "pay" action
  * here; the accountant sees the gap, the owner resolves it.
+ *
+ * Neev re-skin: MoneyCell for all ₹ (tabular, Indian-grouped), StatusPill for
+ * row status, EvidenceChip / EvidenceCard-pattern inline GRN proof, EmptyState
+ * for empty/offline. Dense 44px desk rows. Reasons use Small + warn colour.
  */
 import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { ActivityIndicator, ScrollView, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../../src/theme/tokens'
+import { SPACE, type Status } from '../../../../src/theme/tokens'
 import {
   accountant,
   type GrnDraft,
@@ -28,14 +32,18 @@ import {
   BodyStrong,
   Button,
   Card,
+  EmptyState,
+  EvidenceChip,
+  Eyebrow,
   H1,
+  MoneyCell,
+  Mono,
+  MonoSm,
   Small,
-  StatusDot,
+  StatusPill,
 } from '../../../../src/ui'
 
-const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
-
-const STATUS_TONE: Record<ReconcileStatus, 'ok' | 'warn' | 'risk'> = {
+const STATUS_TONE: Record<ReconcileStatus, Status> = {
   matched: 'ok',
   mismatch: 'risk',
   missing_proof: 'warn',
@@ -80,34 +88,70 @@ export default function AccountantSite() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* back link — Neev: Body muted, no chevron */}
       <Body
         muted
         onPress={() => router.back()}
         style={{ marginBottom: SPACE.xs }}
       >
-        {t('accountant.back')}
+        ← {t('accountant.back')}
       </Body>
       <H1>{t('accountant.siteReconcileTitle')}</H1>
 
+      {/* site-level summary strip */}
+      {data ? (
+        <Card padded={false}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.lg,
+              paddingHorizontal: SPACE.lg,
+              paddingVertical: SPACE.md,
+            }}
+          >
+            <MoneyCell
+              amount={data.summary.total_amount_at_risk}
+              sign={data.summary.total_amount_at_risk > 0 ? 'out' : 'none'}
+              size="sm"
+              label={t('accountant.atRisk')}
+            />
+            <View style={{ flex: 1 }} />
+            <Small muted>{t('accountant.matchedN', { count: data.summary.matched })}</Small>
+            {data.summary.mismatch > 0 ? (
+              <Small style={{ color: theme.colors.risk }}>
+                {t('accountant.mismatchN', { count: data.summary.mismatch })}
+              </Small>
+            ) : null}
+            {data.summary.missing_proof > 0 ? (
+              <Small style={{ color: theme.colors.warn }}>
+                {t('accountant.missingProofN', { count: data.summary.missing_proof })}
+              </Small>
+            ) : null}
+          </View>
+        </Card>
+      ) : null}
+
       {q.isLoading ? (
-        <Card>
-          <Body muted>{t('common.loading')}</Body>
-        </Card>
+        <View style={{ paddingVertical: SPACE.xl, alignItems: 'center', gap: SPACE.md }}>
+          <ActivityIndicator color={theme.colors.accent} size="large" />
+          <Small muted>{t('common.loading')}</Small>
+        </View>
       ) : q.error ? (
-        <Card>
-          <Body>{t('accountant.error')}</Body>
-          <Button
-            title={t('common.retry')}
-            variant="secondary"
-            style={{ marginTop: SPACE.sm }}
-            onPress={() => void q.refetch()}
-          />
-        </Card>
+        <EmptyState
+          variant="offline"
+          title={t('accountant.error')}
+          action={
+            <Button
+              title={t('common.retry')}
+              variant="secondary"
+              onPress={() => void q.refetch()}
+            />
+          }
+        />
       ) : data ? (
         data.items.length === 0 ? (
-          <Card>
-            <Body muted>{t('accountant.noRows')}</Body>
-          </Card>
+          <EmptyState variant="clear" title={t('accountant.noRows')} />
         ) : (
           data.items.map((it) => <ReconcileRow key={it.key} item={it} />)
         )
@@ -142,78 +186,125 @@ function ReconcileRow({ item }: { item: ReconcileItem }) {
   }
 
   return (
-    <Card
-      style={
-        tone !== 'ok'
-          ? { borderLeftWidth: 4, borderLeftColor: theme.colors[tone] }
-          : undefined
-      }
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-        <StatusDot status={tone} />
-        <BodyStrong style={{ flex: 1 }}>
+    <Card flag={tone !== 'ok' ? tone : undefined} padded={false}>
+      {/* 44px desk row — vendor + at-risk amount */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.sm,
+          minHeight: 44,
+          paddingHorizontal: SPACE.lg,
+          paddingTop: SPACE.sm,
+          paddingBottom: SPACE.xs,
+        }}
+      >
+        <StatusPill status={tone} size="sm" />
+        <BodyStrong style={{ flex: 1 }} numberOfLines={1}>
           {item.vendor ?? t('accountant.unknownVendor')}
           {item.item ? ` · ${item.item}` : ''}
         </BodyStrong>
         {item.amount_at_risk > 0 ? (
-          <Small style={{ color: theme.colors.risk }}>{inr(item.amount_at_risk)}</Small>
+          <MoneyCell amount={item.amount_at_risk} sign="out" size="sm" align="right" />
         ) : null}
       </View>
 
-      <Small muted style={{ marginTop: SPACE.xs }}>
-        {t(`accountant.status_${item.status}`)}
-      </Small>
+      {/* status sentence */}
+      <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.xs }}>
+        <Small muted>{t(`accountant.status_${item.status}`)}</Small>
+      </View>
 
-      {item.delivery ? (
-        <Small muted style={{ marginTop: SPACE.xs }}>
-          {t('accountant.deliveryLine', { summary: item.delivery.summary })}
-        </Small>
-      ) : null}
-      {item.invoice ? (
-        <Small muted style={{ marginTop: 2 }}>
-          {t('accountant.invoiceLine', { summary: item.invoice.summary })}
-        </Small>
-      ) : null}
-
-      {/* variance reasons */}
-      {item.reasons.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs, marginTop: SPACE.xs }}>
-          {item.reasons.map((r) => (
-            <Small key={r} style={{ color: theme.colors.warn }}>
-              {reasonLabel(t, r)}
+      {/* delivery / invoice event summaries */}
+      {(item.delivery || item.invoice) ? (
+        <View
+          style={{
+            paddingHorizontal: SPACE.lg,
+            paddingBottom: SPACE.xs,
+            gap: 2,
+          }}
+        >
+          {item.delivery ? (
+            <Small muted numberOfLines={1}>
+              {t('accountant.deliveryLine', { summary: item.delivery.summary })}
             </Small>
+          ) : null}
+          {item.invoice ? (
+            <Small muted numberOfLines={1}>
+              {t('accountant.invoiceLine', { summary: item.invoice.summary })}
+            </Small>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* variance reasons as small chips */}
+      {item.reasons.length > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: SPACE.xs,
+            paddingHorizontal: SPACE.lg,
+            paddingBottom: SPACE.sm,
+          }}
+        >
+          {item.reasons.map((r) => (
+            <View
+              key={r}
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: theme.radii.chip,
+                backgroundColor: `${theme.colors.warn}22`,
+                borderWidth: 1,
+                borderColor: `${theme.colors.warn}55`,
+              }}
+            >
+              <Small style={{ color: theme.colors.warn }}>{reasonLabel(t, r)}</Small>
+            </View>
           ))}
         </View>
       ) : null}
 
-      {/* GRN proof on tap */}
+      {/* GRN proof on tap — EvidenceChip as the trigger */}
       {deliveryId ? (
-        <Button
-          title={grn ? t('accountant.hideProof') : t('accountant.viewProof')}
-          variant="ghost"
-          size="md"
-          loading={loadingGrn}
-          style={{ marginTop: SPACE.sm, alignSelf: 'flex-start' }}
-          onPress={loadGrn}
-        />
+        <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.md }}>
+          {loadingGrn ? (
+            <ActivityIndicator size="small" color={theme.colors.accent} />
+          ) : (
+            <EvidenceChip
+              kind="slip"
+              label={grn ? t('accountant.hideProof') : t('accountant.viewProof')}
+              onPress={loadGrn}
+            />
+          )}
+        </View>
       ) : null}
+
+      {/* Inline GRN proof — expanded below the chip */}
       {grn ? (
         <View
           style={{
-            marginTop: SPACE.xs,
+            marginHorizontal: SPACE.lg,
+            marginBottom: SPACE.md,
             padding: SPACE.md,
             borderRadius: theme.radii.control,
-            backgroundColor: theme.colors.bg,
-            gap: 2,
+            backgroundColor: theme.colors.paper,
+            borderWidth: 1,
+            borderColor: theme.colors.line,
+            gap: SPACE.xs,
           }}
         >
-          <Small muted style={{ letterSpacing: 1 }}>
-            {t('accountant.grn').toUpperCase()} · {grn.reference}
-          </Small>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Feather name="file-text" size={14} color={theme.colors.textMute} />
+            <Eyebrow>{t('accountant.grn')} · {grn.reference}</Eyebrow>
+          </View>
           <Body>
             {grn.quantity ?? '—'} {grn.unit ?? ''} {grn.material ?? ''}
           </Body>
-          <Small muted>{grn.note}</Small>
+          {grn.note ? <Small muted>{grn.note}</Small> : null}
+          {grn.vendor ? (
+            <MonoSm color={theme.colors.textMute}>{grn.vendor}</MonoSm>
+          ) : null}
         </View>
       ) : null}
     </Card>

@@ -31,6 +31,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { FACES } from '../../../src/theme/fonts'
 import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
 import {
@@ -1067,7 +1068,7 @@ export default function CrewChat() {
             paddingHorizontal: SPACE.md,
             paddingTop: SPACE.sm,
             paddingBottom: SPACE.sm,
-            fontFamily: 'Hind-Regular',
+            fontFamily: FACES[theme.name].body,
             fontSize: 16,
             color: c.text,
           }}

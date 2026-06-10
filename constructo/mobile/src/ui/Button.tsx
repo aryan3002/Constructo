@@ -1,6 +1,12 @@
 /**
  * Button — the one decisive action per screen. Always ≥48px tall with a pressed
- * state. `primary` is the theme accent (amber on Blueprint, green on Daylight).
+ * state.
+ *
+ *   Daylight (homeowner) → `primary` is the sage accent; `danger` is red.
+ *   Blueprint (Neev)     → `primary` is INK (it survives direct sun); the single
+ *     affirmative "yes" (Approve / Order / Send) is `accent` = the marigold spark
+ *     — never two marigold fills competing; the cautionary Hold/stop is `danger`
+ *     rendered as an INK-OUTLINE (per the locked Neev rule), not a red fill.
  */
 import { ActivityIndicator, Pressable, View, type ViewStyle } from 'react-native'
 
@@ -8,7 +14,16 @@ import { useTheme } from '../theme/ThemeProvider'
 import { SPACE, TAP } from '../theme/tokens'
 import { BodyStrong } from './Typography'
 
-export type ButtonVariant = 'primary' | 'celebrate' | 'secondary' | 'ghost' | 'danger'
+/** on-ink (paper-50) — text/glyph colour on a Neev ink surface. */
+const ON_INK = '#f4f0e7'
+
+export type ButtonVariant =
+  | 'primary'
+  | 'accent'
+  | 'celebrate'
+  | 'secondary'
+  | 'ghost'
+  | 'danger'
 export type ButtonSize = 'md' | 'lg'
 
 export interface ButtonProps {
@@ -37,21 +52,28 @@ export function Button({
 }: ButtonProps) {
   const { theme } = useTheme()
   const c = theme.colors
+  const neev = theme.name === 'blueprint'
 
   const bg: Record<ButtonVariant, string> = {
-    primary: c.accent, // sage green — the primary role
+    primary: neev ? c.text : c.accent, // Neev: ink (sun-proof) · Daylight: sage
+    accent: c.accent, // the single affirmative "yes" — marigold on Neev
     celebrate: c.secondary, // warm clay — milestone / celebration ONLY
     secondary: c.card,
     ghost: 'transparent',
-    danger: c.risk,
+    danger: neev ? 'transparent' : c.risk, // Neev: cautionary ink-OUTLINE, not red
   }
   const fg: Record<ButtonVariant, string> = {
-    primary: c.onAccent,
+    primary: neev ? ON_INK : c.onAccent,
+    accent: c.onAccent, // Neev: ink on marigold · Daylight: white on sage
     celebrate: '#ffffff',
     secondary: c.text,
-    ghost: c.accentDeep,
-    danger: '#ffffff',
+    ghost: neev ? c.text : c.accentDeep,
+    danger: neev ? c.text : '#ffffff',
   }
+  // Border: bordered secondary on both surfaces; Neev's danger is an ink outline.
+  const bordered = variant === 'secondary' || (neev && variant === 'danger')
+  const borderColor = neev && variant === 'danger' ? c.text : c.line
+  const lifts = variant === 'primary' || variant === 'accent' || variant === 'celebrate'
   const isDisabled = disabled || loading
 
   return (
@@ -66,8 +88,8 @@ export function Button({
           paddingHorizontal: size === 'lg' ? SPACE.xl : SPACE.lg,
           borderRadius: theme.radii.control,
           backgroundColor: bg[variant],
-          borderWidth: variant === 'secondary' ? 1 : 0,
-          borderColor: c.line,
+          borderWidth: bordered ? (neev && variant === 'danger' ? 1.5 : 1) : 0,
+          borderColor,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
@@ -76,7 +98,7 @@ export function Button({
           transform: [{ scale: pressed && !isDisabled ? 0.98 : 1 }],
           alignSelf: block ? 'stretch' : 'flex-start',
         },
-        variant === 'primary' || variant === 'celebrate' ? theme.shadowCard : null,
+        lifts ? theme.shadowCard : null,
         style,
       ]}
     >

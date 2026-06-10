@@ -12,7 +12,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../src/theme/tokens'
 import { owner, type SearchHit, type SearchResponse } from '../../../src/api/owner'
-import { Body, Button, Card, EvidenceCard, H1, Screen, Small } from '../../../src/ui'
+import { Button, EmptyState, EvidenceCard, H1, Screen, Small } from '../../../src/ui'
 
 const STR = {
   en: {
@@ -95,27 +95,27 @@ export default function Search() {
 
       {/* idle prompt */}
       {!search.isPending && !data && !search.error ? (
-        <Card><Body muted>{t.prompt}</Body></Card>
+        <EmptyState variant="empty" icon="search" body={t.prompt} />
       ) : null}
 
       {/* error */}
       {search.error ? (
-        <View style={{ gap: SPACE.md }}>
-          <Small color={theme.colors.risk}>{t.errorLine}</Small>
-          <Button title={t.tryAgain} variant="secondary" onPress={submit} />
-        </View>
+        <EmptyState
+          variant="empty"
+          icon="alert-triangle"
+          title={t.errorLine}
+          action={<Button title={t.tryAgain} variant="secondary" onPress={submit} />}
+        />
       ) : null}
 
       {/* not-sure */}
       {data && !data.answerable ? (
-        <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.warn }}>
-          <Body>{t.notSure}</Body>
-        </Card>
+        <EmptyState variant="empty" icon="help-circle" body={t.notSure} />
       ) : null}
 
       {/* no results */}
       {data && data.answerable && hits.length === 0 ? (
-        <Card><Body muted>{t.noResults}</Body></Card>
+        <EmptyState variant="empty" body={t.noResults} />
       ) : null}
 
       {/* results */}
