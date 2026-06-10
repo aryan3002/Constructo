@@ -11,8 +11,10 @@
 ## Decisions locked this session
 
 1. **Web stays Blueprint through the pilot.** The "Neev Desk" web re-skin is deferred to Phase 4 — don't re-skin a working surface mid-pilot.
-2. **Chat doctrine:** *"Win the record, rent the transport — absorb workflows, don't fight a chat war."* In-app chat stays a **capture rail into the ledger**, not a WhatsApp replacement.
-3. **Roles for the pilot:** onboard **Owner / Supervisor / Accountant / Homeowner** only. Keep all 7 roles in code; **hide** `pm`, `mukadam`, `procurement` (per the roles map). Converge, don't amputate.
+2. **Chat doctrine (UPDATED 2026-06-10 — real contractor signal):** *"Own the room, bridge the edges."* Build a **reliable, intelligent, WhatsApp-grade in-app chat** as a real destination — for **(a)** the contractor's internal team AND **(b)** a shared **contractor↔client/homeowner room**. Capture happens **natively in-app** (the site engineer photographs the challan at the boundary); WhatsApp is only a **migration/edge bridge** (it's ToS-violating + unreliable as a core transport). Chat-as-intelligent-destination is the **acquisition wedge for the broader general-contractor market**. The ledger is still the moat; trust membrane still applies (AI proposes, human commits). *(Supersedes the old "rent the transport / keep chat thin" line.)*
+3. **Roles — per company type (confirmed 2026-06-10).** CivilArch (interior fit-out) active set = **Owner · Architect · Site Engineer · Client (+ back-office Accountant)**. The **Architect is the central Spec-engine user** (owns the Material Spec + design decisions); **mukadam is not used** for this profile. The general-contractor profile uses Owner/Supervisor/Mukadam/Accountant. Keep all roles in code, surface per company type ("roles offered" config). **Add an `architect` role to the enum** (small, deliberate add — it's that central here).
+
+> **Flagship bet (updated):** chat reliability + intelligence is no longer "keep thin" — it's a **flagship FINISH**. The whole "WhatsApp but intelligent" wedge dies if the chat isn't WhatsApp-grade reliable, and the current in-app chat is **unreliable today**. Hardening it (offline/delivery/media/voice/groups) is now a core competency to build, sequenced as a major Phase-2/3 surface alongside the Spec engine.
 
 ---
 
