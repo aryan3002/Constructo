@@ -28,9 +28,11 @@ export function StatusFlag({ status, size = 34, radius }: StatusFlagProps) {
   const n = size
   const r = Math.min(radius ?? theme.radii.card, n - 2)
 
-  // Upper-right triangle, with the top-right (card) corner rounded to `r`.
+  // Upper-right triangle drawn to the SQUARE corner; the container clips its
+  // top-right corner to `r` via borderTopRightRadius + overflow, so the fold's
+  // rounding matches the card's radius EXACTLY (no arc-vs-corner sliver).
   // Box local coords: (0,0) top-left → (n,0) top-right (the card corner).
-  const flap = `M0 0 L${n - r} 0 A${r} ${r} 0 0 1 ${n} ${r} L${n} ${n} Z`
+  const flap = `M0 0 L${n} 0 L${n} ${n} Z`
   // Crease: the diagonal fold from the top-left of the box to the bottom-right.
   const crease = `M0 0 L${n} ${n}`
 
@@ -39,7 +41,15 @@ export function StatusFlag({ status, size = 34, radius }: StatusFlagProps) {
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      style={{ position: 'absolute', top: 0, right: 0, width: n, height: n }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: n,
+        height: n,
+        borderTopRightRadius: r,
+        overflow: 'hidden',
+      }}
     >
       <Svg width={n} height={n} viewBox={`0 0 ${n} ${n}`}>
         <Path d={flap} fill={color} />
