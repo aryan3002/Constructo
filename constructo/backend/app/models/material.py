@@ -26,6 +26,13 @@ class Material(Base):
     unit: Mapped[str | None] = mapped_column(String, nullable=True)
     category: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brand: Mapped[str | None] = mapped_column(String, nullable=True)
+    sku: Mapped[str | None] = mapped_column(String, nullable=True)
+    colour: Mapped[str | None] = mapped_column(String, nullable=True)
+    finish: Mapped[str | None] = mapped_column(String, nullable=True)
+    size: Mapped[str | None] = mapped_column(String, nullable=True)
+    thickness: Mapped[str | None] = mapped_column(String, nullable=True)
+    catalog_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", default=True
     )

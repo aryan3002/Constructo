@@ -18,6 +18,8 @@ ROLE_LANDING: dict[UserRole, str] = {
     UserRole.accountant: "reconcile",
     UserRole.labor_contractor: "attendance",
     UserRole.procurement: "orders",
+    # Architect (design authority) is web spec-desk primary; mobile lands on brief for now.
+    UserRole.architect: "brief",
     # Homeowner app lands on the calm "am I okay?" home (Daylight).
     UserRole.homeowner: "home",
 }

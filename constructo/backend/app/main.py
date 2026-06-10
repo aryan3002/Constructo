@@ -48,6 +48,7 @@ from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
 from app.sites.router import router as sites_router
+from app.specs.router import router as specs_router
 from app.vendor_confirm.router import router as vendor_confirm_router
 from app.vendors.router import router as vendors_router
 
@@ -103,6 +104,7 @@ app.include_router(ingest_router)
 app.include_router(sites_router)
 app.include_router(vendors_router)
 app.include_router(materials_router)
+app.include_router(specs_router)
 app.include_router(billing_router)
 app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR

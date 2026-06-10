@@ -1,0 +1,17 @@
+# Mukadam (labor contractor) — login, walk Attendance + My Pay + Help, sign out.
+appId: host.exp.Exponent
+---
+- runFlow:
+    file: _login_staff.yaml
+    env:
+      PHONE: "+919800000006"
+- assertVisible: "Attendance"
+- takeScreenshot: /tmp/qa_neev/mukadam_attendance
+- tapOn: "My Pay"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/mukadam_my-payments
+- tapOn: "Help"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/mukadam_help
+- tapOn: "Sign out"
+- assertVisible: "Who are you?"

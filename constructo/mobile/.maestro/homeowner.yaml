@@ -1,0 +1,16 @@
+# Homeowner (Calm Cockpit) regression smoke. The join form has 4 unlabelled
+# TextInputs (name, code, phone, OTP) with no testIDs, so the multi-field entry
+# is finicky for a static flow — completing the join + walking tabs is done
+# interactively in the QA agent. This flow proves the chooser -> join route and
+# captures the Calm Cockpit join screen (sage/sand, NOT Neev marigold).
+appId: host.exp.Exponent
+---
+- assertVisible: "Who are you?"
+- tapOn: "I'm a homeowner"
+- assertVisible: "Join your home"
+- takeScreenshot: /tmp/qa_neev/homeowner_join
+# --- interactive from here (no testIDs): name -> SUNRISE-HOME -> phone -> OTP 000000 ---
+# - inputText: "QA Tester"          # name field autofocuses
+# - tapOn: "abc123…"                # join-code field (placeholder)
+# - inputText: "SUNRISE-HOME"
+# - (tap phone field, type +91..., OTP auto-fires on blur, enter 000000, Join)

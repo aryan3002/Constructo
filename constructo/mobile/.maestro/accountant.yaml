@@ -1,0 +1,17 @@
+# Accountant — login, walk Reconcile + Payments + More, screenshot, sign out.
+appId: host.exp.Exponent
+---
+- runFlow:
+    file: _login_staff.yaml
+    env:
+      PHONE: "+919800000004"
+- assertVisible: "Reconcile"
+- takeScreenshot: /tmp/qa_neev/accountant_reconcile
+- tapOn: "Payments"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/accountant_payments
+- tapOn: "More"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/accountant_more
+- tapOn: "Sign out"
+- assertVisible: "Who are you?"

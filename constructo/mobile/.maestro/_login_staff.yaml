@@ -1,0 +1,21 @@
+# Reusable: (chooser ->) staff phone+OTP login. Tolerates starting from EITHER
+# the "Who are you?" chooser OR the login screen directly — sign-out from a
+# contractor role may land on /(auth)/login rather than the chooser. Pass PHONE:
+#   - runFlow: { file: _login_staff.yaml, env: { PHONE: "+919800000001" } }
+appId: host.exp.Exponent
+---
+- runFlow:
+    when:
+      visible: "Who are you?"
+    commands:
+      - tapOn: "Builder / site team"
+      - waitForAnimationToEnd
+- assertVisible: "Welcome to Constructo"
+# phone field autofocuses; clear the "+91" prefill, then type the full number
+- eraseText: 20
+- inputText: "${PHONE}"
+- tapOn: "Send code"
+- assertVisible: "Enter the 6-digit code"
+- inputText: "000000"
+- tapOn: "Verify & continue"
+- waitForAnimationToEnd
