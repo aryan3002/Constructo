@@ -78,3 +78,56 @@ async def test_supervisor_creates_owner_lists_specs(client, factory, db_session)
     listed = await client.get(f"/api/v1/specs?site_id={site.id}", headers=auth(owner))
     assert listed.status_code == 200
     assert [s["label"] for s in listed.json()] == ["Laminate-1"]
+
+
+async def test_update_and_approve_spec(client, factory, db_session):
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    site = await factory.site(company)
+    _room, comp = await _room_with_component(factory, db_session, company, site)
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/v1/specs",
+        json={"site_id": str(site.id), "component_id": str(comp.id), "label": "Louvers"},
+        headers=auth(owner),
+    )
+    spec_id = created.json()["id"]
+
+    updated = await client.patch(
+        f"/api/v1/specs/{spec_id}",
+        json={"qty": "12", "unit_rate": "300", "unit": "rft"},
+        headers=auth(owner),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["qty"] == "12.00"
+
+    approved = await client.post(
+        f"/api/v1/specs/{spec_id}/approve",
+        json={"status": "approved", "client_final_code": "OS-9006-02"},
+        headers=auth(owner),
+    )
+    assert approved.status_code == 200
+    assert approved.json()["approval_status"] == "approved"
+    assert approved.json()["client_final_code"] == "OS-9006-02"
+
+
+async def test_supervisor_cannot_approve(client, factory, db_session):
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    sup = await factory.user(company=company, role=UserRole.supervisor)
+    site = await factory.site(company)
+    _room, comp = await _room_with_component(factory, db_session, company, site)
+    await db_session.commit()
+    created = await client.post(
+        "/api/v1/specs",
+        json={"site_id": str(site.id), "component_id": str(comp.id), "label": "Paint"},
+        headers=auth(owner),
+    )
+    spec_id = created.json()["id"]
+    resp = await client.post(
+        f"/api/v1/specs/{spec_id}/approve",
+        json={"status": "approved"},
+        headers=auth(sup),
+    )
+    assert resp.status_code == 403
