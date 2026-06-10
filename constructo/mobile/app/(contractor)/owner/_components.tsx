@@ -216,7 +216,7 @@ export function BriefCommandCard({
           marginTop: -SPACE.sm,
         }}
       >
-        <Button title={chips.approve} size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
+        <Button title={chips.approve} variant="accent" size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
         <Button title={chips.hold} variant="danger" size="md" disabled={pending} onPress={() => onChip('hold')} />
         <Button title={chips.assign} variant="secondary" size="md" disabled={pending} onPress={() => onChip('assign')} />
       </View>
@@ -398,7 +398,7 @@ export function ApprovalRow({
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-        <Button title={chips.approve} size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
+        <Button title={chips.approve} variant="accent" size="md" disabled={pending} loading={pending} onPress={() => onChip('approve')} />
         <Button title={chips.hold} variant="danger" size="md" disabled={pending} onPress={() => onChip('hold')} />
         <Button title={chips.assign} variant="secondary" size="md" disabled={pending} onPress={() => onChip('assign')} />
       </View>

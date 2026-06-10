@@ -9,7 +9,8 @@
 import { View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { useTheme } from '../theme/ThemeProvider'
-import { AP, SPACE } from '../theme/tokens'
+import { AP, SPACE, type Status } from '../theme/tokens'
+import { StatusFlag } from './StatusFlag'
 
 export type CardVariant = 'plain' | 'letter' | 'quiet'
 
@@ -17,10 +18,25 @@ export interface CardProps extends ViewProps {
   variant?: CardVariant
   /** Apply default inner padding (16). */
   padded?: boolean
+  /**
+   * Neev "Site Register" signature: a folded-corner status flag in the top-right
+   * (pairs with a StatusPill, never colour-alone). Opt-in — homeowner cards omit
+   * it. `size` follows field vs desk density at the call site.
+   */
+  flag?: Status
+  flagSize?: number
   style?: ViewStyle | ViewStyle[]
 }
 
-export function Card({ variant = 'plain', padded = true, style, children, ...rest }: CardProps) {
+export function Card({
+  variant = 'plain',
+  padded = true,
+  flag,
+  flagSize,
+  style,
+  children,
+  ...rest
+}: CardProps) {
   const { theme } = useTheme()
   const quiet = variant === 'quiet'
   const bg =
@@ -48,6 +64,7 @@ export function Card({ variant = 'plain', padded = true, style, children, ...res
       ]}
     >
       {children}
+      {flag ? <StatusFlag status={flag} size={flagSize} /> : null}
     </View>
   )
 }

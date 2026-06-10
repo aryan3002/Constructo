@@ -170,6 +170,7 @@ export default function Approvals() {
             {selectedIds.length > 0 ? (
               <Button
                 title={t.batchApprove(selectedIds.length)}
+                variant="accent"
                 size="md"
                 loading={batch.isPending}
                 disabled={pending}

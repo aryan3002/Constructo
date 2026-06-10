@@ -271,6 +271,7 @@ export default function PmDpr() {
           ) : (
             <Button
               title={t('pm.send')}
+              variant="accent"
               block
               size="lg"
               loading={sendM.isPending}
