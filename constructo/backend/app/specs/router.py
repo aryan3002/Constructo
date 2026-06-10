@@ -19,8 +19,9 @@ from app.specs.schemas import RollupOut, SpecApprove, SpecCreate, SpecOut, SpecU
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
 
-_EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.supervisor)
-_APPROVE_ROLES = (UserRole.owner, UserRole.pm)
+# Architect + Site Engineer (supervisor) maintain the spec; Architect/owner/pm approve.
+_EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+_APPROVE_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect)
 
 
 @router.get("", response_model=list[SpecOut])

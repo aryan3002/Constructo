@@ -150,3 +150,28 @@ async def test_costing_rollup_endpoint(client, factory, db_session):
     body = resp.json()
     assert body["grand_total"] == "1100.00"
     assert body["rooms"][0]["room"] == "Master Bedroom"
+
+
+async def test_architect_creates_and_approves_spec(client, factory, db_session):
+    # The Architect owns the spec for interior fit-out firms: can create AND approve.
+    company = await factory.company()
+    architect = await factory.user(company=company, role=UserRole.architect)
+    site = await factory.site(company)
+    _room, comp = await _room_with_component(factory, db_session, company, site)
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/v1/specs",
+        json={"site_id": str(site.id), "component_id": str(comp.id), "label": "Laminate"},
+        headers=auth(architect),
+    )
+    assert created.status_code == 201
+    spec_id = created.json()["id"]
+
+    approved = await client.post(
+        f"/api/v1/specs/{spec_id}/approve",
+        json={"status": "approved", "client_final_code": "OS-9006-02"},
+        headers=auth(architect),
+    )
+    assert approved.status_code == 200
+    assert approved.json()["approval_status"] == "approved"

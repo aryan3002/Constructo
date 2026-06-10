@@ -13,6 +13,8 @@ from app.db import Base
 class UserRole(StrEnum):
     owner = "owner"
     pm = "pm"
+    # Design authority — owns the Material Spec + design decisions (interior fit-out firms).
+    architect = "architect"
     supervisor = "supervisor"
     accountant = "accountant"
     procurement = "procurement"
