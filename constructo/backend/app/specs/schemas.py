@@ -69,3 +69,8 @@ class RollupOut(BaseModel):
     rooms: list[RoomRollup]
     grand_total: Decimal
     excluded_total: int
+
+
+class ExtractedSpecOut(BaseModel):
+    spec: SpecOut
+    extracted: dict
