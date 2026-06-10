@@ -259,10 +259,10 @@ class OpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+    async def complete_vision(  # pragma: no cover - live network path; unit-tested via FakeLLMClient
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
-        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
         if not image_url:
             return await self.complete(system, user, json_schema)
         try:
@@ -334,10 +334,10 @@ class AzureOpenAILLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
-    async def complete_vision(  # pragma: no cover - real vision provider lands in H6.6
+    async def complete_vision(  # pragma: no cover - live network path; unit-tested via FakeLLMClient
         self, system: str, user: str, image_url: str | None, json_schema: dict
     ) -> dict:
-        """Attach the image as an image-URL content block (frozen stub, H6.6)."""
+        """Attach the image as an image-URL content block. Live — used by POST /specs/extract."""
         if not image_url:
             return await self.complete(system, user, json_schema)
         try:
