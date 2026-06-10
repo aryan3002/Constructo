@@ -38,7 +38,6 @@ from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
 from app.materials.router import router as materials_router
-from app.specs.router import router as specs_router
 from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.permits.router import router as permits_router
@@ -49,6 +48,7 @@ from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
 from app.sites.router import router as sites_router
+from app.specs.router import router as specs_router
 from app.vendor_confirm.router import router as vendor_confirm_router
 from app.vendors.router import router as vendors_router
 
