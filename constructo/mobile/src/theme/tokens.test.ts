@@ -1,4 +1,4 @@
-import { severityToStatus, STATUS, STATUS_TINT, THEMES } from './tokens'
+import { severityToStatus, STATUS, THEMES } from './tokens'
 
 describe('design tokens', () => {
   it('ships both themes', () => {
@@ -6,10 +6,10 @@ describe('design tokens', () => {
     expect(THEMES.daylight.name).toBe('daylight')
   })
 
-  it('keeps the shared status spine on the contractor (Blueprint) surface', () => {
-    expect(THEMES.blueprint.colors.ok).toBe(STATUS.ok)
-    expect(THEMES.blueprint.colors.risk).toBe(STATUS.risk)
-    expect(THEMES.blueprint.colors.infoTint).toBe(STATUS_TINT.infoTint)
+  it('gives the contractor (Neev "Site Register") surface its own warm spine', () => {
+    expect(THEMES.blueprint.colors.ok).toBe('#2f7d52') // Neev ok-600
+    expect(THEMES.blueprint.colors.risk).toBe('#b23a2e') // Neev brick red
+    expect(THEMES.blueprint.colors.ok).not.toBe(STATUS.ok)
   })
 
   it('gives the homeowner (Daylight) its own Direction-C spine — sage/amber/red, no blue', () => {
@@ -24,12 +24,11 @@ describe('design tokens', () => {
 
   it('uses the residential Daylight radius and the bolder Blueprint radius', () => {
     expect(THEMES.daylight.radii.card).toBe(22)
-    expect(THEMES.blueprint.radii.card).toBe(8)
+    expect(THEMES.blueprint.radii.card).toBe(14)
   })
 
-  it('keeps the brand primaries (Blueprint amber, Daylight Direction-C sage green)', () => {
-    expect(THEMES.blueprint.colors.accent).toBe('#f2a100')
-    // Daylight uses the locked Direction C "Blend" sage-green primary.
+  it('carries the brand primaries (Neev marigold, Daylight Direction-C sage)', () => {
+    expect(THEMES.blueprint.colors.accent).toBe('#f0a21f') // Neev marigold-500
     expect(THEMES.daylight.colors.accent).toBe('#3e7a66')
   })
 

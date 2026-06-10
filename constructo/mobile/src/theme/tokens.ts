@@ -107,21 +107,30 @@ export interface Theme {
   }
 }
 
+// Blueprint key now carries the contractor "Neev · Site Register" identity:
+// warm concrete paper, deep ink, a single marigold spark. The primary ACTION is
+// ink (survives direct sun); marigold = capture + the one affirmative "yes".
+// Money is ink-first. Own warm status spine (not the shared blueprint spine).
 const BLUEPRINT_COLORS: ThemeColors = {
-  bg: '#f7f5f0', // warm, NOT clinical white
-  card: '#ffffff',
-  paper: '#f7f5f0',
-  line: '#d9d4c8',
-  accent: '#f2a100', // amber — THE primary action
-  accentDeep: '#c77f00',
-  accentWarm: '#c77f00',
-  secondary: '#c5683b', // warm clay (shared celebration accent)
-  secondaryContainer: '#f4d9c6',
-  onAccent: '#15171c', // dark ink reads best on amber
-  text: '#15171c',
-  textMute: '#6b6f78',
-  ...STATUS,
-  ...STATUS_TINT,
+  bg: '#efeadf', // paper-100 — warm concrete app canvas (never clinical white)
+  card: '#fffdf8', // surface — warm-white card / sheet
+  paper: '#f4f0e7', // paper-50 — raised row / subtle fill
+  line: '#ded7c9', // cement-200 — hairline borders / card edges
+  accent: '#f0a21f', // marigold-500 — capture, focus, the single affirmative
+  accentDeep: '#d6850c', // marigold-600 — pressed/hover
+  accentWarm: '#fbe8c4', // marigold-200 — attention tint
+  secondary: '#d6850c', // no celebration accent in Neev — reuse deep marigold
+  secondaryContainer: '#fcf3df', // marigold-100 faint wash
+  onAccent: '#1b1916', // dark ink reads best on marigold
+  text: '#1b1916', // ink-900
+  textMute: '#7a7368', // steel-500 — muted text
+  // Neev status spine — warm, restrained (own values, not the shared STATUS):
+  ok: '#2f7d52', // verified / on-track
+  warn: '#c77a12', // attention / proposed / waiting
+  risk: '#b23a2e', // behind / overdue / blocked (brick red)
+  info: '#3a6491', // recorded / neutral fact (slate)
+  quiet: '#7a7368', // neutral / quiet
+  infoTint: 'rgba(58,100,145,0.10)',
 }
 
 // Daylight = the homeowner surface, on the "Calm Cockpit" system — Direction C
@@ -177,14 +186,15 @@ export const THEMES: Record<ThemeName, Theme> = {
   blueprint: {
     name: 'blueprint',
     colors: BLUEPRINT_COLORS,
-    // Site = 8px cards / 12px sheets.
-    radii: { chip: 8, card: 8, hero: 12, sheet: 12, pill: 9999, control: 8 },
+    // Neev "sturdy, not toy": buttons/inputs 10, cards 14, sheets/big 18, pill.
+    radii: { chip: 10, card: 14, hero: 18, sheet: 18, pill: 9999, control: 10 },
+    // A record leans on hairline borders over heavy shadow — a low, warm-ink lift.
     shadowCard: {
-      shadowColor: '#15171c',
-      shadowOffset: { width: 0, height: 1 },
+      shadowColor: '#1b1916',
+      shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
-      shadowRadius: 2,
-      elevation: 1,
+      shadowRadius: 6,
+      elevation: 2,
     },
   },
   daylight: {
@@ -245,16 +255,18 @@ export const TYPE = {
  * `theme.type` so the shared Typography components size per active surface.
  */
 export const TYPE_BLUEPRINT: TypeScale = {
-  display: { fontSize: 28, lineHeight: 34, letterSpacing: -0.3 },
-  h1: { fontSize: 22, lineHeight: 28, letterSpacing: -0.2 },
-  h2: { fontSize: 18, lineHeight: 24 },
-  title: { fontSize: 16, lineHeight: 22 },
-  bodyLg: { fontSize: 16, lineHeight: 24 },
-  body: { fontSize: 16, lineHeight: 24 },
-  small: { fontSize: 14, lineHeight: 20 },
+  // Neev scale. Display = Bricolage (Latin, generous line-height so it never
+  // clips); titles/body = Mukta; ₹ amounts = Spline mono (bumped, tabular).
+  display: { fontSize: 34, lineHeight: 42, letterSpacing: -0.6 },
+  h1: { fontSize: 25, lineHeight: 31, letterSpacing: -0.3 },
+  h2: { fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
+  title: { fontSize: 17, lineHeight: 24 },
+  bodyLg: { fontSize: 17, lineHeight: 26 },
+  body: { fontSize: 15.5, lineHeight: 23 },
+  small: { fontSize: 13, lineHeight: 18 },
   micro: { fontSize: 12, lineHeight: 16 },
-  dataNum: { fontSize: 16, lineHeight: 22 },
-  monoSm: { fontSize: 13, lineHeight: 18, letterSpacing: 0.3 },
+  dataNum: { fontSize: 18, lineHeight: 24 }, // ₹ amounts / counts (Spline mono)
+  monoSm: { fontSize: 11.5, lineHeight: 16, letterSpacing: 0.4 },
 }
 
 /** 4px-base spacing scale (§3.3). `gutter` = screen side margin (20px). */
