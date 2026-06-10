@@ -2,7 +2,7 @@
  * Owner-local composite components + helpers (NOT in src/ui — these are
  * Owner-branch specific). Built on the shared kit + Blueprint theme:
  *
- *   - formatRupees / formatDate / formatWhen      — money + time formatting
+ *   - formatDate / formatWhen                     — time formatting
  *   - riskToEvidence                              — Risk → EvidenceCard items
  *   - BriefCommandCard  (the hero card)           — risk + inline Approve/Hold/Assign
  *   - PulseCard         (2×2 pulse tile)          — calm, hide-empty
@@ -54,19 +54,6 @@ export function formatWhen(iso: string | null | undefined): string {
   const ampm = h >= 12 ? 'pm' : 'am'
   h = h % 12 || 12
   return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${h}:${m}${ampm}`
-}
-
-/** Indian rupee formatting: ₹X.X Cr / ₹X.X L / ₹12,000. */
-export function formatRupees(n: number): string {
-  const sign = n < 0 ? '-' : ''
-  const abs = Math.abs(n)
-  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(1)} Cr`
-  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)} L`
-  const s = String(Math.round(abs))
-  const last3 = s.slice(-3)
-  const rest = s.slice(0, -3)
-  const grouped = rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3 : last3
-  return `${sign}₹${grouped}`
 }
 
 /** Build EvidenceCard items from a risk's evidence_event_ids. The brief gives

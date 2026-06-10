@@ -9,7 +9,7 @@
  *     draft (an explicit note), never invented fiction.
  *   - PM PROPOSES, NEVER APPROVES — any money action reads as "propose to owner".
  *
- * Neev re-skin: ConfirmCard (AI draft), MoneyCell, StatusPill, Card flag, EvidenceChip,
+ * Neev re-skin: ConfirmCard (AI draft), MoneyCell, StatusPill, Card flag,
  * EmptyState, Screen, SyncStatus, useInputStyle. No hardcoded hex or font families.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -34,7 +34,6 @@ import {
   ConfirmCard,
   type ConfirmField,
   type Confidence,
-  EvidenceChip,
   EmptyState,
   H1,
   MonoSm,
@@ -555,14 +554,7 @@ function MaterialsCard({ dpr, str }: { dpr: Dpr; str: typeof STR['en'] }) {
           >
             <Body>{d.summary}</Body>
             {d.needs_clarification ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <StatusPill status="warn" size="sm" label={str.unconfirmed} />
-                <EvidenceChip
-                  kind="slip"
-                  label={str.proof}
-                  onPress={() => {}}
-                />
-              </View>
+              <StatusPill status="warn" size="sm" label={str.unconfirmed} />
             ) : null}
           </View>
         ))
