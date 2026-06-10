@@ -1,0 +1,26 @@
+# Supervisor — login, walk all 4 tabs, screenshot each, sign out (on My Sites).
+# Tabs: Capture · Chat · My Sites · Tasks/Asks
+appId: host.exp.Exponent
+---
+- runFlow:
+    file: _login_staff.yaml
+    env:
+      PHONE: "+919800000003"
+- assertVisible: "Capture"
+- takeScreenshot: /tmp/qa_neev/supervisor_capture
+- tapOn: "Tasks/Asks"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/supervisor_tasks-asks
+- tapOn: "Chat"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/supervisor_chat
+- tapOn: "My Sites"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/supervisor_my-sites
+# action-items is reached from within Tasks/Asks or My Sites — captured by the agent
+- scrollUntilVisible:
+    element:
+      text: "Sign out"
+    direction: DOWN
+- tapOn: "Sign out"
+- assertVisible: "Who are you?"

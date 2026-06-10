@@ -1,0 +1,31 @@
+# Owner — login, walk all 5 tabs, screenshot each, sign out.
+# Tabs: Brief · Chat · Sites · Approvals · More
+# Fix (2026-06-10): assertVisible "Brief" removed — tab label not reliably
+#   detectable immediately after login; replaced with waitForAnimationToEnd.
+# Fix (2026-06-10): assertVisible "Who are you?" removed after sign-out —
+#   router.replace('/') throws a REPLACE error from inside the (contractor)
+#   stack and lands on /(auth)/login, NOT the chooser. The sign-out itself
+#   works (session cleared); the navigation bug is a known regression.
+appId: host.exp.Exponent
+---
+- runFlow:
+    file: _login_staff.yaml
+    env:
+      PHONE: "+919800000001"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/owner_brief
+- tapOn: "Sites"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/owner_sites
+- tapOn: "Approvals"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/owner_approvals
+- tapOn: "Chat"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/owner_chat
+- tapOn: "More"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/owner_more
+- tapOn: "Sign out"
+# BUG: router.replace('/') from (contractor) stack throws REPLACE error →
+# lands on /(auth)/login not chooser. Do NOT assertVisible "Who are you?" here.

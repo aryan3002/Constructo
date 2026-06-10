@@ -1,0 +1,14 @@
+# PM — login, walk DPR + More, screenshot, sign out.
+appId: host.exp.Exponent
+---
+- runFlow:
+    file: _login_staff.yaml
+    env:
+      PHONE: "+919800000002"
+- assertVisible: "DPR"
+- takeScreenshot: /tmp/qa_neev/pm_dpr
+- tapOn: "More"
+- waitForAnimationToEnd
+- takeScreenshot: /tmp/qa_neev/pm_more
+- tapOn: "Sign out"
+- assertVisible: "Who are you?"
