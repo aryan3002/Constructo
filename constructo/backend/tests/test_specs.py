@@ -131,3 +131,22 @@ async def test_supervisor_cannot_approve(client, factory, db_session):
         headers=auth(sup),
     )
     assert resp.status_code == 403
+
+
+async def test_costing_rollup_endpoint(client, factory, db_session):
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    site = await factory.site(company)
+    _room, comp = await _room_with_component(factory, db_session, company, site)
+    await db_session.commit()
+    await client.post(
+        "/api/v1/specs",
+        json={"site_id": str(site.id), "component_id": str(comp.id), "label": "Laminate-1",
+              "qty": "10", "unit_rate": "100", "wastage_pct": "10"},
+        headers=auth(owner),
+    )
+    resp = await client.get(f"/api/v1/specs/rollup?site_id={site.id}", headers=auth(owner))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["grand_total"] == "1100.00"
+    assert body["rooms"][0]["room"] == "Master Bedroom"

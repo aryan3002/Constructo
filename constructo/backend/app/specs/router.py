@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import Spec, User, UserRole
-from app.specs.schemas import SpecApprove, SpecCreate, SpecOut, SpecUpdate
+from app.models import Component, Space, Spec, User, UserRole
+from app.specs.costing import rollup_by_room
+from app.specs.schemas import RollupOut, SpecApprove, SpecCreate, SpecOut, SpecUpdate
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
 
@@ -48,6 +49,26 @@ async def create_spec(
     await session.commit()
     await session.refresh(spec)
     return SpecOut.model_validate(spec)
+
+
+@router.get("/rollup", response_model=RollupOut)
+async def costing_rollup(
+    site_id: UUID = Query(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RollupOut:
+    stmt = (
+        select(Spec, Space.name)
+        .join(Component, Component.id == Spec.component_id)
+        .join(Space, Space.id == Component.space_id)
+        .where(Spec.company_id == user.company_id, Spec.site_id == site_id)
+    )
+    rows = (await session.execute(stmt)).all()
+    lines = [
+        {"room": room_name, "qty": s.qty, "unit_rate": s.unit_rate, "wastage_pct": s.wastage_pct}
+        for s, room_name in rows
+    ]
+    return RollupOut.model_validate(rollup_by_room(lines))
 
 
 @router.get("/{spec_id}", response_model=SpecOut)

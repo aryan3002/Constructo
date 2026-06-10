@@ -56,3 +56,16 @@ class SpecOut(BaseModel):
     assignee_id: UUID | None
     notes: str | None
     created_at: datetime
+
+
+class RoomRollup(BaseModel):
+    room: str
+    total: Decimal
+    lines: int
+    excluded: int
+
+
+class RollupOut(BaseModel):
+    rooms: list[RoomRollup]
+    grand_total: Decimal
+    excluded_total: int
