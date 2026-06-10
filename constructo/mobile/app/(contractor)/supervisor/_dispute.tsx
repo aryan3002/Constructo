@@ -19,8 +19,8 @@ import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
+import { SPACE } from '../../../src/theme/tokens'
+import { Body, Button, Mono, Small, StatusPill } from '../../../src/ui'
 import { disputesApi, type Dispute } from '../../../src/api/disputes'
 import type { ChatEvent } from '../../../src/api/chat'
 
@@ -195,14 +195,12 @@ export function DisputeSheet({
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-            <Feather
-              name={mode === 'raise' ? 'flag' : 'check-circle'}
-              size={18}
-              color={mode === 'raise' ? STATUS.risk : STATUS.ok}
+            <StatusPill
+              status={mode === 'raise' ? 'risk' : 'ok'}
+              label={mode === 'raise' ? t.raiseTitle : t.resolveTitle}
+              size="sm"
+              style={{ flex: 1 }}
             />
-            <BodyStrong style={{ flex: 1 }}>
-              {mode === 'raise' ? t.raiseTitle : t.resolveTitle}
-            </BodyStrong>
             <Pressable accessibilityRole="button" accessibilityLabel={t.cancel} hitSlop={10} onPress={close}>
               <Feather name="x" size={22} color={c.textMute} />
             </Pressable>
@@ -221,24 +219,15 @@ export function DisputeSheet({
                   {t.yourDispute}
                 </Small>
                 <Body style={{ color: c.text }}>{myOpen.reason}</Body>
-                {error ? <Small color={STATUS.risk}>{error}</Small> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t.withdraw}
+                {error ? <StatusPill status="risk" label={error} size="sm" /> : null}
+                <Button
+                  title={t.withdraw}
+                  variant="danger"
+                  block
                   disabled={busy}
+                  loading={busy}
                   onPress={onWithdraw}
-                  style={({ pressed }) => ({
-                    minHeight: TAP,
-                    borderRadius: theme.radii.control,
-                    borderWidth: 1,
-                    borderColor: c.line,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                  })}
-                >
-                  {busy ? <ActivityIndicator color={c.accent} /> : <BodyStrong>{t.withdraw}</BodyStrong>}
-                </Pressable>
+                />
               </View>
             ) : (
             <>
@@ -261,24 +250,16 @@ export function DisputeSheet({
                   textAlignVertical: 'top',
                 }}
               />
-              {error ? <Small color={STATUS.risk}>{error}</Small> : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t.raise}
-                accessibilityState={{ disabled: !reason.trim() || busy }}
+              {error ? <StatusPill status="risk" label={error} size="sm" /> : null}
+              {/* Cautionary raise — ink-outline per Neev danger rule (not red fill). */}
+              <Button
+                title={t.raise}
+                variant="danger"
+                block
                 disabled={!reason.trim() || busy}
+                loading={busy}
                 onPress={onRaise}
-                style={({ pressed }) => ({
-                  minHeight: TAP,
-                  borderRadius: theme.radii.control,
-                  backgroundColor: STATUS.risk,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: !reason.trim() || busy ? 0.5 : pressed ? 0.9 : 1,
-                })}
-              >
-                {busy ? <ActivityIndicator color="#fff" /> : <BodyStrong color="#fff">{t.raise}</BodyStrong>}
-              </Pressable>
+              />
             </>
             )
           ) : disputesQ.isLoading ? (
@@ -338,44 +319,29 @@ export function DisputeSheet({
                     textAlignVertical: 'top',
                   }}
                 />
-                {error ? <Small color={STATUS.risk}>{error}</Small> : null}
+                {error ? <StatusPill status="risk" label={error} size="sm" /> : null}
 
                 <View style={{ gap: SPACE.sm }}>
                   {open.proposed_fields && fieldLines(open.proposed_fields).length ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t.accept}
+                    /* "Accept correction" = the single affirmative: accent (marigold). */
+                    <Button
+                      title={t.accept}
+                      variant="accent"
+                      block
                       disabled={busy}
+                      loading={busy}
                       onPress={() => onResolve(true)}
-                      style={({ pressed }) => ({
-                        minHeight: TAP,
-                        borderRadius: theme.radii.control,
-                        backgroundColor: STATUS.ok,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                      })}
-                    >
-                      {busy ? <ActivityIndicator color="#fff" /> : <BodyStrong color="#fff">{t.accept}</BodyStrong>}
-                    </Pressable>
+                    />
                   ) : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t.keep}
+                  {/* "Keep as recorded" = primary action (ink). */}
+                  <Button
+                    title={t.keep}
+                    variant="primary"
+                    block
                     disabled={busy}
+                    loading={busy}
                     onPress={() => onResolve(false)}
-                    style={({ pressed }) => ({
-                      minHeight: TAP,
-                      borderRadius: theme.radii.control,
-                      borderWidth: 1,
-                      borderColor: c.line,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                    })}
-                  >
-                    <BodyStrong>{t.keep}</BodyStrong>
-                  </Pressable>
+                  />
                 </View>
               </View>
             </ScrollView>

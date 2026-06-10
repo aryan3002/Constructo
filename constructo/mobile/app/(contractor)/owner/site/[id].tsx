@@ -14,7 +14,7 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { owner, type SiteEvent, type SiteEventType } from '../../../../src/api/owner'
-import { Body, Button, Card, H1, Screen, Small, StatusPill, TimelineItem } from '../../../../src/ui'
+import { Body, Button, Card, EmptyState, H1, Screen, Small, StatusPill, TimelineItem } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, formatWhen } from '../_components'
 
 const STR = {
@@ -122,7 +122,7 @@ export default function SiteDetail() {
           </Body>
           {forecastQ.data.reorder.filter((r) => r.overdue).map((r) => (
             <View key={r.material} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: 6 }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.warn }} />
+              <StatusPill status="warn" size="sm" />
               <Small style={{ flex: 1, color: theme.colors.text }}>
                 {`${r.material} — ${r.days_since_last}d since last (usually ~${Math.round(r.avg_interval_days)}d)`}
               </Small>
@@ -139,12 +139,11 @@ export default function SiteDetail() {
             <Small muted style={{ letterSpacing: 1 }}>{t.radar.toUpperCase()}</Small>
           </View>
           {radarQ.data.signals.map((s, i) => {
-            const tone =
-              s.severity === 'high' ? theme.colors.risk : s.severity === 'medium' ? theme.colors.warn : theme.colors.info
+            const pillStatus = s.severity === 'high' ? 'risk' : s.severity === 'medium' ? 'warn' : 'info'
             return (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, marginTop: i === 0 ? 0 : 6 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 6, backgroundColor: tone }} />
-                <Small style={{ flex: 1, color: theme.colors.text }}>{s.message}</Small>
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, marginTop: i === 0 ? 0 : 8 }}>
+                <StatusPill status={pillStatus} size="sm" />
+                <Small style={{ flex: 1, color: theme.colors.text, marginTop: 2 }}>{s.message}</Small>
               </View>
             )
           })}
@@ -166,7 +165,7 @@ export default function SiteDetail() {
       {eventsQ.isLoading ? (
         <LoadingBlock />
       ) : events.length === 0 ? (
-        <Card><Body muted>{t.noEvents}</Body></Card>
+        <EmptyState variant="empty" title={t.noEvents} />
       ) : (
         <Card>
           {events.map((e, i) => {

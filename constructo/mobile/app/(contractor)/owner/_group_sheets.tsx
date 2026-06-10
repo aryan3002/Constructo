@@ -32,7 +32,7 @@ import { useRouter } from 'expo-router'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { BodyStrong, Small } from '../../../src/ui'
+import { Body, BodyStrong, Button, Small } from '../../../src/ui'
 import { useInputStyle } from '../../../src/ui/useInputStyle'
 import { ApiError } from '../../../src/api/client'
 import { owner } from '../../../src/api/owner'
@@ -262,7 +262,7 @@ function SelectableUserRow({
         borderWidth: 1,
         borderColor: selected ? c.accent : c.line,
         borderRadius: theme.radii.control,
-        backgroundColor: selected ? 'rgba(242,161,0,0.08)' : c.card,
+        backgroundColor: selected ? c.accentWarm : c.card,
         opacity: disabled ? 0.5 : pressed ? 0.9 : 1,
       })}
     >
@@ -410,7 +410,7 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
                     borderWidth: companyWide ? 2 : 1,
                     borderColor: companyWide ? c.accent : c.line,
                     borderRadius: theme.radii.control,
-                    backgroundColor: companyWide ? 'rgba(242,161,0,0.08)' : c.card,
+                    backgroundColor: companyWide ? c.accentWarm : c.card,
                     opacity: pressed ? 0.9 : 1,
                   })}
                 >
@@ -449,7 +449,7 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
                           borderWidth: on ? 2 : 1,
                           borderColor: on ? c.accent : c.line,
                           borderRadius: theme.radii.control,
-                          backgroundColor: on ? 'rgba(242,161,0,0.08)' : c.card,
+                          backgroundColor: on ? c.accentWarm : c.card,
                           opacity: pressed ? 0.9 : 1,
                         })}
                       >
@@ -503,32 +503,20 @@ export function NewGroupSheet({ visible, onClose }: NewGroupSheetProps) {
         </View>
       </ScrollView>
 
-      {/* Create — amber fill, dark ink, ≥48px */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t.create}
-        accessibilityState={{ disabled: !canCreate }}
+      {/* Create — accent (the one affirmative "yes"), ≥48px */}
+      <Button
+        title={create.isPending ? t.creating : t.create}
+        variant="accent"
+        size="md"
+        block
+        loading={create.isPending}
         disabled={!canCreate}
+        style={{ marginTop: SPACE.sm }}
         onPress={() => {
           setError(null)
           create.mutate()
         }}
-        style={({ pressed }) => ({
-          minHeight: TAP,
-          borderRadius: theme.radii.control,
-          backgroundColor: c.accent,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginTop: SPACE.sm,
-          opacity: !canCreate ? 0.5 : pressed ? 0.9 : 1,
-        })}
-      >
-        {create.isPending ? (
-          <ActivityIndicator color={c.onAccent} />
-        ) : (
-          <BodyStrong style={{ color: c.onAccent }}>{t.create}</BodyStrong>
-        )}
-      </Pressable>
+      />
     </SheetShell>
   )
 }
@@ -692,30 +680,17 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
                   placeholderTextColor={c.textMute}
                   style={[inputStyle, { flex: 1 }]}
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t.save}
+                <Button
+                  title={t.save}
+                  variant="accent"
+                  size="md"
+                  loading={rename.isPending}
                   disabled={!name.trim() || !nameDirty || busy}
                   onPress={() => {
                     setError(null)
                     rename.mutate()
                   }}
-                  style={({ pressed }) => ({
-                    minHeight: TAP,
-                    paddingHorizontal: SPACE.lg,
-                    borderRadius: theme.radii.control,
-                    backgroundColor: c.accent,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: !name.trim() || !nameDirty || busy ? 0.5 : pressed ? 0.9 : 1,
-                  })}
-                >
-                  {rename.isPending ? (
-                    <ActivityIndicator color={c.onAccent} />
-                  ) : (
-                    <BodyStrong style={{ color: c.onAccent }}>{t.save}</BodyStrong>
-                  )}
-                </Pressable>
+                />
               </View>
             </View>
 
@@ -752,51 +727,35 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
                       <View style={{ gap: SPACE.xs }}>
                         <Small>{t.confirmRemove}</Small>
                         <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t.yes}
+                          <Button
+                            title={t.yes}
+                            variant="danger"
+                            size="md"
+                            loading={remove.isPending}
                             disabled={busy}
+                            style={{ flex: 1 }}
                             onPress={() => {
                               setError(null)
                               remove.mutate(m.user_id)
                             }}
-                            style={({ pressed }) => ({
-                              flex: 1,
-                              minHeight: TAP,
-                              borderRadius: theme.radii.control,
-                              backgroundColor: STATUS.risk,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                            })}
-                          >
-                            <BodyStrong color="#fff">{t.yes}</BodyStrong>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t.no}
+                          />
+                          <Button
+                            title={t.no}
+                            variant="secondary"
+                            size="md"
+                            style={{ flex: 1 }}
                             onPress={() => setConfirmRemoveId(null)}
-                            style={({ pressed }) => ({
-                              flex: 1,
-                              minHeight: TAP,
-                              borderRadius: theme.radii.control,
-                              borderWidth: 1,
-                              borderColor: c.line,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              opacity: pressed ? 0.9 : 1,
-                            })}
-                          >
-                            <BodyStrong>{t.no}</BodyStrong>
-                          </Pressable>
+                          />
                         </View>
                       </View>
                     ) : (
                       <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={isAdmin ? t.makeMember : t.makeAdmin}
+                        <Button
+                          title={isAdmin ? t.makeMember : t.makeAdmin}
+                          variant="secondary"
+                          size="md"
                           disabled={busy}
+                          style={{ flex: 1 }}
                           onPress={() => {
                             setError(null)
                             setRole.mutate({
@@ -804,49 +763,14 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
                               role: isAdmin ? 'member' : 'admin',
                             })
                           }}
-                          style={({ pressed }) => ({
-                            flex: 1,
-                            minHeight: TAP,
-                            borderRadius: theme.radii.control,
-                            borderWidth: 1,
-                            borderColor: c.line,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                          })}
-                        >
-                          <Feather
-                            name={isAdmin ? 'arrow-down-circle' : 'shield'}
-                            size={16}
-                            color={c.text}
-                          />
-                          <Small style={{ color: c.text }}>
-                            {isAdmin ? t.makeMember : t.makeAdmin}
-                          </Small>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={t.remove}
+                        />
+                        <Button
+                          title={t.remove}
+                          variant="danger"
+                          size="md"
                           disabled={busy}
                           onPress={() => setConfirmRemoveId(m.user_id)}
-                          style={({ pressed }) => ({
-                            minHeight: TAP,
-                            paddingHorizontal: SPACE.lg,
-                            borderRadius: theme.radii.control,
-                            borderWidth: 1,
-                            borderColor: STATUS.risk,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                          })}
-                        >
-                          <Feather name="user-x" size={16} color={STATUS.risk} />
-                          <Small style={{ color: STATUS.risk }}>{t.remove}</Small>
-                        </Pressable>
+                        />
                       </View>
                     )}
                   </View>
@@ -878,31 +802,18 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
                     />
                   ))}
                   {toAdd.size > 0 ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t.add}
+                    <Button
+                      title={`${t.add} (${toAdd.size})`}
+                      variant="accent"
+                      size="md"
+                      block
+                      loading={addMembers.isPending}
                       disabled={busy}
                       onPress={() => {
                         setError(null)
                         addMembers.mutate()
                       }}
-                      style={({ pressed }) => ({
-                        minHeight: TAP,
-                        borderRadius: theme.radii.control,
-                        backgroundColor: c.accent,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                      })}
-                    >
-                      {addMembers.isPending ? (
-                        <ActivityIndicator color={c.onAccent} />
-                      ) : (
-                        <BodyStrong style={{ color: c.onAccent }}>
-                          {`${t.add} (${toAdd.size})`}
-                        </BodyStrong>
-                      )}
-                    </Pressable>
+                    />
                   ) : null}
                 </>
               )}
@@ -914,72 +825,38 @@ export function ManageGroupSheet({ visible, onClose, groupId, siteId }: ManageGr
             <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
               {confirmArchive ? (
                 <View style={{ gap: SPACE.xs }}>
-                  <Small color={STATUS.risk}>{t.confirmArchive}</Small>
+                  <Body color={STATUS.risk}>{t.confirmArchive}</Body>
                   <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t.yes}
+                    <Button
+                      title={t.yes}
+                      variant="danger"
+                      size="md"
+                      loading={archive.isPending}
                       disabled={busy}
+                      style={{ flex: 1 }}
                       onPress={() => {
                         setError(null)
                         archive.mutate()
                       }}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        minHeight: TAP,
-                        borderRadius: theme.radii.control,
-                        backgroundColor: STATUS.risk,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                      })}
-                    >
-                      {archive.isPending ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <BodyStrong color="#fff">{t.yes}</BodyStrong>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t.no}
+                    />
+                    <Button
+                      title={t.no}
+                      variant="secondary"
+                      size="md"
+                      style={{ flex: 1 }}
                       onPress={() => setConfirmArchive(false)}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        minHeight: TAP,
-                        borderRadius: theme.radii.control,
-                        borderWidth: 1,
-                        borderColor: c.line,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: pressed ? 0.9 : 1,
-                      })}
-                    >
-                      <BodyStrong>{t.no}</BodyStrong>
-                    </Pressable>
+                    />
                   </View>
                 </View>
               ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t.archive}
+                <Button
+                  title={t.archive}
+                  variant="danger"
+                  size="md"
+                  block
                   disabled={busy}
                   onPress={() => setConfirmArchive(true)}
-                  style={({ pressed }) => ({
-                    minHeight: TAP,
-                    borderRadius: theme.radii.control,
-                    borderWidth: 1,
-                    borderColor: STATUS.risk,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-                  })}
-                >
-                  <Feather name="archive" size={16} color={STATUS.risk} />
-                  <BodyStrong style={{ color: STATUS.risk }}>{t.archive}</BodyStrong>
-                </Pressable>
+                />
               )}
             </View>
           </View>

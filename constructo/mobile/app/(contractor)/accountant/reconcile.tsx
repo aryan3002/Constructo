@@ -10,16 +10,18 @@
  * owner pays"). Tapping a site opens its row-by-row reconciliation with the GRN
  * proof one tap away.
  *
- * Strings come from the t() i18n catalog; icons are premium Feather glyphs.
+ * Neev re-skin: MoneyCell for all ₹, StatusPill for status, EvidenceChip on
+ * exception detail, EmptyState for no-flags / loading error / no-sites.
+ * Dense desk rows — 44px rows, scannable, no big field targets.
  */
-import { Pressable, ScrollView, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../src/theme/tokens'
+import { SPACE, type Status } from '../../../src/theme/tokens'
 import {
   accountant,
   type AccountantOverview,
@@ -31,13 +33,14 @@ import {
   BodyStrong,
   Button,
   Card,
+  EmptyState,
+  EvidenceChip,
+  Eyebrow,
   H1,
+  MoneyCell,
   Small,
-  StatusDot,
+  StatusPill,
 } from '../../../src/ui'
-
-const inr = (n: number) =>
-  '₹' + Math.round(n).toLocaleString('en-IN')
 
 export default function AccountantReconcile() {
   const { t } = useT()
@@ -70,38 +73,40 @@ export default function AccountantReconcile() {
 
       {/* states */}
       {q.isLoading ? (
-        <Card>
-          <Body muted>{t('common.loading')}</Body>
-        </Card>
+        <View style={{ paddingVertical: SPACE.xl, alignItems: 'center', gap: SPACE.md }}>
+          <ActivityIndicator color={theme.colors.accent} size="large" />
+          <Small muted>{t('common.loading')}</Small>
+        </View>
       ) : q.error ? (
-        <Card>
-          <Body>{t('accountant.error')}</Body>
-          <Button
-            title={t('common.retry')}
-            variant="secondary"
-            style={{ marginTop: SPACE.sm }}
-            onPress={() => void q.refetch()}
-          />
-        </Card>
+        <EmptyState
+          variant="offline"
+          title={t('accountant.error')}
+          action={
+            <Button
+              title={t('common.retry')}
+              variant="secondary"
+              onPress={() => void q.refetch()}
+            />
+          }
+        />
       ) : data ? (
         <>
           {/* money-at-risk headline */}
           <Card
-            style={
-              data.total_amount_at_risk > 0
-                ? { borderLeftWidth: 4, borderLeftColor: theme.colors.risk }
-                : undefined
-            }
+            flag={data.total_amount_at_risk > 0 ? 'risk' : undefined}
+            padded
           >
-            <Small muted style={{ letterSpacing: 1 }}>
-              {t('accountant.atRisk').toUpperCase()}
-            </Small>
-            <BodyStrong style={{ marginTop: SPACE.xs, fontSize: 28, lineHeight: 34 }}>
-              {inr(data.total_amount_at_risk)}
-            </BodyStrong>
-            <Small muted style={{ marginTop: 2 }}>
-              {t('accountant.openFlags', { count: data.open_exception_count })}
-            </Small>
+            <Eyebrow>{t('accountant.atRisk')}</Eyebrow>
+            <View style={{ marginTop: SPACE.xs, gap: SPACE.xs }}>
+              <MoneyCell
+                amount={data.total_amount_at_risk}
+                sign={data.total_amount_at_risk > 0 ? 'out' : 'none'}
+                size="xl"
+              />
+              <Small muted>
+                {t('accountant.openFlags', { count: data.open_exception_count })}
+              </Small>
+            </View>
           </Card>
 
           {/* money exceptions (the flags) — worst-first */}
@@ -110,12 +115,7 @@ export default function AccountantReconcile() {
             {hasFlags ? (
               data.exceptions.map((e) => <ExceptionCard key={e.decision_id} exc={e} />)
             ) : (
-              <Card>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-                  <Feather name="check-circle" size={18} color={theme.colors.ok} />
-                  <Body muted>{t('accountant.noFlags')}</Body>
-                </View>
-              </Card>
+              <EmptyState variant="clear" title={t('accountant.noFlags')} />
             )}
           </View>
 
@@ -123,9 +123,7 @@ export default function AccountantReconcile() {
           <View style={{ gap: SPACE.sm }}>
             <SectionHeader icon="layers" title={t('accountant.sites')} />
             {data.sites.length === 0 ? (
-              <Card>
-                <Body muted>{t('accountant.noSites')}</Body>
-              </Card>
+              <EmptyState variant="empty" title={t('accountant.noSites')} />
             ) : (
               data.sites.map((s) => (
                 <SiteRow
@@ -157,28 +155,32 @@ function SectionHeader({
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
       <Feather name={icon} size={16} color={theme.colors.textMute} />
-      <Small muted style={{ letterSpacing: 1 }}>
-        {title.toUpperCase()}
-      </Small>
+      <Eyebrow>{title}</Eyebrow>
     </View>
   )
 }
 
 function ExceptionCard({ exc }: { exc: MoneyException }) {
-  const { theme } = useTheme()
+  const { t } = useT()
   return (
-    <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.risk }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-        <StatusDot status="risk" />
+    <Card flag="risk">
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+        <StatusPill status="risk" size="sm" style={{ marginTop: 1 }} />
         <BodyStrong style={{ flex: 1 }}>{exc.title}</BodyStrong>
         {exc.amount_at_risk > 0 ? (
-          <Small style={{ color: theme.colors.risk }}>{inr(exc.amount_at_risk)}</Small>
+          <MoneyCell amount={exc.amount_at_risk} sign="out" size="sm" align="right" />
         ) : null}
       </View>
       {exc.detail ? (
         <Small muted style={{ marginTop: SPACE.xs }}>
           {exc.detail}
         </Small>
+      ) : null}
+      {/* Prompt to view proof — the site detail has the row-level GRN */}
+      {exc.site_id ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs, marginTop: SPACE.sm }}>
+          <EvidenceChip kind="doc" label={t('accountant.viewProof')} />
+        </View>
       ) : null}
     </Card>
   )
@@ -195,24 +197,41 @@ function SiteRow({
   const { theme } = useTheme()
   const s = site.summary
   const bad = s.mismatch + s.missing_proof + s.needs_approval
-  const tone: 'ok' | 'warn' | 'risk' =
+  const tone: Status =
     s.mismatch > 0 ? 'risk' : bad > 0 ? 'warn' : 'ok'
 
   return (
     <Pressable onPress={onPress}>
-      <Card
-        style={
-          tone !== 'ok'
-            ? { borderLeftWidth: 4, borderLeftColor: theme.colors[tone] }
-            : undefined
-        }
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-          <StatusDot status={tone} />
+      <Card flag={tone !== 'ok' ? tone : undefined} padded={false}>
+        {/* 44-px desk-density row */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
+            minHeight: 44,
+            paddingHorizontal: SPACE.lg,
+            paddingVertical: SPACE.sm,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.line,
+          }}
+        >
+          <StatusPill status={tone} size="sm" style={{ marginRight: SPACE.xs }} />
           <BodyStrong style={{ flex: 1 }}>{site.site_name}</BodyStrong>
           <Feather name="chevron-right" size={18} color={theme.colors.textMute} />
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xs }}>
+
+        {/* summary counts + at-risk amount */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: SPACE.md,
+            paddingHorizontal: SPACE.lg,
+            paddingVertical: SPACE.sm,
+          }}
+        >
           <Small muted>{t('accountant.matchedN', { count: s.matched })}</Small>
           {s.mismatch > 0 ? (
             <Small style={{ color: theme.colors.risk }}>
@@ -229,12 +248,17 @@ function SiteRow({
               {t('accountant.needsApprovalN', { count: s.needs_approval })}
             </Small>
           ) : null}
+          {s.total_amount_at_risk > 0 ? (
+            <MoneyCell
+              amount={s.total_amount_at_risk}
+              sign="out"
+              size="sm"
+              label={t('accountant.atRisk')}
+              align="right"
+              style={{ marginLeft: 'auto' }}
+            />
+          ) : null}
         </View>
-        {s.total_amount_at_risk > 0 ? (
-          <Small style={{ color: theme.colors.risk, marginTop: SPACE.xs }}>
-            {t('accountant.siteAtRisk', { amount: inr(s.total_amount_at_risk) })}
-          </Small>
-        ) : null}
       </Card>
     </Pressable>
   )

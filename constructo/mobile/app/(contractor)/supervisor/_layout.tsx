@@ -41,7 +41,7 @@ export default function SupervisorLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: theme.name === 'blueprint' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
       }}
     >
       <Tabs.Screen name="capture" options={{ title: str.capture, tabBarIcon: icon('📷') }} />

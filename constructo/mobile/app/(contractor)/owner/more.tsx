@@ -4,14 +4,12 @@
  * web-primary for heavy desk work (Owner.md §6.6 / §8); this MVP screen ships
  * identity + the sign-out path.
  */
-import { Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Button, Card, H1, Mono, Screen, Small } from '../../../src/ui'
+import { Body, BodyStrong, Card, H1, Mono, Screen, SettingsGroup, SettingsRow, Small } from '../../../src/ui'
 
 const STR = {
   en: {
@@ -52,7 +50,6 @@ const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
 
 export default function More() {
   const { lang } = useT()
-  const { theme } = useTheme()
   const { me, signOut } = useAuth()
   const router = useRouter()
   const t = STR[lang]
@@ -79,30 +76,21 @@ export default function More() {
         ) : null}
       </Card>
 
-      <Pressable accessibilityRole="button" accessibilityLabel={t.search} onPress={() => router.push('/(contractor)/owner/search')}>
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-            <Body muted style={{ fontSize: 18 }}>⌕</Body>
-            <View style={{ flex: 1 }}>
-              <BodyStrong>{t.search}</BodyStrong>
-              <Small muted style={{ marginTop: 2 }}>{t.searchSub}</Small>
-            </View>
-            <Body muted>›</Body>
-          </View>
-        </Card>
-      </Pressable>
-
-      <Pressable accessibilityRole="button" accessibilityLabel={t.foresight} onPress={() => router.push('/(contractor)/owner/foresight')}>
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-            <View style={{ flex: 1 }}>
-              <BodyStrong>{t.foresight}</BodyStrong>
-              <Small muted style={{ marginTop: 2 }}>{t.foresightSub}</Small>
-            </View>
-            <Body muted>›</Body>
-          </View>
-        </Card>
-      </Pressable>
+      <SettingsGroup>
+        <SettingsRow
+          icon="search"
+          title={t.search}
+          subtitle={t.searchSub}
+          onPress={() => router.push('/(contractor)/owner/search')}
+        />
+        <SettingsRow
+          icon="trending-up"
+          title={t.foresight}
+          subtitle={t.foresightSub}
+          last
+          onPress={() => router.push('/(contractor)/owner/foresight')}
+        />
+      </SettingsGroup>
 
       <Card>
         <Small muted style={{ letterSpacing: 1 }}>{t.company.toUpperCase()}</Small>
@@ -113,7 +101,16 @@ export default function More() {
         <Body muted>{t.webNote}</Body>
       </Card>
 
-      <Button title={t.signOut} variant="secondary" block onPress={onSignOut} />
+      <SettingsGroup>
+        <SettingsRow
+          icon="log-out"
+          title={t.signOut}
+          tone="risk"
+          hideChevron
+          last
+          onPress={onSignOut}
+        />
+      </SettingsGroup>
     </Screen>
   )
 }

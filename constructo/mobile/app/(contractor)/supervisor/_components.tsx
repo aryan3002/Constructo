@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, H2, Mono, Small, StatusDot } from '../../../src/ui'
+import { Body, BodyStrong, EmptyState, H2, MonoSm, Small, StatusDot, StatusPill } from '../../../src/ui'
 import type { CaptureKind } from '../../../src/api/supervisor'
 
 // CaptureCard + MessageBubble live in the shared chat module so the owner Chat
@@ -37,28 +37,11 @@ export function Loading() {
   )
 }
 
+/** CalmEmpty — delegates to the kit EmptyState. Uses "empty" variant for lists,
+ *  "clear" when there is nothing pending (all-clear feeling). Screens that want
+ *  "offline" pass variant explicitly via the underlying EmptyState directly. */
 export function CalmEmpty({ title, body }: { title: string; body?: string }) {
-  const { theme } = useTheme()
-  return (
-    <View
-      style={{
-        backgroundColor: theme.colors.card,
-        borderRadius: theme.radii.card,
-        borderWidth: 1,
-        borderColor: theme.colors.line,
-        padding: SPACE.xl,
-        gap: SPACE.xs,
-        alignItems: 'center',
-      }}
-    >
-      <BodyStrong>{title}</BodyStrong>
-      {body ? (
-        <Small muted style={{ textAlign: 'center' }}>
-          {body}
-        </Small>
-      ) : null}
-    </View>
-  )
+  return <EmptyState variant="empty" title={title} body={body} />
 }
 
 export function ErrorState({
@@ -71,18 +54,21 @@ export function ErrorState({
   onRetry: () => void
 }) {
   const { theme } = useTheme()
+  const c = theme.colors
   return (
     <View
       style={{
-        backgroundColor: theme.colors.card,
+        backgroundColor: c.card,
         borderRadius: theme.radii.card,
         borderWidth: 1,
-        borderColor: theme.colors.line,
+        borderColor: c.line,
         padding: SPACE.lg,
         gap: SPACE.md,
       }}
     >
-      <Small color={STATUS.risk}>{message}</Small>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <StatusPill status="risk" label={message} size="sm" />
+      </View>
       <Pressable
         accessibilityRole="button"
         onPress={onRetry}
@@ -92,7 +78,7 @@ export function ErrorState({
           justifyContent: 'center',
           borderRadius: theme.radii.control,
           borderWidth: 1,
-          borderColor: theme.colors.line,
+          borderColor: c.line,
         }}
       >
         <BodyStrong>{retryLabel}</BodyStrong>
@@ -152,6 +138,8 @@ export function KindChipRow({
 }) {
   const { theme } = useTheme()
   const c = theme.colors
+  // Active kind chip: ink fill (not marigold — the one marigold is the capture
+  // mic + the single affirmative "yes"; never two marigold fills on one screen).
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
       {CAPTURE_KINDS.map((k) => {
@@ -168,14 +156,14 @@ export function KindChipRow({
               alignItems: 'center',
               gap: SPACE.xs,
               borderRadius: 9999,
-              borderWidth: 1,
-              borderColor: active ? c.accent : c.line,
-              backgroundColor: active ? c.accent : c.card,
+              borderWidth: active ? 1.5 : 1,
+              borderColor: active ? c.text : c.line,
+              backgroundColor: active ? c.text : c.card,
               paddingHorizontal: SPACE.md,
             }}
           >
-            <Body color={active ? c.onAccent : c.text}>{KIND_GLYPH[k]}</Body>
-            <Small color={active ? c.onAccent : c.text} style={{ fontWeight: '600' }}>
+            <Body color={active ? c.paper : c.text}>{KIND_GLYPH[k]}</Body>
+            <Small color={active ? c.paper : c.text} style={{ fontWeight: '600' }}>
               {labels[k]}
             </Small>
           </Pressable>
@@ -264,9 +252,6 @@ export function SentRow({
   onPress?: () => void
   isLast: boolean
 }) {
-  const { theme } = useTheme()
-  const c = theme.colors
-  const dotColor = filed ? STATUS.ok : STATUS.warn
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : 'text'}
@@ -277,22 +262,19 @@ export function SentRow({
         alignItems: 'center',
         gap: SPACE.md,
         paddingVertical: SPACE.sm,
-        borderTopWidth: isLast ? 0 : 0,
       }}
     >
       <Body>{glyph}</Body>
       <View style={{ flex: 1 }}>
         <BodyStrong numberOfLines={1}>{label}</BodyStrong>
-        <Mono muted style={{ fontSize: 12 }}>
-          {meta}
-        </Mono>
+        <MonoSm muted>{meta}</MonoSm>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
-        <Small color={dotColor} style={{ fontWeight: '600' }}>
-          {filed ? filedLabel : queuedLabel}
-        </Small>
-      </View>
+      {/* Status = shape + label + colour via the kit StatusPill (never dot alone). */}
+      <StatusPill
+        status={filed ? 'ok' : 'info'}
+        label={filed ? filedLabel : queuedLabel}
+        size="sm"
+      />
     </Pressable>
   )
 }

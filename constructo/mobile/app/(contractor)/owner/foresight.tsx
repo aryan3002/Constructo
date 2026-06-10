@@ -6,7 +6,7 @@
  * live). Reached from More.
  */
 import { useState } from 'react'
-import { ActivityIndicator, Pressable, TextInput, View } from 'react-native'
+import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -15,7 +15,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { owner, type SettlementResult, type SiteRollup } from '../../../src/api/owner'
-import { Body, BodyStrong, Card, H1, Mono, Screen, Small, StatusPill } from '../../../src/ui'
+import { Body, BodyStrong, Button, Card, EmptyState, H1, Mono, MoneyCell, Screen, Small, StatusPill, formatINR } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock } from './_components'
 
 const STR = {
@@ -53,23 +53,11 @@ const STR = {
   },
 } as const
 
-/** Indian-grouped rupee (no Hermes Intl reliance). */
+/** Format rupee for the stat helper (uses formatINR from the kit). */
 function inr(value: number | null): string {
   if (value == null) return '—'
-  const s = Math.abs(Math.round(value)).toString()
-  let grouped = s
-  if (s.length > 3) {
-    const last3 = s.slice(-3)
-    let rest = s.slice(0, -3)
-    const parts: string[] = []
-    while (rest.length > 2) {
-      parts.unshift(rest.slice(-2))
-      rest = rest.slice(0, -2)
-    }
-    if (rest) parts.unshift(rest)
-    grouped = `${parts.join(',')},${last3}`
-  }
-  return `₹${grouped}`
+  const { currency, value: val } = formatINR(value, { sign: 'none' })
+  return `${currency}${val}`
 }
 
 export default function Foresight() {
@@ -116,9 +104,7 @@ export default function Foresight() {
       ) : q.isError ? (
         <ErrorBlock message={t.err} retryLabel={t.tryAgain} onRetry={() => q.refetch()} />
       ) : !q.data || q.data.site_count === 0 ? (
-        <Card>
-          <Body muted>{t.empty}</Body>
-        </Card>
+        <EmptyState variant="empty" title={t.empty} />
       ) : (
         <>
           {/* Portfolio totals */}
@@ -128,7 +114,14 @@ export default function Foresight() {
             </Small>
             <View style={{ flexDirection: 'row', marginTop: SPACE.md, gap: SPACE.sm }}>
               {stat(t.workerDays, q.data.totals.worker_days != null ? String(q.data.totals.worker_days) : '—')}
-              {stat(t.spend, inr(q.data.totals.amount_total))}
+              <View style={{ flex: 1, gap: 2 }}>
+                <MoneyCell
+                  amount={q.data.totals.amount_total ?? 0}
+                  sign="none"
+                  size="md"
+                  label={t.spend}
+                />
+              </View>
             </View>
             <View style={{ flexDirection: 'row', marginTop: SPACE.md, gap: SPACE.sm }}>
               {stat(t.deliveries, String(q.data.totals.deliveries))}
@@ -148,19 +141,24 @@ export default function Foresight() {
               accessibilityLabel={s.site_name}
               onPress={() => router.push(`/(contractor)/owner/site/${s.site_id}`)}
             >
-              <Card>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Card flag={s.open_disputes > 0 ? 'risk' : 'ok'}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingRight: 20 }}>
                   <BodyStrong style={{ flex: 1 }}>{s.site_name}</BodyStrong>
                   {s.open_disputes > 0 ? (
-                    <StatusPill status="risk" label={`${s.open_disputes}`} size="sm" />
+                    <StatusPill status="risk" label={`${s.open_disputes} ${t.disputes.toLowerCase()}`} size="sm" />
                   ) : null}
                 </View>
-                <View style={{ flexDirection: 'row', marginTop: SPACE.sm, gap: SPACE.md, flexWrap: 'wrap' }}>
-                  <Mono muted style={{ fontSize: 13 }}>
+                <View style={{ flexDirection: 'row', marginTop: SPACE.sm, gap: SPACE.md, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <MoneyCell
+                    amount={s.amount_total ?? 0}
+                    sign="none"
+                    size="sm"
+                    label={t.spend}
+                  />
+                  <Small muted>
                     {s.worker_days != null ? `${s.worker_days} ${t.workerDays.toLowerCase()}` : '—'}
-                  </Mono>
-                  <Mono muted style={{ fontSize: 13 }}>{inr(s.amount_total)}</Mono>
-                  <Mono muted style={{ fontSize: 13 }}>{`${s.deliveries} ${t.deliveries.toLowerCase()}`}</Mono>
+                  </Small>
+                  <Small muted>{`${s.deliveries} ${t.deliveries.toLowerCase()}`}</Small>
                 </View>
               </Card>
             </Pressable>
@@ -173,7 +171,7 @@ export default function Foresight() {
               <Small muted style={{ letterSpacing: 1 }}>{t.advanceGuard.toUpperCase()}</Small>
             </View>
             <Small muted style={{ marginTop: 2 }}>{t.advanceSub}</Small>
-            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm, alignItems: 'center' }}>
               <TextInput
                 value={vendor}
                 onChangeText={setVendor}
@@ -192,22 +190,14 @@ export default function Foresight() {
                   fontSize: 15,
                 }}
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t.check}
+              <Button
+                title={t.check}
+                variant="primary"
+                size="md"
+                loading={checking}
                 disabled={!vendor.trim() || checking}
                 onPress={checkGuard}
-                style={({ pressed }) => ({
-                  paddingHorizontal: SPACE.lg,
-                  borderRadius: theme.radii.control,
-                  backgroundColor: c.accent,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: !vendor.trim() || checking ? 0.5 : pressed ? 0.9 : 1,
-                })}
-              >
-                {checking ? <ActivityIndicator color={c.onAccent} /> : <BodyStrong color={c.onAccent}>{t.check}</BodyStrong>}
-              </Pressable>
+              />
             </View>
             {guard ? (
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, marginTop: SPACE.sm }}>

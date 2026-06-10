@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
+import { FACES } from '../../../src/theme/fonts'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 
 type FeatherName = React.ComponentProps<typeof Feather>['name']
@@ -39,7 +40,7 @@ export default function PmLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12 },
       }}
     >
       <Tabs.Screen

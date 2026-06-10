@@ -13,7 +13,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
-import { Body, BodyStrong, Button, Card, H1, Small } from '../../../src/ui'
+import { Body, BodyStrong, Button, EmptyState, H1, Small } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from './_components'
 
 const STR = {
@@ -149,9 +149,7 @@ export default function Approvals() {
       </View>
 
       {items.length === 0 ? (
-        <Card style={{ borderLeftWidth: 4, borderLeftColor: theme.colors.ok }}>
-          <BodyStrong>{t.empty}</BodyStrong>
-        </Card>
+        <EmptyState variant="clear" title={t.empty} />
       ) : (
         <>
           {/* batch controls */}

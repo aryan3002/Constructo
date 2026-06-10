@@ -1,13 +1,32 @@
 /**
  * PM · More — identity + sign out. Heavy desk work (full schedule, reports,
  * exports) stays web-primary; this MVP ships identity + the sign-out path.
+ *
+ * Neev re-skin: SettingsGroup + SettingsRow (no raw Card/Button), theme fonts,
+ * no hardcoded colours.
  */
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { SPACE } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Button, Card, H1, Mono, Screen, Small } from '../../../src/ui'
+import {
+  H1,
+  Screen,
+  SettingsGroup,
+  SettingsRow,
+} from '../../../src/ui'
+
+const STR = {
+  en: {
+    phone: 'Phone',
+    company: 'Company',
+  },
+  hi: {
+    phone: 'फ़ोन',
+    company: 'कंपनी',
+  },
+} as const
 
 const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
   owner: { en: 'Owner', hi: 'मालिक' },
@@ -21,6 +40,7 @@ export default function PmMore() {
   const { t, lang } = useT()
   const { me, signOut } = useAuth()
   const router = useRouter()
+  const str = STR[lang]
 
   async function onSignOut() {
     await signOut()
@@ -33,20 +53,49 @@ export default function PmMore() {
     <Screen>
       <H1>{t('pm.tabMore')}</H1>
 
-      <Card>
-        <BodyStrong style={{ fontSize: 20, lineHeight: 26 }}>{me?.name ?? '—'}</BodyStrong>
-        <Body muted style={{ marginTop: 2 }}>{roleLabel}</Body>
+      {/* Identity group */}
+      <SettingsGroup>
+        <SettingsRow
+          icon="user"
+          title={me?.name ?? '—'}
+          subtitle={roleLabel}
+          hideChevron
+          onPress={() => {}}
+        />
         {me?.phone ? (
-          <Mono muted style={{ marginTop: SPACE.sm }}>{me.phone}</Mono>
+          <SettingsRow
+            icon="phone"
+            title={me.phone}
+            subtitle={str.phone}
+            hideChevron
+            last={!me?.company_id}
+            onPress={() => {}}
+          />
         ) : null}
-      </Card>
+        {me?.company_id ? (
+          <SettingsRow
+            icon="briefcase"
+            title={me.company_id}
+            subtitle={str.company}
+            hideChevron
+            last
+            onPress={() => {}}
+          />
+        ) : null}
+      </SettingsGroup>
 
-      <Card>
-        <Small muted style={{ letterSpacing: 1 }}>COMPANY</Small>
-        <Mono style={{ marginTop: SPACE.xs }}>{me?.company_id ?? '—'}</Mono>
-      </Card>
-
-      <Button title={t('auth.signOut')} variant="secondary" block onPress={onSignOut} />
+      {/* Account actions */}
+      <SettingsGroup style={{ marginTop: SPACE.sm }}>
+        <SettingsRow
+          icon="log-out"
+          title={t('auth.signOut')}
+          tone="risk"
+          hideChevron
+          last
+          onPress={onSignOut}
+          accessibilityLabel={t('auth.signOut')}
+        />
+      </SettingsGroup>
     </Screen>
   )
 }

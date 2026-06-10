@@ -10,6 +10,7 @@ import { Tabs } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { FACES } from '../../../src/theme/fonts'
 
 const LABELS = {
   en: { brief: 'Brief', chat: 'Chat', sites: 'Sites', approvals: 'Approvals', search: 'Search', more: 'More' },
@@ -41,7 +42,7 @@ export default function OwnerLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12 },
       }}
     >
       <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: icon('◆') }} />

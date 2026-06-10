@@ -25,9 +25,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
+import { Body, BodyStrong, Button, EmptyState, EvidenceChip, Eyebrow, Mono, Small, StatusPill } from '../../../src/ui'
 import { actionItemsApi, type ActionItem } from '../../../src/api/actionItems'
-import { SPACE, STATUS, TAP } from './_components'
+import { SPACE, STATUS } from './_components'
 
 const STR = {
   en: {
@@ -139,25 +139,9 @@ export default function ActionItems() {
             {it.title}
           </Body>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
+            {/* AI-detected to-do: an EvidenceChip-style marker ("Nivaan"). */}
             {it.created_by_ai ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 4,
-                  borderRadius: 9999,
-                  backgroundColor: c.paper,
-                  borderWidth: 1,
-                  borderColor: c.line,
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                }}
-              >
-                <Feather name="zap" size={11} color={c.accentDeep} />
-                <Small style={{ color: c.textMute, letterSpacing: 0.5, fontWeight: '600' }}>
-                  {t.nivaan}
-                </Small>
-              </View>
+              <EvidenceChip kind="message" label={t.nivaan} />
             ) : null}
             {it.due_on ? (
               <Mono style={{ fontSize: 12, color: c.textMute }}>
@@ -215,28 +199,22 @@ export default function ActionItems() {
           <ActivityIndicator color={c.accent} />
         </View>
       ) : q.isError ? (
-        <Small color={STATUS.risk} style={{ padding: SPACE.lg }}>
-          {t.err}
-        </Small>
+        <View style={{ padding: SPACE.lg }}>
+          <StatusPill status="risk" label={t.err} />
+        </View>
       ) : items.length === 0 ? (
-        <Body muted style={{ padding: SPACE.xl, textAlign: 'center' }}>
-          {t.empty}
-        </Body>
+        <EmptyState variant="empty" title={t.empty} />
       ) : (
         <View style={{ paddingHorizontal: SPACE.lg }}>
           {open.length > 0 ? (
             <>
-              <Small style={{ marginTop: SPACE.md, color: c.textMute, letterSpacing: 0.5, fontWeight: '600' }}>
-                {t.open.toUpperCase()}
-              </Small>
+              <Eyebrow style={{ marginTop: SPACE.md }}>{t.open}</Eyebrow>
               {open.map(row)}
             </>
           ) : null}
           {done.length > 0 ? (
             <>
-              <Small style={{ marginTop: SPACE.lg, color: c.textMute, letterSpacing: 0.5, fontWeight: '600' }}>
-                {t.done.toUpperCase()}
-              </Small>
+              <Eyebrow style={{ marginTop: SPACE.lg }}>{t.done}</Eyebrow>
               {done.map(row)}
             </>
           ) : null}
@@ -280,31 +258,21 @@ export default function ActionItems() {
               }}
             />
             <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-              <Pressable
+              <Button
+                title={t.cancel}
+                variant="secondary"
                 onPress={() => setAdding(false)}
-                style={{ flex: 1, minHeight: TAP, alignItems: 'center', justifyContent: 'center', borderRadius: theme.radii.control, borderWidth: 1, borderColor: c.line }}
-              >
-                <BodyStrong>{t.cancel}</BodyStrong>
-              </Pressable>
-              <Pressable
-                disabled={!text.trim() || create.isPending}
+                style={{ flex: 1 }}
+              />
+              {/* "Add" = the single affirmative: accent (marigold). */}
+              <Button
+                title={t.save}
+                variant="accent"
+                disabled={!text.trim()}
+                loading={create.isPending}
                 onPress={() => create.mutate(text.trim())}
-                style={({ pressed }) => ({
-                  flex: 2,
-                  minHeight: TAP,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: theme.radii.control,
-                  backgroundColor: c.accent,
-                  opacity: !text.trim() || create.isPending ? 0.5 : pressed ? 0.9 : 1,
-                })}
-              >
-                {create.isPending ? (
-                  <ActivityIndicator color={c.onAccent} />
-                ) : (
-                  <BodyStrong color={c.onAccent}>{t.save}</BodyStrong>
-                )}
-              </Pressable>
+                style={{ flex: 2 }}
+              />
             </View>
           </View>
         </KeyboardAvoidingView>

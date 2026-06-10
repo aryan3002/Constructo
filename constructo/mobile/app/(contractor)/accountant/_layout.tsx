@@ -39,7 +39,7 @@ export default function AccountantLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: theme.name === 'blueprint' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
       }}
     >
       <Tabs.Screen
