@@ -29,6 +29,7 @@ const ROLE_MORE: Record<Role, MoreLink[]> = {
     { to: '/reconcile', labelKey: 'nav.reconcile', icon: '🧾' },
     { to: '/groups', labelKey: 'nav.groups', icon: '💬' },
   ],
+  architect: [{ to: '/sites', labelKey: 'nav.sites', icon: '🏗' }],
   supervisor: [
     { to: '/permits', labelKey: 'nav.permits', icon: '📋' },
   ],

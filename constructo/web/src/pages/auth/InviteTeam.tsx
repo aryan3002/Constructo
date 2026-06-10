@@ -25,6 +25,7 @@ const FREE_SEAT_ROLES: Role[] = ['supervisor', 'labor_contractor']
 const ROLE_KEY: Record<Role, TranslationKey> = {
   owner: 'invite.role.owner',
   pm: 'invite.role.pm',
+  architect: 'invite.role.architect',
   supervisor: 'invite.role.supervisor',
   accountant: 'invite.role.accountant',
   procurement: 'invite.role.procurement',

@@ -23,6 +23,7 @@ import { useUnreadCount } from '../features/notifications/useUnreadCount'
 export type Role =
   | 'owner'
   | 'pm'
+  | 'architect'
   | 'supervisor'
   | 'accountant'
   | 'procurement'
@@ -61,6 +62,13 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     { to: '/', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
+    { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
+    { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
+  ],
+  // Architect (interior fit-out) — owns the Material Specification schedule.
+  architect: [
+    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon />, end: true },
+    { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],

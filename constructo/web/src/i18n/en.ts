@@ -13,6 +13,7 @@ export const en = {
   'nav.brief': 'Brief',
   'nav.today': 'Today',
   'nav.sites': 'Sites',
+  'nav.specs': 'Spec desk',
   'nav.my_sites': 'My Sites',
   'nav.my_site': 'My Site',
   'nav.capture': 'Capture',
@@ -142,6 +143,7 @@ export const en = {
   'invite.name.label': 'Name (optional)',
   'invite.role.label': 'Role',
   'invite.role.pm': 'Project Manager',
+  'invite.role.architect': 'Architect',
   'invite.role.supervisor': 'Supervisor',
   'invite.role.accountant': 'Accountant',
   'invite.role.procurement': 'Procurement',
@@ -170,6 +172,8 @@ export const en = {
   'join.action.accept': 'Accept & join',
   'join.action.accepting': 'Joining…',
   'join.welcome': 'Welcome to the team!',
+  'join.coachmark.architect':
+    'You own the material spec — propose finishes, then confirm with the client.',
   'join.coachmark.supervisor':
     'Tap the big camera or mic to log work — no forms.',
   'join.coachmark.labor_contractor':
