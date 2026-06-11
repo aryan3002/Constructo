@@ -296,7 +296,16 @@ export function MessageBubble({
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
       {timestamp ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            // Own bubbles hug the right (with the tick); received bubbles keep
+            // their original left alignment.
+            alignSelf: mine ? 'flex-end' : 'flex-start',
+          }}
+        >
           <Mono style={{ color: c.textMute, fontSize: 11 }}>{timestamp}</Mono>
           {mine && tickGlyph(deliveryState) ? (
             <Mono style={{ fontSize: 11, color: isReadTick(deliveryState) ? c.accent : c.textMute }}>
