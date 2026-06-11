@@ -41,6 +41,27 @@ export interface ChatMessage {
   attachment_url: string | null
   /** Events this message minted; empty for plain human talk (a bubble). */
   events: ChatEvent[]
+  /** Extraction status of the message's raw row (queued|processing|done|failed),
+   *  or null for messages that carry no extractable payload. Drives the "still
+   *  reading…" cue on a freshly-sent media card; patched live by event_update. */
+  raw_status?: string | null
+}
+
+/** One member's read/delivered cursor pair (spine A10) — the client derives
+ *  per-message delivery ticks from the set of these across a thread's members. */
+export interface CursorOut {
+  user_id: string
+  last_delivered_seq: number
+  last_read_seq: number
+}
+
+/** A direct-to-R2 upload ticket (spine A11). `upload_mode` is "presigned" when
+ *  `put_url` is set (PUT the bytes there), else "multipart" (fall back to the
+ *  existing POST /chat/media). Keeps the API out of the byte path on one bar. */
+export interface MediaPresign {
+  key: string
+  put_url: string | null
+  upload_mode: 'presigned' | 'multipart'
 }
 
 export interface ChatSendBody {
@@ -249,6 +270,49 @@ export const chatApi = {
         ? { conversation_id: opts.conversationId, last_seq: opts.lastSeq }
         : { site_id: (opts as { siteId: string }).siteId, last_seq: opts.lastSeq }
     return request<void>('/api/v1/chat/read', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /** Advance the caller's DELIVERED cursor (✓✓). Called after persisting messages
+   *  locally (a WS frame or a REST backfill). Mirrors {@link read} — returns 204. */
+  delivered(opts: ChatAddress & { lastSeq: number }): Promise<void> {
+    const body =
+      'conversationId' in opts && opts.conversationId
+        ? { conversation_id: opts.conversationId, last_seq: opts.lastSeq }
+        : { site_id: (opts as { siteId: string }).siteId, last_seq: opts.lastSeq }
+    return request<void>('/api/v1/chat/delivered', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /** Every member's cursor pair for the thread — the client computes per-message
+   *  delivery/read ticks from these. Read cursors are masked in the homeowner room. */
+  cursors(address: ChatAddress): Promise<CursorOut[]> {
+    const q = new URLSearchParams()
+    if ('conversationId' in address && address.conversationId)
+      q.set('conversation_id', address.conversationId)
+    else if ('siteId' in address && address.siteId) q.set('site_id', address.siteId)
+    return request<CursorOut[]>(`/api/v1/chat/cursors?${q.toString()}`)
+  },
+
+  /** A one-time WS ticket for /chat/ws (keeps the JWT out of the URL). */
+  wsTicket(): Promise<{ ticket: string }> {
+    return request<{ ticket: string }>('/api/v1/chat/ws-ticket', { method: 'POST' })
+  },
+
+  /** A direct-to-R2 upload ticket (spine A11). `upload_mode` tells the client to
+   *  PUT to `put_url` (presigned) or fall back to multipart POST /chat/media. */
+  presignMedia(
+    opts: ChatAddress & { kind: 'image' | 'document' | 'voice' },
+  ): Promise<MediaPresign> {
+    const body =
+      'conversationId' in opts && opts.conversationId
+        ? { conversation_id: opts.conversationId, kind: opts.kind }
+        : { site_id: (opts as { siteId: string }).siteId, kind: opts.kind }
+    return request<MediaPresign>('/api/v1/chat/media/presign', {
       method: 'POST',
       body: JSON.stringify(body),
     })

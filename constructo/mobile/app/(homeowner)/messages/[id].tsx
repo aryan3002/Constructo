@@ -26,7 +26,7 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
+import { ChatComposer, MessageBubble, MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
 import { HOME_ROOM_STR, weaveHomeRoom, type DecisionAction } from '../_home_room.util'
 import { HomeRoomDecisionCard, HomeRoomUpdateCard } from '../_messages_components'
@@ -95,9 +95,9 @@ export default function HomeownerThread() {
 
   const headerTitle = kind === 'homeowner' ? t.builder : title || t.builder
 
-  const thread = useChatThread({ conversationId: id })
+  const { siteId, me } = useAuth()
+  const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
   const [text, setText] = useState('')
-  const { siteId } = useAuth()
   const qc = useQueryClient()
 
   // Home Room weave (#158): in her builder channel (kind=homeowner, which has a
@@ -255,9 +255,24 @@ export default function HomeownerThread() {
         />
       ),
     }))
-    return [...base, ...askRows]
+    // Durable-outbox pending bubbles — a storage-backed message that hasn't yet
+    // confirmed from the server. Rendered as her own bubble with a calm status.
+    const pendingRows: FeedRow[] = thread.pending.map((p) => ({
+      kind: 'custom',
+      key: `pending:${p.clientMsgId}`,
+      node: (
+        <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+          <MessageBubble
+            body={p.body}
+            mine
+            timestamp={p.state === 'failed_permanent' ? t.photoErr : t.send + '…'}
+          />
+        </View>
+      ),
+    }))
+    return [...base, ...askRows, ...pendingRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.messages, lang, asks, homeRoom, updatesQ.data, decisionsQ.data, canApprove, hr])
+  }, [thread.messages, thread.pending, lang, asks, homeRoom, updatesQ.data, decisionsQ.data, canApprove, hr])
 
   const onSend = async () => {
     const body = text.trim()

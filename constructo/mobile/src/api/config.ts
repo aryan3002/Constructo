@@ -16,6 +16,13 @@ export const WEB_BASE: string = (
   process.env.EXPO_PUBLIC_WEB_BASE ?? API_BASE
 ).replace(/\/$/, '')
 
+/**
+ * WebSocket base for the live chat socket (spine A9). Derived from {@link API_BASE}
+ * by swapping the http(s) scheme for ws(s) and appending the chat WS path. The
+ * socket carries a single-use ticket in the query string (the JWT never rides a URL).
+ */
+export const CHAT_WS_URL: string = `${API_BASE.replace(/^http/, 'ws')}/api/v1/chat/ws`
+
 /** Local calendar date (NOT UTC) as YYYY-MM-DD. */
 export function todayIso(): string {
   const d = new Date()

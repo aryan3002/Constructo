@@ -7,7 +7,7 @@
  * v1: the supervisor's assigned site(s); messages poll every ~8s; sends are
  * optimistic (a local "sending" bubble) and idempotent on client_msg_id.
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -234,6 +234,21 @@ export default function CrewChat() {
     for (const x of msgsQ.data ?? []) m.set(x.id, x)
     return m
   }, [msgsQ.data])
+
+  // Mark-read: advance the cursor to the newest seq so the inbox unread badge
+  // clears (Task 13c — the supervisor crew chat previously never reported read,
+  // so its badge never cleared). Invalidate the owner inbox which surfaces every
+  // thread's unread count.
+  const msgs = msgsQ.data
+  const newestSeq = msgs && msgs.length > 0 ? msgs[msgs.length - 1].seq : 0
+  useEffect(() => {
+    if (!site || newestSeq <= 0) return
+    chatApi
+      .read({ siteId: site.id, lastSeq: newestSeq })
+      .then(() => qc.invalidateQueries({ queryKey: ['owner', 'conversations'] }))
+      .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site?.id, newestSeq, qc])
 
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
