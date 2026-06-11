@@ -23,6 +23,7 @@ import { ErrorState, Spinner } from '../../components/states'
 const ASSIGNABLE_ROLES: Role[] = [
   'owner',
   'pm',
+  'architect',
   'supervisor',
   'accountant',
   'procurement',
