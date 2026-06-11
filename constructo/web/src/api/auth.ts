@@ -92,6 +92,17 @@ export interface InvitePreview {
   status: 'pending' | 'accepted' | 'revoked'
 }
 
+/** The homeowner-member row minted for a Client invite (mobile join-code flow). */
+export interface HomeownerMemberInvite {
+  id: string
+  site_id: string
+  phone: string | null
+  display_name: string | null
+  join_code: string
+  invite_link: string
+  status: string
+}
+
 export interface InviteAcceptResult {
   token: string
   role: Role
@@ -323,6 +334,28 @@ export const authApi = {
 
   listInvites(): Promise<Invite[]> {
     return call('/api/v1/invites')
+  },
+
+  /**
+   * Invite the Client (homeowner) for a site. The homeowner is NOT a contractor
+   * web role — they redeem a join code in the mobile app — so this hits the
+   * site-scoped homeowner-member endpoint (mints a member + join code), not the
+   * contractor `/invites` flow. Returns the join code + `constructo://` deep link.
+   */
+  inviteClient(body: {
+    siteId: string
+    phone?: string
+    name?: string
+  }): Promise<HomeownerMemberInvite> {
+    return call('/api/v1/homeowner/members', {
+      method: 'POST',
+      body: JSON.stringify({
+        site_id: body.siteId,
+        sub_role: 'primary_owner',
+        phone: body.phone || undefined,
+        display_name: body.name || undefined,
+      }),
+    })
   },
 
   /** Public pre-login peek at an invite for the join screen. */

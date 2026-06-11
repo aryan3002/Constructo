@@ -54,6 +54,28 @@ async def test_mint_and_join_flow(client, world):
     assert memberships[0]["site_id"] == str(site.id)
 
 
+async def test_mint_member_with_display_name(client, world):
+    """Contractor can label the client at invite time so the roster reads a name,
+    not a bare phone, before the homeowner has joined (pilot turnkey)."""
+    owner, site = world
+
+    minted = await client.post(
+        "/api/v1/homeowner/members",
+        json={
+            "site_id": str(site.id),
+            "sub_role": "primary_owner",
+            "phone": "+919800000020",
+            "display_name": "Pratibha Tripathi",
+        },
+        headers=auth(owner),
+    )
+    assert minted.status_code == 201, minted.text
+    body = minted.json()
+    assert body["display_name"] == "Pratibha Tripathi"
+    assert body["phone"] == "+919800000020"
+    assert body["status"] == "invited"
+
+
 async def test_join_bad_otp_rejected(client, world):
     owner, site = world
     minted = await client.post(
