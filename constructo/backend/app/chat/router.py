@@ -61,6 +61,7 @@ from app.models import (
     MessageAck,
     MessageSide,
     RawMessageModel,
+    SenderKind,
     Site,
     SiteEventModel,
     User,
@@ -161,6 +162,8 @@ class ChatMessageOut(BaseModel):
     conversation_id: UUID
     sender_id: UUID | None
     sender_side: MessageSide
+    # Who/what authored the row (human|nivaan|system) — drives client rendering.
+    sender_kind: SenderKind
     seq: int
     body: str | None
     reply_to_id: UUID | None
@@ -219,6 +222,52 @@ def _side_for(user: User) -> MessageSide:
         if user.role is UserRole.homeowner
         else MessageSide.contractor
     )
+
+
+async def post_agent_message(
+    session: AsyncSession,
+    conv: Conversation,
+    *,
+    sender_kind: SenderKind,
+    body: str | None,
+    meta: dict | None = None,
+) -> ChatMessage:
+    """Mint a seq-ordered nivaan/system row (sender_id NULL) and broadcast it.
+
+    Same ordering authority as a human send: seq is assigned under a row lock on
+    the conversation. These rows are real — receipted, searchable, gap-free."""
+    locked = (
+        await session.execute(
+            select(Conversation).where(Conversation.id == conv.id).with_for_update()
+        )
+    ).scalar_one()
+    now = datetime.now(UTC)
+    seq = locked.last_seq + 1
+    locked.last_seq = seq
+    locked.last_message_at = now
+
+    msg = ChatMessage(
+        conversation_id=conv.id,
+        sender_id=None,
+        sender_side=MessageSide.contractor,
+        sender_kind=sender_kind,
+        client_msg_id=uuid4(),
+        seq=seq,
+        body=body,
+        media_type="text",
+        meta=meta,
+    )
+    session.add(msg)
+    await session.flush()
+    await session.commit()
+    await session.refresh(msg)
+
+    out = ChatMessageOut.model_validate(msg)
+    await get_broadcaster().publish(
+        conv.id,
+        {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
+    )
+    return msg
 
 
 async def _require_site(session: AsyncSession, user: User, site_id: UUID) -> None:
