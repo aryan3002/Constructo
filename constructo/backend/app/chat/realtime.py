@@ -15,8 +15,10 @@ exactly that seam.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import cache
 from uuid import UUID
 
 # A bounded queue per subscriber: a slow client is dropped a frame (it will
@@ -66,3 +68,95 @@ class Broadcaster:
 
 # Process-wide singleton (the WS endpoint and the send path share it).
 broadcaster = Broadcaster()
+
+
+_CHANNEL_PREFIX = "chat:"
+
+
+class RedisBroadcaster:
+    """Cross-worker fan-out: publish → Redis PUBLISH; one listener task per
+    process pumps Redis frames into a local :class:`Broadcaster`. Redis is a
+    TRANSIENT bus — a dropped frame is recovered by the client's after_seq
+    refetch; Neon stays the ordering authority. Same public interface as
+    :class:`Broadcaster` (the documented seam)."""
+
+    def __init__(self, redis, local: Broadcaster | None = None) -> None:
+        self._redis = redis
+        self._local = local or Broadcaster()
+        self._pubsub = None
+        self._listener: asyncio.Task | None = None
+
+    async def publish(self, conversation_id: UUID, payload: dict) -> None:
+        try:
+            await self._redis.publish(
+                f"{_CHANNEL_PREFIX}{conversation_id}", json.dumps(payload)
+            )
+        except Exception:  # pragma: no cover - defensive
+            # Redis down: degrade to local-only (correct on one replica); the
+            # client resync covers cross-replica gaps.
+            await self._local.publish(conversation_id, payload)
+
+    @asynccontextmanager
+    async def subscribe(self, conversation_id: UUID) -> AsyncIterator[asyncio.Queue]:
+        await self._ensure_listener()
+        await self._pubsub.subscribe(f"{_CHANNEL_PREFIX}{conversation_id}")
+        try:
+            async with self._local.subscribe(conversation_id) as queue:
+                yield queue
+        finally:
+            if self._local.subscriber_count(conversation_id) == 0:
+                try:
+                    await self._pubsub.unsubscribe(f"{_CHANNEL_PREFIX}{conversation_id}")
+                except Exception:  # pragma: no cover - defensive
+                    pass
+
+    async def _ensure_listener(self) -> None:
+        if self._pubsub is None:
+            self._pubsub = self._redis.pubsub()
+        if self._listener is None or self._listener.done():
+            self._listener = asyncio.create_task(self._listen())
+
+    async def _listen(self) -> None:
+        while True:
+            try:
+                message = await self._pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
+            except asyncio.CancelledError:  # pragma: no cover
+                return
+            except Exception:  # pragma: no cover - bus hiccup; retry
+                await asyncio.sleep(0.5)
+                continue
+            if message is None or message.get("type") != "message":
+                continue
+            channel = message["channel"]
+            if isinstance(channel, bytes):
+                channel = channel.decode()
+            try:
+                conv_id = UUID(channel.removeprefix(_CHANNEL_PREFIX))
+                payload = json.loads(message["data"])
+            except (ValueError, TypeError):  # pragma: no cover - malformed frame
+                continue
+            await self._local.publish(conv_id, payload)
+
+    async def close(self) -> None:
+        if self._listener is not None:
+            self._listener.cancel()
+            try:
+                await self._listener
+            except (asyncio.CancelledError, Exception):  # pragma: no cover
+                pass
+
+
+@cache
+def get_broadcaster():
+    """Process-wide broadcaster, selected by settings.chat_realtime."""
+    from app.config import settings
+
+    if settings.chat_realtime == "redis":
+        import redis.asyncio as aioredis
+
+        return RedisBroadcaster(aioredis.from_url(settings.redis_url))
+    # Memory mode reuses the documented process-wide singleton so the WS
+    # endpoint, the send path, and direct callers all share one instance.
+    return broadcaster

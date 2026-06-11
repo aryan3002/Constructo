@@ -30,6 +30,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +46,12 @@ class ConversationKind(StrEnum):
 class MessageSide(StrEnum):
     homeowner = "homeowner"
     contractor = "contractor"
+
+
+class SenderKind(StrEnum):
+    user = "user"      # a human member
+    nivaan = "nivaan"  # the AI (Phase B; rows are real, seq-ordered)
+    system = "system"  # membrane/system notices ("member added", provenance)
 
 
 class Conversation(Base):
@@ -120,6 +127,10 @@ class ChatMessage(Base):
     sender_side: Mapped[MessageSide] = mapped_column(
         SAEnum(MessageSide, name="message_side"), nullable=False
     )
+    # Who/what authored this row (Phase B uses nivaan/system; default human).
+    sender_kind: Mapped[SenderKind] = mapped_column(
+        SAEnum(SenderKind, name="sender_kind"), nullable=False, server_default="user"
+    )
     client_msg_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -140,6 +151,9 @@ class ChatMessage(Base):
         PgUUID(as_uuid=True), ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
     )
     media_type: Mapped[str] = mapped_column(String, nullable=False, server_default="text")
+    # Machine payloads only (proposal cards, provenance, blocked-action notices) —
+    # never rendered as free text.
+    meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -159,6 +173,11 @@ class ConversationRead(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     last_read_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    # Delivered cursor (✓✓): client advances after persisting messages locally.
+    # Monotonic max, gap-free seq ⇒ "delivered through N" is well-defined.
+    last_delivered_seq: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

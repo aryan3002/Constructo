@@ -124,10 +124,23 @@ async def handle_ingested(
                 raw_row.external_group_id,
                 raw_row.source,
             )
+            raw_row.status = "skipped"
+            await session.commit()
             return []
 
-        raw = _to_contract(raw_row)
-        events = await extract(raw, site_id, llm=llm, stt=stt, ocr=ocr)
+        # Mark processing and increment attempt counter before calling the LLM/OCR.
+        raw_row.status = "processing"
+        raw_row.attempts = (raw_row.attempts or 0) + 1
+        await session.commit()
+
+        try:
+            raw = _to_contract(raw_row)
+            events = await extract(raw, site_id, llm=llm, stt=stt, ocr=ocr)
+        except Exception as exc:
+            raw_row.status = "failed"
+            raw_row.last_error = str(exc)[:2000]
+            await session.commit()
+            raise  # RQ Retry owns the requeue/backoff
 
         # A non-crew (homeowner) capture books to the ledger but always lands
         # needs_clarification (amber) — crew confirm/correct it via the existing
@@ -158,6 +171,8 @@ async def handle_ingested(
             session.add(model)
             ids.append(ev.id)
 
+        raw_row.status = "done"
+        raw_row.last_error = None
         await session.commit()
 
         # Make the new events searchable. Indexing failures must NEVER fail
@@ -171,6 +186,11 @@ async def handle_ingested(
         # graveyard becomes searchable. Best-effort; never fails ingestion.
         if raw_row.source == APP_CHAT_SOURCE:
             await _index_chat_message(session, (raw_row.raw or {}).get("chat_message_id"))
+
+        # Live event_update frame so clients upgrade the bubble to a Card in real
+        # time without waiting for a poll (Task 8 spine A8).
+        if raw_row.source == APP_CHAT_SOURCE and ids:
+            await _publish_event_update(session, raw_row, ids)
 
         # Hand the inbound message to the bot (Nivaan) for a Guest-Rule
         # reaction/reply. Best-effort: a bot failure must NEVER fail ingestion.
@@ -229,3 +249,47 @@ async def _index_events(session: AsyncSession, event_ids: list[UUID]) -> None:
             await session.commit()
         except Exception:
             logger.exception("handle_ingested: failed to commit indexed events")
+
+
+async def _publish_event_update(
+    session: AsyncSession, raw_row: RawMessageModel, event_ids: list[UUID]
+) -> None:
+    """Best-effort event_update frame through the (Redis) broadcaster."""
+    try:
+        from app.chat import realtime
+        from app.models import ChatMessage  # SiteEventModel already imported at top
+
+        chat_message_id = (raw_row.raw or {}).get("chat_message_id")
+        if not chat_message_id:
+            return
+        msg = await session.get(ChatMessage, UUID(str(chat_message_id)))
+        if msg is None:
+            return
+        events = (
+            await session.execute(
+                select(SiteEventModel).where(SiteEventModel.id.in_(event_ids))
+            )
+        ).scalars().all()
+        await realtime.get_broadcaster().publish(
+            msg.conversation_id,
+            {
+                "v": 1,
+                "type": "event_update",
+                "conv": str(msg.conversation_id),
+                "message_id": str(msg.id),
+                "raw_status": raw_row.status,
+                "events": [
+                    {
+                        "id": str(e.id),
+                        "event_type": e.event_type,
+                        "summary": e.summary,
+                        "fields": e.fields,
+                        "confidence": e.confidence,
+                        "needs_clarification": e.needs_clarification,
+                    }
+                    for e in events
+                ],
+            },
+        )
+    except Exception:  # pragma: no cover - live upgrade is best-effort
+        logger.exception("event_update publish failed for raw %s", raw_row.id)

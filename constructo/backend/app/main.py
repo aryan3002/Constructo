@@ -38,6 +38,7 @@ from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
 from app.invites.router import router as invites_router
 from app.materials.router import router as materials_router
+from app.metrics.router import router as metrics_router
 from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.permits.router import router as permits_router
@@ -129,6 +130,7 @@ app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggre
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
+app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
 if settings.enable_labs:
     app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
     app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop

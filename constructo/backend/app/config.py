@@ -11,6 +11,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://constructo:constructo@localhost:5433/constructo"
     redis_url: str = "redis://localhost:6379/0"
+    # Chat realtime fan-out: "memory" (single process; tests/dev) or "redis"
+    # (multi-worker / multi-replica prod).
+    chat_realtime: str = "memory"
     jwt_secret: str = "dev-secret-change-me-to-a-real-32byte-key"
     ingest_api_key: str = "dev-ingest-key"
 

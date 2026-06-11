@@ -13,6 +13,7 @@ a later slice; homeowner-role users are out of scope here.
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -32,12 +33,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.action_items.detector import detect_action_item
 from app.auth.deps import get_current_user
-from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
 from app.chat.access import require_access
-from app.chat.realtime import broadcaster
+from app.chat.members import member_user_ids
+from app.chat.realtime import get_broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
+from app.chat.tickets import get_ticket_store
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
@@ -67,6 +69,8 @@ from app.models import (
 from app.queue import enqueue_extraction
 from app.sites.router import effective_visible_site_ids
 from app.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 # Roles that may directly commit a correction; others' corrections raise a
 # dispute (1.7) — they can flag, an authority resolves.
@@ -171,6 +175,9 @@ class ChatMessageOut(BaseModel):
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
+    # Extraction lifecycle status (pending/processing/done/failed/skipped).
+    # None for messages with no capture (plain talk bubbles).
+    raw_status: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -678,11 +685,16 @@ async def send_message(
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
     # Push the new message live to any subscribed clients (2.0). The card upgrade
     # arrives on the client's next refetch once extraction runs; the bubble is live.
-    await broadcaster.publish(conv.id, out.model_dump(mode="json"))
+    await get_broadcaster().publish(
+        conv.id,
+        {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
+    )
+    await _push_offline_members(session, conv, msg, user)
     return out
 
 
 _MEDIA_EXT = {"image": "jpg", "document": "pdf", "voice": "m4a"}
+_MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/pdf", "voice": "audio/m4a"}
 CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
 
 
@@ -727,11 +739,69 @@ async def upload_media(
     return MediaUploadOut(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest())
 
 
+class MediaPresignIn(BaseModel):
+    site_id: UUID | None = None
+    conversation_id: UUID | None = None
+    kind: str = "document"
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if self.site_id is None and self.conversation_id is None:
+            raise ValueError("provide site_id or conversation_id")
+        return self
+
+
+class MediaPresignOut(BaseModel):
+    key: str
+    put_url: str | None
+    upload_mode: str  # "presigned" | "multipart"
+
+
+@router.post("/media/presign", response_model=MediaPresignOut)
+async def presign_media(
+    body: MediaPresignIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MediaPresignOut:
+    """Direct-to-R2 upload URL (spine A11): the API stays out of the byte path —
+    critical on one bar. Local storage (CI/dev) raises NotImplementedError from
+    presigned_put, so the client falls back to the existing multipart POST /chat/media."""
+    if body.conversation_id is not None:
+        conv = await session.get(Conversation, body.conversation_id)
+        if conv is None:
+            raise AppError(404, "not_found", "Conversation not found")
+        await require_access(session, user, conv)
+        if conv.site_id is None:
+            raise AppError(422, "no_site", "This conversation has no site")
+        site_id = conv.site_id
+    else:
+        await _require_site(session, user, body.site_id)
+        site_id = body.site_id
+    ext = _MEDIA_EXT.get(body.kind, "bin")
+    key = f"chat/{site_id}/{uuid4().hex}.{ext}"
+    storage = get_storage()
+    put_url: str | None = None
+    # Canonical MIME the client must echo as the PUT Content-Type (a strict R2/S3
+    # CORS/validator rejects non-canonical types like "image/jpg").
+    content_type = _MEDIA_CONTENT_TYPE.get(body.kind, "application/octet-stream")
+    try:
+        ticket = storage.presigned_put(key, content_type)
+        put_url = ticket["url"]
+    except NotImplementedError:
+        # Local storage (CI/dev) has no presigned PUT — client falls back to multipart.
+        put_url = None
+    return MediaPresignOut(
+        key=key, put_url=put_url, upload_mode="presigned" if put_url else "multipart"
+    )
+
+
 @router.get("/messages", response_model=list[ChatMessageOut])
 async def list_messages(
     site_id: UUID | None = Query(None),
     conversation_id: UUID | None = Query(None),
     after_seq: int = Query(0, ge=0),
+    before_seq: int | None = Query(None, ge=1),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -739,17 +809,25 @@ async def list_messages(
     """A thread, oldest→newest, after a seq cursor (for sync-on-reconnect).
 
     Keyed by ``conversation_id`` (any kind, access-checked) or the crew
-    ``site_id``. An empty site thread (no conversation yet) lists as []."""
+    ``site_id``. An empty site thread (no conversation yet) lists as [].
+
+    Optional ``before_seq`` and ``order`` enable reverse-pagination (history
+    loading): order="desc" + before_seq=N returns messages just below N,
+    newest-first, for a chat history view (e.g., before_seq=4, limit=2 → [3, 2])."""
     conv = await _resolve_conversation(
         session, user, site_id=site_id, conversation_id=conversation_id
     )
     if conv is None:
         return []
+    filters = [ChatMessage.conversation_id == conv.id, ChatMessage.seq > after_seq]
+    if before_seq is not None:
+        filters.append(ChatMessage.seq < before_seq)
+    order_clause = ChatMessage.seq.desc() if order == "desc" else ChatMessage.seq
     rows = (
         await session.execute(
             select(ChatMessage)
-            .where(ChatMessage.conversation_id == conv.id, ChatMessage.seq > after_seq)
-            .order_by(ChatMessage.seq)
+            .where(*filters)
+            .order_by(order_clause)
             .limit(limit)
         )
     ).scalars().all()
@@ -758,11 +836,24 @@ async def list_messages(
     contested = await _contested_event_ids(
         session, [e.id for evs in events_by_raw.values() for e in evs]
     )
+    # Batch-fetch extraction statuses for all messages that have a raw capture.
+    raw_ids = [r.raw_message_id for r in rows if r.raw_message_id is not None]
+    status_by_raw: dict[UUID, str] = {}
+    if raw_ids:
+        status_rows = (
+            await session.execute(
+                select(RawMessageModel.id, RawMessageModel.status).where(
+                    RawMessageModel.id.in_(raw_ids)
+                )
+            )
+        ).all()
+        status_by_raw = {row.id: row.status for row in status_rows}
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
         msg_out = ChatMessageOut.model_validate(r)
         msg_out.attachment_url = _safe_attachment_url(r.attachment_key, storage)
+        msg_out.raw_status = status_by_raw.get(r.raw_message_id)
         events = []
         for e in events_by_raw.get(r.raw_message_id, []):
             eo = ChatEventOut.model_validate(e)
@@ -771,6 +862,29 @@ async def list_messages(
         msg_out.events = events
         out.append(msg_out)
     return out
+
+
+@router.post("/messages/{message_id}/retry-extraction", status_code=202)
+async def retry_extraction(
+    message_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Re-enqueue a failed extraction (the in-thread 'couldn't process · retry')."""
+    msg = await session.get(ChatMessage, message_id)
+    if msg is None or msg.raw_message_id is None:
+        raise AppError(404, "not_found", "Message has no capture to retry")
+    conv = await session.get(Conversation, msg.conversation_id)
+    if conv is None:
+        raise AppError(404, "not_found", "Conversation not found")
+    await require_access(session, user, conv)
+    raw = await session.get(RawMessageModel, msg.raw_message_id)
+    if raw is None or raw.status != "failed":
+        raise AppError(409, "not_retryable", "Extraction is not in a failed state")
+    raw.status = "pending"
+    await session.commit()
+    await enqueue_extraction(raw.id)
+    return {"status": "queued"}
 
 
 async def _contested_event_ids(session: AsyncSession, event_ids: list[UUID]) -> set[UUID]:
@@ -1179,49 +1293,126 @@ async def resolve_thread(
     return ResolveOut(closed_action_items=len(items))
 
 
+class WsTicketOut(BaseModel):
+    ticket: str
+
+
+@router.post("/ws-ticket", response_model=WsTicketOut)
+async def ws_ticket(user: User = Depends(get_current_user)) -> WsTicketOut:
+    """A 60s single-use ticket for /chat/ws — keeps the JWT out of URLs."""
+    return WsTicketOut(ticket=await get_ticket_store().issue(str(user.id)))
+
+
 @router.websocket("/ws")
 async def chat_ws(
     websocket: WebSocket,
-    site_id: UUID | None = Query(None),
-    conversation_id: UUID | None = Query(None),
-    token: str = Query(...),
+    ticket: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Live message stream for a thread (2.0). Auth is a query ``token``
-    (WS can't carry an Authorization header cleanly); scoping reuses the REST
-    rules via ``_resolve_conversation`` (so homeowner is still blocked from a
-    site thread, but may subscribe to a group it belongs to). The
-    seq-authoritative store is still Neon and the client backfills anything
-    missed via ``after_seq`` — this only pushes new messages live."""
-    try:
-        user = await session.get(User, UUID(decode_token(token)["sub"]))
-    except Exception:
-        await websocket.close(code=1008)
-        return
+    """Multiplexed live stream (one socket per device). Auth: a one-time ticket
+    from POST /chat/ws-ticket. Subscriptions arrive as frames; access is checked
+    per-sub; Neon stays the ordering authority and clients backfill via REST."""
+    user_id = await get_ticket_store().consume(ticket)
+    user = await session.get(User, UUID(user_id)) if user_id else None
     if user is None:
         await websocket.close(code=1008)
         return
+    await websocket.accept()
+    from app.chat.ws import ChatSocketSession
+
     try:
-        conv = await _resolve_conversation(
-            session, user, site_id=site_id, conversation_id=conversation_id
-        )
-    except AppError:
-        await websocket.close(code=1008)
-        return
-    if conv is None:
-        await websocket.close(code=1011)
+        await ChatSocketSession(
+            websocket, user, session, broadcaster=get_broadcaster()
+        ).run()
+    except WebSocketDisconnect:  # pragma: no cover - client gone
         return
 
-    await websocket.accept()
+
+async def _advance_cursor(
+    session: AsyncSession,
+    user: User,
+    *,
+    site_id: UUID | None,
+    conversation_id: UUID | None,
+    last_seq: int,
+    read: bool,
+) -> Conversation | None:
+    """Monotonic max-advance of the caller's cursor pair. read ⇒ delivered."""
+    conv = await _resolve_conversation(
+        session, user, site_id=site_id, conversation_id=conversation_id
+    )
+    if conv is None:
+        return None
+    cursor = await session.get(ConversationRead, (conv.id, user.id))
+    if cursor is None:
+        cursor = ConversationRead(conversation_id=conv.id, user_id=user.id)
+        session.add(cursor)
+    cursor.last_delivered_seq = max(cursor.last_delivered_seq or 0, last_seq)
+    if read:
+        cursor.last_read_seq = max(cursor.last_read_seq or 0, last_seq)
+    await session.commit()
+    return conv
+
+
+async def _publish_receipt(
+    conv: Conversation | None, user: User, kind: str, seq: int
+) -> None:
+    """Envelope-framed receipt to live subscribers. Calm-Cockpit policy: read
+    receipts never cross in the homeowner room (delivered-only, both ways)."""
+    if conv is None:
+        return
+    if kind == "read" and conv.kind is ConversationKind.homeowner:
+        return
+    await get_broadcaster().publish(
+        conv.id,
+        {
+            "v": 1,
+            "type": "receipt",
+            "conv": str(conv.id),
+            "user_id": str(user.id),
+            "kind": kind,
+            "seq": seq,
+        },
+    )
+
+
+_PUSH_PREVIEW_LEN = 80
+
+
+async def _push_offline_members(
+    session: AsyncSession, conv: Conversation, msg: ChatMessage, sender: User
+) -> None:
+    """Expo push to members without a live socket (spine A6). Best-effort;
+    respects group mute; deep-links to the conversation."""
     try:
-        async with broadcaster.subscribe(conv.id) as queue:
-            while True:
-                payload = await queue.get()
-                await websocket.send_json(payload)
-    except WebSocketDisconnect:
-        return
-    except Exception:  # pragma: no cover - defensive (client gone)
-        return
+        from app.chat.presence import get_presence
+        from app.push.sender import notify_user
+
+        preview = (msg.body or "📎 attachment").strip()[:_PUSH_PREVIEW_LEN]
+        muted: set[UUID] = set()
+        if conv.kind is ConversationKind.group:
+            muted = set(
+                (
+                    await session.execute(
+                        select(ConversationMember.user_id).where(
+                            ConversationMember.conversation_id == conv.id,
+                            ConversationMember.muted.is_(True),
+                        )
+                    )
+                ).scalars().all()
+            )
+        presence = get_presence()
+        for member_id in await member_user_ids(session, conv):
+            if member_id == sender.id or member_id in muted:
+                continue
+            if await presence.is_online(str(member_id)):
+                continue
+            await notify_user(
+                session, member_id, sender.name or "New message", preview,
+                data={"conversation_id": str(conv.id), "seq": msg.seq},
+            )
+    except Exception:  # pragma: no cover - push must never fail a send
+        logger.exception("chat push fallback failed for conv %s", conv.id)
 
 
 @router.post("/read", status_code=204)
@@ -1231,18 +1422,101 @@ async def mark_read(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Advance the caller's read cursor for the target thread."""
+    conv = await _advance_cursor(
+        session,
+        user,
+        site_id=body.site_id,
+        conversation_id=body.conversation_id,
+        last_seq=body.last_seq,
+        read=True,
+    )
+    await _publish_receipt(conv, user, "read", body.last_seq)
+
+
+@router.post("/delivered", status_code=204)
+async def mark_delivered(
+    body: ChatReadIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Advance the caller's delivered cursor (✓✓) — client calls after persisting
+    messages locally (WS frame or backfill)."""
+    conv = await _advance_cursor(
+        session,
+        user,
+        site_id=body.site_id,
+        conversation_id=body.conversation_id,
+        last_seq=body.last_seq,
+        read=False,
+    )
+    await _publish_receipt(conv, user, "delivered", body.last_seq)
+
+
+class CursorOut(BaseModel):
+    user_id: UUID
+    last_delivered_seq: int
+    last_read_seq: int
+
+
+@router.get("/cursors", response_model=list[CursorOut])
+async def list_cursors(
+    site_id: UUID | None = Query(None),
+    conversation_id: UUID | None = Query(None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[CursorOut]:
+    """Every member's cursor pair — the client computes ticks from these.
+    In the homeowner room, read cursors are masked (delivered-only policy)."""
     conv = await _resolve_conversation(
-        session, user, site_id=body.site_id, conversation_id=body.conversation_id
+        session, user, site_id=site_id, conversation_id=conversation_id
     )
     if conv is None:
-        return
-    cursor = await session.get(ConversationRead, (conv.id, user.id))
-    if cursor is None:
-        session.add(
-            ConversationRead(
-                conversation_id=conv.id, user_id=user.id, last_read_seq=body.last_seq
-            )
+        return []
+    rows = (
+        await session.execute(
+            select(ConversationRead).where(ConversationRead.conversation_id == conv.id)
         )
-    else:
-        cursor.last_read_seq = max(cursor.last_read_seq, body.last_seq)
-    await session.commit()
+    ).scalars().all()
+    mask_read = conv.kind is ConversationKind.homeowner
+    return [
+        CursorOut(
+            user_id=r.user_id,
+            last_delivered_seq=r.last_delivered_seq,
+            last_read_seq=0 if (mask_read and r.user_id != user.id) else r.last_read_seq,
+        )
+        for r in rows
+    ]
+
+
+class MessageReceiptsOut(BaseModel):
+    message_id: UUID
+    delivered_by: list[UUID]
+    read_by: list[UUID]
+
+
+@router.get("/messages/{message_id}/receipts", response_model=MessageReceiptsOut)
+async def message_receipts(
+    message_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MessageReceiptsOut:
+    """Who has this message reached (cursor-derived; sender excluded)."""
+    msg = await session.get(ChatMessage, message_id)
+    if msg is None:
+        raise AppError(404, "not_found", "Message not found")
+    conv = await session.get(Conversation, msg.conversation_id)
+    await require_access(session, user, conv)
+    members = set(await member_user_ids(session, conv)) - {msg.sender_id}
+    cursors = (
+        await session.execute(
+            select(ConversationRead).where(ConversationRead.conversation_id == conv.id)
+        )
+    ).scalars().all()
+    mask_read = conv.kind is ConversationKind.homeowner
+    delivered = [
+        c.user_id for c in cursors if c.user_id in members and c.last_delivered_seq >= msg.seq
+    ]
+    read = [] if mask_read else [
+        c.user_id for c in cursors if c.user_id in members and c.last_read_seq >= msg.seq
+    ]
+    return MessageReceiptsOut(message_id=message_id, delivered_by=delivered, read_by=read)

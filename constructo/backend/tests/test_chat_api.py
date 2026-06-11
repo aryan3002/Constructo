@@ -737,8 +737,10 @@ async def test_send_publishes_to_live_subscribers(client, db_session, world):
             headers=auth(owner),
         )
         payload = await asyncio.wait_for(queue.get(), 1)
-        assert payload["body"] == "live one"
-        assert payload["seq"] == 2
+        # Task 5: publishes are now envelope-framed {v, type, conv, payload}.
+        assert payload["type"] == "msg"
+        assert payload["payload"]["body"] == "live one"
+        assert payload["payload"]["seq"] == 2
 
 
 async def test_site_brief_surfaces_labor_shortfall(client, db_session, world):
