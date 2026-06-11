@@ -235,7 +235,15 @@ async def post_agent_message(
     """Mint a seq-ordered nivaan/system row (sender_id NULL) and broadcast it.
 
     Same ordering authority as a human send: seq is assigned under a row lock on
-    the conversation. These rows are real — receipted, searchable, gap-free."""
+    the conversation. These rows are real — receipted, searchable, gap-free.
+
+    NOTE: This commits its own transaction. It is meant to be called AFTER the
+    caller's own send has committed (the agent reply is a separate, best-effort
+    step — a failure here must never roll back the human message), or as the sole
+    writer of a request (the nivaan_propose short-circuit). Do not call it mid-send
+    before the caller's own commit, or you fragment one logical send into two
+    transactions.
+    """
     locked = (
         await session.execute(
             select(Conversation).where(Conversation.id == conv.id).with_for_update()
@@ -249,7 +257,7 @@ async def post_agent_message(
     msg = ChatMessage(
         conversation_id=conv.id,
         sender_id=None,
-        sender_side=MessageSide.contractor,
+        sender_side=MessageSide.contractor,  # agent rows live on the crew surface; never homeowner
         sender_kind=sender_kind,
         client_msg_id=uuid4(),
         seq=seq,
