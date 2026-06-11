@@ -21,17 +21,31 @@ export class ChatSocket {
   private subs = new Map<string, number>() // conv id → after_seq
   private attempts = 0
   private closedByUser = false
+  private connecting = false
   private pingTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(private opts: ChatSocketOpts) {}
 
   async connect(): Promise<void> {
+    // In-flight guard: a reconnect timer can fire while a prior connect()'s
+    // getTicket() await is still pending — without this, the second call would
+    // overwrite this.ws and orphan the first socket. The flag is released when
+    // the socket opens or closes/fails (so the next reconnect can proceed).
+    if (this.connecting) return
+    this.connecting = true
     this.closedByUser = false
-    const ticket = await this.opts.getTicket()
-    const make = this.opts.makeWebSocket ?? ((url: string) => new WebSocket(url))
-    const ws = make(`${this.opts.baseWsUrl}?ticket=${encodeURIComponent(ticket)}`)
+    let ws: WebSocket
+    try {
+      const ticket = await this.opts.getTicket()
+      const make = this.opts.makeWebSocket ?? ((url: string) => new WebSocket(url))
+      ws = make(`${this.opts.baseWsUrl}?ticket=${encodeURIComponent(ticket)}`)
+    } catch (err) {
+      this.connecting = false
+      throw err // let scheduleReconnect's .catch re-arm the backoff
+    }
     this.ws = ws
     ws.onopen = () => {
+      this.connecting = false
       this.attempts = 0
       this.sendSubs()
       this.pingTimer = setInterval(
@@ -46,7 +60,10 @@ export class ChatSocket {
         /* malformed frame: ignore; REST resync covers it */
       }
     }
-    ws.onclose = () => this.scheduleReconnect()
+    ws.onclose = () => {
+      this.connecting = false
+      this.scheduleReconnect()
+    }
   }
 
   subscribe(convId: string, afterSeq: number): void {
@@ -72,7 +89,10 @@ export class ChatSocket {
 
   close(): void {
     this.closedByUser = true
-    if (this.pingTimer) clearInterval(this.pingTimer)
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
     this.ws?.close()
   }
 
@@ -90,7 +110,10 @@ export class ChatSocket {
   }
 
   private scheduleReconnect(): void {
-    if (this.pingTimer) clearInterval(this.pingTimer)
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
     if (this.closedByUser) return
     this.attempts += 1
     const delay =

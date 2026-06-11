@@ -65,6 +65,26 @@ test('dispatches msg frames to onFrame', async () => {
   expect(received).toContainEqual({ v: 1, type: 'msg', conv: 'conv-1', payload: { seq: 9 } })
 })
 
+test('concurrent connect() calls do not create duplicate sockets', async () => {
+  // A reconnect timer firing while a prior connect()'s getTicket() is still
+  // pending must NOT spin up a second socket and orphan the first.
+  let resolveTicket!: (t: string) => void
+  const ticketPromise = new Promise<string>((r) => {
+    resolveTicket = r
+  })
+  const socket = new ChatSocket({
+    getTicket: () => ticketPromise,
+    baseWsUrl: 'wss://api.test/api/v1/chat/ws',
+    makeWebSocket: (url) => new FakeWS(url) as unknown as WebSocket,
+    onFrame: () => undefined,
+  })
+  const p1 = socket.connect()
+  const p2 = socket.connect() // blocked by the in-flight guard
+  resolveTicket('ticket-1')
+  await Promise.all([p1, p2])
+  expect(FakeWS.instances.length).toBe(1)
+})
+
 test('reconnects with backoff and resubscribes', async () => {
   const { socket } = makeSocket()
   await socket.connect()
