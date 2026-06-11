@@ -49,11 +49,11 @@ from app.sites.schemas import (
 
 router = APIRouter(prefix="/api/v1", tags=["sites"])
 
-_ALL_SITES_ROLES = {UserRole.owner, UserRole.pm}
+_ALL_SITES_ROLES = {UserRole.owner, UserRole.pm, UserRole.architect}
 
 
 async def effective_visible_site_ids(session: AsyncSession, user: User) -> list[UUID]:
-    """owner/pm -> all company sites; others -> assigned sites only."""
+    """owner/pm/architect -> all company sites; others -> assigned sites only."""
     if user.role in _ALL_SITES_ROLES:
         return await visible_site_ids(session, user)
     rows = await session.execute(

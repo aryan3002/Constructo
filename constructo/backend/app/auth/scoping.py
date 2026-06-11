@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Site, User, UserRole
 
-_ALL_SITES_ROLES = {UserRole.owner, UserRole.pm}
+_ALL_SITES_ROLES = {UserRole.owner, UserRole.pm, UserRole.architect}
 
 
 async def visible_site_ids(session: AsyncSession, user: User) -> list[UUID]:

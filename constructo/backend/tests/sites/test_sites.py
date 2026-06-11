@@ -431,3 +431,21 @@ async def test_set_baseline_on_missing_site_404(client, owner):
         headers=auth(owner),
     )
     assert resp.status_code == 404
+
+
+# ---- architect visibility --------------------------------------------------
+
+
+async def test_architect_sees_all_company_sites_without_assignment(client, factory):
+    """Architect is a company-wide design authority: no SiteAssignment rows needed."""
+    company = await factory.company()
+    await factory.site(company=company, name="Site A")
+    await factory.site(company=company, name="Site B")
+    architect = await factory.user(company=company, role=UserRole.architect)
+    token = create_access_token(str(architect.id), architect.role.value)
+    resp = await client.get(
+        "/api/v1/sites", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200
+    names = {s["name"] for s in resp.json()["items"]}
+    assert names == {"Site A", "Site B"}

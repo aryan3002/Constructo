@@ -90,6 +90,10 @@ async def test_landing_map_for_roles():
     assert landing_for(UserRole.procurement) == "orders"
 
 
+def test_architect_lands_on_spec_desk():
+    assert landing_for(UserRole.architect) == "spec_desk"
+
+
 async def test_me_landing_endpoint(client):
     token = await _login(client, "+15551110005")
     resp = await client.get(

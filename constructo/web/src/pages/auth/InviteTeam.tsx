@@ -15,6 +15,7 @@ import { SelectField, TextField } from './fields'
 // friction seats (highlighted as such).
 const INVITABLE_ROLES: Role[] = [
   'pm',
+  'architect',
   'supervisor',
   'labor_contractor',
   'accountant',
