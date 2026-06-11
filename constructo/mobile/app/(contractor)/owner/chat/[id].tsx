@@ -9,7 +9,7 @@
  * Hindi-first copy. A header cue + composer; the read cursor advances on the
  * newest seq and invalidates the inbox so its unread badge clears.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -21,14 +21,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
 import { CaptureCard, MessageBubble } from '../../../../src/chat/MessageView'
-import { chatApi, newClientMsgId, type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
+import { useChatThread } from '../../../../src/chat'
+import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
 import { LoadingBlock, ErrorBlock } from '../_components'
@@ -49,6 +50,8 @@ const STR = {
     unavailable: "This conversation isn't available yet.",
     manage: 'Manage',
     homeowner: 'Homeowner',
+    sendingHint: 'sending…',
+    sendFailed: "couldn't send",
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
@@ -64,6 +67,8 @@ const STR = {
     unavailable: 'यह बातचीत अभी उपलब्ध नहीं है।',
     manage: 'प्रबंधन',
     homeowner: 'गृहस्वामी',
+    sendingHint: 'भेजा जा रहा…',
+    sendFailed: 'नहीं भेजा गया',
   },
 } as const
 
@@ -81,7 +86,6 @@ export default function OwnerConversation() {
   const c = theme.colors
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const qc = useQueryClient()
   const { me } = useAuth()
   const str = STR[lang]
   const listRef = useRef<FlatList>(null)
@@ -101,8 +105,6 @@ export default function OwnerConversation() {
   const addressByConv = kind !== 'site'
 
   const [text, setText] = useState('')
-  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
-  const [sending, setSending] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
 
   // For group threads, learn the roster to gate the "Manage" action on the
@@ -116,53 +118,32 @@ export default function OwnerConversation() {
     (m) => m.user_id === me?.id && m.role === 'admin',
   )
 
-  const q = useQuery({
-    queryKey: ['owner', 'chat', id],
-    queryFn: () =>
-      chatApi.messages(addressByConv ? { conversationId: id, afterSeq: 0 } : { siteId, afterSeq: 0 }),
-    refetchInterval: 8000,
-    enabled: addressByConv ? !!id : !!siteId,
-  })
-
-  const messages = useMemo(() => q.data ?? [], [q.data])
-
-  // Mark-read: advance the cursor to the newest seq, then clear the inbox badge.
-  const newestSeq = messages.length > 0 ? messages[messages.length - 1].seq : 0
-  useEffect(() => {
-    const addressed = addressByConv ? !!id : !!siteId
-    if (!addressed || newestSeq <= 0) return
-    chatApi
-      .read(addressByConv ? { conversationId: id, lastSeq: newestSeq } : { siteId, lastSeq: newestSeq })
-      .then(() => qc.invalidateQueries({ queryKey: ['owner', 'conversations'] }))
-      .catch(() => undefined)
-  }, [addressByConv, id, siteId, newestSeq, qc])
+  // Cache-first thread — the SAME offline-first hook the homeowner thread uses:
+  // seeds instantly from the persisted cache (so reopening a thread offline shows
+  // cached messages instead of "could not load"), syncs incrementally via
+  // after_seq, sends through the durable outbox (survives offline / app-kill),
+  // rides the live socket, and advances the read cursor + clears the owner inbox
+  // badge. A group/homeowner thread is addressed by conv id; a site thread by site.
+  const address = addressByConv
+    ? { conversationId: id }
+    : { siteId: siteId as string }
+  const thread = useChatThread(address, { myUserId: me?.id })
+  const messages = thread.messages
 
   const scrollToEnd = () =>
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
 
   const onSend = async () => {
     const body = text.trim()
-    const addressed = addressByConv ? !!id : !!siteId
-    if (!body || !addressed || sending) return
-    setSending(true)
-    const replyToId = replyTo?.id
+    if (!body || thread.sending) return
     setText('')
-    setReplyTo(null)
     try {
-      await chatApi.send({
-        ...(addressByConv ? { conversation_id: id } : { site_id: siteId }),
-        client_msg_id: newClientMsgId(),
-        body,
-        ...(replyToId ? { reply_to_id: replyToId } : {}),
-        media_type: 'text',
-      })
-      await q.refetch()
+      // Durable: enqueues to the persisted outbox (reply target handled by the
+      // hook), so the message is never lost on a flaky link or an app kill.
+      await thread.send(body)
       scrollToEnd()
     } catch {
-      // Restore the text so the user can retry; keep it simple (no optimistic UI).
-      setText(body)
-    } finally {
-      setSending(false)
+      setText(body) // restore on a hard (non-transient) failure
     }
   }
 
@@ -254,12 +235,15 @@ export default function OwnerConversation() {
         </View>
       ) : null}
 
-      {/* Messages */}
-      {q.isLoading ? (
+      {/* Messages. Only show the hard error when there is genuinely nothing to
+          render — once the persisted cache (or a prior fetch) has seeded
+          messages, an offline refetch failure must NOT replace the thread with
+          "could not load". */}
+      {thread.isLoading && messages.length === 0 ? (
         <LoadingBlock />
-      ) : q.error ? (
+      ) : thread.error && messages.length === 0 ? (
         <View style={{ flex: 1, padding: SPACE.lg, justifyContent: 'center' }}>
-          <ErrorBlock message={str.err} retryLabel={str.retry} onRetry={() => void q.refetch()} />
+          <ErrorBlock message={str.err} retryLabel={str.retry} onRetry={() => thread.refetch()} />
         </View>
       ) : (
         <FlatList
@@ -272,6 +256,20 @@ export default function OwnerConversation() {
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Small muted>{str.empty}</Small>
             </View>
+          }
+          ListFooterComponent={
+            thread.pending.length ? (
+              <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
+                {thread.pending.map((p) => (
+                  <MessageBubble
+                    key={p.clientMsgId}
+                    body={p.body || (p.captured ? '📎' : '')}
+                    mine
+                    timestamp={p.state === 'failed_permanent' ? str.sendFailed : str.sendingHint}
+                  />
+                ))}
+              </View>
+            ) : null
           }
           renderItem={({ item }) => {
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
@@ -301,7 +299,7 @@ export default function OwnerConversation() {
                 mine={item.sender_side === 'contractor'}
                 attachmentUrl={item.attachment_url}
                 timestamp={new Date(item.created_at).toLocaleTimeString()}
-                onLongPress={() => setReplyTo(item)}
+                onLongPress={() => thread.setReply(item)}
               />
             )
           }}
@@ -309,7 +307,7 @@ export default function OwnerConversation() {
       )}
 
       {/* Quote-reply banner */}
-      {replyTo ? (
+      {thread.reply ? (
         <View
           style={{
             flexDirection: 'row',
@@ -328,13 +326,13 @@ export default function OwnerConversation() {
           <View style={{ flex: 1 }}>
             <Small style={{ color: c.textMute, fontWeight: '600' }}>{str.replyingTo}</Small>
             <Small numberOfLines={1} style={{ color: c.text }}>
-              {msgSnippet(replyTo)}
+              {msgSnippet(thread.reply)}
             </Small>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={str.cancel}
-            onPress={() => setReplyTo(null)}
+            onPress={() => thread.setReply(null)}
             hitSlop={8}
             style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
           >
@@ -383,7 +381,7 @@ export default function OwnerConversation() {
           accessibilityRole="button"
           accessibilityLabel={str.send}
           onPress={() => void onSend()}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim() || thread.sending}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
