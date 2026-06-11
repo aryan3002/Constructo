@@ -89,8 +89,11 @@ async def test_event_update_frame_published(client, db_session, factory, monkeyp
 
     bus = Broadcaster()
     realtime.get_broadcaster.cache_clear()
+    # The worker resolves the broadcaster via `realtime.get_broadcaster()` at
+    # call-time, so patching the module attribute is the authoritative intercept.
+    # (No worker-level patch — that would be a no-op and could mask a regression
+    # if someone later imported get_broadcaster directly into the worker.)
     monkeypatch.setattr(realtime, "get_broadcaster", lambda: bus)
-    monkeypatch.setattr("app.extraction.worker.get_broadcaster", lambda: bus, raising=False)
     company = await factory.company()
     owner = await factory.user(company=company, role=UserRole.owner)
     site = await factory.site(company)

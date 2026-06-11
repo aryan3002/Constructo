@@ -818,6 +818,8 @@ async def retry_extraction(
     if msg is None or msg.raw_message_id is None:
         raise AppError(404, "not_found", "Message has no capture to retry")
     conv = await session.get(Conversation, msg.conversation_id)
+    if conv is None:
+        raise AppError(404, "not_found", "Conversation not found")
     await require_access(session, user, conv)
     raw = await session.get(RawMessageModel, msg.raw_message_id)
     if raw is None or raw.status != "failed":

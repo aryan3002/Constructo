@@ -257,7 +257,7 @@ async def _publish_event_update(
     """Best-effort event_update frame through the (Redis) broadcaster."""
     try:
         from app.chat import realtime
-        from app.models import ChatMessage, SiteEventModel
+        from app.models import ChatMessage  # SiteEventModel already imported at top
 
         chat_message_id = (raw_row.raw or {}).get("chat_message_id")
         if not chat_message_id:
