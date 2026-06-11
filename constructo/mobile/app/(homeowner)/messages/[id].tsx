@@ -55,6 +55,7 @@ const STR = {
     cancel: 'Cancel',
     photo: 'Send a photo',
     photoErr: 'We couldn’t send that photo just now.',
+    tapRetry: 'Tap to retry',
   },
   hi: {
     builder: 'आपका बिल्डर',
@@ -71,6 +72,7 @@ const STR = {
     cancel: 'रद्द करें',
     photo: 'फ़ोटो भेजें',
     photoErr: 'अभी फ़ोटो नहीं भेज सके।',
+    tapRetry: 'फिर भेजने के लिए टैप करें',
   },
 } as const
 
@@ -257,18 +259,23 @@ export default function HomeownerThread() {
     }))
     // Durable-outbox pending bubbles — a storage-backed message that hasn't yet
     // confirmed from the server. Rendered as her own bubble with a calm status.
+    // A failed_permanent bubble is wrapped in a Pressable so she can tap to retry.
     const pendingRows: FeedRow[] = thread.pending.map((p) => ({
       kind: 'custom',
       key: `pending:${p.clientMsgId}`,
-      node: (
-        <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
-          <MessageBubble
-            body={p.body}
-            mine
-            timestamp={p.state === 'failed_permanent' ? t.photoErr : t.send + '…'}
-          />
-        </View>
-      ),
+      node:
+        p.state === 'failed_permanent' ? (
+          <Pressable
+            onPress={() => void thread.retry(p.clientMsgId)}
+            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+          >
+            <MessageBubble body={p.body} mine timestamp={t.tapRetry} />
+          </Pressable>
+        ) : (
+          <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+            <MessageBubble body={p.body} mine timestamp={t.send + '…'} />
+          </View>
+        ),
     }))
     return [...base, ...askRows, ...pendingRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps

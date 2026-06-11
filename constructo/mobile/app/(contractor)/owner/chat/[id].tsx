@@ -52,6 +52,7 @@ const STR = {
     homeowner: 'Homeowner',
     sendingHint: 'sending…',
     sendFailed: "couldn't send",
+    tapRetry: 'Tap to retry',
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
@@ -69,6 +70,7 @@ const STR = {
     homeowner: 'गृहस्वामी',
     sendingHint: 'भेजा जा रहा…',
     sendFailed: 'नहीं भेजा गया',
+    tapRetry: 'फिर भेजने के लिए टैप करें',
   },
 } as const
 
@@ -260,14 +262,20 @@ export default function OwnerConversation() {
           ListFooterComponent={
             thread.pending.length ? (
               <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
-                {thread.pending.map((p) => (
-                  <MessageBubble
-                    key={p.clientMsgId}
-                    body={p.body || (p.captured ? '📎' : '')}
-                    mine
-                    timestamp={p.state === 'failed_permanent' ? str.sendFailed : str.sendingHint}
-                  />
-                ))}
+                {thread.pending.map((p) =>
+                  p.state === 'failed_permanent' ? (
+                    <Pressable key={p.clientMsgId} onPress={() => void thread.retry(p.clientMsgId)}>
+                      <MessageBubble body={p.body || (p.captured ? '📎' : '')} mine timestamp={str.tapRetry} />
+                    </Pressable>
+                  ) : (
+                    <MessageBubble
+                      key={p.clientMsgId}
+                      body={p.body || (p.captured ? '📎' : '')}
+                      mine
+                      timestamp={str.sendingHint}
+                    />
+                  ),
+                )}
               </View>
             ) : null
           }

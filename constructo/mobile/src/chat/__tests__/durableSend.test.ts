@@ -17,7 +17,7 @@ jest.mock('../../api/chat', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { drainChatOutbox, enqueueChatSend, listChatOutbox } from '../outbox'
+import { drainChatOutbox, enqueueChatSend, listChatOutbox, retryPermanent } from '../outbox'
 import { performSend } from '../useChatThread'
 import { pendingForThread } from '../threadState'
 
@@ -69,4 +69,15 @@ test('a 4xx parks the item as failed_permanent (never silently dropped)', async 
 
   const [parked] = await listChatOutbox()
   expect(parked.state).toBe('failed_permanent')
+})
+
+test('retry un-parks a failed_permanent item and a successful drain clears it', async () => {
+  await enqueueChatSend({ address: { site_id: 'site-1' }, body: 'x', clientMsgId: 'c1' })
+  await drainChatOutbox(async () => ({ ok: false, permanent: true }))
+  expect((await listChatOutbox())[0].state).toBe('failed_permanent')
+
+  await retryPermanent('c1')
+  expect((await listChatOutbox())[0].state).toBe('queued')
+  await drainChatOutbox(async () => ({ ok: true, seq: 1 }))
+  expect(await listChatOutbox()).toHaveLength(0)
 })

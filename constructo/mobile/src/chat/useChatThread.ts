@@ -38,6 +38,7 @@ import {
   drainChatOutbox,
   enqueueChatSend,
   listChatOutbox,
+  retryPermanent,
   type ChatAddressBody,
   type ChatOutboxItem,
   type SendResult,
@@ -80,6 +81,8 @@ export interface UseChatThread {
   deliveryState: (msg: ChatMessage) => DeliveryState | undefined
   /** Force a drain of the durable outbox (e.g. a "retry now" tap). */
   flush: () => Promise<void>
+  /** Re-queue a permanently-failed send (a "tap to retry" on its bubble), then drain. */
+  retry: (clientMsgId: string) => Promise<void>
 }
 
 // --- module-level socket singleton (one per app session) --------------------
@@ -260,6 +263,15 @@ export function useChatThread(
     await refreshOutbox()
     void qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
   }, [qc, addrKey, refreshOutbox])
+
+  const retry = useCallback(
+    async (clientMsgId: string) => {
+      await retryPermanent(clientMsgId)
+      await refreshOutbox()
+      await flush()
+    },
+    [refreshOutbox, flush],
+  )
 
   // --- cache-first incremental query --------------------------------------
   const q = useQuery({
@@ -464,5 +476,6 @@ export function useChatThread(
     deliveryStates,
     deliveryState,
     flush,
+    retry,
   }
 }
