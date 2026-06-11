@@ -38,6 +38,7 @@ from app.brief.risk import detect_risks, rank_risks
 from app.chat.access import require_access
 from app.chat.realtime import get_broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
+from app.chat.tickets import get_ticket_store
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
@@ -1177,6 +1178,16 @@ async def resolve_thread(
         )
     await session.commit()
     return ResolveOut(closed_action_items=len(items))
+
+
+class WsTicketOut(BaseModel):
+    ticket: str
+
+
+@router.post("/ws-ticket", response_model=WsTicketOut)
+async def ws_ticket(user: User = Depends(get_current_user)) -> WsTicketOut:
+    """A 60s single-use ticket for /chat/ws — keeps the JWT out of URLs."""
+    return WsTicketOut(ticket=await get_ticket_store().issue(str(user.id)))
 
 
 @router.websocket("/ws")
