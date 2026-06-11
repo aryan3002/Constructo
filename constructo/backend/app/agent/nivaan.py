@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.loop import run_turn
 from app.agent.nivaan_guard import numbers_are_grounded
-from app.agent.tiers import MONEY_CAPTURE_TYPES, Proposal, propose_capture
+from app.agent.tiers import MONEY_CAPTURE_TYPES, Proposal, propose_capture, propose_money
 from app.extraction.llm import LLMClient
 from app.models import (
     AgentResultKind,
@@ -138,12 +138,14 @@ def _draft_summary(capture_type: str, fields: dict) -> str:
     material = fields.get("material", capture_type.replace("_", " "))
     vendor = fields.get("vendor")
     amount = fields.get("amount")
+    # amount takes precedence over quantity (money cards lead with ₹); the full
+    # fields dict still rides the proposal regardless of what the summary shows.
     if amount is not None:
         head = f"₹{amount}"
         if vendor:
             head += f" to {vendor}"
     elif qty is not None:
-        head = f"{qty} {unit} {material}".strip()
+        head = " ".join(p for p in (str(qty), unit, material) if p)
         if vendor:
             head += f" from {vendor}"
     else:
@@ -191,6 +193,4 @@ async def _build_money_proposal(
     session: AsyncSession, user: User, conv: Conversation, req: ProposalRequest, summary: str
 ) -> Proposal:
     """Money tier (filled in Task 6). Minimal: no evidence yet → missing_proof."""
-    from app.agent.tiers import propose_money
-
     return propose_money(req.capture_type, req.fields, summary, evidence=[])
