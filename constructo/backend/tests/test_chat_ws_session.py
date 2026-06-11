@@ -17,8 +17,9 @@ class FakeSocket:
     async def receive_json(self) -> dict:
         if self._incoming:
             return self._incoming.pop(0)
-        await asyncio.sleep(0.05)
-        raise ConnectionError("client gone")
+        # Idle but connected: a real socket blocks here waiting for the next client
+        # frame. (A genuine disconnect would raise — see the disconnect test.)
+        await asyncio.Event().wait()
 
     async def send_json(self, frame: dict) -> None:
         self.sent.append(frame)
@@ -80,3 +81,22 @@ async def test_ping_pong_and_delivered_frame(db_session, conv_world):
     cur = await db_session.get(ConversationRead, (conv.id, owner.id))
     assert cur is not None and cur.last_delivered_seq == 5
     task.cancel()
+
+
+async def test_disconnect_tears_down_idle_pump_promptly(db_session, conv_world):
+    """A real disconnect (receive_json raises) must end run() even when a
+    subscribed conversation is idle — no orphaned pump, no leaked session."""
+    owner, conv = conv_world
+
+    class DisconnectingSocket(FakeSocket):
+        async def receive_json(self) -> dict:
+            if self._incoming:
+                return self._incoming.pop(0)
+            raise ConnectionError("client disconnected")
+
+    sock = DisconnectingSocket(
+        [{"v": 1, "type": "sub", "convs": [{"id": str(conv.id), "after_seq": 0}]}]
+    )
+    session_obj = ChatSocketSession(sock, owner, db_session, broadcaster=Broadcaster())
+    # Must return promptly — if run() hangs on the idle pump, this times out (the bug).
+    await asyncio.wait_for(session_obj.run(), timeout=2)

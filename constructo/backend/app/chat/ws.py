@@ -33,45 +33,26 @@ class ChatSocketSession:
         self._session = session
         self._broadcaster = broadcaster
         self._pumps: dict[UUID, asyncio.Task] = {}
-        self._reader: asyncio.Task | None = None
 
     async def run(self) -> None:
         await self._socket.send_json({"v": _V, "type": "hello", "user_id": str(self._user.id)})
-        # Receive loop and the per-conversation pumps run concurrently against one
-        # socket. When the reader stops (a real disconnect raises in receive_json,
-        # or the client just goes quiet) the pumps stay live so already-subscribed
-        # conversations keep streaming — the session ends only when run() itself is
-        # cancelled (FastAPI cancels it on connection teardown). On a genuinely
-        # dead socket the pump's own send_json raises and that pump self-retires.
-        self._reader = asyncio.create_task(self._receive_loop())
-        try:
-            await self._supervise()
-        finally:
-            for task in (self._reader, *self._pumps.values()):
-                task.cancel()
-            for task in (self._reader, *self._pumps.values()):
-                with contextlib.suppress(BaseException):
-                    await task
-
-    async def _supervise(self) -> None:
-        # Keep the session alive while the reader is alive OR a pump is still
-        # streaming. On a real disconnect the reader ends AND every pump's
-        # send_json soon raises (dead socket), so this drains and returns — no
-        # leaked DB session. External cancellation (FastAPI on teardown) also
-        # ends it immediately.
-        while True:
-            self._pumps = {c: t for c, t in self._pumps.items() if not t.done()}
-            if self._reader.done() and not self._pumps:
-                return
-            await asyncio.sleep(0.05)
-
-    async def _receive_loop(self) -> None:
+        # The receive loop IS the session lifecycle. Pumps stream concurrently to
+        # the socket while the client is connected; an idle-but-connected client
+        # simply blocks here in receive_json (the loop stays alive). On a real
+        # disconnect receive_json raises, we fall through, and every pump is torn
+        # down — no orphaned pump, no leaked DB session.
         try:
             while True:
                 frame = await self._socket.receive_json()
                 await self._handle(frame)
         except Exception:
-            return
+            pass
+        finally:
+            for task in self._pumps.values():
+                task.cancel()
+            for task in self._pumps.values():
+                with contextlib.suppress(BaseException):
+                    await task
 
     async def _handle(self, frame: dict) -> None:
         kind = frame.get("type")
