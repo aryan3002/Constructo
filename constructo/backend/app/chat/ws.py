@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.access import can_access
+from app.chat.presence import get_presence
 from app.models import Conversation, User
 
 _V = 1
@@ -35,6 +36,9 @@ class ChatSocketSession:
         self._pumps: dict[UUID, asyncio.Task] = {}
 
     async def run(self) -> None:
+        conn_id = uuid4().hex
+        presence = get_presence()
+        await presence.mark_online(str(self._user.id), conn_id)
         await self._socket.send_json({"v": _V, "type": "hello", "user_id": str(self._user.id)})
         # The receive loop IS the session lifecycle. Pumps stream concurrently to
         # the socket while the client is connected; an idle-but-connected client
@@ -44,19 +48,24 @@ class ChatSocketSession:
         try:
             while True:
                 frame = await self._socket.receive_json()
-                await self._handle(frame)
+                await self._handle(frame, conn_id=conn_id)
         except Exception:
             pass
         finally:
+            # Presence cleanup is guaranteed-first; pump teardown follows.
+            with contextlib.suppress(BaseException):
+                await presence.mark_offline(str(self._user.id), conn_id)
             for task in self._pumps.values():
                 task.cancel()
             for task in self._pumps.values():
                 with contextlib.suppress(BaseException):
                     await task
 
-    async def _handle(self, frame: dict) -> None:
+    async def _handle(self, frame: dict, *, conn_id: str = "") -> None:
         kind = frame.get("type")
         if kind == "ping":
+            # Refresh presence TTL so a long-lived socket stays 'online'.
+            await get_presence().mark_online(str(self._user.id), conn_id)
             await self._socket.send_json({"v": _V, "type": "pong"})
         elif kind == "sub":
             for entry in frame.get("convs", []):

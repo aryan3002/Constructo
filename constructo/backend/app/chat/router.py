@@ -13,8 +13,11 @@ a later slice; homeowner-role users are out of scope here.
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
+
+logger = logging.getLogger(__name__)
 
 from fastapi import (
     APIRouter,
@@ -683,6 +686,7 @@ async def send_message(
         conv.id,
         {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
     )
+    await _push_offline_members(session, conv, msg, user)
     return out
 
 
@@ -1274,6 +1278,46 @@ async def _publish_receipt(
             "seq": seq,
         },
     )
+
+
+_PUSH_PREVIEW_LEN = 80
+
+
+async def _push_offline_members(
+    session: AsyncSession, conv: Conversation, msg: ChatMessage, sender: User
+) -> None:
+    """Expo push to members without a live socket (spine A6). Best-effort;
+    respects group mute; deep-links to the conversation."""
+    try:
+        from app.chat.members import member_user_ids
+        from app.chat.presence import get_presence
+        from app.push.sender import notify_user
+
+        preview = (msg.body or "📎 attachment").strip()[:_PUSH_PREVIEW_LEN]
+        muted: set[UUID] = set()
+        if conv.kind is ConversationKind.group:
+            muted = set(
+                (
+                    await session.execute(
+                        select(ConversationMember.user_id).where(
+                            ConversationMember.conversation_id == conv.id,
+                            ConversationMember.muted.is_(True),
+                        )
+                    )
+                ).scalars().all()
+            )
+        presence = get_presence()
+        for member_id in await member_user_ids(session, conv):
+            if member_id == sender.id or member_id in muted:
+                continue
+            if await presence.is_online(str(member_id)):
+                continue
+            await notify_user(
+                session, member_id, sender.name or "New message", preview,
+                data={"conversation_id": str(conv.id), "seq": msg.seq},
+            )
+    except Exception:  # pragma: no cover - push must never fail a send
+        logger.exception("chat push fallback failed for conv %s", conv.id)
 
 
 @router.post("/read", status_code=204)
