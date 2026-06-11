@@ -19,6 +19,8 @@ import { useTheme } from '../theme/ThemeProvider'
 import { AP, SPACE, STATUS, TAP } from '../theme/tokens'
 import { Body, BodyStrong, Micro, Mono, Small, StatusPill } from '../ui'
 import type { ChatEvent } from '../api/chat'
+import { tickGlyph, isReadTick } from './tick'
+import type { DeliveryState } from './threadState'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -235,12 +237,14 @@ export function MessageBubble({
   mine,
   attachmentUrl,
   timestamp,
+  deliveryState,
   onLongPress,
 }: {
   body: string | null
   mine: boolean
   attachmentUrl?: string | null
   timestamp?: string
+  deliveryState?: DeliveryState
   onLongPress?: () => void
 }) {
   const { theme } = useTheme()
@@ -291,7 +295,16 @@ export function MessageBubble({
         />
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
-      {timestamp ? <Mono style={{ color: c.textMute, fontSize: 11 }}>{timestamp}</Mono> : null}
+      {timestamp ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' }}>
+          <Mono style={{ color: c.textMute, fontSize: 11 }}>{timestamp}</Mono>
+          {mine && tickGlyph(deliveryState) ? (
+            <Mono style={{ fontSize: 11, color: isReadTick(deliveryState) ? c.accent : c.textMute }}>
+              {tickGlyph(deliveryState)}
+            </Mono>
+          ) : null}
+        </View>
+      ) : null}
     </>
   )
 

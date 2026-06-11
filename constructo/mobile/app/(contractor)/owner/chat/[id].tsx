@@ -299,6 +299,7 @@ export default function OwnerConversation() {
                 mine={item.sender_side === 'contractor'}
                 attachmentUrl={item.attachment_url}
                 timestamp={new Date(item.created_at).toLocaleTimeString()}
+                deliveryState={thread.deliveryState(item)}
                 onLongPress={() => thread.setReply(item)}
               />
             )

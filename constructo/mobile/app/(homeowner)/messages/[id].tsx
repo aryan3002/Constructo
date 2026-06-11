@@ -388,6 +388,7 @@ export default function HomeownerThread() {
             mineSide="homeowner"
             time={timeLabel}
             onLongPressMessage={onLongPress}
+            deliveryStateFor={thread.deliveryState}
             emptyState={
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />
