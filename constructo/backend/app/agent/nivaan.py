@@ -16,8 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.loop import run_turn
 from app.agent.nivaan_guard import numbers_are_grounded
+from app.agent.tiers import MONEY_CAPTURE_TYPES, Proposal, propose_capture
 from app.extraction.llm import LLMClient
-from app.models import ChatMessage, Conversation, SiteEventModel, User
+from app.models import (
+    AgentResultKind,
+    AgentTurn,
+    ChatMessage,
+    Conversation,
+    SiteEventModel,
+    User,
+)
 
 _MENTION = re.compile(r"^\s*[@/]nivaan\b[:,]?\s*", re.IGNORECASE)
 
@@ -112,3 +120,77 @@ async def run_nivaan_turn(
             }
         },
     )
+
+
+@dataclass
+class ProposalRequest:
+    """A card-button / slash request asking Nivaan to DRAFT (not commit) a card."""
+
+    capture_type: str
+    fields: dict
+
+
+def _draft_summary(capture_type: str, fields: dict) -> str:
+    """A deterministic, human-readable draft line built from the fields — numbers
+    come straight from `fields`, so the guard always passes by construction."""
+    qty = fields.get("quantity")
+    unit = fields.get("unit", "")
+    material = fields.get("material", capture_type.replace("_", " "))
+    vendor = fields.get("vendor")
+    amount = fields.get("amount")
+    if amount is not None:
+        head = f"₹{amount}"
+        if vendor:
+            head += f" to {vendor}"
+    elif qty is not None:
+        head = f"{qty} {unit} {material}".strip()
+        if vendor:
+            head += f" from {vendor}"
+    else:
+        head = material
+    return f"{head} — confirm to log it?"
+
+
+async def _log_proposal_turn(
+    session: AsyncSession, user: User, conv: Conversation, summary: str
+) -> None:
+    """One audit row per proposal (mirrors run_turn's AgentTurn discipline)."""
+    session.add(
+        AgentTurn(
+            company_id=user.company_id, actor_id=user.id, site_id=conv.site_id,
+            utterance=summary[:2000], result_kind=AgentResultKind.cards,
+            tool="propose", model="deterministic", token_cost=0,
+        )
+    )
+    await session.commit()
+
+
+async def build_proposal(
+    session: AsyncSession, user: User, conv: Conversation, req: ProposalRequest
+) -> NivaanReply:
+    """Draft a card a human commits. Non-money → a commit-tier capture proposal.
+    Money (Task 6) → evidence-bound or missing_proof. The agent never commits."""
+    summary = _draft_summary(req.capture_type, req.fields)
+    # Guard the drafted line against the field values (defense-in-depth; the
+    # deterministic _draft_summary is grounded by construction).
+    source = [str(v) for v in req.fields.values()]
+    if _has_digit(summary) and not numbers_are_grounded(summary, source):
+        summary = "Confirm to log this?"  # strip ungrounded digits, never invent
+
+    proposal: Proposal
+    if req.capture_type in MONEY_CAPTURE_TYPES:
+        proposal = await _build_money_proposal(session, user, conv, req, summary)  # Task 6
+    else:
+        proposal = propose_capture(req.capture_type, req.fields, summary)
+
+    await _log_proposal_turn(session, user, conv, summary)
+    return NivaanReply(body=proposal.summary, meta=proposal.as_meta())
+
+
+async def _build_money_proposal(
+    session: AsyncSession, user: User, conv: Conversation, req: ProposalRequest, summary: str
+) -> Proposal:
+    """Money tier (filled in Task 6). Minimal: no evidence yet → missing_proof."""
+    from app.agent.tiers import propose_money
+
+    return propose_money(req.capture_type, req.fields, summary, evidence=[])
