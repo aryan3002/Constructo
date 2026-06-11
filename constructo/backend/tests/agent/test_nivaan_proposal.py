@@ -115,3 +115,22 @@ async def test_money_proposal_without_proof_is_missing_proof(db_session, factory
     assert p["kind"] == "missing_proof"
     assert p["committable"] is False
     assert p["capture_type"] == "decision"
+
+
+async def test_money_proposal_vendor_filter_normalizes(db_session, factory):
+    """The vendor filter must match reconcile's normalization — a Pvt/Ltd spelling
+    variant must still bind a real match, not false-block it as missing_proof."""
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    site = await factory.site(company)
+    conv = await _site_conv(db_session, company, site, owner)
+    db_session.add_all([_md_event(site.id, vendor="ACC Ltd"), _inv_event(site.id, vendor="ACC")])
+    await db_session.flush()
+    req = ProposalRequest(
+        capture_type="approval", fields={"vendor": "ACC Pvt Ltd", "amount": 50000}
+    )
+    reply = await build_proposal(db_session, owner, conv, req)
+    p = reply.meta["proposal"]
+    assert p["kind"] == "capture"  # bound, not falsely missing_proof
+    assert p["committable"] is True
+    assert len(p["evidence_event_ids"]) == 2

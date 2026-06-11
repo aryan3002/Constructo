@@ -27,7 +27,7 @@ from app.models import (
     SiteEventModel,
     User,
 )
-from app.reconcile.matching import DeliveryEvent, InvoiceEvent, reconcile
+from app.reconcile.matching import DeliveryEvent, InvoiceEvent, normalize_text, reconcile
 
 _MENTION = re.compile(r"^\s*[@/]nivaan\b[:,]?\s*", re.IGNORECASE)
 
@@ -223,6 +223,8 @@ async def _build_money_proposal(
     session: AsyncSession, user: User, conv: Conversation, req: ProposalRequest, summary: str
 ) -> Proposal:
     """Money tier: bind reconcile evidence for the site, or missing_proof."""
+    # Caller (send_message) has already access-checked conv; site_id is globally
+    # unique so a site-id-only query carries no cross-company leak.
     rows = (
         await session.execute(
             select(SiteEventModel).where(
@@ -238,5 +240,6 @@ async def _build_money_proposal(
     items = reconcile(deliveries, invoices)
     vendor = req.fields.get("vendor")
     if vendor:
-        items = [it for it in items if (it.vendor or "").lower() == str(vendor).lower()]
+        want = normalize_text(str(vendor))
+        items = [it for it in items if normalize_text(it.vendor) == want]
     return propose_money(req.capture_type, req.fields, summary, evidence=items)
