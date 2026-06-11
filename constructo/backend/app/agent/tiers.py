@@ -38,7 +38,7 @@ class Tool:
     run: Callable[..., Awaitable[object]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Proposal:
     """A draft card Nivaan emits for a HUMAN to commit — never a committed event."""
 
@@ -48,12 +48,18 @@ class Proposal:
     fields: dict                # committed verbatim via the capture fast-path
     summary: str                # human line; numeric-guarded against `fields`
     evidence_event_ids: list[str] = field(default_factory=list)
-    committable: bool = True    # False for missing_proof (nothing to tap-commit)
+
+    @property
+    def committable(self) -> bool:
+        """A missing_proof card can never be tap-committed — derived, not stored,
+        so it cannot be forged by mutating the object."""
+        return self.kind != "missing_proof"
 
     def as_meta(self) -> dict:
         """The meta.proposal payload carried on a sender_kind=nivaan row."""
         return {
             "proposal": {
+                "v": 1,
                 "tier": self.tier.value,
                 "kind": self.kind,
                 "capture_type": self.capture_type,
@@ -108,7 +114,7 @@ def propose_missing_proof(capture_type: str, fields: dict, summary: str) -> Prop
     return Proposal(
         tier=ToolTier.money, kind="missing_proof", capture_type="decision",
         fields={"about": capture_type, "reason": "missing_proof", **fields},
-        summary=summary, evidence_event_ids=[], committable=False,
+        summary=summary, evidence_event_ids=[],
     )
 
 
@@ -131,8 +137,10 @@ def propose_money(
     for it in bound:
         evidence_ids.append(str(it.delivery.id))
         evidence_ids.append(str(it.invoice.id))
+    # The fields copy is deliberate: it rides the human-tap capture fast-path
+    # so the committed event carries its own evidence provenance for audit.
     return Proposal(
         tier=ToolTier.money, kind="capture", capture_type=capture_type,
         fields={**fields, "evidence_event_ids": evidence_ids},
-        summary=summary, evidence_event_ids=evidence_ids, committable=True,
+        summary=summary, evidence_event_ids=evidence_ids,
     )
