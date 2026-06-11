@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy import func, select
 
 from app.chat.router import post_agent_message
-from app.models import ChatMessage, Conversation, ConversationKind, SenderKind, UserRole
+from app.models import ActionItem, ChatMessage, Conversation, ConversationKind, SenderKind, UserRole
 from tests.test_chat_api import auth
 
 
@@ -154,3 +154,28 @@ async def test_nivaan_propose_returns_a_proposal_card(client, db_session, factor
         select(func.count()).select_from(SiteEventModel).where(SiteEventModel.site_id == site.id)
     )
     assert n == 0
+
+
+async def test_at_nivaan_assignment_phrasing_stages_no_action_item(client, db_session, factory):
+    """An @nivaan command is a question to the agent, not crew content — it must
+    not be mined into an AI action item.
+
+    The detector fires on "bolo" (an explicit _ASSIGN_CUES cue), so this phrasing
+    would produce a spurious action item without the summons_nivaan guard."""
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    site = await factory.site(company)
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "site_id": str(site.id),
+            "client_msg_id": str(uuid4()),
+            "body": "@nivaan Ramesh ko kal tak bolo",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+    n = await db_session.scalar(
+        select(func.count()).select_from(ActionItem).where(ActionItem.site_id == site.id)
+    )
+    assert n == 0, f"Expected 0 action items, got {n} — @nivaan trigger must not be mined"

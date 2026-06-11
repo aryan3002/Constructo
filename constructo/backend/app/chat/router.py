@@ -594,6 +594,8 @@ async def send_message(
 
     # Nivaan proposal request (a card button): draft a card, don't commit. Crew
     # rooms only — never the homeowner room.
+    # NOTE: proposals are not idempotent on client_msg_id — a retried propose
+    # mints a fresh draft card (cheap; the human commits at most one). Intentional.
     if (
         body.nivaan_propose
         and conv.kind is not ConversationKind.homeowner
@@ -609,7 +611,7 @@ async def send_message(
             session, conv, sender_kind=SenderKind.nivaan, body=reply.body, meta=reply.meta,
         )
         out = ChatMessageOut.model_validate(nivaan_msg)
-        # Parity with the human return; a nivaan text row has no attachment (None).
+        # text-only nivaan row has no attachment; keep the field shape consistent
         out.attachment_url = _safe_attachment_url(nivaan_msg.attachment_key)
         return out
 
@@ -741,6 +743,7 @@ async def send_message(
     if (
         target_site_id is not None
         and not talk_only
+        and not summons_nivaan
         and body.body
         and not body.capture_type
         and not body.fields
