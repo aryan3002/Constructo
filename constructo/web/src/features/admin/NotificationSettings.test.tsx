@@ -67,15 +67,20 @@ describe('NotificationSettings', () => {
   })
 
   it('saves changed SLA hours + toggles via updateSettings', async () => {
+    const user = userEvent.setup()
     renderSettings('owner')
     const input = await screen.findByDisplayValue('24')
-    await userEvent.clear(input)
-    await userEvent.type(input, '72')
+    await user.clear(input)
+    await user.type(input, '72')
     // Turn escalation off.
-    await userEvent.click(
+    await user.click(
       screen.getByRole('switch', { name: /escalate overdue decisions/i }),
     )
-    await userEvent.click(screen.getByRole('button', { name: /save settings/i }))
+    // Save is disabled until the form is dirty; clicking a disabled button is a
+    // silent no-op (the "spy not called" CI flake). Wait for it to enable first.
+    const saveBtn = screen.getByRole('button', { name: /save settings/i })
+    await waitFor(() => expect(saveBtn).toBeEnabled())
+    await user.click(saveBtn)
     await waitFor(() => expect(updateSettings).toHaveBeenCalled())
     expect(updateSettings.mock.calls[0][0]).toEqual({
       sla_hours: 72,
@@ -86,11 +91,14 @@ describe('NotificationSettings', () => {
   })
 
   it('blocks an out-of-range SLA value', async () => {
+    const user = userEvent.setup()
     renderSettings('owner')
     const input = await screen.findByDisplayValue('24')
-    await userEvent.clear(input)
-    await userEvent.type(input, '999')
-    await userEvent.click(screen.getByRole('button', { name: /save settings/i }))
+    await user.clear(input)
+    await user.type(input, '999')
+    const saveBtn = screen.getByRole('button', { name: /save settings/i })
+    await waitFor(() => expect(saveBtn).toBeEnabled())
+    await user.click(saveBtn)
     expect(await screen.findByRole('alert')).toHaveTextContent(/1–168/)
     expect(updateSettings).not.toHaveBeenCalled()
   })
