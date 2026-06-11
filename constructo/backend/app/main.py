@@ -26,6 +26,7 @@ from app.bot.router import router as bot_router
 from app.brief.router import router as brief_router
 from app.capture.router import router as capture_router
 from app.chat.groups_router import router as chat_groups_router
+from app.chat.realtime import shutdown_broadcaster
 from app.chat.router import router as chat_router
 from app.common.errors import install_error_handlers
 from app.config import settings
@@ -62,6 +63,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         shutdown_scheduler()
+        # Release the chat realtime bus (cancels the Redis pub/sub listener in
+        # redis mode; no-op in memory mode / if never used).
+        await shutdown_broadcaster()
 
 
 app = FastAPI(

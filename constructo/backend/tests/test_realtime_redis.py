@@ -3,7 +3,12 @@ one Redis must fan out publishes to each other's local subscribers."""
 import asyncio
 from uuid import uuid4
 
-from app.chat.realtime import Broadcaster, RedisBroadcaster, get_broadcaster
+from app.chat.realtime import (
+    Broadcaster,
+    RedisBroadcaster,
+    get_broadcaster,
+    shutdown_broadcaster,
+)
 
 
 class FakePubSub:
@@ -73,4 +78,40 @@ def test_get_broadcaster_defaults_memory(monkeypatch):
     monkeypatch.setattr("app.config.settings.chat_realtime", "memory")
     get_broadcaster.cache_clear()
     assert isinstance(get_broadcaster(), Broadcaster)
+    get_broadcaster.cache_clear()
+
+
+async def test_shutdown_broadcaster_noop_when_uninstantiated():
+    # Never called → nothing instantiated → no-op (must not raise / must not
+    # build a broadcaster just to close it).
+    get_broadcaster.cache_clear()
+    await shutdown_broadcaster()
+    assert get_broadcaster.cache_info().currsize == 0
+
+
+async def test_shutdown_broadcaster_noop_in_memory_mode(monkeypatch):
+    monkeypatch.setattr("app.config.settings.chat_realtime", "memory")
+    get_broadcaster.cache_clear()
+    get_broadcaster()  # instantiate the in-memory singleton (no close method)
+    await shutdown_broadcaster()  # must not raise
+    get_broadcaster.cache_clear()
+
+
+async def test_shutdown_broadcaster_closes_redis(monkeypatch):
+    monkeypatch.setattr("app.config.settings.chat_realtime", "redis")
+    bus = FakeRedis()
+    monkeypatch.setattr("redis.asyncio.from_url", lambda _url: bus)
+    get_broadcaster.cache_clear()
+    broadcaster = get_broadcaster()
+    assert isinstance(broadcaster, RedisBroadcaster)
+    closed = {"v": False}
+    orig_close = broadcaster.close
+
+    async def spy() -> None:
+        closed["v"] = True
+        await orig_close()
+
+    monkeypatch.setattr(broadcaster, "close", spy)
+    await shutdown_broadcaster()
+    assert closed["v"] is True
     get_broadcaster.cache_clear()

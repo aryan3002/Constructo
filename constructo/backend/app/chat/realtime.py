@@ -160,3 +160,18 @@ def get_broadcaster():
     # Memory mode reuses the documented process-wide singleton so the WS
     # endpoint, the send path, and direct callers all share one instance.
     return broadcaster
+
+
+async def shutdown_broadcaster() -> None:
+    """Tear down the process broadcaster on app shutdown.
+
+    No-op for the in-memory ``Broadcaster`` (nothing to release) and when no
+    broadcaster was ever instantiated. For a ``RedisBroadcaster`` this cancels
+    the pub/sub listener task and closes the Redis connection so a restart does
+    not leak it. Safe to call unconditionally from the FastAPI lifespan.
+    """
+    if get_broadcaster.cache_info().currsize == 0:
+        return  # never instantiated — don't create one just to close it
+    close = getattr(get_broadcaster(), "close", None)
+    if close is not None:
+        await close()
