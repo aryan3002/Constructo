@@ -67,6 +67,62 @@ describe('auth/InviteTeam', () => {
     })
   })
 
+  it('invites a Client (homeowner) via the site-scoped member path, surfacing a join code', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/invites') && (!init || init.method !== 'POST')) {
+        return jsonOk([]) // listInvites
+      }
+      if (url.endsWith('/sites')) {
+        return jsonOk({ items: [{ id: 'site-1', name: 'Tripathi Dream Home' }] })
+      }
+      if (url.endsWith('/homeowner/members') && init?.method === 'POST') {
+        const body = JSON.parse(init.body as string)
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            id: 'm1',
+            site_id: body.site_id,
+            phone: body.phone ?? null,
+            display_name: body.display_name ?? null,
+            join_code: 'JOIN-ABC123',
+            invite_link: 'constructo://join?code=JOIN-ABC123',
+            status: 'invited',
+          }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <LanguageProvider defaultLanguage="en">
+        <InviteTeam companyName="CivilArch (CADS)" />
+      </LanguageProvider>,
+    )
+
+    await userEvent.type(screen.getByLabelText(/phone/i), '+919800000020')
+    await userEvent.selectOptions(screen.getByLabelText(/^role$/i), 'client')
+    // The property selector loads once Client is chosen.
+    await screen.findByRole('option', { name: /tripathi dream home/i })
+    await userEvent.click(screen.getByRole('button', { name: /create client invite/i }))
+
+    // The client panel surfaces the join code, not a web /join link.
+    expect(await screen.findByText(/client invite ready/i)).toBeInTheDocument()
+    expect(screen.getByText('JOIN-ABC123')).toBeInTheDocument()
+
+    const postCall = fetchMock.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith('/homeowner/members') &&
+        (c[1] as RequestInit)?.method === 'POST',
+    )
+    expect(JSON.parse((postCall![1] as RequestInit).body as string)).toMatchObject({
+      site_id: 'site-1',
+      sub_role: 'primary_owner',
+      phone: '+919800000020',
+    })
+  })
+
   it('shows free-seat roles among the options', async () => {
     const fetchMock = vi.fn(async () => jsonOk([]))
     vi.stubGlobal('fetch', fetchMock)

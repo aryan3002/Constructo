@@ -421,6 +421,7 @@ async def create_member(
         site_id=body.site_id,
         sub_role=body.sub_role,
         phone=body.phone,
+        display_name=body.display_name,
         notif_prefs=body.notif_prefs,
     )
     session.add(member)

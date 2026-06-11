@@ -166,6 +166,18 @@ export const en = {
   'invite.status.accepted': 'Joined',
   'invite.status.revoked': 'Revoked',
   'invite.empty': 'No invites yet.',
+  'invite.role.client': 'Client (Homeowner)',
+  'invite.client.phone.label': "Client's phone",
+  'invite.client.site_label': 'Property',
+  'invite.client.action': 'Create client invite',
+  'invite.client.title': 'Client invite ready',
+  'invite.client.code_label': 'Join code',
+  'invite.client.copy_code': 'Copy code',
+  'invite.client.them': 'your client',
+  'invite.client.instructions':
+    'Ask {name} to download the Constructo app, sign in with their phone, and enter this join code.',
+  'invite.client.message':
+    "You're invited to follow {company} on Constructo. Download the app, sign in with your phone, and enter join code: {code}",
 
   // Join (invitee accepts an invite)
   'join.title': 'You have been invited',
