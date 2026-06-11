@@ -694,6 +694,7 @@ async def send_message(
 
 
 _MEDIA_EXT = {"image": "jpg", "document": "pdf", "voice": "m4a"}
+_MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/pdf", "voice": "audio/m4a"}
 CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
 
 
@@ -780,7 +781,9 @@ async def presign_media(
     key = f"chat/{site_id}/{uuid4().hex}.{ext}"
     storage = get_storage()
     put_url: str | None = None
-    content_type = f"image/{ext}" if ext == "jpg" else f"application/{ext}"
+    # Canonical MIME the client must echo as the PUT Content-Type (a strict R2/S3
+    # CORS/validator rejects non-canonical types like "image/jpg").
+    content_type = _MEDIA_CONTENT_TYPE.get(body.kind, "application/octet-stream")
     try:
         ticket = storage.presigned_put(key, content_type)
         put_url = ticket["url"]
