@@ -410,3 +410,34 @@ export interface HomeownerAskResult {
   sources: number
 }
 
+// ---- Homeowner Finishes (GET /homeowner/finishes) ----
+/**
+ * A single finish line item for a component in a room.
+ *
+ * NOTE: `qty` is `string | null` — the backend serialises Python `Decimal` as a
+ * string on the wire to avoid floating-point drift.  No cost/pricing fields are
+ * ever present on this schema (the firewall is structural).
+ */
+export interface FinishItem {
+  element: string
+  category: string | null
+  brand: string | null
+  colour: string | null
+  finish: string | null
+  qty: string | null
+  unit: string | null
+  status: 'chosen' | 'deciding'
+  client_final_code: string | null
+}
+
+/** All finish items grouped by room. */
+export interface RoomFinishes {
+  room: string
+  items: FinishItem[]
+}
+
+/** Top-level response from GET /api/v1/homeowner/finishes. */
+export interface FinishesResponse {
+  rooms: RoomFinishes[]
+}
+

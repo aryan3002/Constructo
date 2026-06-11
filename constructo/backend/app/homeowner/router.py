@@ -62,6 +62,8 @@ from app.homeowner.schemas import (
     DesignProfileOut,
     DesignProfilePutIn,
     DrawingOut,
+    FinishesOut,
+    FinishItem,
     HomeOut,
     HomeownerDecisionOut,
     HomeownerMemberInviteIn,
@@ -80,6 +82,7 @@ from app.homeowner.schemas import (
     RequestCreateIn,
     RequestOut,
     RequestStatusPatchIn,
+    RoomFinishes,
     SelectionCreateIn,
     SelectionOut,
     SpaceOut,
@@ -103,6 +106,7 @@ from app.models import (
     HomeownerRequest,
     HomeownerSubRole,
     HomeownerVisitPhoto,
+    Material,
     MemberStatus,
     Milestone,
     MilestoneStatus,
@@ -113,6 +117,8 @@ from app.models import (
     QuietStatus,
     Site,
     Space,
+    Spec,
+    SpecApprovalStatus,
     Update,
     User,
     UserRole,
@@ -1420,6 +1426,87 @@ async def property_overview(
     if prop is None:
         raise AppError(404, "not_found", "No property published yet")
     return prop
+
+
+@router.get("/finishes", response_model=FinishesOut)
+async def finishes(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> FinishesOut:
+    """Room-by-room material finishes for the homeowner — read-only, cost-firewalled.
+
+    Returns approved + pending specs (rejected are excluded), grouped by room
+    (Space.name). Cost fields (unit_rate, wastage_pct, line_total) are absent
+    from the schema by design — the homeowner never sees money.
+
+    Room narrowing: if the caller's member row has ``design_space_id`` set, only
+    finishes for that room are returned (mirrors the design write gate).
+    """
+    sid = await resolve_site(session, user, site_id)
+
+    # Resolve the caller's member row to check for room-narrowing.
+    member_rows = (
+        await session.execute(
+            select(HomeownerMember).where(
+                HomeownerMember.user_id == user.id,
+                HomeownerMember.site_id == sid,
+                HomeownerMember.status == MemberStatus.active,
+            )
+        )
+    ).scalars().all()
+    # Use the highest-ranked row (matches _MANAGE_RANK); if it carries a
+    # design_space_id, narrow the query to that room only.
+    scoped_space_id: UUID | None = None
+    if member_rows:
+        best = max(member_rows, key=lambda r: _MANAGE_RANK.get(r.sub_role, 0))
+        scoped_space_id = best.design_space_id
+
+    stmt = (
+        select(Spec, Component.name, Space.name, Space.id, Material)
+        .join(Component, Component.id == Spec.component_id)
+        .join(Space, Space.id == Component.space_id)
+        .outerjoin(Material, Material.id == Spec.material_id)
+        .where(
+            Spec.site_id == sid,
+            Spec.approval_status != SpecApprovalStatus.rejected,
+        )
+        .order_by(Space.name, Spec.created_at)
+    )
+    if scoped_space_id is not None:
+        stmt = stmt.where(Space.id == scoped_space_id)
+
+    rows = (await session.execute(stmt)).all()
+
+    # Status projection: approved → "chosen", pending → "deciding".
+    _STATUS_MAP = {
+        SpecApprovalStatus.approved: "chosen",
+        SpecApprovalStatus.pending: "deciding",
+    }
+
+    rooms_map: dict[str, list[FinishItem]] = {}
+    room_order: list[str] = []
+    for spec, comp_name, space_name, _space_id, material in rows:
+        category = (material.category if material is not None else None) or spec.label
+        item = FinishItem(
+            element=comp_name,
+            category=category,
+            brand=material.brand if material is not None else None,
+            colour=material.colour if material is not None else None,
+            finish=material.finish if material is not None else None,
+            qty=spec.qty,
+            unit=spec.unit,
+            status=_STATUS_MAP.get(spec.approval_status, "deciding"),
+            client_final_code=spec.client_final_code,
+        )
+        if space_name not in rooms_map:
+            rooms_map[space_name] = []
+            room_order.append(space_name)
+        rooms_map[space_name].append(item)
+
+    return FinishesOut(
+        rooms=[RoomFinishes(room=name, items=rooms_map[name]) for name in room_order]
+    )
 
 
 # ---- design ----------------------------------------------------------------
