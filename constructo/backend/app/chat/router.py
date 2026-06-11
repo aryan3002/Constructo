@@ -738,6 +738,60 @@ async def upload_media(
     return MediaUploadOut(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest())
 
 
+class MediaPresignIn(BaseModel):
+    site_id: UUID | None = None
+    conversation_id: UUID | None = None
+    kind: str = "document"
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if self.site_id is None and self.conversation_id is None:
+            raise ValueError("provide site_id or conversation_id")
+        return self
+
+
+class MediaPresignOut(BaseModel):
+    key: str
+    put_url: str | None
+    upload_mode: str  # "presigned" | "multipart"
+
+
+@router.post("/media/presign", response_model=MediaPresignOut)
+async def presign_media(
+    body: MediaPresignIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MediaPresignOut:
+    """Direct-to-R2 upload URL (spine A11): the API stays out of the byte path —
+    critical on one bar. Local storage (CI/dev) raises NotImplementedError from
+    presigned_put, so the client falls back to the existing multipart POST /chat/media."""
+    if body.conversation_id is not None:
+        conv = await session.get(Conversation, body.conversation_id)
+        if conv is None:
+            raise AppError(404, "not_found", "Conversation not found")
+        await require_access(session, user, conv)
+        if conv.site_id is None:
+            raise AppError(422, "no_site", "This conversation has no site")
+        site_id = conv.site_id
+    else:
+        await _require_site(session, user, body.site_id)
+        site_id = body.site_id
+    ext = _MEDIA_EXT.get(body.kind, "bin")
+    key = f"chat/{site_id}/{uuid4().hex}.{ext}"
+    storage = get_storage()
+    put_url: str | None = None
+    content_type = f"image/{ext}" if ext == "jpg" else f"application/{ext}"
+    try:
+        ticket = storage.presigned_put(key, content_type)
+        put_url = ticket["url"]
+    except NotImplementedError:
+        # Local storage (CI/dev) has no presigned PUT — client falls back to multipart.
+        put_url = None
+    return MediaPresignOut(
+        key=key, put_url=put_url, upload_mode="presigned" if put_url else "multipart"
+    )
+
+
 @router.get("/messages", response_model=list[ChatMessageOut])
 async def list_messages(
     site_id: UUID | None = Query(None),
