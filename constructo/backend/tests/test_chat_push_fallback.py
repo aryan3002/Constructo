@@ -64,3 +64,84 @@ async def test_online_member_is_not_pushed(client, factory, db_session):
         assert all(m["to"] != "ExponentPushToken[sup]" for m in dry_run_log())
     finally:
         await get_presence().mark_offline(str(supervisor.id), "conn-1")
+
+
+async def test_muted_group_member_not_pushed_unmuted_is_pushed(
+    client, factory, db_session
+):
+    """Muted group members must NOT receive a push; unmuted offline members must.
+    Without the mute-exclusion check in _push_offline_members both tokens would
+    appear in dry_run_log, causing the first assertion to fail."""
+    from app.models import (
+        Conversation,
+        ConversationKind,
+        ConversationMember,
+        MemberRole,
+        PushToken,
+    )
+
+    reset_dry_run_log()
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    crew_muted = await factory.user(company=company, role=UserRole.supervisor)
+    crew_unmuted = await factory.user(company=company, role=UserRole.supervisor)
+
+    # Build a group conversation with three members: owner (admin), one muted
+    # crew member, and one unmuted crew member.
+    conv = Conversation(
+        company_id=company.id,
+        site_id=None,
+        kind=ConversationKind.group,
+        title="Mute Test Group",
+        created_by=owner.id,
+    )
+    db_session.add(conv)
+    await db_session.flush()
+
+    db_session.add(
+        ConversationMember(
+            conversation_id=conv.id,
+            user_id=owner.id,
+            role=MemberRole.admin,
+            added_by=owner.id,
+        )
+    )
+    db_session.add(
+        ConversationMember(
+            conversation_id=conv.id,
+            user_id=crew_muted.id,
+            role=MemberRole.member,
+            added_by=owner.id,
+            muted=True,
+        )
+    )
+    db_session.add(
+        ConversationMember(
+            conversation_id=conv.id,
+            user_id=crew_unmuted.id,
+            role=MemberRole.member,
+            added_by=owner.id,
+            muted=False,
+        )
+    )
+
+    db_session.add(PushToken(user_id=crew_muted.id, token="ExponentPushToken[muted]"))
+    db_session.add(
+        PushToken(user_id=crew_unmuted.id, token="ExponentPushToken[unmuted]")
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        "/api/v1/chat/messages",
+        json={
+            "conversation_id": str(conv.id),
+            "client_msg_id": str(uuid4()),
+            "body": "group message test",
+        },
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text
+
+    tokens_pushed = [m["to"] for m in dry_run_log()]
+    assert "ExponentPushToken[muted]" not in tokens_pushed   # muted — no push
+    assert "ExponentPushToken[unmuted]" in tokens_pushed     # unmuted — must push

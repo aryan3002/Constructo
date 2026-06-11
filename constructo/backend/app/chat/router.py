@@ -17,8 +17,6 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
-logger = logging.getLogger(__name__)
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -71,6 +69,8 @@ from app.models import (
 from app.queue import enqueue_extraction
 from app.sites.router import effective_visible_site_ids
 from app.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 # Roles that may directly commit a correction; others' corrections raise a
 # dispute (1.7) — they can flag, an authority resolves.
@@ -1289,7 +1289,6 @@ async def _push_offline_members(
     """Expo push to members without a live socket (spine A6). Best-effort;
     respects group mute; deep-links to the conversation."""
     try:
-        from app.chat.members import member_user_ids
         from app.chat.presence import get_presence
         from app.push.sender import notify_user
 
