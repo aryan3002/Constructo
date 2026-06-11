@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.site_events import latest_event_clause
 from app.models.chat import ChatMessage, Conversation
 from app.models.raw_message import RawMessageModel
 from app.models.site_event import SiteEventModel
@@ -102,6 +103,7 @@ async def compute_week(
                 SiteEventModel.source_message_ids.overlap(msg_raw_ids),
                 SiteEventModel.created_at >= week_start,
                 SiteEventModel.created_at < week_end,
+                latest_event_clause(),
             )
         )
         all_events = (await session.execute(events_q)).scalars().all()

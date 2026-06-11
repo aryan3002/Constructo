@@ -9,6 +9,7 @@ In production, wire to a weekly cron that calls rollup_last_week().
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -58,7 +59,7 @@ async def rollup_last_week(session: AsyncSession) -> int:
                 {
                     "company_id": str(company_id),
                     "week_start": week_date.isoformat(),
-                    "payload": __import__("json").dumps(payload),
+                    "payload": json.dumps(payload),
                 },
             )
             processed += 1
