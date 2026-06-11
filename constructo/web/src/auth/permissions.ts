@@ -19,6 +19,7 @@ export type Capability =
   | 'manage_team' // owner (+ pm invite) — team & roles
   | 'manage_sites' // owner, pm — site CRUD
   | 'manage_settings' // owner — company/integrations/billing
+  | 'manage_specs' // architect/owner/pm — the Material Specification schedule (spec-desk)
   | 'view_payments' // owner/accountant/pm/procurement — tracking ledger (read)
   | 'view_permits'
   | 'search'
@@ -34,6 +35,7 @@ const ALL: Capability[] = [
   'manage_team',
   'manage_sites',
   'manage_settings',
+  'manage_specs',
   'view_payments',
   'view_permits',
   'search',
@@ -51,10 +53,13 @@ const CAPS: Record<string, Capability[]> = {
     'review_dpr',
     'capture',
     'manage_sites',
+    'manage_specs',
     'view_payments',
     'view_permits',
     'search',
   ],
+  // Architect (interior fit-out) — owns the Material Specification schedule.
+  architect: ['manage_specs', 'view_permits', 'search'],
   accountant: [
     'propose_decision',
     'reconcile',

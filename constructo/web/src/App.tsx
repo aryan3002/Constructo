@@ -46,6 +46,10 @@ const DprPage = lazy(() =>
 )
 // === search ===
 import { Search } from './pages/search/Search'
+// === spec-desk (Architect's Material Specification schedule) === lazy: a dense desk grid
+const SpecDesk = lazy(() =>
+  import('./pages/specs/SpecDesk').then((m) => ({ default: m.SpecDesk })),
+)
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -108,6 +112,9 @@ export function App() {
 
       {/* Accountant / Procurement. */}
       <Route path="/reconcile" element={<Guarded><ReconcilePage /></Guarded>} />
+
+      {/* Spec schedule — the Architect's Material Specification desk. */}
+      <Route path="/spec-desk" element={<Guarded><SpecDesk /></Guarded>} />
 
       {/* Approval Inbox (Site-themed full screen). */}
       <Route path="/approvals" element={<Guarded><ApprovalInbox /></Guarded>} />

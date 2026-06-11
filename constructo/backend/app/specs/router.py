@@ -5,6 +5,7 @@ company member; create/edit is owner/pm/supervisor; approval is owner/pm.
 Company-scoped, mirroring app/materials/router.py.
 """
 import base64
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
@@ -16,9 +17,13 @@ from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.models import Component, Material, Space, Spec, User, UserRole
+from app.specs.costing import line_total as line_total_fn
 from app.specs.costing import rollup_by_room
 from app.specs.extraction import extract_material_from_image, get_llm
 from app.specs.schemas import (
+    DeskLine,
+    DeskOut,
+    DeskRoom,
     ExtractedSpecOut,
     RollupOut,
     SpecApprove,
@@ -122,6 +127,63 @@ async def extract_spec(
     await session.commit()
     await session.refresh(spec)
     return ExtractedSpecOut(spec=SpecOut.model_validate(spec), extracted=fields)
+
+
+@router.get("/desk", response_model=DeskOut)
+async def spec_desk(
+    site_id: UUID = Query(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DeskOut:
+    stmt = (
+        select(Spec, Component.name, Component.location, Space.name, Material)
+        .join(Component, Component.id == Spec.component_id)
+        .join(Space, Space.id == Component.space_id)
+        .outerjoin(Material, Material.id == Spec.material_id)
+        .where(Spec.company_id == user.company_id, Spec.site_id == site_id)
+        .order_by(Space.name, Spec.created_at)
+    )
+    rows = (await session.execute(stmt)).all()
+
+    rooms_map: dict[str, dict] = {}
+    excluded_total = 0
+    for spec, comp_name, comp_location, space_name, material in rows:
+        lt = line_total_fn(spec.qty, spec.unit_rate, spec.wastage_pct)
+        category = (material.category if material is not None else None) or spec.label
+        line = DeskLine(
+            id=spec.id,
+            element=comp_name,
+            location=comp_location,
+            category=category,
+            brand=material.brand if material is not None else None,
+            sku=material.sku if material is not None else None,
+            colour=material.colour if material is not None else None,
+            finish=material.finish if material is not None else None,
+            qty=spec.qty,
+            unit=spec.unit,
+            wastage_pct=spec.wastage_pct,
+            unit_rate=spec.unit_rate,
+            line_total=lt,
+            approval_status=spec.approval_status,
+            client_final_code=spec.client_final_code,
+        )
+        bucket = rooms_map.setdefault(
+            space_name,
+            {"room": space_name, "total": Decimal("0.00"), "excluded": 0, "lines": []},
+        )
+        bucket["lines"].append(line)
+        if lt is None:
+            bucket["excluded"] += 1
+            excluded_total += 1
+        else:
+            bucket["total"] += lt
+
+    room_list = [
+        DeskRoom(room=v["room"], total=v["total"], excluded=v["excluded"], lines=v["lines"])
+        for v in rooms_map.values()
+    ]
+    grand_total = sum((r.total for r in room_list), Decimal("0.00"))
+    return DeskOut(rooms=room_list, grand_total=grand_total, excluded_total=excluded_total)
 
 
 @router.get("/{spec_id}", response_model=SpecOut)

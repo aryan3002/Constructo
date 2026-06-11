@@ -26,6 +26,7 @@ const LANDING_ROUTE: Record<string, string> = {
 const ROLE_FALLBACK: Record<Role, string> = {
   owner: '/owner',
   pm: '/pm',
+  architect: '/spec-desk',
   supervisor: '/supervisor/capture',
   accountant: '/reconcile',
   procurement: '/reconcile',

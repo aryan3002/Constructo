@@ -74,3 +74,34 @@ class RollupOut(BaseModel):
 class ExtractedSpecOut(BaseModel):
     spec: SpecOut
     extracted: dict
+
+
+class DeskLine(BaseModel):
+    id: UUID
+    element: str  # Component.name
+    location: str | None  # Component.location
+    category: str | None  # Material.category (fallback Spec.label)
+    brand: str | None  # Material.brand
+    sku: str | None  # Material.sku
+    colour: str | None  # Material.colour
+    finish: str | None  # Material.finish
+    qty: Decimal | None
+    unit: str | None
+    wastage_pct: Decimal | None
+    unit_rate: Decimal | None
+    line_total: Decimal | None  # costing.line_total(qty, unit_rate, wastage_pct)
+    approval_status: SpecApprovalStatus
+    client_final_code: str | None
+
+
+class DeskRoom(BaseModel):
+    room: str
+    total: Decimal  # sum of non-null line_totals in the room
+    excluded: int  # count of lines with no line_total (unpriced)
+    lines: list[DeskLine]
+
+
+class DeskOut(BaseModel):
+    rooms: list[DeskRoom]
+    grand_total: Decimal
+    excluded_total: int

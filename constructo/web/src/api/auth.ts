@@ -51,6 +51,7 @@ export function isAuthenticated(): boolean {
 export type Role =
   | 'owner'
   | 'pm'
+  | 'architect'
   | 'supervisor'
   | 'accountant'
   | 'procurement'

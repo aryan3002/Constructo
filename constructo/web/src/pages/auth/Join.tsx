@@ -15,6 +15,7 @@ import { AuthCard } from './fields'
 const ROLE_KEY: Record<Role, TranslationKey> = {
   owner: 'invite.role.owner',
   pm: 'invite.role.pm',
+  architect: 'invite.role.architect',
   supervisor: 'invite.role.supervisor',
   accountant: 'invite.role.accountant',
   procurement: 'invite.role.procurement',
@@ -24,6 +25,7 @@ const ROLE_KEY: Record<Role, TranslationKey> = {
 const COACHMARK_KEY: Record<Role, TranslationKey> = {
   owner: 'join.coachmark.default',
   pm: 'join.coachmark.pm',
+  architect: 'join.coachmark.architect',
   supervisor: 'join.coachmark.supervisor',
   accountant: 'join.coachmark.accountant',
   procurement: 'join.coachmark.procurement',
