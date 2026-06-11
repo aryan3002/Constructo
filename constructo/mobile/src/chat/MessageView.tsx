@@ -21,6 +21,7 @@ import { Body, BodyStrong, Micro, Mono, Small, StatusPill } from '../ui'
 import type { ChatEvent } from '../api/chat'
 import { tickGlyph, isReadTick } from './tick'
 import type { DeliveryState } from './threadState'
+import type { NivaanProposalView } from './nivaanProposal'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -239,6 +240,100 @@ export function CaptureCard({
           </Mono>
         </View>
       ) : null}
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// NivaanProposalCard — a left-aligned card for a Nivaan-drafted proposal.
+// Shows a "Nivaan · proposal" eyebrow label (warn/amber = AI-proposed), the
+// human-readable summary, a Confirm Pressable (marigold accent, only when
+// committable), and a Dismiss. A missing_proof row renders without Confirm.
+// Uses semantic theme tokens only — no hardcoded hex.
+// ---------------------------------------------------------------------------
+
+export function NivaanProposalCard({
+  view,
+  onConfirm,
+  onDismiss,
+}: {
+  view: NivaanProposalView
+  onConfirm: () => void
+  onDismiss: () => void
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+
+  return (
+    <View
+      style={[
+        {
+          alignSelf: 'flex-start',
+          maxWidth: '92%',
+          backgroundColor: c.card,
+          borderRadius: theme.radii.card,
+          borderWidth: 1,
+          borderColor: c.line,
+          padding: SPACE.lg,
+          gap: SPACE.sm,
+        },
+        theme.shadowCard,
+      ]}
+    >
+      {/* Eyebrow: "Nivaan · proposal" — amber/warn conveys AI-proposed, not
+          a system error. Uppercase mono to match the register/ledger language. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {/* 4-point spark mark for the AI marker */}
+        <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          ✦ Nivaan · proposal
+        </Micro>
+      </View>
+
+      {/* Draft summary */}
+      <Body style={{ color: c.text }}>{view.summary}</Body>
+
+      {/* Action row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xs }}>
+        {view.committable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Confirm"
+            onPress={onConfirm}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: TAP,
+              paddingHorizontal: SPACE.lg,
+              borderRadius: theme.radii.control,
+              backgroundColor: c.accent,
+              opacity: pressed ? 0.88 : 1,
+            })}
+          >
+            <Feather name="check" size={15} color={c.onAccent} />
+            <BodyStrong style={{ color: c.onAccent }}>Confirm</BodyStrong>
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          onPress={onDismiss}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            minHeight: TAP,
+            paddingHorizontal: SPACE.md,
+            borderRadius: theme.radii.control,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: c.paper,
+            opacity: pressed ? 0.88 : 1,
+          })}
+        >
+          <Small style={{ color: c.textMute }}>Dismiss</Small>
+        </Pressable>
+      </View>
     </View>
   )
 }

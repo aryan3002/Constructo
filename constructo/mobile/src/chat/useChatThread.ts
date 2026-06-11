@@ -83,6 +83,9 @@ export interface UseChatThread {
   flush: () => Promise<void>
   /** Re-queue a permanently-failed send (a "tap to retry" on its bubble), then drain. */
   retry: (clientMsgId: string) => Promise<void>
+  /** Commit a Nivaan proposal: a human tap that books the capture via the
+   *  deterministic fast-path (capture_type+fields). The agent never calls this. */
+  sendProposal: (captureType: string, fields: Record<string, unknown>) => Promise<void>
 }
 
 // --- module-level socket singleton (one per app session) --------------------
@@ -356,6 +359,20 @@ export function useChatThread(
     [reply, refreshOutbox, flush],
   )
 
+  const sendProposal = useCallback(
+    async (captureType: string, fields: Record<string, unknown>) => {
+      await enqueueChatSend({
+        clientMsgId: newClientMsgId(),
+        address: addrToBody(addressRef.current),
+        captureType,
+        fields,
+      })
+      await refreshOutbox()
+      void flush()
+    },
+    [refreshOutbox, flush],
+  )
+
   const sendMedia = useCallback<UseChatThread['sendMedia']>(
     async (mediaOpts) => {
       await enqueueChatSend({
@@ -471,6 +488,7 @@ export function useChatThread(
     setReply,
     send,
     sendMedia,
+    sendProposal,
     refetch: q.refetch,
     pending,
     deliveryStates,
