@@ -102,6 +102,19 @@ export async function drainChatOutbox(
 ): Promise<void> {
   const items = await readAll()
   const now = Date.now()
+  // Crash recovery: an item left in 'sending' means the app was killed between
+  // persisting the in-flight state and handling the result. Re-queue it — the
+  // server send is idempotent on clientMsgId, so a re-send that actually landed
+  // just returns the existing row. Without this, a stuck 'sending' item is never
+  // re-attempted, breaking the durability promise.
+  let recovered = false
+  for (const i of items) {
+    if (i.state === 'sending') {
+      i.state = 'queued'
+      recovered = true
+    }
+  }
+  if (recovered) await writeAll(items)
   const halted = new Set<string>()
   const sentIds = new Set<string>()
   // Iterate a stable snapshot: we mutate `items` (splicing sent items) and

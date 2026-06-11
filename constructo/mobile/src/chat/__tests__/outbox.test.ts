@@ -57,3 +57,24 @@ test('backoff is exponential with a 5-minute cap', () => {
   expect(nextAttemptDelayMs(1)).toBeGreaterThanOrEqual(1000)
   expect(nextAttemptDelayMs(10)).toBeLessThanOrEqual(5 * 60_000 + 1000)
 })
+
+test('a stuck "sending" item (app killed mid-send) is recovered and re-sent', async () => {
+  // Simulate a crash that left an item persisted in 'sending'.
+  const stuck: ChatOutboxItem = {
+    clientMsgId: 'c1',
+    address: addr,
+    body: 'mid-flight',
+    state: 'sending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    createdAt: Date.now(),
+  }
+  await AsyncStorage.setItem('constructo.chat.outbox', JSON.stringify([stuck]))
+  const sent: string[] = []
+  await drainChatOutbox(async (item) => {
+    sent.push(item.clientMsgId)
+    return { ok: true, seq: 1 }
+  })
+  expect(sent).toEqual(['c1']) // recovered to queued, then sent
+  expect(await listChatOutbox()).toHaveLength(0)
+})
