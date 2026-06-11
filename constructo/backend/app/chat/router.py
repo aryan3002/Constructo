@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.action_items.detector import detect_action_item
 from app.auth.deps import get_current_user
-from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
 from app.chat.access import require_access
@@ -1207,45 +1206,25 @@ async def ws_ticket(user: User = Depends(get_current_user)) -> WsTicketOut:
 @router.websocket("/ws")
 async def chat_ws(
     websocket: WebSocket,
-    site_id: UUID | None = Query(None),
-    conversation_id: UUID | None = Query(None),
-    token: str = Query(...),
+    ticket: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Live message stream for a thread (2.0). Auth is a query ``token``
-    (WS can't carry an Authorization header cleanly); scoping reuses the REST
-    rules via ``_resolve_conversation`` (so homeowner is still blocked from a
-    site thread, but may subscribe to a group it belongs to). The
-    seq-authoritative store is still Neon and the client backfills anything
-    missed via ``after_seq`` — this only pushes new messages live."""
-    try:
-        user = await session.get(User, UUID(decode_token(token)["sub"]))
-    except Exception:
-        await websocket.close(code=1008)
-        return
+    """Multiplexed live stream (one socket per device). Auth: a one-time ticket
+    from POST /chat/ws-ticket. Subscriptions arrive as frames; access is checked
+    per-sub; Neon stays the ordering authority and clients backfill via REST."""
+    user_id = await get_ticket_store().consume(ticket)
+    user = await session.get(User, UUID(user_id)) if user_id else None
     if user is None:
         await websocket.close(code=1008)
         return
-    try:
-        conv = await _resolve_conversation(
-            session, user, site_id=site_id, conversation_id=conversation_id
-        )
-    except AppError:
-        await websocket.close(code=1008)
-        return
-    if conv is None:
-        await websocket.close(code=1011)
-        return
-
     await websocket.accept()
+    from app.chat.ws import ChatSocketSession
+
     try:
-        async with get_broadcaster().subscribe(conv.id) as queue:
-            while True:
-                payload = await queue.get()
-                await websocket.send_json(payload)
-    except WebSocketDisconnect:
-        return
-    except Exception:  # pragma: no cover - defensive (client gone)
+        await ChatSocketSession(
+            websocket, user, session, broadcaster=get_broadcaster()
+        ).run()
+    except WebSocketDisconnect:  # pragma: no cover - client gone
         return
 
 
