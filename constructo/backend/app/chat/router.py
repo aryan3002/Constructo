@@ -36,7 +36,7 @@ from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
 from app.chat.access import require_access
-from app.chat.realtime import broadcaster
+from app.chat.realtime import get_broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
@@ -678,7 +678,7 @@ async def send_message(
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
     # Push the new message live to any subscribed clients (2.0). The card upgrade
     # arrives on the client's next refetch once extraction runs; the bubble is live.
-    await broadcaster.publish(conv.id, out.model_dump(mode="json"))
+    await get_broadcaster().publish(conv.id, out.model_dump(mode="json"))
     return out
 
 
@@ -1214,7 +1214,7 @@ async def chat_ws(
 
     await websocket.accept()
     try:
-        async with broadcaster.subscribe(conv.id) as queue:
+        async with get_broadcaster().subscribe(conv.id) as queue:
             while True:
                 payload = await queue.get()
                 await websocket.send_json(payload)
