@@ -371,11 +371,11 @@ export default function HomeownerThread() {
         </Pressable>
       </View>
 
-      {thread.isLoading ? (
+      {thread.isLoading && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={c.accent} />
         </View>
-      ) : thread.error ? (
+      ) : thread.error && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.lg }}>
           <Small muted style={{ textAlign: 'center' }}>
             {t.err}

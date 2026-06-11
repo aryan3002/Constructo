@@ -6,6 +6,7 @@ import {
   deliveryStateMap,
   outboxConvKey,
   pendingForThread,
+  syncOrCache,
 } from '../threadState'
 import type { ChatOutboxItem } from '../outbox'
 import type { ChatMessage, CursorOut } from '../../api/chat'
@@ -125,5 +126,38 @@ describe('deliveryStateMap', () => {
     )
     expect(map.get(2)).toBe('delivered')
     expect(map.has(3)).toBe(false)
+  })
+})
+
+describe('syncOrCache (offline-first thread load)', () => {
+  const m = (seq: number): ChatMessage => ({ id: `id-${seq}`, seq } as ChatMessage)
+
+  test('returns the fetched page when the network succeeds', async () => {
+    const got = await syncOrCache(
+      async () => [m(1), m(2)],
+      async () => [m(99)], // cache must NOT be used on success
+    )
+    expect(got.map((x) => x.seq)).toEqual([1, 2])
+  })
+
+  test('falls back to the cache when the fetch fails but cache exists', async () => {
+    const got = await syncOrCache(
+      async () => {
+        throw new Error('offline')
+      },
+      async () => [m(1), m(2)],
+    )
+    expect(got.map((x) => x.seq)).toEqual([1, 2]) // no throw → no error state → thread stays
+  })
+
+  test('re-throws when the fetch fails and there is no cache', async () => {
+    await expect(
+      syncOrCache(
+        async () => {
+          throw new Error('offline')
+        },
+        async () => [],
+      ),
+    ).rejects.toThrow('offline')
   })
 })
