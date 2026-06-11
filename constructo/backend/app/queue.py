@@ -19,6 +19,8 @@ import asyncio
 import logging
 from uuid import UUID
 
+from rq import Retry
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -78,7 +80,11 @@ async def enqueue_extraction(raw_message_id: UUID) -> None:
 
     try:
         queue = get_queue()
-        queue.enqueue(run_handle_ingested, str(raw_message_id))
+        queue.enqueue(
+            run_handle_ingested,
+            str(raw_message_id),
+            retry=Retry(max=3, interval=[10, 60, 300]),
+        )
     except Exception:
         # Redis unreachable / RQ error: log and move on. The row is stored.
         logger.warning(

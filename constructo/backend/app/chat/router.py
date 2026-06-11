@@ -175,6 +175,9 @@ class ChatMessageOut(BaseModel):
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
+    # Extraction lifecycle status (pending/processing/done/failed/skipped).
+    # None for messages with no capture (plain talk bubbles).
+    raw_status: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -776,11 +779,24 @@ async def list_messages(
     contested = await _contested_event_ids(
         session, [e.id for evs in events_by_raw.values() for e in evs]
     )
+    # Batch-fetch extraction statuses for all messages that have a raw capture.
+    raw_ids = [r.raw_message_id for r in rows if r.raw_message_id is not None]
+    status_by_raw: dict[UUID, str] = {}
+    if raw_ids:
+        status_rows = (
+            await session.execute(
+                select(RawMessageModel.id, RawMessageModel.status).where(
+                    RawMessageModel.id.in_(raw_ids)
+                )
+            )
+        ).all()
+        status_by_raw = {row.id: row.status for row in status_rows}
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
         msg_out = ChatMessageOut.model_validate(r)
         msg_out.attachment_url = _safe_attachment_url(r.attachment_key, storage)
+        msg_out.raw_status = status_by_raw.get(r.raw_message_id)
         events = []
         for e in events_by_raw.get(r.raw_message_id, []):
             eo = ChatEventOut.model_validate(e)
@@ -789,6 +805,27 @@ async def list_messages(
         msg_out.events = events
         out.append(msg_out)
     return out
+
+
+@router.post("/messages/{message_id}/retry-extraction", status_code=202)
+async def retry_extraction(
+    message_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Re-enqueue a failed extraction (the in-thread 'couldn't process · retry')."""
+    msg = await session.get(ChatMessage, message_id)
+    if msg is None or msg.raw_message_id is None:
+        raise AppError(404, "not_found", "Message has no capture to retry")
+    conv = await session.get(Conversation, msg.conversation_id)
+    await require_access(session, user, conv)
+    raw = await session.get(RawMessageModel, msg.raw_message_id)
+    if raw is None or raw.status != "failed":
+        raise AppError(409, "not_retryable", "Extraction is not in a failed state")
+    raw.status = "pending"
+    await session.commit()
+    await enqueue_extraction(raw.id)
+    return {"status": "queued"}
 
 
 async def _contested_event_ids(session: AsyncSession, event_ids: list[UUID]) -> set[UUID]:
