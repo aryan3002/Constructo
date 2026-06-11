@@ -14,6 +14,7 @@ import type {
   DesignReference,
   DesignSelection,
   Drawing,
+  FinishesResponse,
   Home,
   HomeownerAskResult,
   HomeownerDecision,
@@ -273,4 +274,9 @@ export const homeowner = {
    */
   quietPeriods: (siteId?: string) =>
     request<QuietPeriod[]>(`/api/v1/homeowner/quiet-periods${qs({ site_id: siteId })}`),
+
+  /** Room-grouped material finishes for the homeowner — read-only, cost-firewalled.
+   *  GET /api/v1/homeowner/finishes. */
+  finishes: (siteId?: string) =>
+    request<FinishesResponse>(`/api/v1/homeowner/finishes${qs({ site_id: siteId })}`),
 }
