@@ -88,3 +88,25 @@ async def test_grounded_answer_with_hallucinated_number_is_blocked(db_session, f
     reply = await run_nivaan_turn(db_session, owner, conv, "what did the vendor bill?", llm=llm)
     assert reply.meta["nivaan"].get("tool") == "guard_blocked"
     assert "450,000" not in reply.body and "450000" not in reply.body
+
+
+async def test_evidence_texts_includes_event_date_so_dates_arent_blocked(db_session, factory):
+    """A grounded answer may cite an event's date; the evidence surface must
+    include occurred_on so the numeric guard doesn't false-block it."""
+    from app.agent.nivaan import _evidence_texts
+    from app.agent.nivaan_guard import numbers_are_grounded
+
+    company = await factory.company()
+    site = await factory.site(company)
+    ev = SiteEventModel(
+        site_id=site.id, event_type="progress_update", occurred_on=date(2026, 6, 10),
+        summary="slab poured", fields={"stage": "slab"},
+        confidence=1.0, needs_clarification=False, source_message_ids=[],
+    )
+    db_session.add(ev)
+    await db_session.flush()
+    allowed = await _evidence_texts(db_session, [str(ev.id)])
+    # The cited date is grounded → an answer mentioning 2026-06-10 must pass.
+    assert numbers_are_grounded("Poured on 2026-06-10.", allowed) is True
+    # A fabricated amount is still blocked.
+    assert numbers_are_grounded("Cost was ₹99,999.", allowed) is False

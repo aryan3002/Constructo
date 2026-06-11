@@ -52,7 +52,7 @@ async def _evidence_texts(session: AsyncSession, ids: list[str]) -> list[str]:
     for i in ids:
         try:
             uuids.append(UUID(i))
-        except (ValueError, AttributeError):
+        except ValueError:
             continue
     if not uuids:
         return []
@@ -62,6 +62,7 @@ async def _evidence_texts(session: AsyncSession, ids: list[str]) -> list[str]:
     ).scalars().all()
     for e in events:
         texts.append(e.summary or "")
+        texts.append(str(e.occurred_on))  # the LLM's grounded context includes occurred_on
         texts.append(" ".join(str(v) for v in (e.fields or {}).values()))
     msgs = (
         await session.execute(select(ChatMessage).where(ChatMessage.id.in_(uuids)))
@@ -86,9 +87,13 @@ async def run_nivaan_turn(
 
     # Numeric guard: an LLM-authored answer may never introduce an ungrounded
     # digit. Deterministic (aggregate) answers are safe by construction.
-    if result.tool == "grounded_qa" and _has_digit(text):
+    # Guard ANY LLM-authored answer. Only deterministic tools are safe by
+    # construction: "aggregate" numbers come from reducers, "none" is a
+    # digit-free clarify. Every other tool (now or future) must be guarded.
+    if result.tool not in ("aggregate", "none") and _has_digit(text):
         allowed = await _evidence_texts(session, result.evidence_event_ids)
         if not numbers_are_grounded(text, allowed):
+            # downgrade the answer to a clarify — never serve an unverifiable number
             return NivaanReply(
                 body=(
                     "I can't verify those numbers from the site record — "
