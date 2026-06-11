@@ -7,6 +7,7 @@ import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
 import { MessageIcon } from '../../ui/icons'
 import { AuthCard, SelectField, TextField } from './fields'
+import { InviteTeam } from './InviteTeam'
 import { markOnboarded } from './Login'
 
 const SITE_TYPES = [
@@ -17,7 +18,7 @@ const SITE_TYPES = [
   'infra',
 ] as const
 
-const STEPS = ['company', 'site', 'whatsapp'] as const
+const STEPS = ['company', 'site', 'team', 'whatsapp'] as const
 type Step = (typeof STEPS)[number]
 
 /**
@@ -86,7 +87,7 @@ export function OwnerFirstRun() {
     setBusy(true)
     try {
       await authApi.createSite({ name: siteName.trim(), type: siteType })
-      setStep('whatsapp')
+      setStep('team')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.error'))
     } finally {
@@ -165,6 +166,29 @@ export function OwnerFirstRun() {
               {t('auth.onboard.continue')}
             </Button>
           </form>
+        )}
+
+        {step === 'team' && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <Display as="h1" className="!text-h1">
+                {t('auth.onboard.team.title')}
+              </Display>
+              <Small className="mt-1">{t('auth.onboard.team.subtitle')}</Small>
+            </div>
+            <InviteTeam companyName={company || undefined} />
+            <Button
+              variant="primary"
+              size="lg"
+              block
+              onClick={() => setStep('whatsapp')}
+            >
+              {t('auth.onboard.continue')}
+            </Button>
+            <Button variant="ghost" block onClick={() => setStep('whatsapp')}>
+              {t('auth.onboard.skip')}
+            </Button>
+          </div>
         )}
 
         {step === 'whatsapp' && (

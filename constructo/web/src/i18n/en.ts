@@ -127,6 +127,9 @@ export const en = {
   'auth.onboard.site.type.villa': 'Villa / Bungalow',
   'auth.onboard.site.type.interior': 'Interior fit-out',
   'auth.onboard.site.type.infra': 'Infrastructure',
+  'auth.onboard.team.title': 'Invite your team',
+  'auth.onboard.team.subtitle':
+    'Add your architect, site engineer, PM and accountant — they each get a join link.',
   'auth.onboard.whatsapp.title': "Connect your site's WhatsApp group",
   'auth.onboard.whatsapp.subtitle':
     "Constructo reads your team's existing chat — no new habits. Connect it now or skip for now.",

@@ -115,6 +115,9 @@ export const hi: Record<TranslationKey, string> = {
   'auth.onboard.site.type.villa': 'विला / बंगला',
   'auth.onboard.site.type.interior': 'इंटीरियर',
   'auth.onboard.site.type.infra': 'इन्फ्रास्ट्रक्चर',
+  'auth.onboard.team.title': 'अपनी टीम जोड़ें',
+  'auth.onboard.team.subtitle':
+    'आर्किटेक्ट, साइट इंजीनियर, PM और अकाउंटेंट को जोड़ें — सबको एक जॉइन लिंक मिलेगा।',
   'auth.onboard.whatsapp.title': 'अपनी साइट का व्हाट्सएप ग्रुप जोड़ें',
   'auth.onboard.whatsapp.subtitle':
     'कंस्ट्रक्टो आपकी टीम की मौजूदा चैट पढ़ता है — कोई नई आदत नहीं। अभी जोड़ें या फ़िलहाल छोड़ें।',
