@@ -36,6 +36,7 @@ from app.auth.jwt import decode_token
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
 from app.chat.access import require_access
+from app.chat.members import member_user_ids
 from app.chat.realtime import get_broadcaster
 from app.chat.reply_interpreter import apply_correction, is_approval, parse_correction
 from app.chat.tickets import get_ticket_store
@@ -679,7 +680,10 @@ async def send_message(
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
     # Push the new message live to any subscribed clients (2.0). The card upgrade
     # arrives on the client's next refetch once extraction runs; the bubble is live.
-    await get_broadcaster().publish(conv.id, out.model_dump(mode="json"))
+    await get_broadcaster().publish(
+        conv.id,
+        {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
+    )
     return out
 
 
@@ -733,6 +737,8 @@ async def list_messages(
     site_id: UUID | None = Query(None),
     conversation_id: UUID | None = Query(None),
     after_seq: int = Query(0, ge=0),
+    before_seq: int | None = Query(None, ge=1),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -740,17 +746,25 @@ async def list_messages(
     """A thread, oldest→newest, after a seq cursor (for sync-on-reconnect).
 
     Keyed by ``conversation_id`` (any kind, access-checked) or the crew
-    ``site_id``. An empty site thread (no conversation yet) lists as []."""
+    ``site_id``. An empty site thread (no conversation yet) lists as [].
+
+    Optional ``before_seq`` and ``order`` enable reverse-pagination (history
+    loading): order="desc" + before_seq=N returns messages just below N,
+    newest-first, for a chat history view (e.g., before_seq=4, limit=2 → [3, 2])."""
     conv = await _resolve_conversation(
         session, user, site_id=site_id, conversation_id=conversation_id
     )
     if conv is None:
         return []
+    filters = [ChatMessage.conversation_id == conv.id, ChatMessage.seq > after_seq]
+    if before_seq is not None:
+        filters.append(ChatMessage.seq < before_seq)
+    order_clause = ChatMessage.seq.desc() if order == "desc" else ChatMessage.seq
     rows = (
         await session.execute(
             select(ChatMessage)
-            .where(ChatMessage.conversation_id == conv.id, ChatMessage.seq > after_seq)
-            .order_by(ChatMessage.seq)
+            .where(*filters)
+            .order_by(order_clause)
             .limit(limit)
         )
     ).scalars().all()
@@ -1235,6 +1249,54 @@ async def chat_ws(
         return
 
 
+async def _advance_cursor(
+    session: AsyncSession,
+    user: User,
+    *,
+    site_id: UUID | None,
+    conversation_id: UUID | None,
+    last_seq: int,
+    read: bool,
+) -> Conversation | None:
+    """Monotonic max-advance of the caller's cursor pair. read ⇒ delivered."""
+    conv = await _resolve_conversation(
+        session, user, site_id=site_id, conversation_id=conversation_id
+    )
+    if conv is None:
+        return None
+    cursor = await session.get(ConversationRead, (conv.id, user.id))
+    if cursor is None:
+        cursor = ConversationRead(conversation_id=conv.id, user_id=user.id)
+        session.add(cursor)
+    cursor.last_delivered_seq = max(cursor.last_delivered_seq or 0, last_seq)
+    if read:
+        cursor.last_read_seq = max(cursor.last_read_seq or 0, last_seq)
+    await session.commit()
+    return conv
+
+
+async def _publish_receipt(
+    conv: Conversation | None, user: User, kind: str, seq: int
+) -> None:
+    """Envelope-framed receipt to live subscribers. Calm-Cockpit policy: read
+    receipts never cross in the homeowner room (delivered-only, both ways)."""
+    if conv is None:
+        return
+    if kind == "read" and conv.kind is ConversationKind.homeowner:
+        return
+    await get_broadcaster().publish(
+        conv.id,
+        {
+            "v": 1,
+            "type": "receipt",
+            "conv": str(conv.id),
+            "user_id": str(user.id),
+            "kind": kind,
+            "seq": seq,
+        },
+    )
+
+
 @router.post("/read", status_code=204)
 async def mark_read(
     body: ChatReadIn,
@@ -1242,18 +1304,101 @@ async def mark_read(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Advance the caller's read cursor for the target thread."""
+    conv = await _advance_cursor(
+        session,
+        user,
+        site_id=body.site_id,
+        conversation_id=body.conversation_id,
+        last_seq=body.last_seq,
+        read=True,
+    )
+    await _publish_receipt(conv, user, "read", body.last_seq)
+
+
+@router.post("/delivered", status_code=204)
+async def mark_delivered(
+    body: ChatReadIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Advance the caller's delivered cursor (✓✓) — client calls after persisting
+    messages locally (WS frame or backfill)."""
+    conv = await _advance_cursor(
+        session,
+        user,
+        site_id=body.site_id,
+        conversation_id=body.conversation_id,
+        last_seq=body.last_seq,
+        read=False,
+    )
+    await _publish_receipt(conv, user, "delivered", body.last_seq)
+
+
+class CursorOut(BaseModel):
+    user_id: UUID
+    last_delivered_seq: int
+    last_read_seq: int
+
+
+@router.get("/cursors", response_model=list[CursorOut])
+async def list_cursors(
+    site_id: UUID | None = Query(None),
+    conversation_id: UUID | None = Query(None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[CursorOut]:
+    """Every member's cursor pair — the client computes ticks from these.
+    In the homeowner room, read cursors are masked (delivered-only policy)."""
     conv = await _resolve_conversation(
-        session, user, site_id=body.site_id, conversation_id=body.conversation_id
+        session, user, site_id=site_id, conversation_id=conversation_id
     )
     if conv is None:
-        return
-    cursor = await session.get(ConversationRead, (conv.id, user.id))
-    if cursor is None:
-        session.add(
-            ConversationRead(
-                conversation_id=conv.id, user_id=user.id, last_read_seq=body.last_seq
-            )
+        return []
+    rows = (
+        await session.execute(
+            select(ConversationRead).where(ConversationRead.conversation_id == conv.id)
         )
-    else:
-        cursor.last_read_seq = max(cursor.last_read_seq, body.last_seq)
-    await session.commit()
+    ).scalars().all()
+    mask_read = conv.kind is ConversationKind.homeowner
+    return [
+        CursorOut(
+            user_id=r.user_id,
+            last_delivered_seq=r.last_delivered_seq,
+            last_read_seq=0 if (mask_read and r.user_id != user.id) else r.last_read_seq,
+        )
+        for r in rows
+    ]
+
+
+class MessageReceiptsOut(BaseModel):
+    message_id: UUID
+    delivered_by: list[UUID]
+    read_by: list[UUID]
+
+
+@router.get("/messages/{message_id}/receipts", response_model=MessageReceiptsOut)
+async def message_receipts(
+    message_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MessageReceiptsOut:
+    """Who has this message reached (cursor-derived; sender excluded)."""
+    msg = await session.get(ChatMessage, message_id)
+    if msg is None:
+        raise AppError(404, "not_found", "Message not found")
+    conv = await session.get(Conversation, msg.conversation_id)
+    await require_access(session, user, conv)
+    members = set(await member_user_ids(session, conv)) - {msg.sender_id}
+    cursors = (
+        await session.execute(
+            select(ConversationRead).where(ConversationRead.conversation_id == conv.id)
+        )
+    ).scalars().all()
+    mask_read = conv.kind is ConversationKind.homeowner
+    delivered = [
+        c.user_id for c in cursors if c.user_id in members and c.last_delivered_seq >= msg.seq
+    ]
+    read = [] if mask_read else [
+        c.user_id for c in cursors if c.user_id in members and c.last_read_seq >= msg.seq
+    ]
+    return MessageReceiptsOut(message_id=message_id, delivered_by=delivered, read_by=read)
