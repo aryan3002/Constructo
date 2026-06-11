@@ -19,9 +19,29 @@ import { useTheme } from '../theme/ThemeProvider'
 import { AP, SPACE, STATUS, TAP } from '../theme/tokens'
 import { Body, BodyStrong, Micro, Mono, Small, StatusPill } from '../ui'
 import type { ChatEvent } from '../api/chat'
+import { tickGlyph, isReadTick } from './tick'
+import type { DeliveryState } from './threadState'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
+}
+
+// ---------------------------------------------------------------------------
+// SystemNotice — a centered, full-width informational row for sender_kind=system
+// messages (member added, dispute resolved) and blocked-contested notices.
+// Uses semantic theme tokens only; no hardcoded hex. Blueprint: textMute on
+// transparent; Daylight: same token resolves to the warm Calm Cockpit muted
+// ink — both systems agree on a calm centered treatment for system rows.
+// ---------------------------------------------------------------------------
+
+export function SystemNotice({ text }: { text: string }) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  return (
+    <View style={{ alignItems: 'center', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.lg }}>
+      <Small muted style={{ textAlign: 'center', color: c.textMute }}>{text}</Small>
+    </View>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -235,12 +255,14 @@ export function MessageBubble({
   mine,
   attachmentUrl,
   timestamp,
+  deliveryState,
   onLongPress,
 }: {
   body: string | null
   mine: boolean
   attachmentUrl?: string | null
   timestamp?: string
+  deliveryState?: DeliveryState
   onLongPress?: () => void
 }) {
   const { theme } = useTheme()
@@ -291,7 +313,25 @@ export function MessageBubble({
         />
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
-      {timestamp ? <Mono style={{ color: c.textMute, fontSize: 11 }}>{timestamp}</Mono> : null}
+      {timestamp ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            // Own bubbles hug the right (with the tick); received bubbles keep
+            // their original left alignment.
+            alignSelf: mine ? 'flex-end' : 'flex-start',
+          }}
+        >
+          <Mono style={{ color: c.textMute, fontSize: 11 }}>{timestamp}</Mono>
+          {mine && tickGlyph(deliveryState) ? (
+            <Mono style={{ fontSize: 11, color: isReadTick(deliveryState) ? c.accent : c.textMute }}>
+              {tickGlyph(deliveryState)}
+            </Mono>
+          ) : null}
+        </View>
+      ) : null}
     </>
   )
 

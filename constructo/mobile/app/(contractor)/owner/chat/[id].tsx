@@ -27,8 +27,9 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
-import { CaptureCard, MessageBubble } from '../../../../src/chat/MessageView'
+import { CaptureCard, MessageBubble, SystemNotice } from '../../../../src/chat/MessageView'
 import { useChatThread } from '../../../../src/chat'
+import { systemNotice } from '../../../../src/chat/systemNotice'
 import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
@@ -52,6 +53,7 @@ const STR = {
     homeowner: 'Homeowner',
     sendingHint: 'sending…',
     sendFailed: "couldn't send",
+    tapRetry: 'Tap to retry',
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
@@ -69,6 +71,7 @@ const STR = {
     homeowner: 'गृहस्वामी',
     sendingHint: 'भेजा जा रहा…',
     sendFailed: 'नहीं भेजा गया',
+    tapRetry: 'फिर भेजने के लिए टैप करें',
   },
 } as const
 
@@ -260,18 +263,26 @@ export default function OwnerConversation() {
           ListFooterComponent={
             thread.pending.length ? (
               <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
-                {thread.pending.map((p) => (
-                  <MessageBubble
-                    key={p.clientMsgId}
-                    body={p.body || (p.captured ? '📎' : '')}
-                    mine
-                    timestamp={p.state === 'failed_permanent' ? str.sendFailed : str.sendingHint}
-                  />
-                ))}
+                {thread.pending.map((p) =>
+                  p.state === 'failed_permanent' ? (
+                    <Pressable key={p.clientMsgId} onPress={() => void thread.retry(p.clientMsgId)}>
+                      <MessageBubble body={p.body || (p.captured ? '📎' : '')} mine timestamp={str.tapRetry} />
+                    </Pressable>
+                  ) : (
+                    <MessageBubble
+                      key={p.clientMsgId}
+                      body={p.body || (p.captured ? '📎' : '')}
+                      mine
+                      timestamp={str.sendingHint}
+                    />
+                  ),
+                )}
               </View>
             ) : null
           }
           renderItem={({ item }) => {
+            const notice = systemNotice(item)
+            if (notice !== null) return <SystemNotice text={notice} />
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
             if (cardEvents.length > 0) {
               const mine = item.sender_side === 'contractor'
@@ -299,6 +310,7 @@ export default function OwnerConversation() {
                 mine={item.sender_side === 'contractor'}
                 attachmentUrl={item.attachment_url}
                 timestamp={new Date(item.created_at).toLocaleTimeString()}
+                deliveryState={thread.deliveryState(item)}
                 onLongPress={() => thread.setReply(item)}
               />
             )

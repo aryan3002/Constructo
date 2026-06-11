@@ -40,6 +40,10 @@ APP_SOURCE = "app"
 APP_CHAT_SOURCE = "app_chat"
 APP_GROUP_PREFIX = "app:"
 
+# Money/quantity events from a VOICE note always need a human read-back (a
+# misheard 50-vs-15 is a real loss). Attendance is cheap to fix → not gated.
+_VOICE_READBACK_TYPES = {"invoice_received", "payment_request", "material_delivery"}
+
 
 async def _resolve_site_id(session: AsyncSession, raw_row: RawMessageModel) -> UUID | None:
     """Resolve the site a raw message belongs to.
@@ -146,6 +150,7 @@ async def handle_ingested(
         # needs_clarification (amber) — crew confirm/correct it via the existing
         # dispute/dedupe rails before it's treated as settled truth (Slice D).
         from_homeowner = (raw_row.raw or {}).get("sender_side") == "homeowner"
+        voice_readback = raw_row.media_type == "voice"
 
         ids: list[UUID] = []
         for ev in events:
@@ -157,7 +162,11 @@ async def handle_ingested(
                 summary=ev.summary,
                 fields=ev.fields,
                 confidence=ev.confidence,
-                needs_clarification=ev.needs_clarification or from_homeowner,
+                needs_clarification=(
+                    ev.needs_clarification
+                    or from_homeowner
+                    or (voice_readback and ev.event_type.value in _VOICE_READBACK_TYPES)
+                ),
                 source_message_ids=ev.source_message_ids,
                 version=ev.version,
                 supersedes_event_id=ev.supersedes_event_id,

@@ -12,6 +12,7 @@ import { SPACE } from '../theme/tokens'
 import type { ChatMessage } from '../api/chat'
 import { CaptureCard, MessageBubble } from './MessageView'
 import type { ChatFeedItem } from './feed'
+import type { DeliveryState } from './threadState'
 
 /** A row in the rendered feed — a derived bubble/card, or a screen-injected node. */
 export type FeedRow = ChatFeedItem | { kind: 'custom'; key: string; node: ReactNode }
@@ -21,6 +22,7 @@ export function MessageFeed({
   mineSide,
   time,
   onLongPressMessage,
+  deliveryStateFor,
   emptyState,
   header,
   contentPaddingBottom = SPACE.lg,
@@ -31,6 +33,8 @@ export function MessageFeed({
   /** Format an ISO timestamp for the bubble/card footer. */
   time: (iso: string) => string
   onLongPressMessage?: (m: ChatMessage) => void
+  /** Optional: derive delivery tick for a given message (only applied to own bubbles). */
+  deliveryStateFor?: (msg: ChatMessage) => DeliveryState | undefined
   emptyState?: ReactNode
   header?: ReactNode
   contentPaddingBottom?: number
@@ -66,12 +70,13 @@ export function MessageFeed({
             mine={m.sender_side === mineSide}
             attachmentUrl={m.attachment_url}
             timestamp={time(m.created_at)}
+            deliveryState={deliveryStateFor?.(m)}
             onLongPress={onLongPressMessage ? () => onLongPressMessage(m) : undefined}
           />
         </View>
       )
     },
-    [mineSide, time, onLongPressMessage],
+    [mineSide, time, onLongPressMessage, deliveryStateFor],
   )
 
   return (
