@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.loop import run_turn
 from app.agent.nivaan_guard import numbers_are_grounded
 from app.agent.tiers import MONEY_CAPTURE_TYPES, Proposal, propose_capture, propose_money
+from app.common.site_events import latest_event_clause
 from app.extraction.llm import LLMClient
 from app.models import (
     AgentResultKind,
@@ -26,6 +27,7 @@ from app.models import (
     SiteEventModel,
     User,
 )
+from app.reconcile.matching import DeliveryEvent, InvoiceEvent, reconcile
 
 _MENTION = re.compile(r"^\s*[@/]nivaan\b[:,]?\s*", re.IGNORECASE)
 
@@ -189,8 +191,52 @@ async def build_proposal(
     return NivaanReply(body=proposal.summary, meta=proposal.as_meta())
 
 
+def _as_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_delivery(e: SiteEventModel) -> DeliveryEvent:
+    f = e.fields or {}
+    return DeliveryEvent(
+        id=e.id, site_id=e.site_id, occurred_on=e.occurred_on, vendor=f.get("vendor"),
+        material=f.get("material"), quantity=_as_float(f.get("quantity")),
+        unit=f.get("unit"), summary=e.summary,
+    )
+
+
+def _to_invoice(e: SiteEventModel) -> InvoiceEvent:
+    f = e.fields or {}
+    return InvoiceEvent(
+        id=e.id, site_id=e.site_id, occurred_on=e.occurred_on, vendor=f.get("vendor"),
+        material=f.get("material"), quantity=_as_float(f.get("quantity")),
+        amount=_as_float(f.get("amount")), currency=f.get("currency"),
+        invoice_number=f.get("invoice_number"), summary=e.summary,
+    )
+
+
 async def _build_money_proposal(
     session: AsyncSession, user: User, conv: Conversation, req: ProposalRequest, summary: str
 ) -> Proposal:
-    """Money tier (filled in Task 6). Minimal: no evidence yet → missing_proof."""
-    return propose_money(req.capture_type, req.fields, summary, evidence=[])
+    """Money tier: bind reconcile evidence for the site, or missing_proof."""
+    rows = (
+        await session.execute(
+            select(SiteEventModel).where(
+                SiteEventModel.site_id == conv.site_id,
+                SiteEventModel.event_type.in_(["material_delivery", "invoice_received"]),
+                latest_event_clause(),
+            )
+        )
+    ).scalars().all()
+    deliveries = [_to_delivery(e) for e in rows if e.event_type == "material_delivery"]
+    invoices = [_to_invoice(e) for e in rows if e.event_type == "invoice_received"]
+
+    items = reconcile(deliveries, invoices)
+    vendor = req.fields.get("vendor")
+    if vendor:
+        items = [it for it in items if (it.vendor or "").lower() == str(vendor).lower()]
+    return propose_money(req.capture_type, req.fields, summary, evidence=items)
