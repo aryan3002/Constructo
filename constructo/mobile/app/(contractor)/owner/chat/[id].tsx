@@ -282,7 +282,7 @@ export default function OwnerConversation() {
           }
           renderItem={({ item }) => {
             const notice = systemNotice(item)
-            if (notice) return <SystemNotice text={notice} />
+            if (notice !== null) return <SystemNotice text={notice} />
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
             if (cardEvents.length > 0) {
               const mine = item.sender_side === 'contractor'
