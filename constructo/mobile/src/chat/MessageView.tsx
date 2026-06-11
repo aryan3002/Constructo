@@ -27,6 +27,24 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // ---------------------------------------------------------------------------
+// SystemNotice — a centered, full-width informational row for sender_kind=system
+// messages (member added, dispute resolved) and blocked-contested notices.
+// Uses semantic theme tokens only; no hardcoded hex. Blueprint: textMute on
+// transparent; Daylight: same token resolves to the warm Calm Cockpit muted
+// ink — both systems agree on a calm centered treatment for system rows.
+// ---------------------------------------------------------------------------
+
+export function SystemNotice({ text }: { text: string }) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  return (
+    <View style={{ alignItems: 'center', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.lg }}>
+      <Small muted style={{ textAlign: 'center', color: c.textMute }}>{text}</Small>
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // CaptureCard — a chat message that became a structured SiteEvent, rendered
 // inline as a Card (event-type pill + key fields + "show proof") instead of a
 // flat bubble. This is "capture with a conversation around it" made VISIBLE:

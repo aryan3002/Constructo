@@ -26,7 +26,8 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageBubble, MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
+import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, type FeedRow } from '../../../src/chat'
+import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
 import { HOME_ROOM_STR, weaveHomeRoom, type DecisionAction } from '../_home_room.util'
 import { HomeRoomDecisionCard, HomeRoomUpdateCard } from '../_messages_components'
@@ -243,6 +244,11 @@ export default function HomeownerThread() {
             />
           ),
         }
+      // System notices (sender_kind=system or blocked-contested) render as a
+      // centered row, not a bubble — route before handing to the feed kit.
+      const noticeText = systemNotice(r.item.message)
+      if (noticeText !== null)
+        return { kind: 'custom', key: r.key, node: <SystemNotice text={noticeText} /> }
       return r.item
     })
     const askRows: FeedRow[] = asks.map((a) => ({

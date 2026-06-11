@@ -45,6 +45,13 @@ export interface ChatMessage {
    *  or null for messages that carry no extractable payload. Drives the "still
    *  reading…" cue on a freshly-sent media card; patched live by event_update. */
   raw_status?: string | null
+  /** System messages (member added, dispute resolved, etc.) are rendered as
+   *  centered notices rather than bubbles. 'nivaan' marks AI-authored rows. */
+  sender_kind?: 'user' | 'nivaan' | 'system'
+  /** Per-message metadata stamped by the backend (Task B-T3). A blocked reply
+   *  carries `blocked.reason = "contested"` when an open dispute freezes an
+   *  approve/correct action. */
+  meta?: { blocked?: { reason?: string; event_id?: string } } | null
 }
 
 /** One member's read/delivered cursor pair (spine A10) — the client derives

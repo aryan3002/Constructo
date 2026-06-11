@@ -27,8 +27,9 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
-import { CaptureCard, MessageBubble } from '../../../../src/chat/MessageView'
+import { CaptureCard, MessageBubble, SystemNotice } from '../../../../src/chat/MessageView'
 import { useChatThread } from '../../../../src/chat'
+import { systemNotice } from '../../../../src/chat/systemNotice'
 import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
@@ -280,6 +281,8 @@ export default function OwnerConversation() {
             ) : null
           }
           renderItem={({ item }) => {
+            const notice = systemNotice(item)
+            if (notice) return <SystemNotice text={notice} />
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
             if (cardEvents.length > 0) {
               const mine = item.sender_side === 'contractor'
