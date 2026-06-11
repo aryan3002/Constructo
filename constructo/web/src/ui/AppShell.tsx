@@ -54,6 +54,7 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
     { to: '/', labelKey: 'nav.brief', label: 'Brief', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
@@ -61,6 +62,7 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
   pm: [
     { to: '/', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },

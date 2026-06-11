@@ -20,6 +20,7 @@ const LANDING_ROUTE: Record<string, string> = {
   orders: '/reconcile',
   approvals: '/approvals',
   search: '/search',
+  spec_desk: '/spec-desk',
 }
 
 /** Fallback landing derived purely from the role, used if /me/landing fails. */
