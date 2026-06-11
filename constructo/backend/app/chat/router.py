@@ -178,6 +178,9 @@ class ChatMessageOut(BaseModel):
     # Extraction lifecycle status (pending/processing/done/failed/skipped).
     # None for messages with no capture (plain talk bubbles).
     raw_status: str | None = None
+    # Machine payload (e.g. {"blocked": {...}}) — drives a system/blocked notice
+    # in the client; never rendered as free text.
+    meta: dict | None = None
 
 
 class ConversationOut(BaseModel):
@@ -356,6 +359,8 @@ async def _apply_reply_correction(
     new_fields, changed_key = applied
 
     if user.role in _CORRECTION_AUTHORITY:
+        if await _event_contested(session, event.id):
+            return {"action": "blocked_contested", "field": changed_key, "event_id": str(event.id)}
         superseding = SiteEventModel(
             site_id=event.site_id,
             event_type=event.event_type,
@@ -433,6 +438,8 @@ async def _apply_reply_approval(
         return None
     if user.role not in _CORRECTION_AUTHORITY:
         return None  # not the deciding authority — let it send as a plain message
+    if await _event_contested(session, event.id):
+        return {"action": "blocked_contested", "dispute": "open", "event_id": str(event.id)}
     now = datetime.now(UTC)
     superseding = SiteEventModel(
         site_id=event.site_id,
@@ -610,6 +617,8 @@ async def send_message(
     # is NOT itself re-extracted as a new capture.
     correction = await _apply_reply_correction(session, user, body.reply_to_id, body.body)
     if correction is not None:
+        if correction.get("action") == "blocked_contested":
+            msg.meta = {"blocked": {"reason": "contested", "event_id": correction["event_id"]}}
         await session.commit()
         await session.refresh(msg)
         return ChatMessageOut.model_validate(msg)
@@ -618,6 +627,8 @@ async def send_message(
     # approval (authority-gated) and is not itself re-extracted.
     approval = await _apply_reply_approval(session, user, body.reply_to_id, body.body)
     if approval is not None:
+        if approval.get("action") == "blocked_contested":
+            msg.meta = {"blocked": {"reason": "contested", "event_id": approval["event_id"]}}
         await session.commit()
         await session.refresh(msg)
         return ChatMessageOut.model_validate(msg)
@@ -900,6 +911,11 @@ async def _contested_event_ids(session: AsyncSession, event_ids: list[UUID]) -> 
         )
     ).scalars().all()
     return set(rows)
+
+
+async def _event_contested(session: AsyncSession, event_id: UUID) -> bool:
+    """True iff the event has an OPEN dispute (a frozen, money-safe value)."""
+    return bool(await _contested_event_ids(session, [event_id]))
 
 
 async def _events_for_messages(
