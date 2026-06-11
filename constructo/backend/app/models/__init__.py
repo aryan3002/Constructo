@@ -13,6 +13,7 @@ from app.models.chat import (
     ConversationKind,
     ConversationRead,
     MessageSide,
+    SenderKind,
 )
 from app.models.company import Company
 from app.models.company_billing import CompanyBilling
@@ -113,6 +114,7 @@ __all__ = [
     "MemberStatus",
     "MessageAck",
     "MessageSide",
+    "SenderKind",
     "Milestone",
     "MilestoneStatus",
     "OwnerBrief",
