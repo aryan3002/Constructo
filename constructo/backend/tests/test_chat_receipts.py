@@ -29,10 +29,12 @@ async def test_delivered_endpoint_advances_cursor_monotonically(client, factory,
     await _send(client, owner, site)
     msg2 = await _send(client, owner, site)
     body = {"site_id": str(site.id), "last_seq": msg2["seq"]}
-    assert (await client.post("/api/v1/chat/delivered", json=body, headers=auth(owner))).status_code == 204
+    resp = await client.post("/api/v1/chat/delivered", json=body, headers=auth(owner))
+    assert resp.status_code == 204
     # Regression must not move it backwards.
     body["last_seq"] = 1
-    assert (await client.post("/api/v1/chat/delivered", json=body, headers=auth(owner))).status_code == 204
+    resp = await client.post("/api/v1/chat/delivered", json=body, headers=auth(owner))
+    assert resp.status_code == 204
     cursors = (
         await client.get(
             "/api/v1/chat/cursors", params={"site_id": str(site.id)}, headers=auth(owner)
