@@ -53,6 +53,9 @@ import type { QuietPeriod } from '../../src/api/types'
 
 const STR = {
   en: {
+    finishesEyebrow: 'YOUR FINISHES',
+    finishesLabel: 'Your finishes',
+    finishesSub: 'Room-by-room choices for your home',
     settings: 'Open settings',
     morning: 'Good morning',
     afternoon: 'Good afternoon',
@@ -103,6 +106,9 @@ const STR = {
     savedLabel: 'Saved',
   },
   hi: {
+    finishesEyebrow: 'आपकी सामग्री',
+    finishesLabel: 'आपकी फ़िनिश',
+    finishesSub: 'घर के हर कमरे के लिए चुनी गई सामग्री',
     settings: 'सेटिंग्स खोलें',
     morning: 'सुप्रभात',
     afternoon: 'नमस्ते',
@@ -504,6 +510,25 @@ export default function Home() {
           href="/ask"
           accessibilityLabel={t.askBuilder}
         />
+      </FadeInUp>
+
+      {/* ---- Finishes — calm entry to the room-by-room finishes screen. ---- */}
+      <FadeInUp delay={110}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.finishesLabel}
+          onPress={() => router.push('/(homeowner)/finishes')}
+        >
+          <CalmCard
+            status="ok"
+            eyebrow={t.finishesEyebrow}
+            title={t.finishesLabel}
+            body={t.finishesSub}
+            trailing={
+              <Feather name="chevron-right" size={20} color={c.accent} />
+            }
+          />
+        </Pressable>
       </FadeInUp>
 
       {/* ---- Weekly summary letter (warm-clay) — when one exists. ---- */}
