@@ -263,6 +263,9 @@ export function NivaanProposalCard({
 }) {
   const { theme } = useTheme()
   const c = theme.colors
+  // (1) Guard against double-commit: once confirmed or dismissed the buttons
+  // are replaced by a muted status line, so neither action can fire again.
+  const [status, setStatus] = useState<'open' | 'confirmed' | 'dismissed'>('open')
 
   return (
     <View
@@ -280,60 +283,63 @@ export function NivaanProposalCard({
         theme.shadowCard,
       ]}
     >
-      {/* Eyebrow: "Nivaan · proposal" — amber/warn conveys AI-proposed, not
-          a system error. Uppercase mono to match the register/ledger language. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        {/* 4-point spark mark for the AI marker */}
-        <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-          ✦ Nivaan · proposal
-        </Micro>
-      </View>
+      {/* (3) Eyebrow collapsed to a single text node — the ✦ is inline text,
+          not a sibling, so the wrapping View + its gap are unnecessary. */}
+      <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+        ✦ Nivaan · proposal
+      </Micro>
 
       {/* Draft summary */}
       <Body style={{ color: c.text }}>{view.summary}</Body>
 
-      {/* Action row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xs }}>
-        {view.committable ? (
+      {/* Action row — replaced by a status line once acted upon. */}
+      {status === 'confirmed' ? (
+        <Small style={{ color: c.textMute }}>✓ Added</Small>
+      ) : status === 'dismissed' ? (
+        <Small style={{ color: c.textMute }}>Dismissed</Small>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xs }}>
+          {view.committable ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm"
+              onPress={() => { setStatus('confirmed'); onConfirm() }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                minHeight: TAP,
+                paddingHorizontal: SPACE.lg,
+                borderRadius: theme.radii.control,
+                backgroundColor: c.accent,
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              <Feather name="check" size={15} color={c.onAccent} />
+              <BodyStrong style={{ color: c.onAccent }}>Confirm</BodyStrong>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Confirm"
-            onPress={onConfirm}
+            accessibilityLabel="Dismiss"
+            onPress={() => { setStatus('dismissed'); onDismiss() }}
             style={({ pressed }) => ({
               flexDirection: 'row',
               alignItems: 'center',
               gap: 6,
               minHeight: TAP,
-              paddingHorizontal: SPACE.lg,
+              paddingHorizontal: SPACE.md,
               borderRadius: theme.radii.control,
-              backgroundColor: c.accent,
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: c.paper,
               opacity: pressed ? 0.88 : 1,
             })}
           >
-            <Feather name="check" size={15} color={c.onAccent} />
-            <BodyStrong style={{ color: c.onAccent }}>Confirm</BodyStrong>
+            <Small style={{ color: c.textMute }}>Dismiss</Small>
           </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss"
-          onPress={onDismiss}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            minHeight: TAP,
-            paddingHorizontal: SPACE.md,
-            borderRadius: theme.radii.control,
-            borderWidth: 1,
-            borderColor: c.line,
-            backgroundColor: c.paper,
-            opacity: pressed ? 0.88 : 1,
-          })}
-        >
-          <Small style={{ color: c.textMute }}>Dismiss</Small>
-        </Pressable>
-      </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -352,6 +358,7 @@ export function MessageBubble({
   timestamp,
   deliveryState,
   onLongPress,
+  nivaan,
 }: {
   body: string | null
   mine: boolean
@@ -359,6 +366,9 @@ export function MessageBubble({
   timestamp?: string
   deliveryState?: DeliveryState
   onLongPress?: () => void
+  /** (2) When true, renders a small "✦ Nivaan" caption above the body to
+   *  visually distinguish AI-generated answer rows from human messages. */
+  nivaan?: boolean
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -400,6 +410,11 @@ export function MessageBubble({
 
   const content = (
     <>
+      {nivaan ? (
+        <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 }}>
+          ✦ Nivaan
+        </Micro>
+      ) : null}
       {attachmentUrl ? (
         <Image
           source={{ uri: attachmentUrl }}

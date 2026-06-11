@@ -298,11 +298,8 @@ export default function OwnerConversation() {
             }
             if (isNivaanAnswer(item)) {
               return (
-                <MessageBubble
-                  body={item.body}
-                  mine={false}
-                  timestamp={new Date(item.created_at).toLocaleTimeString()}
-                />
+                <MessageBubble body={item.body} mine={false} nivaan
+                  timestamp={new Date(item.created_at).toLocaleTimeString()} />
               )
             }
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
