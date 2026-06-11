@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     quiet_cooldown_days: int = 3
     quiet_sweep_hour: int = 6
 
+    # Labs/post-pilot routes. Set ENABLE_LABS=false in the pilot deploy to hide
+    # the dispute-pack and vendor-confirm routes (real features, not no-ops —
+    # just not exercised by the interior fit-out pilot). Defaults True so dev,
+    # tests, and CI keep the routes registered.
+    enable_labs: bool = True
+
     # WhatsApp send transport. One of: "dry_run" | "url" | "cloud_api".
     whatsapp_send_mode: str = "dry_run"
     whatsapp_send_url: str | None = None  # used by "url" mode
