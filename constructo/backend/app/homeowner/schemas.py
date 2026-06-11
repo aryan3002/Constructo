@@ -6,6 +6,7 @@ returned as plain numbers (rupees); the mobile client formats lakh/crore.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -454,3 +455,33 @@ class CapabilitiesOut(BaseModel):
     can_manage_members: bool
     can_design: bool
     design_space_id: UUID | None = None
+
+
+# ---- finishes (read-only, cost-firewalled) ----------------------------------
+
+
+class FinishItem(BaseModel):
+    """One material finish line for the homeowner.
+
+    Cost fields (unit_rate, wastage_pct, line_total) are deliberately absent —
+    they must NEVER appear on this schema. That omission is the firewall.
+    """
+
+    element: str                  # Component.name (e.g. "Floor")
+    category: str | None          # Material.category or Spec.label
+    brand: str | None
+    colour: str | None
+    finish: str | None
+    qty: Decimal | None
+    unit: str | None
+    status: str                   # "chosen" (approved) | "deciding" (pending)
+    client_final_code: str | None
+
+
+class RoomFinishes(BaseModel):
+    room: str                     # Space.name
+    items: list[FinishItem]
+
+
+class FinishesOut(BaseModel):
+    rooms: list[RoomFinishes]
