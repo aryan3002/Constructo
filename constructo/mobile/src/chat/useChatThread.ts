@@ -46,6 +46,7 @@ import { ChatSocket } from './socket'
 import {
   deliveryStateMap,
   pendingForThread,
+  syncOrCache,
   type DeliveryState,
   type PendingMessage,
 } from './threadState'
@@ -263,11 +264,18 @@ export function useChatThread(
   // --- cache-first incremental query --------------------------------------
   const q = useQuery({
     queryKey: ['chat', 'thread', addrKey],
-    queryFn: async () => {
-      const after = await maxCachedSeq(addrKey as string)
-      const page = await chatApi.messages({ ...addressRef.current, afterSeq: after })
-      return mergeMessages(addrKey as string, page)
-    },
+    queryFn: () =>
+      // Offline-first: on a fetch failure, fall back to the persisted cache so a
+      // reopened thread keeps its messages instead of flipping to an error after
+      // the retries exhaust (the "shows for 4s then disappears" bug).
+      syncOrCache(
+        async () => {
+          const after = await maxCachedSeq(addrKey as string)
+          const page = await chatApi.messages({ ...addressRef.current, afterSeq: after })
+          return mergeMessages(addrKey as string, page)
+        },
+        () => loadThreadCache(addrKey as string),
+      ),
     initialData: undefined,
     // Polling stays as a cheap incremental fallback (now after_seq, not 0). The
     // socket is the latency win on top; if it's down, the poll still syncs.

@@ -7,6 +7,27 @@
 import type { ChatAddressBody, ChatOutboxItem } from './outbox'
 import type { ChatMessage, CursorOut } from '../api/chat'
 
+/**
+ * Offline-first thread sync. Try the network page; if the fetch fails (offline,
+ * timeout, 5xx) fall back to the persisted cache so a reopened thread keeps
+ * showing its messages instead of blanking to an error after the retries
+ * exhaust. Only re-throws when there is genuinely nothing cached to show.
+ *
+ * Dependencies are injected so this is unit-testable without mocking modules.
+ */
+export async function syncOrCache(
+  fetchPage: () => Promise<ChatMessage[]>,
+  loadCache: () => Promise<ChatMessage[]>,
+): Promise<ChatMessage[]> {
+  try {
+    return await fetchPage()
+  } catch (err) {
+    const cached = await loadCache()
+    if (cached.length) return cached
+    throw err
+  }
+}
+
 /** A not-yet-confirmed message still in the outbox, rendered as a pending bubble
  *  beneath the merged server feed. `state` mirrors the outbox item so the UI can
  *  show "sending…" vs "tap to retry" (failed_permanent). */
