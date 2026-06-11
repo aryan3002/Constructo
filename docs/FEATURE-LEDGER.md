@@ -1,6 +1,7 @@
 # Feature Ledger — the honest inventory (v1)
 
 > **Author:** Written with Claude, 2026-06-10. Grounded in the four-layer audit + the Neev QA pass (2026-06-10, SHIP verdict).
+> **Correction (2026-06-11):** Four rows were mis-tagged after code verification — `dispute-pack`, `vendor-confirm`, `Admin / dashboard roll-ups`, and `mocks/fixtures.ts`. Corrected below.
 > **What this is:** one row per notable feature/screen/route across all four layers, tagged with what it *really* is and what to *do*. The single source of truth for Phase-1 convergence. **Living doc — refine as you go.**
 >
 > **Status:** REAL (wired, works) · THIN (shallow) · STUB (fake/placeholder/no-op) · DEAD (orphaned) · MISSING (doesn't exist yet)
@@ -25,9 +26,9 @@
 | Auth — OTP login (`000000` stub) | STUB | **FINISH** | wire SMS or a pilot allowlist *before any external exposure* |
 | Homeowner masking / membrane | THIN (leaky) | **FINISH** | close the PII-leak paths (Phase 2) |
 | **Spec engine** (material spec · site-audit · client approval · costing) | MISSING | **BUILD** | the new capability — Phase 2; see [CIVILARCH-GOLDEN-PATH.md](CIVILARCH-GOLDEN-PATH.md) |
-| `dispute-pack` route | STUB (no-op) | **CUT** | accepts requests, does nothing; remove for pilot |
-| `vendor-confirm` route | STUB (no-op) | **CUT** | same |
-| Admin / dashboard roll-ups | STUB | **CUT** | not needed for pilot |
+| `dispute-pack` route | REAL | **QUARANTINE (Labs)** | real hash-chained dispute pack (Phase 3.6) — NOT a no-op; gated behind `enable_labs`, hidden for the fit-out pilot. See [docs/LABS-QUARANTINE.md](LABS-QUARANTINE.md). |
+| `vendor-confirm` route | REAL | **QUARANTINE (Labs)** | real token-capability vendor GRN loop (Phase 3.8), money-firewalled — NOT a no-op; gated behind `enable_labs`. See [docs/LABS-QUARANTINE.md](LABS-QUARANTINE.md). |
+| Admin / dashboard roll-ups | REAL | **KEEP** | this is `GET /dashboard/home` (Owner Brief home) — real aggregation, used by the web (api/dashboard.ts). Not a stub. |
 | Permit expiry sweep | THIN (never runs) | **QUARANTINE** | not a fit-out need |
 | Vision / image captions | FROZEN | **QUARANTINE (Labs)** | finish in Phase 4 |
 | Auto-translation | FAKED | **QUARANTINE (Labs)** | English-first now → low priority |
@@ -56,7 +57,7 @@
 |---|---|---|---|
 | ~43 pages (owner brief, reconcile, approvals, search, DPR, admin, sites…) | REAL | **KEEP** | Blueprint through the pilot |
 | **Material Spec Schedule + costing desk** | MISSING | **BUILD** | Phase 2 — web is the "desk" for the spec |
-| `mocks/fixtures.ts` (orphaned) | DEAD | **CUT** | unused import |
+| `mocks/fixtures.ts` (orphaned) | REAL | **KEEP** | NOT orphaned — imported by web api/client.ts; powers VITE_USE_MOCKS mock mode. |
 | Neev Desk re-skin | — | **DEFER → Phase 4** | locked decision #1 |
 
 ## Layer 4 — Homeowner mobile (Calm Cockpit) — ~90% wired
