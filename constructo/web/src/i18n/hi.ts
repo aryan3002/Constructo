@@ -153,6 +153,18 @@ export const hi: Record<TranslationKey, string> = {
   'invite.status.accepted': 'जुड़ गए',
   'invite.status.revoked': 'रद्द',
   'invite.empty': 'अभी कोई इनवाइट नहीं।',
+  'invite.role.client': 'क्लाइंट (गृह-स्वामी)',
+  'invite.client.phone.label': 'क्लाइंट का फ़ोन',
+  'invite.client.site_label': 'प्रॉपर्टी',
+  'invite.client.action': 'क्लाइंट इनवाइट बनाएँ',
+  'invite.client.title': 'क्लाइंट इनवाइट तैयार',
+  'invite.client.code_label': 'जॉइन कोड',
+  'invite.client.copy_code': 'कोड कॉपी करें',
+  'invite.client.them': 'आपका क्लाइंट',
+  'invite.client.instructions':
+    '{name} से कहें कि Constructo ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और यह जॉइन कोड डालें।',
+  'invite.client.message':
+    'आपको Constructo पर {company} को फ़ॉलो करने का न्योता है। ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और जॉइन कोड डालें: {code}',
 
   'join.title': 'आपको आमंत्रित किया गया है',
   'join.subtitle': '{company} में {role} के रूप में जुड़ें।',

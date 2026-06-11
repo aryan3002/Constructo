@@ -60,6 +60,7 @@ class MemberCreateIn(BaseModel):
     site_id: UUID
     sub_role: HomeownerSubRole = HomeownerSubRole.primary_owner
     phone: str | None = None
+    display_name: str | None = None
     notif_prefs: dict = Field(default_factory=dict)
 
 
