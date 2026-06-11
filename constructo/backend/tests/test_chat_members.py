@@ -65,4 +65,48 @@ async def test_group_members_are_explicit(db_session, setup):
     db_session.add(ConversationMember(conversation_id=conv.id, user_id=supervisor.id))
     await db_session.flush()
     ids = await member_user_ids(db_session, conv)
-    assert ids == [supervisor.id]
+    assert set(ids) == {supervisor.id}
+
+
+async def test_invited_homeowner_not_in_member_ids(db_session, factory, setup):
+    """Deviation 3 + active-filter: invited (status != active) HomeownerMembers
+    with a null user_id must never appear in member_user_ids (status guard +
+    user_id IS NOT NULL guard)."""
+    company, site, owner, supervisor, outsider, homeowner = setup
+    # Add an invited (not yet redeemed) HomeownerMember — user_id is null.
+    db_session.add(
+        HomeownerMember(
+            site_id=site.id,
+            user_id=None,
+            sub_role=HomeownerSubRole.primary_owner,
+            status=MemberStatus.invited,
+        )
+    )
+    await db_session.flush()
+    conv = Conversation(
+        company_id=company.id, site_id=site.id, kind=ConversationKind.homeowner
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    ids = await member_user_ids(db_session, conv)
+    # The invited member has no user_id → must not appear.
+    assert None not in ids
+    # The active homeowner is still present.
+    assert homeowner.id in ids
+
+
+async def test_deactivated_crew_user_not_in_member_ids(db_session, factory, setup):
+    """is_active filter: a deactivated assigned supervisor must be excluded from
+    member_user_ids even though they have a valid SiteAssignment."""
+    company, site, owner, supervisor, outsider, homeowner = setup
+    # Deactivate the assigned supervisor in-place and flush.
+    supervisor.is_active = False
+    await db_session.flush()
+    conv = Conversation(company_id=company.id, site_id=site.id, kind=ConversationKind.site)
+    db_session.add(conv)
+    await db_session.flush()
+    ids = await member_user_ids(db_session, conv)
+    # Deactivated supervisor must not receive push/receipt writes.
+    assert supervisor.id not in ids
+    # Active owner is still present.
+    assert owner.id in ids

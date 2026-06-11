@@ -22,7 +22,7 @@ from app.sites.models import SiteAssignment
 
 # Roles that see every company site (mirrors sites.router._ALL_SITES_ROLES /
 # effective_visible_site_ids — owner, pm, AND architect all get company-wide visibility).
-_ALL_SITES_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect)
+_ALL_SITES_ROLES = frozenset({UserRole.owner, UserRole.pm, UserRole.architect})
 
 
 async def member_user_ids(session: AsyncSession, conv: Conversation) -> list[UUID]:
@@ -45,6 +45,7 @@ async def member_user_ids(session: AsyncSession, conv: Conversation) -> list[UUI
             .where(
                 User.company_id == conv.company_id,
                 User.role != UserRole.homeowner,
+                User.is_active.is_(True),
                 (User.role.in_(_ALL_SITES_ROLES))
                 | (SiteAssignment.site_id == conv.site_id),
             )
