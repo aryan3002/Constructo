@@ -7,6 +7,7 @@ from app.models.action_item import (
     ActionItemStatus,
 )
 from app.models.agent_turn import AgentResultKind, AgentTurn
+from app.models.bet_metrics import BetMetricsWeekly
 from app.models.chat import (
     ChatMessage,
     Conversation,
@@ -75,6 +76,7 @@ from app.models.vendor_confirmation import VendorConfirmation, VendorConfirmStat
 from app.models.whatsapp_group import WhatsappGroup
 
 __all__ = [
+    "BetMetricsWeekly",
     "ActionItem",
     "ActionItemEvent",
     "ActionItemEventKind",
