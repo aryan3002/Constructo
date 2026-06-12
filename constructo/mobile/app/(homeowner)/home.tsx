@@ -32,14 +32,19 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, type Status } from '../../src/theme/tokens'
 import {
+  Body,
   BodyLg,
+  BodyStrong,
   Button,
   CalmCard,
+  Card,
   DecisionCard,
   Display,
   Eyebrow,
   FadeInUp,
   HomeWidget,
+  ListRow,
+  MilestoneStrip,
   PhotoTile,
   Screen,
   Small,
@@ -49,7 +54,8 @@ import {
   FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 import type { PhotoTileData } from '../../src/ui'
-import type { QuietPeriod } from '../../src/api/types'
+import type { AttentionItem, QuietPeriod } from '../../src/api/types'
+import { REQUEST_STATUS_META } from '../_requests.util'
 
 const STR = {
   en: {
@@ -104,6 +110,26 @@ const STR = {
     hide: 'Hide',
     videoLabel: 'Video',
     savedLabel: 'Saved',
+    // B1 — Needs your input
+    needsInputEyebrow: 'NEEDS YOUR INPUT',
+    needsInputReview: 'Review',
+    needsInputSeeAll: 'See all',
+    // B2 — Milestone strip
+    milestonesEyebrow: 'YOUR MILESTONES',
+    milestonesTitle: 'Build milestones',
+    milestonesSub: 'Tap to see the full timeline',
+    milestoneNow: 'Now',
+    // B3 — My requests
+    requestsEyebrow: 'MY REQUESTS',
+    requestsTitle: 'Your requests',
+    requestsSeeAll: 'See all',
+    requestsAdd: 'Add a request',
+    requestsEmpty: 'No open requests',
+    // B4 — Recent activity
+    activityEyebrow: 'RECENT ACTIVITY',
+    activityTitle: 'Latest from your team',
+    activitySeeAll: 'See photos',
+    activityEmpty: 'No recent activity',
   },
   hi: {
     finishesEyebrow: 'आपकी सामग्री',
@@ -154,6 +180,26 @@ const STR = {
     hide: 'छिपाएँ',
     videoLabel: 'वीडियो',
     savedLabel: 'सहेजा गया',
+    // B1 — Needs your input
+    needsInputEyebrow: 'आपकी ज़रूरत',
+    needsInputReview: 'देखें',
+    needsInputSeeAll: 'सब देखें',
+    // B2 — Milestone strip
+    milestonesEyebrow: 'आपके पड़ाव',
+    milestonesTitle: 'निर्माण पड़ाव',
+    milestonesSub: 'पूरी टाइमलाइन देखने के लिए टैप करें',
+    milestoneNow: 'अभी',
+    // B3 — My requests
+    requestsEyebrow: 'मेरे अनुरोध',
+    requestsTitle: 'आपके अनुरोध',
+    requestsSeeAll: 'सब देखें',
+    requestsAdd: 'अनुरोध जोड़ें',
+    requestsEmpty: 'कोई खुला अनुरोध नहीं',
+    // B4 — Recent activity
+    activityEyebrow: 'हालिया गतिविधि',
+    activityTitle: 'आपकी टीम से ताज़ा',
+    activitySeeAll: 'फ़ोटो देखें',
+    activityEmpty: 'कोई हालिया गतिविधि नहीं',
   },
 } as const
 
@@ -293,6 +339,18 @@ export default function Home() {
   const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
   const photosQ = useQuery({ queryKey: ['home', 'photos'], queryFn: () => homeowner.photos() })
   const weeklyQ = useQuery({ queryKey: ['home', 'weekly'], queryFn: () => homeowner.weeklySummary() })
+  // B2 — milestone strip
+  const milestonesQ = useQuery({
+    queryKey: ['home', 'milestones'],
+    queryFn: () => homeowner.milestones(),
+    enabled: !homeQ.isLoading,
+  })
+  // B3 — my requests (open only)
+  const requestsQ = useQuery({
+    queryKey: ['home', 'requests'],
+    queryFn: () => homeowner.requests(),
+    enabled: !homeQ.isLoading,
+  })
 
   if (homeQ.isLoading) {
     return (
@@ -319,6 +377,10 @@ export default function Home() {
   const photos = photosQ.data?.items ?? []
   const latest = photos[0]
   const weekly = weeklyQ.data?.[0]
+  // B2 — milestones for the strip
+  const milestones = milestonesQ.data ?? []
+  // B3 — open requests (not done)
+  const openRequests = (requestsQ.data ?? []).filter((r) => r.status !== 'done').slice(0, 3)
 
   const startOn = property?.started_on ?? null
   const handoverOn = property?.expected_handover_on ?? null
@@ -456,6 +518,149 @@ export default function Home() {
 
       {/* ---- Quiet: explain the contractor-confirmed silence (no red/pulse). ---- */}
       {state === 'quiet' && quiet ? <QuietCard quiet={quiet} lang={lang} /> : null}
+
+      {/* ==== B1: All "Needs your input" items (multi-item, conditional). ====
+          The existing DecisionCard above shows only the first item for the quick
+          reassure. This block renders ALL items for completeness, but only when
+          there are MORE than one (to avoid duplication when there's just one).
+          Each routes to /(homeowner)/decisions/[id]. */}
+      {needs_attention.length > 1 ? (
+        <FadeInUp delay={50}>
+          <Card>
+            <View style={{ gap: SPACE.sm }}>
+              <Eyebrow>{t.needsInputEyebrow}</Eyebrow>
+              {needs_attention.map((item: AttentionItem, idx: number) => {
+                const isLast = idx === needs_attention.length - 1
+                return (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    onPress={() => router.push(`/(homeowner)/decisions/${item.id}`)}
+                    style={({ pressed }) => ({
+                      paddingVertical: SPACE.md,
+                      borderBottomWidth: isLast ? 0 : 1,
+                      borderBottomColor: c.line,
+                      opacity: pressed ? 0.85 : 1,
+                      gap: SPACE.xs,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md }}>
+                      <BodyStrong style={{ flex: 1, color: c.warn }}>{item.title}</BodyStrong>
+                      <Feather name="chevron-right" size={18} color={c.accent} />
+                    </View>
+                    {item.detail ? <Small muted numberOfLines={1}>{item.detail}</Small> : null}
+                  </Pressable>
+                )
+              })}
+            </View>
+          </Card>
+        </FadeInUp>
+      ) : null}
+
+      {/* ==== B2: Milestone strip card (conditional — when milestones exist). ==== */}
+      {milestones.length > 0 ? (
+        <FadeInUp delay={55}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.milestonesTitle}
+            onPress={() => router.push('/(homeowner)/updates')}
+          >
+            <Card style={{ gap: SPACE.sm }}>
+              <Eyebrow>{t.milestonesEyebrow}</Eyebrow>
+              <MilestoneStrip milestones={milestones} nowLabel={t.milestoneNow} />
+              <Small color={c.accent} style={{ fontWeight: '600', marginTop: SPACE.xs }}>
+                {t.milestonesSub} →
+              </Small>
+            </Card>
+          </Pressable>
+        </FadeInUp>
+      ) : null}
+
+      {/* ==== B3: "My requests" card (conditional — when open requests exist). ====
+          Shows up to 3 open requests with status pills; See all → requests screen. */}
+      {openRequests.length > 0 ? (
+        <FadeInUp delay={62}>
+          <Card style={{ gap: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.sm }}>
+              <Eyebrow>{t.requestsEyebrow}</Eyebrow>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.requestsSeeAll}
+                onPress={() => router.push('/(homeowner)/requests')}
+                hitSlop={8}
+              >
+                <Small color={c.accent} style={{ fontWeight: '600' }}>{t.requestsSeeAll}</Small>
+              </Pressable>
+            </View>
+            {openRequests.map((req, idx) => (
+              <ListRow
+                key={req.id}
+                icon="message-square"
+                title={req.title}
+                subtitle={req.sla_due_at ? undefined : undefined}
+                last={idx === openRequests.length - 1}
+                onPress={() => router.push('/(homeowner)/requests')}
+                right={
+                  <StatusPill
+                    status={REQUEST_STATUS_META[req.status]?.status ?? 'info'}
+                    label={
+                      lang === 'hi'
+                        ? (REQUEST_STATUS_META[req.status]?.hi ?? req.status)
+                        : (REQUEST_STATUS_META[req.status]?.en ?? req.status)
+                    }
+                    size="sm"
+                  />
+                }
+              />
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.requestsAdd}
+              onPress={() => router.push('/(homeowner)/issue')}
+              style={{ marginTop: SPACE.sm }}
+            >
+              <Small color={c.accent} style={{ fontWeight: '600' }}>+ {t.requestsAdd}</Small>
+            </Pressable>
+          </Card>
+        </FadeInUp>
+      ) : null}
+
+      {/* ==== B4: "Recent activity" compact list (conditional). ====
+          Up to 3 recent_activity updates from home payload. Compact, no second
+          big photo hero — the hero PhotoTile below is kept as the one visual anchor. */}
+      {recent_activity.length > 0 ? (
+        <FadeInUp delay={68}>
+          <Card style={{ gap: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.sm }}>
+              <Eyebrow>{t.activityEyebrow}</Eyebrow>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.activitySeeAll}
+                onPress={() => router.push('/(homeowner)/photos')}
+                hitSlop={8}
+              >
+                <Small color={c.accent} style={{ fontWeight: '600' }}>{t.activitySeeAll}</Small>
+              </Pressable>
+            </View>
+            {recent_activity.slice(0, 3).map((item, idx) => (
+              <ListRow
+                key={item.id}
+                icon="activity"
+                title={item.title}
+                subtitle={item.body ?? undefined}
+                last={idx === Math.min(recent_activity.length - 1, 2)}
+                statusTone={
+                  item.type === 'milestone' ? 'ok'
+                  : item.type === 'delay' ? 'risk'
+                  : item.type === 'decision_needed' ? 'warn'
+                  : 'info'
+                }
+              />
+            ))}
+          </Card>
+        </FadeInUp>
+      ) : null}
 
       {/* ---- Latest from site — real photo, keeps the home feeling alive. ---- */}
       {latestPhoto ? (
