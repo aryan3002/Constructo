@@ -45,6 +45,27 @@ def require_role(*roles: UserRole) -> Callable:
     return _checker
 
 
+def assert_valid_step_up(token: str | None, user: User) -> None:
+    """Validate a step-up token for *user* and raise 403 ``step_up_required`` if invalid.
+
+    Separates the token-validation logic from the FastAPI dependency so callers
+    that only *conditionally* need step-up (e.g. ``update_user``) can call this
+    directly instead of wiring a full ``Depends(require_step_up)``.
+
+    Raises:
+        AppError(403, "step_up_required", …) on missing / expired / wrong-scope /
+        wrong-subject token. Returns ``None`` when the token is valid.
+    """
+    if not token:
+        raise AppError(403, "step_up_required", "This action requires re-verification")
+    try:
+        payload = decode_token(token)
+    except Exception as exc:  # expired or tampered
+        raise AppError(403, "step_up_required", "Step-up expired — verify again") from exc
+    if payload.get("scope") != STEP_UP_SCOPE or payload.get("sub") != str(user.id):
+        raise AppError(403, "step_up_required", "Invalid step-up token")
+
+
 async def require_step_up(
     user: User = Depends(get_current_user),
     x_step_up_token: str | None = Header(default=None),
@@ -56,12 +77,5 @@ async def require_step_up(
     wrong-scope/other-user tokens raise ``403 step_up_required`` so the web can
     detect the code and prompt for the OTP, then retry.
     """
-    if not x_step_up_token:
-        raise AppError(403, "step_up_required", "This action requires re-verification")
-    try:
-        payload = decode_token(x_step_up_token)
-    except Exception as exc:  # expired or tampered
-        raise AppError(403, "step_up_required", "Step-up expired — verify again") from exc
-    if payload.get("scope") != STEP_UP_SCOPE or payload.get("sub") != str(user.id):
-        raise AppError(403, "step_up_required", "Invalid step-up token")
+    assert_valid_step_up(x_step_up_token, user)
     return user
