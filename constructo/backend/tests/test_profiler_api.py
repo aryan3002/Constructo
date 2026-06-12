@@ -2,8 +2,11 @@
 from uuid import UUID as _UUID
 
 from app.auth.jwt import create_access_token
+from app.extraction.llm import FakeLLMClient
+from app.main import app
 from app.models import UserRole
 from app.models.profiler import ProfilerReferenceAttributes
+from app.profiler.extraction import get_llm
 
 
 def auth(user) -> dict[str, str]:
@@ -134,3 +137,42 @@ async def test_area_taste_is_deterministic_with_conflict(client, factory, db_ses
     assert body["confidence"] == 0.5           # 1 ranked ref / recommended 2
     assert body["has_conflict"] is True
     assert body["dimensions"]["colors"]["dark"] == 0.0  # +1.0 (5★) + -1.0 (1★)
+
+
+async def test_e2e_two_owners_conflict_surfaces_in_taste(client, factory):
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(
+        canned={"colors": ["dark"], "style": "ornate", "confidence": 0.9}
+    )
+    try:
+        architect, pid, area_id, contrib_ids = await _profile_with_area_and_two_contributors(
+            client, factory
+        )
+        ref_ids = []
+        for _ in range(2):
+            r = await client.post(
+                "/api/v1/design/references",
+                json={"area_id": area_id, "source_type": "upload",
+                      "source_url": "https://example.test/dark.jpg"},
+                headers=auth(architect),
+            )
+            ref_ids.append(r.json()["id"])
+
+        # owner A loves both (5★), owner B dislikes both (1★)
+        for ref_id in ref_ids:
+            await client.post(
+                f"/api/v1/design/references/{ref_id}/rankings",
+                json={"contributor_id": contrib_ids[0], "stars": 5}, headers=auth(architect),
+            )
+            await client.post(
+                f"/api/v1/design/references/{ref_id}/rankings",
+                json={"contributor_id": contrib_ids[1], "stars": 1}, headers=auth(architect),
+            )
+
+        taste = (await client.get(
+            f"/api/v1/design/profiles/{pid}/areas/{area_id}/taste", headers=auth(architect)
+        )).json()
+        assert taste["has_conflict"] is True
+        assert taste["confidence"] == 1.0  # 2 ranked refs / recommended 2
+        assert any(c["dimension"] == "colors" and c["value"] == "dark" for c in taste["conflicts"])
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
