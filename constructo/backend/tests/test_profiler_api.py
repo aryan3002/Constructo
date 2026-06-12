@@ -1,6 +1,9 @@
 """Design Profiler API — endpoint + e2e tests."""
+from uuid import UUID as _UUID
+
 from app.auth.jwt import create_access_token
 from app.models import UserRole
+from app.models.profiler import ProfilerReferenceAttributes
 
 
 def auth(user) -> dict[str, str]:
@@ -97,3 +100,37 @@ async def test_add_reference_and_rank_per_contributor(client, factory):
         headers=auth(architect),
     )
     assert again.status_code == 201
+
+
+async def test_area_taste_is_deterministic_with_conflict(client, factory, db_session):
+    architect, pid, area_id, contrib_ids = await _profile_with_area_and_two_contributors(
+        client, factory
+    )
+
+    # one reference, both contributors rank it oppositely
+    ref = await client.post(
+        "/api/v1/design/references",
+        json={"area_id": area_id, "contributor_id": contrib_ids[0], "source_type": "upload"},
+        headers=auth(architect),
+    )
+    ref_id = ref.json()["id"]
+    db_session.add(
+        ProfilerReferenceAttributes(reference_id=_UUID(ref_id), attributes={"colors": "dark"})
+    )
+    await db_session.commit()
+
+    for cid, stars in ((contrib_ids[0], 5), (contrib_ids[1], 1)):
+        await client.post(
+            f"/api/v1/design/references/{ref_id}/rankings",
+            json={"contributor_id": cid, "stars": stars},
+            headers=auth(architect),
+        )
+
+    taste = await client.get(
+        f"/api/v1/design/profiles/{pid}/areas/{area_id}/taste", headers=auth(architect)
+    )
+    assert taste.status_code == 200
+    body = taste.json()
+    assert body["confidence"] == 0.5           # 1 ranked ref / recommended 2
+    assert body["has_conflict"] is True
+    assert body["dimensions"]["colors"]["dark"] == 0.0  # +1.0 (5★) + -1.0 (1★)

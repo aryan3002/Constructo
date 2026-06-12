@@ -14,6 +14,7 @@ from app.models.profiler import (
     ProfilerProfile,
     ProfilerRanking,
     ProfilerReference,
+    ProfilerReferenceAttributes,
     ProfileStatus,
 )
 from app.profiler.schemas import (
@@ -27,6 +28,7 @@ from app.profiler.schemas import (
     ReferenceIn,
     ReferenceOut,
 )
+from app.profiler.taste import build_taste_model
 
 router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
 
@@ -191,3 +193,61 @@ async def rank_reference(
         )
     await session.commit()
     return {"ok": True}
+
+
+@router.get("/profiles/{profile_id}/areas/{area_id}/taste")
+async def get_area_taste(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    await _load_owned_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+
+    ref_ids = (
+        (
+            await session.execute(
+                select(ProfilerReference.id).where(ProfilerReference.area_id == area_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    rankings, attrs = [], []
+    if ref_ids:
+        rank_rows = (
+            await session.execute(
+                select(ProfilerRanking).where(ProfilerRanking.reference_id.in_(ref_ids))
+            )
+        ).scalars().all()
+        attr_rows = (
+            await session.execute(
+                select(ProfilerReferenceAttributes).where(
+                    ProfilerReferenceAttributes.reference_id.in_(ref_ids)
+                )
+            )
+        ).scalars().all()
+        rankings = [
+            {
+                "reference_id": str(r.reference_id),
+                "contributor_id": str(r.contributor_id),
+                "stars": r.stars,
+                "tags": r.tags,
+            }
+            for r in rank_rows
+        ]
+        attrs = [
+            {"reference_id": str(a.reference_id), "attributes": a.attributes}
+            for a in attr_rows
+        ]
+
+    model = build_taste_model(rankings, attrs, area.recommended_count)
+    # Persist the deterministic summary back onto the area (no LLM involved here).
+    area.taste_model = model["dimensions"]
+    area.confidence = model["confidence"]
+    area.has_conflict = model["has_conflict"]
+    await session.commit()
+    return model
