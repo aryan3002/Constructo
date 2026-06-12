@@ -44,7 +44,7 @@ export default function PmMore() {
 
   async function onSignOut() {
     await signOut()
-    router.replace('/')
+    router.replace('/(auth)/login')
   }
 
   const roleLabel = me?.role ? (ROLE_LABEL[me.role]?.[lang] ?? me.role) : '—'
@@ -75,7 +75,7 @@ export default function PmMore() {
         {me?.company_id ? (
           <SettingsRow
             icon="briefcase"
-            title={me.company_id}
+            title={me.company_name ?? me.company_id}
             subtitle={str.company}
             hideChevron
             last

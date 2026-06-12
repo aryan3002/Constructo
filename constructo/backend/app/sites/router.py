@@ -320,7 +320,15 @@ async def list_site_events(
     page_size = _parse_limit(limit)
     after = _decode(cursor)
 
-    stmt = select(SiteEventModel).where(SiteEventModel.site_id == site_id)
+    # An ``unknown``-type event is a failed extraction ("Message received is
+    # unclear") — a non-event. It must never surface in the site timeline.
+    # (Known-type captures awaiting confirmation, needs_clarification=True, ARE
+    # real events and stay — they render as amber cards.)
+    stmt = (
+        select(SiteEventModel)
+        .where(SiteEventModel.site_id == site_id)
+        .where(SiteEventModel.event_type != "unknown")
+    )
     if date is not None:
         stmt = stmt.where(SiteEventModel.occurred_on == date)
     stmt = stmt.order_by(SiteEventModel.id)
