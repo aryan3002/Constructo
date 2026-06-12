@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
+from app.extraction.llm import LLMClient
 from app.models import User, UserRole
 from app.models.profiler import (
     ProfilerArea,
@@ -17,6 +18,7 @@ from app.models.profiler import (
     ProfilerReferenceAttributes,
     ProfileStatus,
 )
+from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
     ContributorIn,
@@ -28,7 +30,7 @@ from app.profiler.schemas import (
     ReferenceIn,
     ReferenceOut,
 )
-from app.profiler.taste import build_taste_model
+from app.profiler.taste import build_taste_model, check_consistency
 
 router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
 
@@ -138,6 +140,7 @@ async def add_reference(
     body: ReferenceIn,
     user: User = Depends(require_role(*_EDIT_ROLES)),
     session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
 ) -> ReferenceOut:
     area = await session.get(ProfilerArea, body.area_id)
     if area is None:
@@ -153,6 +156,25 @@ async def add_reference(
         preset_id=body.preset_id,
     )
     session.add(ref)
+    await session.flush()
+
+    image_url = body.source_url or body.image_r2_key
+    if image_url:
+        try:
+            attrs = await extract_reference_attributes(llm, image_url)
+        except Exception:  # never fail the request on extraction
+            attrs = None
+        if attrs:
+            confidence = float(attrs.get("confidence") or 0.0)
+            session.add(
+                ProfilerReferenceAttributes(
+                    reference_id=ref.id, attributes=attrs, confidence=confidence
+                )
+            )
+            verdict = check_consistency(attrs, area.taste_model or {})
+            ref.consistency_status = verdict["status"]
+            ref.consistency_note = verdict["reason"]
+
     await session.commit()
     await session.refresh(ref)
     return ReferenceOut.model_validate(ref)
