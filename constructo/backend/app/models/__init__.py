@@ -62,6 +62,23 @@ from app.models.notification_settings import CompanyNotificationSettings
 from app.models.owner_brief import OwnerBrief
 from app.models.payment import Payment, PaymentDirection, PaymentStatus
 from app.models.permit import Permit, PermitStatus
+from app.models.profiler import (
+    AreaKind,
+    AreaStatus,
+    ConsistencyStatus,
+    ContributorRole,
+    ProfilerArea,
+    ProfilerContributor,
+    ProfilerProfile,
+    ProfilerRanking,
+    ProfilerReference,
+    ProfilerReferenceAttributes,
+    ProfileScope,
+    ProfileStatus,
+)
+from app.models.profiler import (
+    ReferenceSource as ProfilerReferenceSource,
+)
 from app.models.push_token import PushToken
 from app.models.raw_message import RawMessageModel
 from app.models.site import Site
@@ -134,6 +151,20 @@ __all__ = [
     "QuietStatus",
     "RawMessageModel",
     "ReferenceSource",
+    # Design Profiler engine
+    "AreaKind",
+    "AreaStatus",
+    "ConsistencyStatus",
+    "ContributorRole",
+    "ProfileScope",
+    "ProfileStatus",
+    "ProfilerArea",
+    "ProfilerContributor",
+    "ProfilerProfile",
+    "ProfilerRanking",
+    "ProfilerReference",
+    "ProfilerReferenceAttributes",
+    "ProfilerReferenceSource",
     "Site",
     "SiteBaseline",
     "SiteFinancials",
