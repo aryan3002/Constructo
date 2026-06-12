@@ -38,6 +38,7 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as MediaLibrary from 'expo-media-library'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'expo-router'
 
 import { homeowner } from '../../src/api/client'
 import type { Photo, QuietPeriod } from '../../src/api/types'
@@ -66,17 +67,17 @@ import {
 type ViewMode = 'all' | 'room' | 'milestone'
 /** The segmented filter tabs (UI). */
 type FilterTab = 'all' | 'room' | 'milestone' | 'mine'
-type RetentionDays = 7 | 30 | 90
 
+// Use the same AsyncStorage key as storage.tsx — both screens read/write the
+// same policy object. Photos only reads retentionDays locally (for display).
 const POLICY_KEY = 'constructo.photoPolicy'
-/** Locally-noted uploads (intent capture only — no real upload endpoint yet). */
 
-interface PhotoPolicy {
+interface PhotoPolicyLocal {
   keepStarredAndMilestone: boolean
-  retentionDays: RetentionDays
+  retentionDays: 7 | 30 | 90 | 'all'
 }
 
-const DEFAULT_POLICY: PhotoPolicy = { keepStarredAndMilestone: true, retentionDays: 30 }
+const DEFAULT_POLICY: PhotoPolicyLocal = { keepStarredAndMilestone: true, retentionDays: 30 }
 
 const STR = {
   en: {
@@ -123,6 +124,7 @@ const STR = {
     days7: '7 days',
     days30: '30 days',
     days90: '90 days',
+    keepAll: 'Everything (manual only)',
     freeUp: 'Free up space',
     addPhoto: 'Add a photo',
     addNote: 'Share a photo from your own site visit.',
@@ -185,6 +187,7 @@ const STR = {
     days7: '7 दिन',
     days30: '30 दिन',
     days90: '90 दिन',
+    keepAll: 'सब कुछ (केवल मैन्युअल)',
     freeUp: 'जगह खाली करें',
     addPhoto: 'तस्वीर जोड़ें',
     addNote: 'अपनी साइट विज़िट की तस्वीर साझा करें।',
@@ -291,39 +294,36 @@ export default function Photos() {
   const { width } = useWindowDimensions()
   const insets = useSafeAreaInsets()
 
+  const router = useRouter()
   const [tab, setTab] = useState<FilterTab>('all')
   const [search, setSearch] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [policy, setPolicy] = useState<PhotoPolicy>(DEFAULT_POLICY)
+  const [policy, setPolicy] = useState<PhotoPolicyLocal>(DEFAULT_POLICY)
   const queryClient = useQueryClient()
 
   // Grouping mode for the curated tabs ("My visits" has no grouping — its grid
   // is a flat, newest-first list of her own uploads).
   const view: ViewMode = tab === 'mine' ? 'all' : tab
 
-  // Load persisted storage policy + locally-noted "my visit" photos.
+  // Load the storage policy written by storage.tsx so the retention label
+  // shown below "Manage" stays in sync with what the user last set.
   useEffect(() => {
     void AsyncStorage.getItem(POLICY_KEY).then((raw) => {
       if (!raw) return
       try {
-        const parsed = JSON.parse(raw) as Partial<PhotoPolicy>
+        const parsed = JSON.parse(raw) as Partial<PhotoPolicyLocal>
         setPolicy({
           keepStarredAndMilestone:
             parsed.keepStarredAndMilestone ?? DEFAULT_POLICY.keepStarredAndMilestone,
-          retentionDays: (parsed.retentionDays ?? DEFAULT_POLICY.retentionDays) as RetentionDays,
+          retentionDays: parsed.retentionDays ?? DEFAULT_POLICY.retentionDays,
         })
       } catch {
         /* corrupt value — keep defaults */
       }
     })
-  }, [])
-
-  const savePolicy = useCallback((next: PhotoPolicy) => {
-    setPolicy(next)
-    void AsyncStorage.setItem(POLICY_KEY, JSON.stringify(next))
   }, [])
 
   const query = useQuery({
@@ -425,15 +425,6 @@ export default function Photos() {
     setUploadOpen(false)
     if (!result.canceled && result.assets[0]) await doUpload(result.assets[0])
   }, [s, doUpload])
-
-  const onFreeUpSpace = useCallback(async () => {
-    try {
-      await FileSystem.deleteAsync(FileSystem.cacheDirectory ?? '', { idempotent: true })
-    } catch {
-      // Non-fatal — server data is unaffected.
-    }
-    Alert.alert(s.freedTitle, s.freedBody)
-  }, [s])
 
   const onSavePhoto = useCallback(
     async (url?: string, id?: string) => {
@@ -718,18 +709,15 @@ export default function Photos() {
         </View>
       )}
 
-      {/* Storage management */}
-      <Card>
-        <View style={{ gap: SPACE.md }}>
-          <H2>{s.storageTitle}</H2>
-
-          {/* Keep kept + milestone toggle */}
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: policy.keepStarredAndMilestone }}
-            onPress={() =>
-              savePolicy({ ...policy, keepStarredAndMilestone: !policy.keepStarredAndMilestone })
-            }
+      {/* Storage link — shows current retention window; taps into the full Storage screen */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={s.storageTitle}
+        onPress={() => router.push('/(homeowner)/storage')}
+        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+      >
+        <Card>
+          <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -737,60 +725,23 @@ export default function Photos() {
               minHeight: TAP,
             }}
           >
-            <View
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                borderWidth: 2,
-                borderColor: policy.keepStarredAndMilestone ? c.accent : c.line,
-                backgroundColor: policy.keepStarredAndMilestone ? c.accent : 'transparent',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {policy.keepStarredAndMilestone ? (
-                <Feather name="check" size={16} color={c.onAccent} />
-              ) : null}
+            <Feather name="hard-drive" size={18} color={c.textMute} />
+            <View style={{ flex: 1 }}>
+              <Body style={{ fontWeight: '600' }}>{s.storageTitle}</Body>
+              <Small muted>
+                {policy.retentionDays === 'all'
+                  ? s.keepAll
+                  : policy.retentionDays === 7
+                    ? s.days7
+                    : policy.retentionDays === 90
+                      ? s.days90
+                      : s.days30}
+              </Small>
             </View>
-            <Body style={{ flex: 1 }}>{s.keepLabel}</Body>
-          </Pressable>
-
-          {/* Auto-manage retention radios */}
-          <Small muted>{s.autoManage}</Small>
-          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-            {([7, 30, 90] as RetentionDays[]).map((days) => {
-              const selected = policy.retentionDays === days
-              const label = days === 7 ? s.days7 : days === 30 ? s.days30 : s.days90
-              return (
-                <Pressable
-                  key={days}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => savePolicy({ ...policy, retentionDays: days })}
-                  style={{
-                    flex: 1,
-                    minHeight: TAP,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: theme.radii.control,
-                    borderWidth: 1,
-                    borderColor: selected ? c.accent : c.line,
-                    backgroundColor: selected ? c.accent : 'transparent',
-                  }}
-                >
-                  <Small color={selected ? c.onAccent : c.text} style={{ fontWeight: '600' }}>
-                    {label}
-                  </Small>
-                </Pressable>
-              )
-            })}
+            <Feather name="chevron-right" size={18} color={c.textMute} />
           </View>
-
-          <Button title={s.freeUp} variant="secondary" block onPress={onFreeUpSpace} />
-          <Small muted>{s.storageNote}</Small>
-        </View>
-      </Card>
+        </Card>
+      </Pressable>
 
       {/* Floating "+" upload FAB (above the floating nav) */}
       <Pressable

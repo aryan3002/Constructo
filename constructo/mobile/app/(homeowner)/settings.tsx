@@ -9,9 +9,11 @@
  * live here too. Strings follow the per-screen en/hi pattern (the language
  * mechanism still comes from the shared provider).
  */
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { homeowner } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
@@ -43,6 +45,9 @@ const STR = {
       n === 1 ? '1 person' : `${n} people`,
     membersSubUnknown: 'Your household',
     notifications: 'Notifications',
+    storage: 'Storage settings',
+    storageSub: (days: number | 'all') =>
+      days === 'all' ? 'Keep everything' : `Keep last ${days} days`,
     profile: 'Account',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'Phone & profile',
@@ -62,6 +67,9 @@ const STR = {
     membersSub: (n: number) => `${n} सदस्य`,
     membersSubUnknown: 'आपका परिवार',
     notifications: 'सूचनाएँ',
+    storage: 'स्टोरेज सेटिंग्स',
+    storageSub: (days: number | 'all') =>
+      days === 'all' ? 'सब कुछ रखें' : `पिछले ${days} दिन रखें`,
     profile: 'खाता',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'फ़ोन और प्रोफ़ाइल',
@@ -92,6 +100,20 @@ export default function Settings() {
   const memberCount = rosterQ.data?.length ?? null
   const selfPrefs = selfQ.data?.[0]?.notif_prefs
   const notifSub = selfQ.isSuccess ? summaryCadence(selfPrefs, L) : undefined
+
+  // Live storage subtitle: read the retention days from the shared policy key.
+  const [retentionDays, setRetentionDays] = useState<number | 'all'>(30)
+  useEffect(() => {
+    void AsyncStorage.getItem('constructo.photoPolicy').then((raw) => {
+      if (!raw) return
+      try {
+        const parsed = JSON.parse(raw) as { retentionDays?: number | 'all' }
+        if (parsed.retentionDays !== undefined) setRetentionDays(parsed.retentionDays)
+      } catch {
+        /* ignore */
+      }
+    })
+  }, [])
 
   async function onSignOut() {
     await signOut()
@@ -139,6 +161,12 @@ export default function Settings() {
       <FadeInUp delay={80} style={{ gap: SPACE.sm }}>
         <Eyebrow>{tx.app}</Eyebrow>
         <SettingsGroup>
+          <SettingsRow
+            icon="hard-drive"
+            title={tx.storage}
+            subtitle={tx.storageSub(retentionDays)}
+            onPress={() => router.push('/(homeowner)/storage')}
+          />
           <SettingsRow
             icon="globe"
             title={tx.language}
