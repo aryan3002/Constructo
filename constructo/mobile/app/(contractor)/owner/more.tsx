@@ -1,110 +1,177 @@
 /**
- * More (Tab 5) — profile + company + sign out. The long tail (Team, Reconcile,
- * Payments, Permits, Exports, Reports) is phased to later H4 work and stays
- * web-primary for heavy desk work (Owner.md §6.6 / §8); this MVP screen ships
- * identity + the sign-out path.
+ * Account (Tab 5) — identity hub + workspace navigation for the Neev owner shell.
+ *
+ * Design: warm ink-on-paper, single marigold accent, bilingual en/hi.
+ * Rule: "never render an action a person can't take" — every row does something
+ * real: in-app push, web deep-link, or language toggle.
+ *
+ * Sections:
+ *   • Profile card   — Avatar (initials) · name · role · company_name · phone
+ *   • Workspace      — Team, Spec desk (web), Search, Foresight
+ *   • Site           — Permits
+ *   • Money          — Reconcile (web), Tally export (web)
+ *   • Settings       — Language toggle
+ *   • Sign out
  */
+import { Linking, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
+import { WEB_BASE } from '../../../src/api/config'
 import { SPACE } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Card, H1, Mono, Screen, SettingsGroup, SettingsRow, Small } from '../../../src/ui'
+import {
+  Avatar,
+  Body,
+  BodyStrong,
+  H1,
+  Mono,
+  Screen,
+  SettingsGroup,
+  SettingsRow,
+  Small,
+} from '../../../src/ui'
+import { buildProfileSubtitle, ROUTES } from './_account.util'
 
-const STR = {
-  en: {
-    title: 'More',
-    profile: 'Profile',
-    company: 'Company',
-    role: 'Role',
-    phone: 'Phone',
-    signOut: 'Sign out',
-    search: 'Search',
-    searchSub: 'Find any event, site or person across the record',
-    foresight: 'Foresight',
-    foresightSub: 'Portfolio rollup across all your sites',
-    webNote: 'Team, Reconciliation, Payments, Permits and Exports stay on the web dashboard for now — built for desk-altitude work.',
-  },
-  hi: {
-    title: 'और',
-    profile: 'प्रोफ़ाइल',
-    company: 'कंपनी',
-    role: 'भूमिका',
-    phone: 'फ़ोन',
-    signOut: 'साइन आउट',
-    search: 'खोज',
-    searchSub: 'रिकॉर्ड में कोई भी इवेंट, साइट या व्यक्ति खोजें',
-    foresight: 'दूरदृष्टि',
-    foresightSub: 'सभी साइटों का पोर्टफोलियो सार',
-    webNote: 'टीम, मिलान, भुगतान, परमिट और एक्सपोर्ट फ़िलहाल वेब डैशबोर्ड पर हैं — गहरे डेस्क-कार्य के लिए।',
-  },
-} as const
-
-const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
-  owner: { en: 'Owner', hi: 'मालिक' },
-  pm: { en: 'Project Manager', hi: 'प्रोजेक्ट मैनेजर' },
-  accountant: { en: 'Accountant', hi: 'लेखाकार' },
-  procurement: { en: 'Procurement', hi: 'खरीद' },
-  supervisor: { en: 'Supervisor', hi: 'सुपरवाइज़र' },
+// ---------------------------------------------------------------------------
+// Web deep-link helpers
+// ---------------------------------------------------------------------------
+function openWebLink(path: string) {
+  const url = `${WEB_BASE}${path}`
+  void Linking.openURL(url)
 }
 
-export default function More() {
-  const { lang } = useT()
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
+export default function AccountHub() {
+  const { lang, setLang, t } = useT()
   const { me, signOut } = useAuth()
   const router = useRouter()
-  const t = STR[lang]
 
   async function onSignOut() {
     await signOut()
     router.replace('/')
   }
 
-  const roleLabel = me?.role ? (ROLE_LABEL[me.role]?.[lang] ?? me.role) : '—'
+  const companyLine = buildProfileSubtitle({
+    role: me?.role,
+    companyName: me?.company_name,
+    lang,
+  })
+  const nextLang = lang === 'en' ? 'hi' : 'en'
+  const langLabel = lang === 'en' ? t('account.languageCurrent') : t('account.languageCurrent')
 
   return (
     <Screen>
-      <H1>{t.title}</H1>
+      <H1>{t('account.title')}</H1>
 
-      <Card>
-        <Small muted style={{ letterSpacing: 1 }}>{t.profile.toUpperCase()}</Small>
-        <BodyStrong style={{ marginTop: SPACE.xs, fontSize: 20, lineHeight: 26 }}>
-          {me?.name ?? '—'}
-        </BodyStrong>
-        <Body muted style={{ marginTop: 2 }}>{roleLabel}</Body>
-        {me?.phone ? (
-          <Mono muted style={{ marginTop: SPACE.sm }}>{t.phone}: {me.phone}</Mono>
-        ) : null}
-      </Card>
+      {/* ── Profile card ── */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.md,
+          paddingVertical: SPACE.md,
+        }}
+      >
+        <Avatar name={me?.name} size={56} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <BodyStrong style={{ fontSize: 18, lineHeight: 24 }}>
+            {me?.name ?? '—'}
+          </BodyStrong>
+          <Body muted>{companyLine}</Body>
+          {me?.phone ? (
+            <Mono muted style={{ marginTop: 2 }}>{me.phone}</Mono>
+          ) : null}
+        </View>
+      </View>
 
-      <SettingsGroup>
+      {/* ── Workspace ── */}
+      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.sm }}>
+        {t('account.groupWorkspace').toUpperCase()}
+      </Small>
+      <SettingsGroup style={{ marginTop: SPACE.xs }}>
+        <SettingsRow
+          icon="users"
+          title={t('account.team')}
+          subtitle={t('account.teamSub')}
+          onPress={() => router.push(ROUTES.team)}
+        />
+        <SettingsRow
+          icon="book-open"
+          title={t('account.specDesk')}
+          subtitle={t('account.specDeskSub')}
+          onPress={() => openWebLink('/spec-desk')}
+        />
         <SettingsRow
           icon="search"
-          title={t.search}
-          subtitle={t.searchSub}
-          onPress={() => router.push('/(contractor)/owner/search')}
+          title={t('account.search')}
+          subtitle={t('account.searchSub')}
+          onPress={() => router.push(ROUTES.search)}
         />
         <SettingsRow
           icon="trending-up"
-          title={t.foresight}
-          subtitle={t.foresightSub}
+          title={t('account.foresight')}
+          subtitle={t('account.foresightSub')}
           last
-          onPress={() => router.push('/(contractor)/owner/foresight')}
+          onPress={() => router.push(ROUTES.foresight)}
         />
       </SettingsGroup>
 
-      <Card>
-        <Small muted style={{ letterSpacing: 1 }}>{t.company.toUpperCase()}</Small>
-        <Mono style={{ marginTop: SPACE.xs }}>{me?.company_id ?? '—'}</Mono>
-      </Card>
+      {/* ── Site ── */}
+      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.md }}>
+        {t('account.groupSite').toUpperCase()}
+      </Small>
+      <SettingsGroup style={{ marginTop: SPACE.xs }}>
+        <SettingsRow
+          icon="file-text"
+          title={t('account.permits')}
+          subtitle={t('account.permitsSub')}
+          last
+          onPress={() => router.push(ROUTES.permits)}
+        />
+      </SettingsGroup>
 
-      <Card>
-        <Body muted>{t.webNote}</Body>
-      </Card>
+      {/* ── Money · web ── */}
+      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.md }}>
+        {t('account.groupMoney').toUpperCase()}
+      </Small>
+      <SettingsGroup style={{ marginTop: SPACE.xs }}>
+        <SettingsRow
+          icon="bar-chart-2"
+          title={t('account.reconcile')}
+          subtitle={t('account.reconcileSub')}
+          onPress={() => openWebLink('/reconcile')}
+        />
+        <SettingsRow
+          icon="download"
+          title={t('account.tallyExport')}
+          subtitle={t('account.tallyExportSub')}
+          last
+          onPress={() => openWebLink('/reconcile')}
+        />
+      </SettingsGroup>
 
-      <SettingsGroup>
+      {/* ── Settings ── */}
+      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.md }}>
+        {t('account.groupSettings').toUpperCase()}
+      </Small>
+      <SettingsGroup style={{ marginTop: SPACE.xs }}>
+        <SettingsRow
+          icon="globe"
+          title={t('settings.language')}
+          subtitle={langLabel}
+          last
+          onPress={() => setLang(nextLang)}
+        />
+      </SettingsGroup>
+
+      {/* ── Sign out ── */}
+      <SettingsGroup style={{ marginTop: SPACE.md }}>
         <SettingsRow
           icon="log-out"
-          title={t.signOut}
+          title={t('account.signOut')}
           tone="risk"
           hideChevron
           last

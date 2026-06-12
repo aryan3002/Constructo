@@ -57,6 +57,10 @@ export default function OwnerLayout() {
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
       {/* Foresight (portfolio) — pushed from More, off-tab. */}
       <Tabs.Screen name="foresight" options={{ href: null }} />
+      {/* Team & roles — pushed from Account hub, off-tab. */}
+      <Tabs.Screen name="team" options={{ href: null }} />
+      {/* Permits — pushed from Account hub, off-tab. */}
+      <Tabs.Screen name="permits" options={{ href: null }} />
       {/* Dispute pack — pushed from the site detail, off-tab. */}
       <Tabs.Screen name="dispute-pack" options={{ href: null }} />
     </Tabs>
