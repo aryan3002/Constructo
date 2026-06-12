@@ -3,7 +3,7 @@
  * state.
  *
  *   Daylight (homeowner) → `primary` is the sage accent; `danger` is red.
- *   Blueprint (Neev)     → `primary` is INK (it survives direct sun); the single
+ *   Neev (contractor)    → `primary` is INK (it survives direct sun); the single
  *     affirmative "yes" (Approve / Order / Send) is `accent` = the marigold spark
  *     — never two marigold fills competing; the cautionary Hold/stop is `danger`
  *     rendered as an INK-OUTLINE (per the locked Neev rule), not a red fill.
@@ -52,7 +52,7 @@ export function Button({
 }: ButtonProps) {
   const { theme } = useTheme()
   const c = theme.colors
-  const neev = theme.name === 'blueprint'
+  const neev = theme.name === 'neev'
 
   const bg: Record<ButtonVariant, string> = {
     primary: neev ? c.text : c.accent, // Neev: ink (sun-proof) · Daylight: sage

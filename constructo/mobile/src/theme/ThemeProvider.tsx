@@ -1,6 +1,6 @@
 /**
  * Theme context for React Native. Exposes the active {@link Theme} (resolved
- * token set) and a setter. The app shell sets `blueprint` for contractor routes
+ * token set) and a setter. The app shell sets `neev` for contractor routes
  * and `daylight` for homeowner routes, so a screen never hardcodes colors — it
  * reads them from `useTheme().theme`.
  */
@@ -24,7 +24,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeProvider({
   children,
-  initial = 'blueprint',
+  initial = 'neev',
 }: {
   children: ReactNode
   initial?: ThemeName

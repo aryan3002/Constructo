@@ -2,7 +2,7 @@
  * StatusPill / StatusDot — the locked "status = color + icon + word" rule (never
  * color alone, for accessibility). Colors resolve from the ACTIVE theme, so the
  * homeowner (Daylight) surface gets the Direction-C spine (sage / clay / amber /
- * red + neutral, NO blue) and the contractor (Blueprint) keeps its shared spine.
+ * red + neutral, NO blue) and the contractor (Neev) keeps its shared spine.
  * Direction C: the word + line-icon sit on a soft tint of the status hue — red
  * appears only for genuine delay/risk.
  */

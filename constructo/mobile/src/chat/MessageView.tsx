@@ -1,5 +1,5 @@
 /**
- * Shared message-rendering primitives for crew threads (Blueprint theme).
+ * Shared message-rendering primitives for crew threads (Neev theme).
  *
  * These are the PRESENTATIONAL pieces both the supervisor crew-chat screen and
  * the owner Chat screen render. Extracted here (out of the expo-router route
@@ -29,7 +29,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 // ---------------------------------------------------------------------------
 // SystemNotice — a centered, full-width informational row for sender_kind=system
 // messages (member added, dispute resolved) and blocked-contested notices.
-// Uses semantic theme tokens only; no hardcoded hex. Blueprint: textMute on
+// Uses semantic theme tokens only; no hardcoded hex. Neev: textMute on
 // transparent; Daylight: same token resolves to the warm Calm Cockpit muted
 // ink — both systems agree on a calm centered treatment for system rows.
 // ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ export function MessageBubble({
   const c = theme.colors
   const daylight = theme.name === 'daylight'
 
-  // Own bubble: blueprint keeps its translucent amber (unchanged); daylight uses
+  // Own bubble: neev keeps its translucent amber (unchanged); daylight uses
   // the warm sage chip the homeowner DaylightBubble used, so the look is preserved
   // when the homeowner thread renders through this shared bubble.
   const ownBubble = daylight

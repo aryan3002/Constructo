@@ -1,20 +1,21 @@
 /**
  * Owner-local composite components + helpers (NOT in src/ui — these are
- * Owner-branch specific). Built on the shared kit + Blueprint theme:
+ * Owner-branch specific). Built on the shared kit + Neev theme:
  *
  *   - formatDate / formatWhen                     — time formatting
- *   - riskToEvidence                              — Risk → EvidenceCard items
- *   - BriefCommandCard  (the hero card)           — risk + inline Approve/Hold/Assign
+ *   - idsToEvidence                               — Risk event ids → EvidenceChip items
+ *   - SiteSwitcher      (sticky header pill)      — All sites / per-site scope
  *   - PulseCard         (2×2 pulse tile)          — calm, hide-empty
  *   - SiteRollupRow     (sites list row)          — status + counts
  *   - ApprovalRow       (decisions inbox row)     — claim + decision chips
  *   - SectionLabel / StateBlock                   — small shared bits
  */
+import React from 'react'
 import type { ReactNode } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, View } from 'react-native'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, TAP, severityToStatus, type Status } from '../../../src/theme/tokens'
+import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
@@ -24,11 +25,11 @@ import {
   Micro,
   NeedsYouCard,
   Small,
+  StatusDot,
   StatusPill,
   type EvidenceChipProps,
   type EvidenceItem,
 } from '../../../src/ui'
-import type { Risk } from '../../../src/api/owner'
 
 // ---------------------------------------------------------------------------
 // Formatting helpers
@@ -114,71 +115,125 @@ export function ErrorBlock({ message, onRetry, retryLabel }: { message: string; 
 }
 
 // ---------------------------------------------------------------------------
-// BriefCommandCard — THE hero. A cross-site risk rendered as a NeedsYouCard
-// (proof-on-tap evidence + ranked status + Approve / Hold / Assign actions).
+// SiteSwitcher — sticky header pill: "All sites (N) ▾" + per-site selector.
+// Opens a lightweight modal listing All + each site with a worst-status dot.
+// No new backend calls — the screen passes sites it already has.
 // ---------------------------------------------------------------------------
-export interface BriefDecision {
-  approve: () => void
-  hold: () => void
-  assign: () => void
+export interface SiteSwitcherItem {
+  id: string
+  name: string
+  status: Status
 }
 
-export function BriefCommandCard({
-  risk,
-  siteName,
-  rank,
-  pending,
-  resolvedLabel,
-  proofLabel,
-  chips,
-  onChip,
+export function SiteSwitcher({
+  sites,
+  selectedId,
+  onSelect,
+  allLabel,
+  totalCount,
 }: {
-  risk: Risk
-  siteName: string
-  rank?: number
-  pending: boolean
-  /** When set, the card has collapsed into its decision consequence. */
-  resolvedLabel?: string
-  proofLabel: string
-  chips: { approve: string; hold: string; assign: string }
-  onChip: (action: 'approve' | 'hold' | 'assign') => void
+  sites: SiteSwitcherItem[]
+  /** null = All sites */
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+  allLabel: string
+  totalCount: number
 }) {
-  const status: Status = severityToStatus(risk.severity)
-  const domain = risk.kind.replace(/_/g, ' ')
+  const { theme } = useTheme()
+  const c = theme.colors
+  const [open, setOpen] = React.useState(false)
 
-  if (resolvedLabel) {
-    return (
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-        <StatusPill status="ok" size="sm" label={resolvedLabel} />
-      </Card>
-    )
-  }
-
-  // Build evidence chips from event ids.
-  const evidenceChips: EvidenceChipProps[] = idsToEvidence(risk.evidence_event_ids, proofLabel).map(
-    (item) => ({ kind: 'message' as const, label: item.label ?? proofLabel }),
-  )
+  const pillLabel =
+    selectedId == null
+      ? `${allLabel} (${totalCount}) ▾`
+      : `${sites.find((s) => s.id === selectedId)?.name ?? allLabel} ▾`
 
   return (
-    <View style={{ gap: SPACE.sm }}>
-      <NeedsYouCard
-        rank={rank}
-        status={status}
-        statusLabel={domain}
-        title={risk.message}
-        detail={siteName}
-        evidence={evidenceChips}
-        primaryLabel={chips.approve}
-        tone={status === 'risk' ? 'cautionary' : 'affirmative'}
-        canApprove={true}
-        onPrimary={pending ? undefined : () => onChip('approve')}
-      />
-      {/* Hold + Assign — rendered separately so Hold gets its danger ink-outline */}
-      <View style={{ flexDirection: 'row', gap: SPACE.sm, paddingHorizontal: SPACE.xs }}>
-        <Button title={chips.hold} variant="danger" size="md" disabled={pending} onPress={() => onChip('hold')} />
-        <Button title={chips.assign} variant="secondary" size="md" disabled={pending} onPress={() => onChip('assign')} />
-      </View>
-    </View>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={pillLabel}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => ({
+          alignSelf: 'flex-start',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.xs,
+          paddingVertical: SPACE.xs + 2,
+          paddingHorizontal: SPACE.md,
+          borderRadius: 9999,
+          borderWidth: 1,
+          borderColor: c.line,
+          backgroundColor: c.card,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Small style={{ fontWeight: '600' }}>{pillLabel}</Small>
+      </Pressable>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(27,25,22,0.45)', justifyContent: 'flex-start', paddingTop: 96 }}
+          onPress={() => setOpen(false)}
+        >
+          <View
+            style={{
+              marginHorizontal: SPACE.lg,
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              overflow: 'hidden',
+            }}
+          >
+            {/* All sites row */}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => { onSelect(null); setOpen(false) }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.md,
+                padding: SPACE.lg,
+                borderBottomWidth: 1,
+                borderBottomColor: c.line,
+                backgroundColor: selectedId === null ? c.accentWarm : pressed ? c.paper : c.card,
+              })}
+            >
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.textMute }} />
+              <Body style={{ flex: 1 }}>{allLabel} ({totalCount})</Body>
+              {selectedId === null ? <Micro color={c.accent}>✓</Micro> : null}
+            </Pressable>
+
+            {/* Per-site rows */}
+            {sites.map((site, idx) => (
+              <Pressable
+                key={site.id}
+                accessibilityRole="button"
+                onPress={() => { onSelect(site.id); setOpen(false) }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.md,
+                  padding: SPACE.lg,
+                  borderBottomWidth: idx < sites.length - 1 ? 1 : 0,
+                  borderBottomColor: c.line,
+                  backgroundColor:
+                    selectedId === site.id ? c.accentWarm : pressed ? c.paper : c.card,
+                })}
+              >
+                <StatusDot status={site.status} size={10} />
+                <Body style={{ flex: 1 }}>{site.name}</Body>
+                {selectedId === site.id ? <Micro color={c.accent}>✓</Micro> : null}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   )
 }
 

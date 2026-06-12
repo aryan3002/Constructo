@@ -2,7 +2,7 @@
  * Home Room message primitives — the homeowner Messages tab, re-skinned to the
  * locked "Calm Cockpit" design system (Direction C · "Blend").
  *
- * These DO NOT reuse the Blueprint `MessageBubble` (it hardcodes amber). They
+ * These DO NOT reuse the Neev `MessageBubble` (it hardcodes amber). They
  * are calm, warm, residential bubbles + inbox rows on the Daylight palette:
  *   - the homeowner's OWN message sits on a soft SAGE tint (green-tint as a
  *     calm solid, never the loud sage fill) with ink text;

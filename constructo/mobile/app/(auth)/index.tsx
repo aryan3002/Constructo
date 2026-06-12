@@ -1,7 +1,7 @@
 /**
  * "Who are you?" — the front door. Before we know a guest's role we can't theme
  * by it, so this calm Daylight chooser splits the two journeys: a homeowner
- * (join code → Daylight) or the builder / site team (phone+OTP → Blueprint).
+ * (join code → Daylight) or the builder / site team (phone+OTP → Neev).
  * Each card routes to the right flow, which carries its own theme.
  */
 import { Pressable, View } from 'react-native'

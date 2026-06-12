@@ -4,7 +4,7 @@
  * unread badge clears once the thread is read (the detail advances the cursor +
  * invalidates this query). Reuses the site-keyed chat API — no schema change.
  *
- * Blueprint theme: warm paper canvas, ScrollView + RefreshControl, exceptions-
+ * Neev theme: warm paper canvas, ScrollView + RefreshControl, exceptions-
  * calm empty state (a single bilingual line, not a dump).
  */
 import { useState } from 'react'

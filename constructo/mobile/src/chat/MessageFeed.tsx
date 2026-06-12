@@ -3,7 +3,7 @@
  * flat array of rows: bubbles, capture cards, and screen-supplied `custom` rows
  * (Nivaan @ask answers, the homeowner Home Room weave). Adapts to the active
  * theme automatically (the bubbles/cards read `useTheme()`), so the same feed
- * serves the contractor Blueprint screens and the homeowner Daylight thread.
+ * serves the contractor Neev screens and the homeowner Daylight thread.
  */
 import { useCallback, useRef, type ReactNode } from 'react'
 import { FlatList, View } from 'react-native'

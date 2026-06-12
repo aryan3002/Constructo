@@ -1,5 +1,5 @@
 /**
- * On-device voice capture kit (Contractor / Blueprint). Real hold-to-talk audio
+ * On-device voice capture kit (Contractor / Neev). Real hold-to-talk audio
  * recording + the "AI proposes, human commits" transcript-confirm chip.
  */
 export { HoldToTalk } from './HoldToTalk'

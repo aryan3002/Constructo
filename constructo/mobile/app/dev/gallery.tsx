@@ -1,6 +1,6 @@
 /**
  * Dev component gallery — renders the Constructo RN kit in BOTH themes
- * (Blueprint + Daylight) so the design system can be reviewed at a glance.
+ * (Neev + Daylight) so the design system can be reviewed at a glance.
  * Reachable from the homeowner Home; not part of the shipping nav.
  */
 import { ScrollView, View } from 'react-native'
@@ -229,7 +229,7 @@ function KitShowcase({ label }: { label: string }) {
 export default function Gallery() {
   const insets = useSafeAreaInsets()
   const themes: { name: ThemeName; label: string }[] = [
-    { name: 'blueprint', label: 'Blueprint — contractor' },
+    { name: 'neev', label: 'Neev — contractor' },
     { name: 'daylight', label: 'Daylight — homeowner' },
   ]
   return (

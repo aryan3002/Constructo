@@ -3,9 +3,9 @@
  * SURFACE. Screens never hardcode font sizes or families; they compose these.
  *
  *   Homeowner (Daylight)  → Eczar serif headlines · Hind body · IBM Plex Mono ₹
- *   Contractor (Blueprint)→ Anek display · Hind body · Spline Sans Mono ₹
+ *   Contractor (Neev)     → Anek display · Hind body · Spline Sans Mono ₹
  *
- * Both the SIZE scale (`TYPE` vs `TYPE_BLUEPRINT`) and the FACE (`FACES`) are
+ * Both the SIZE scale (`TYPE` vs `TYPE_NEEV`) and the FACE (`FACES`) are
  * theme-aware; color comes from the active theme too. Eczar is HEADLINES ONLY on
  * the homeowner surface — the reassuring voice — and never used for body copy.
  */
@@ -13,14 +13,14 @@ import { Text, type TextProps, type TextStyle } from 'react-native'
 
 import { FACES, type FaceRole } from '../theme/fonts'
 import { useTheme } from '../theme/ThemeProvider'
-import { TYPE, TYPE_BLUEPRINT, type TypeRole } from '../theme/tokens'
+import { TYPE, TYPE_NEEV, type TypeRole } from '../theme/tokens'
 
 type Props = TextProps & { muted?: boolean; color?: string; style?: TextStyle | TextStyle[] }
 
 function make(role: TypeRole, face: FaceRole) {
   return function Typo({ muted, color, style, ...rest }: Props) {
     const { theme } = useTheme()
-    const base = (theme.name === 'blueprint' ? TYPE_BLUEPRINT : TYPE)[role]
+    const base = (theme.name === 'neev' ? TYPE_NEEV : TYPE)[role]
     const family = FACES[theme.name][face]
     const resolved = color ?? (muted ? theme.colors.textMute : theme.colors.text)
     return (
@@ -32,13 +32,13 @@ function make(role: TypeRole, face: FaceRole) {
   }
 }
 
-/** Hero greeting / the 3-second answer. (Daylight: Eczar 500 44px · Blueprint: Anek 28px) */
+/** Hero greeting / the 3-second answer. (Daylight: Eczar 500 44px · Neev: Anek 28px) */
 export const Display = make('display', 'hero')
-/** Screen titles. (Daylight: Eczar 600 28px · Blueprint: Anek 22px) */
+/** Screen titles. (Daylight: Eczar 600 28px · Neev: Anek 22px) */
 export const H1 = make('h1', 'h1')
-/** Section / card headings. (Daylight: Eczar 600 22px · Blueprint: Anek 18px) */
+/** Section / card headings. (Daylight: Eczar 600 22px · Neev: Anek 18px) */
 export const H2 = make('h2', 'h2')
-/** Card titles. (Daylight: Eczar 600 18px · Blueprint: Anek 16px) */
+/** Card titles. (Daylight: Eczar 600 18px · Neev: Anek 16px) */
 export const Title = make('title', 'title')
 /** Primary reading copy (status sentence). Hind. */
 export const BodyLg = make('bodyLg', 'body')
@@ -48,9 +48,9 @@ export const Body = make('body', 'body')
 export const BodyStrong = make('body', 'bodyStrong')
 /** Labels, captions, nav. Hind. Muted by default at call sites. */
 export const Small = make('small', 'body')
-/** Micro caption. Hind. (Daylight floors at 14px; Blueprint 12px.) */
+/** Micro caption. Hind. (Daylight floors at 14px; Neev 12px.) */
 export const Micro = make('micro', 'label')
-/** ₹ amounts / counts. Mono, medium. (Daylight: IBM Plex Mono · Blueprint: Spline) */
+/** ₹ amounts / counts. Mono, medium. (Daylight: IBM Plex Mono · Neev: Spline) */
 export const DataNum = make('dataNum', 'dataNum')
 /** Dates / timestamps / mono eyebrows. Mono, medium. */
 export const MonoSm = make('monoSm', 'monoMedium')

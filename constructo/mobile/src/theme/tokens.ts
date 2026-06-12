@@ -1,18 +1,18 @@
 /**
- * Constructo "Blueprint & Daylight" design tokens — React Native port.
+ * Constructo "Neev & Daylight" design tokens — React Native port.
  *
  * Values are ported VERBATIM from the web design system
  * (`web/src/ui/theme.css`) so the two clients stay visually identical:
- *   - `blueprint` (a.k.a web `data-theme="site"`)  — contractor app: bold, warm
+ *   - `neev`     (a.k.a web `data-theme="site"`)  — contractor app: bold, warm
  *     paper, amber primary.
- *   - `daylight`  (web `data-theme="daylight"`)     — homeowner app: soft,
+ *   - `daylight` (web `data-theme="daylight"`)     — homeowner app: soft,
  *     photo-forward, calm green.
  *
  * The status spine (ok/warn/risk/info) is SHARED across both surfaces and is
  * always paired with an icon/shape — never color alone (accessibility).
  */
 
-export type ThemeName = 'blueprint' | 'daylight'
+export type ThemeName = 'neev' | 'daylight'
 export type Status = 'ok' | 'warn' | 'risk' | 'info' | 'quiet'
 
 /**
@@ -43,7 +43,7 @@ export interface ThemeColors {
   bg: string
   /** Card / sheet surface. */
   card: string
-  /** Secondary surface (warm paper on blueprint, white on daylight). */
+  /** Secondary surface (warm paper on neev, white on daylight). */
   paper: string
   /** Hairline borders / dividers. */
   line: string
@@ -90,7 +90,7 @@ export type TypeRole =
   | 'display' | 'h1' | 'h2' | 'title' | 'bodyLg' | 'body'
   | 'small' | 'micro' | 'dataNum' | 'monoSm'
 /** A full type scale (one size per role). Theme-aware: Daylight = Calm Cockpit,
- *  Blueprint = the contractor's tighter engineered scale. */
+ *  Neev = the contractor's tighter engineered scale. */
 export type TypeScale = Record<TypeRole, TypeStyle>
 
 export interface Theme {
@@ -107,11 +107,11 @@ export interface Theme {
   }
 }
 
-// Blueprint key now carries the contractor "Neev · Site Register" identity:
+// Neev key carries the contractor "Neev · Site Register" identity:
 // warm concrete paper, deep ink, a single marigold spark. The primary ACTION is
 // ink (survives direct sun); marigold = capture + the one affirmative "yes".
-// Money is ink-first. Own warm status spine (not the shared blueprint spine).
-const BLUEPRINT_COLORS: ThemeColors = {
+// Money is ink-first. Own warm status spine.
+const NEEV_COLORS: ThemeColors = {
   bg: '#efeadf', // paper-100 — warm concrete app canvas (never clinical white)
   card: '#fffdf8', // surface — warm-white card / sheet
   paper: '#f4f0e7', // paper-50 — raised row / subtle fill
@@ -151,7 +151,7 @@ const DAYLIGHT_COLORS: ThemeColors = {
   onAccent: '#ffffff',
   text: '#2a2519', // ink-900 — headlines + primary text (warm near-black)
   textMute: '#6a6047', // ink-600 — secondary text (5.42:1 on sand)
-  // Direction-C status spine (homeowner-specific — NOT the shared blueprint spine):
+  // Direction-C status spine (homeowner-specific — NOT the shared neev spine):
   ok: '#2f6151', // on-track → green-700 text (6.20:1 on sand)
   warn: '#7d5a13', // needs-you → amber-700 (5.47:1) — a choice, not a risk
   risk: '#a4382a', // genuine delay / money risk ONLY → red-600 (5.76:1)
@@ -183,9 +183,9 @@ export const AP = {
 } as const
 
 export const THEMES: Record<ThemeName, Theme> = {
-  blueprint: {
-    name: 'blueprint',
-    colors: BLUEPRINT_COLORS,
+  neev: {
+    name: 'neev',
+    colors: NEEV_COLORS,
     // Neev "sturdy, not toy": buttons/inputs 10, cards 14, sheets/big 18, pill.
     radii: { chip: 10, card: 14, hero: 18, sheet: 18, pill: 9999, control: 10 },
     // A record leans on hairline borders over heavy shadow — a low, warm-ink lift.
@@ -249,12 +249,12 @@ export const TYPE = {
 } as const
 
 /**
- * Blueprint (contractor) type scale — the original "engineered/dense" sizing,
+ * Neev (contractor) type scale — the original "engineered/dense" sizing,
  * one notch smaller than the homeowner Calm Cockpit scale. The contractor app
  * keeps a 12px micro (the homeowner floors visible text at 14px). Lives behind
  * `theme.type` so the shared Typography components size per active surface.
  */
-export const TYPE_BLUEPRINT: TypeScale = {
+export const TYPE_NEEV: TypeScale = {
   // Neev scale. Display = Bricolage (Latin, generous line-height so it never
   // clips); titles/body = Mukta; ₹ amounts = Spline mono (bumped, tabular).
   display: { fontSize: 34, lineHeight: 42, letterSpacing: -0.6 },

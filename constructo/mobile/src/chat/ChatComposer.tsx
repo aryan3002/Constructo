@@ -5,7 +5,7 @@
  * voice recorder / smart-suggest chip. Each screen passes only the actions it
  * supports, so the homeowner thread gets text+reply today and the supervisor adds
  * camera/voice/capture. Send uses `theme.colors.accent` (sage on daylight, amber
- * on blueprint).
+ * on neev).
  */
 import { type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, TextInput, View } from 'react-native'

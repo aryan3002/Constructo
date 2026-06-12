@@ -2,12 +2,12 @@
  * Font loading for the two Constructo surfaces.
  *
  * The HOMEOWNER (Daylight, "Calm Cockpit" — Direction C) and CONTRACTOR
- * (Blueprint) surfaces use DIFFERENT type faces, so faces are resolved per
+ * (Neev) surfaces use DIFFERENT type faces, so faces are resolved per
  * active theme (see {@link FACES}). Both load up front; the body face (Hind)
  * is shared.
  *
- *   Homeowner (Daylight)              Contractor (Blueprint)
- *   ─────────────────────             ──────────────────────
+ *   Homeowner (Daylight)              Contractor (Neev)
+ *   ─────────────────────             ─────────────────
  *   Eczar          → HEADLINES ONLY   Anek            → display/headlines
  *   Hind           → body / UI        Hind            → body / UI
  *   IBM Plex Mono  → money / numerals Spline Sans Mono → money / numerals
@@ -64,7 +64,7 @@ import type { ThemeName } from './tokens'
 
 /** Registered family names → font assets (passed to expo-font). */
 export const FONT_MAP = {
-  // ── Contractor (Blueprint) display + numerals ───────────────────────────
+  // ── Contractor (Neev) display + numerals ────────────────────────────────
   'Anek-Regular': AnekLatin_400Regular,
   'Anek-SemiBold': AnekLatin_600SemiBold,
   'Anek-Bold': AnekLatin_700Bold,
@@ -111,11 +111,10 @@ export type FaceRole =
   | 'monoMedium'
 
 export const FACES: Record<ThemeName, Record<FaceRole, string>> = {
-  // Contractor — Anek display, Hind body, Spline numerals (unchanged).
   // Contractor "Neev" (Site Register): Bricolage Grotesque display (English
   // headings — Latin-only, so titles/body use Mukta which renders Hindi too),
   // Mukta body/UI (Devanagari + Latin), Spline Sans Mono for all numerals/money.
-  blueprint: {
+  neev: {
     hero: 'Bricolage-ExtraBold',
     h1: 'Bricolage-Bold',
     h2: 'Bricolage-SemiBold',

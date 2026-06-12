@@ -26,7 +26,7 @@ export function Screen({
    * screens pad themselves, but the off-tab routes (settings/members/
    * notifications/welcome/household) render inside the same Tabs navigator — the
    * bar + pill float over them too — so they opt in here to scroll fully clear
-   * (handoff §2.6). Off by default so contractor (Blueprint) screens are
+   * (handoff §2.6). Off by default so contractor (Neev) screens are
    * unaffected.
    */
   floatingNav?: boolean
