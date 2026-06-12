@@ -61,6 +61,10 @@ function HomeownerTabs() {
         {/* Onboarding screens — no tab bar entry */}
         <Tabs.Screen name="welcome" options={{ href: null }} />
         <Tabs.Screen name="household" options={{ href: null }} />
+        {/* Wave 1a — requests, issue-report, decision detail */}
+        <Tabs.Screen name="requests" options={{ href: null }} />
+        <Tabs.Screen name="issue" options={{ href: null }} />
+        <Tabs.Screen name="decisions/[id]" options={{ href: null }} />
       </Tabs>
       {!onThread ? <AskPill label={askLabel} /> : null}
     </View>
