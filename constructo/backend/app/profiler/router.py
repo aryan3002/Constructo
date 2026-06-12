@@ -12,6 +12,8 @@ from app.models.profiler import (
     ProfilerArea,
     ProfilerContributor,
     ProfilerProfile,
+    ProfilerRanking,
+    ProfilerReference,
     ProfileStatus,
 )
 from app.profiler.schemas import (
@@ -21,6 +23,9 @@ from app.profiler.schemas import (
     ProfileCreate,
     ProfileDetailOut,
     ProfileOut,
+    RankingIn,
+    ReferenceIn,
+    ReferenceOut,
 )
 
 router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
@@ -124,3 +129,65 @@ async def add_contributor(
     session.add(c)
     await session.commit()
     return {"id": str(c.id)}
+
+
+@router.post("/references", response_model=ReferenceOut, status_code=201)
+async def add_reference(
+    body: ReferenceIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> ReferenceOut:
+    area = await session.get(ProfilerArea, body.area_id)
+    if area is None:
+        raise AppError(404, "not_found", "Area not found")
+    await _load_owned_profile(session, area.profile_id, user)
+    ref = ProfilerReference(
+        profile_id=area.profile_id,
+        area_id=area.id,
+        contributor_id=body.contributor_id,
+        source_type=body.source_type,
+        image_r2_key=body.image_r2_key,
+        source_url=body.source_url,
+        preset_id=body.preset_id,
+    )
+    session.add(ref)
+    await session.commit()
+    await session.refresh(ref)
+    return ReferenceOut.model_validate(ref)
+
+
+@router.post("/references/{reference_id}/rankings", status_code=201)
+async def rank_reference(
+    reference_id: UUID,
+    body: RankingIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    ref = await session.get(ProfilerReference, reference_id)
+    if ref is None:
+        raise AppError(404, "not_found", "Reference not found")
+    await _load_owned_profile(session, ref.profile_id, user)
+    existing = (
+        await session.execute(
+            select(ProfilerRanking).where(
+                ProfilerRanking.reference_id == reference_id,
+                ProfilerRanking.contributor_id == body.contributor_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.stars = body.stars
+        existing.tags = body.tags
+        existing.note = body.note
+    else:
+        session.add(
+            ProfilerRanking(
+                reference_id=reference_id,
+                contributor_id=body.contributor_id,
+                stars=body.stars,
+                tags=body.tags,
+                note=body.note,
+            )
+        )
+    await session.commit()
+    return {"ok": True}
