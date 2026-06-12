@@ -27,7 +27,7 @@ import * as FileSystem from 'expo-file-system/legacy'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../src/theme/tokens'
+import { SPACE, TAP, TYPE } from '../../src/theme/tokens'
 import {
   Body,
   Button,
@@ -40,32 +40,8 @@ import {
   SubHeader,
   Toggle,
 } from '../../src/ui'
-
-// ── Types (shared with photos.tsx via the same AsyncStorage key) ──────────────
-
-export type RetentionDays = 7 | 30 | 90 | 'all'
-
-export interface PhotoPolicy {
-  keepStarredAndMilestone: boolean
-  retentionDays: RetentionDays
-  /** Auto-manage (evict old cached photos automatically). */
-  autoManage: boolean
-  /** Always keep specific categories on device regardless of retention. */
-  alwaysKeep: {
-    pinned: boolean
-    milestone: boolean
-    shared: boolean
-  }
-}
-
-export const POLICY_KEY = 'constructo.photoPolicy'
-
-export const DEFAULT_POLICY: PhotoPolicy = {
-  keepStarredAndMilestone: true,
-  retentionDays: 30,
-  autoManage: true,
-  alwaysKeep: { pinned: true, milestone: true, shared: false },
-}
+import { POLICY_KEY, DEFAULT_POLICY } from './_storage.util'
+import type { PhotoPolicy, RetentionDays } from './_storage.util'
 
 // ── Strings ───────────────────────────────────────────────────────────────────
 
@@ -138,10 +114,6 @@ async function getCacheSizeBytes(): Promise<number | null> {
   } catch {
     return null
   }
-}
-
-function formatMB(bytes: number): string {
-  return Math.round(bytes / 1024 / 1024).toString()
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -252,7 +224,7 @@ export default function Storage() {
                   >
                     {s.cloudValue}
                   </MonoSm>
-                  <Small muted style={{ fontSize: 11 }}>
+                  <Small muted style={{ fontSize: TYPE.micro.fontSize }}>
                     {s.estimateNote}
                   </Small>
                 </View>
@@ -270,7 +242,7 @@ export default function Storage() {
                   overflow: 'hidden',
                 }}
               >
-                {/* Bar is purely illustrative — we cap at 95% to avoid filling
+                {/* Bar is purely illustrative — we cap at 60% to avoid filling
                     fully (we don't know the total). The bar just communicates
                     "there is something on device". */}
                 <View

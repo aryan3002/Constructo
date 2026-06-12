@@ -11,7 +11,7 @@
  *
  * Save: expo-media-library (download-then-save two-step).
  * Share: React Native built-in Share.share.
- * Free up space: FileSystem.deleteAsync on cacheDirectory.
+ * Free up space: handled by the dedicated Storage screen (/(homeowner)/storage).
  * Upload: intent capture only (noted to "My visits" locally) — no upload
  * endpoint yet. "Hide" is local-only, per-member, reversible.
  *
@@ -45,6 +45,8 @@ import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../src/theme/tokens'
+import { POLICY_KEY, DEFAULT_POLICY } from './_storage.util'
+import type { PhotoPolicy } from './_storage.util'
 import {
   Body,
   BodyStrong,
@@ -67,17 +69,6 @@ import {
 type ViewMode = 'all' | 'room' | 'milestone'
 /** The segmented filter tabs (UI). */
 type FilterTab = 'all' | 'room' | 'milestone' | 'mine'
-
-// Use the same AsyncStorage key as storage.tsx — both screens read/write the
-// same policy object. Photos only reads retentionDays locally (for display).
-const POLICY_KEY = 'constructo.photoPolicy'
-
-interface PhotoPolicyLocal {
-  keepStarredAndMilestone: boolean
-  retentionDays: 7 | 30 | 90 | 'all'
-}
-
-const DEFAULT_POLICY: PhotoPolicyLocal = { keepStarredAndMilestone: true, retentionDays: 30 }
 
 const STR = {
   en: {
@@ -117,15 +108,10 @@ const STR = {
     close: 'Close',
     yourPhoto: 'Your photo',
     storageTitle: 'Storage',
-    storageNote:
-      'These photos live on the server and stay curated for you — nothing is really deleted from your account.',
-    keepLabel: 'Keep kept + milestone photos',
-    autoManage: 'Auto-manage cached photos older than',
     days7: '7 days',
     days30: '30 days',
     days90: '90 days',
     keepAll: 'Everything (manual only)',
-    freeUp: 'Free up space',
     addPhoto: 'Add a photo',
     addNote: 'Share a photo from your own site visit.',
     takePhoto: 'Take a photo',
@@ -180,15 +166,10 @@ const STR = {
     close: 'बंद करें',
     yourPhoto: 'आपकी तस्वीर',
     storageTitle: 'स्टोरेज',
-    storageNote:
-      'ये तस्वीरें सर्वर पर रहती हैं और आपके लिए सुरक्षित हैं — आपके खाते से कुछ भी वास्तव में हटाया नहीं जाता।',
-    keepLabel: 'सहेजी + चरण तस्वीरें रखें',
-    autoManage: 'इससे पुरानी कैश तस्वीरें स्वतः प्रबंधित करें',
     days7: '7 दिन',
     days30: '30 दिन',
     days90: '90 दिन',
     keepAll: 'सब कुछ (केवल मैन्युअल)',
-    freeUp: 'जगह खाली करें',
     addPhoto: 'तस्वीर जोड़ें',
     addNote: 'अपनी साइट विज़िट की तस्वीर साझा करें।',
     takePhoto: 'तस्वीर लें',
@@ -301,7 +282,10 @@ export default function Photos() {
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [policy, setPolicy] = useState<PhotoPolicyLocal>(DEFAULT_POLICY)
+  const [policy, setPolicy] = useState<Pick<PhotoPolicy, 'keepStarredAndMilestone' | 'retentionDays'>>({
+    keepStarredAndMilestone: DEFAULT_POLICY.keepStarredAndMilestone,
+    retentionDays: DEFAULT_POLICY.retentionDays,
+  })
   const queryClient = useQueryClient()
 
   // Grouping mode for the curated tabs ("My visits" has no grouping — its grid
@@ -314,7 +298,7 @@ export default function Photos() {
     void AsyncStorage.getItem(POLICY_KEY).then((raw) => {
       if (!raw) return
       try {
-        const parsed = JSON.parse(raw) as Partial<PhotoPolicyLocal>
+        const parsed = JSON.parse(raw) as Partial<PhotoPolicy>
         setPolicy({
           keepStarredAndMilestone:
             parsed.keepStarredAndMilestone ?? DEFAULT_POLICY.keepStarredAndMilestone,

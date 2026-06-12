@@ -31,6 +31,7 @@ import {
   Small,
 } from '../../src/ui'
 import { summaryCadence, type Lang } from './_settings.util'
+import { POLICY_KEY } from './_storage.util'
 
 const STR = {
   en: {
@@ -104,7 +105,7 @@ export default function Settings() {
   // Live storage subtitle: read the retention days from the shared policy key.
   const [retentionDays, setRetentionDays] = useState<number | 'all'>(30)
   useEffect(() => {
-    void AsyncStorage.getItem('constructo.photoPolicy').then((raw) => {
+    void AsyncStorage.getItem(POLICY_KEY).then((raw) => {
       if (!raw) return
       try {
         const parsed = JSON.parse(raw) as { retentionDays?: number | 'all' }
