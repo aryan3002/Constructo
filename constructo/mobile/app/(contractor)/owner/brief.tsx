@@ -60,9 +60,9 @@ const STR = {
     assignedBy: 'Assigned → PM · logged',
     risks: (n: number) => `${n} risk${n === 1 ? '' : 's'}`,
     ok: 'ok',
-    connectTitle: 'Your brief lights up once your sites start talking.',
-    connectBody: 'Connect a WhatsApp group to begin — every update flows here as one trustworthy source of truth.',
-    connect: 'Connect a group',
+    connectTitle: 'Your brief lights up as your sites get going.',
+    connectBody: 'Open a site chat and capture the day — deliveries, attendance and decisions land here as one source of truth.',
+    connect: 'Open a site chat',
     errorLine: 'We could not load your brief just now.',
     tryAgain: 'Try again',
     deliveries: 'deliveries', issues: 'issues', present: 'present',
@@ -87,9 +87,9 @@ const STR = {
     assignedBy: 'सौंपा गया → PM · दर्ज',
     risks: (n: number) => `${n} जोखिम`,
     ok: 'ठीक',
-    connectTitle: 'आपकी साइट बात करना शुरू करते ही ब्रीफ़ जीवंत हो जाएगा।',
-    connectBody: 'शुरू करने के लिए एक WhatsApp ग्रुप जोड़ें — हर अपडेट यहाँ एक भरोसेमंद सत्य के रूप में आता है।',
-    connect: 'ग्रुप जोड़ें',
+    connectTitle: 'जैसे-जैसे आपकी साइटें चलती हैं, आपका ब्रीफ़ यहाँ रोशन होगा।',
+    connectBody: 'एक साइट चैट खोलें और दिन दर्ज करें — डिलीवरी, हाज़िरी और फ़ैसले यहाँ एक भरोसेमंद सत्य के रूप में आते हैं।',
+    connect: 'साइट चैट खोलें',
     errorLine: 'अभी आपका ब्रीफ़ लोड नहो सका।',
     tryAgain: 'फिर कोशिश करें',
     deliveries: 'डिलीवरी', issues: 'मुद्दे', present: 'उपस्थित',
@@ -189,14 +189,14 @@ export default function Brief() {
       <Wrap>
         <EmptyState
           variant="empty"
-          icon="link"
+          icon="message-circle"
           title={t.connectTitle}
           body={t.connectBody}
           action={
             <Button
               title={t.connect}
               size="lg"
-              onPress={() => { /* connect-group flow (O5) — phased */ }}
+              onPress={() => router.push('/(contractor)/owner/chat')}
             />
           }
         />
