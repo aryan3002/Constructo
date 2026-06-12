@@ -416,7 +416,7 @@ function RequestsTab({ t, lang }: { t: Strings; lang: Lang }) {
     mutationFn: () =>
       homeowner.createRequest({
         title: title.trim(),
-        detail: buildRequestDetail({ detail, roomKey, urgency, hasPhoto: !!photoUri, lang }),
+        detail: buildRequestDetail({ detail, roomKey, urgency, photoCount: photoUri ? 1 : 0, lang }),
       }),
     onSuccess: () => {
       setTitle('')

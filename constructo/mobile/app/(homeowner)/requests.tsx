@@ -19,7 +19,7 @@ import { homeowner } from '../../src/api/client'
 import type { HomeownerRequest } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, type Status } from '../../src/theme/tokens'
+import { SPACE } from '../../src/theme/tokens'
 import {
   Button,
   CalmCard,
@@ -31,7 +31,7 @@ import {
   SubHeader,
   ListRow,
 } from '../../src/ui'
-import { REQUEST_STATUS_META } from '../_requests.util'
+import { REQUEST_STATUS_META, slaPromise } from '../_requests.util'
 
 type Lang = 'en' | 'hi'
 
@@ -75,14 +75,6 @@ const STR: Record<Lang, Strings> = {
     retry: 'पुनः प्रयास',
   },
 } as const
-
-// Lifecycle → status spine (prototype → app mapping; matches _requests.util)
-const STATUS_MAP: Record<string, Status> = {
-  sent: 'info',
-  seen: 'info',
-  in_progress: 'warn',
-  done: 'ok',
-}
 
 function formatDate(iso: string, lang: Lang): string {
   const d = new Date(iso)
@@ -169,26 +161,30 @@ export default function RequestsScreen() {
                 </Small>
               </View>
               <Card>
-                {open.map((req, idx) => (
-                  <ListRow
-                    key={req.id}
-                    icon="message-square"
-                    title={req.title}
-                    subtitle={`${t.raised} · ${formatDate(req.created_at, lang as Lang)}`}
-                    last={idx === open.length - 1}
-                    right={
-                      <StatusPill
-                        status={STATUS_MAP[req.status] ?? 'info'}
-                        label={
-                          lang === 'hi'
-                            ? (REQUEST_STATUS_META[req.status]?.hi ?? req.status)
-                            : (REQUEST_STATUS_META[req.status]?.en ?? req.status)
-                        }
-                        size="sm"
-                      />
-                    }
-                  />
-                ))}
+                {open.map((req, idx) => {
+                  const sla = slaPromise(req, lang as Lang)
+                  const subtitle = sla || `${t.raised} · ${formatDate(req.created_at, lang as Lang)}`
+                  return (
+                    <ListRow
+                      key={req.id}
+                      icon="message-square"
+                      title={req.title}
+                      subtitle={subtitle}
+                      last={idx === open.length - 1}
+                      right={
+                        <StatusPill
+                          status={REQUEST_STATUS_META[req.status]?.status ?? 'info'}
+                          label={
+                            lang === 'hi'
+                              ? (REQUEST_STATUS_META[req.status]?.hi ?? req.status)
+                              : (REQUEST_STATUS_META[req.status]?.en ?? req.status)
+                          }
+                          size="sm"
+                        />
+                      }
+                    />
+                  )
+                })}
               </Card>
             </View>
           ) : null}

@@ -43,7 +43,7 @@ import {
   useInputStyle,
   useToast,
 } from '../../src/ui'
-import { ROOM_PRESETS, URGENCY_PRESETS, type Urgency } from '../_requests.util'
+import { buildRequestDetail, ROOM_PRESETS, URGENCY_PRESETS, type Urgency } from '../_requests.util'
 
 type Lang = 'en' | 'hi'
 type Step = 1 | 2
@@ -170,8 +170,8 @@ export default function IssueScreen() {
   // ---- mutations ----
   const submitMut = useMutation({
     mutationFn: async () => {
-      // Step 1: upload photos (best-effort, non-blocking — issue sent regardless).
-      let photoNote = ''
+      // Step 1: upload photos (best-effort — issue sent regardless of failure).
+      let uploadedCount = 0
       if (photos.length > 0) {
         try {
           await Promise.all(
@@ -183,28 +183,21 @@ export default function IssueScreen() {
               ),
             ),
           )
-          photoNote = `\n[${photos.length} photo${photos.length > 1 ? 's' : ''} attached]`
+          uploadedCount = photos.length
         } catch {
-          // Upload failed — noted; issue sent anyway, warning via toast after.
-          toast(
-            lang === 'hi' ? t.uploadError : t.uploadError,
-            'alert-circle',
-          )
+          // Upload failed — issue sent anyway, warning via toast.
+          toast(t.uploadError, 'alert-circle')
         }
       }
 
-      // Step 2: build detail string (rooms + urgency + photo note).
-      const room = roomKey ? ROOM_PRESETS.find((r) => r.key === roomKey) : null
-      const urg = URGENCY_PRESETS.find((u) => u.key === urgency)
-      const L = (e: string, h: string) => (lang === 'hi' ? h : e)
-
-      const parts: string[] = []
-      const body = detailText.trim()
-      if (body) parts.push(body)
-      if (room) parts.push(`${L('Room', 'कमरा')}: ${lang === 'hi' ? room.hi : room.en}`)
-      if (urg) parts.push(`${L('Urgency', 'अत्यावश्यकता')}: ${lang === 'hi' ? urg.hi : urg.en}`)
-      if (photoNote) parts.push(photoNote.trim())
-      const detail = parts.join('\n') || undefined
+      // Step 2: build detail string (rooms + urgency + photo count) via shared util.
+      const detail = buildRequestDetail({
+        detail: detailText,
+        roomKey,
+        urgency,
+        photoCount: uploadedCount,
+        lang: lang as 'en' | 'hi',
+      })
 
       return homeowner.createRequest({ title: titleText.trim(), detail })
     },

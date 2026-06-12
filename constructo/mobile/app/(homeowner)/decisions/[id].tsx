@@ -2,8 +2,8 @@
  * Decision detail — homeowner pushed screen (Calm Cockpit §5 "Decision detail").
  *
  * Reads the decision from `homeowner.decisions()` list by `id`.
- * Shows the contractor's note, option images via `PhotoTile` when present,
- * an AI "your style leans…" hint from `homeowner.designProfile()`, and
+ * Shows the contractor's note (decision.detail), an AI "your style leans…"
+ * hint from `homeowner.designProfile()`, and
  * capability-gated actions:
  *   - Approve → `homeowner.respondDecision(id, 'approve')`
  *   - Comment → `homeowner.respondDecision(id, 'comment', note)`
