@@ -32,6 +32,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.action_items.detector import detect_action_item
+from app.agent.nivaan import (
+    ProposalRequest,
+    build_proposal,
+    parse_nivaan_invocation,
+    run_nivaan_turn,
+)
 from app.auth.deps import get_current_user
 from app.brief.generate import _to_contract
 from app.brief.risk import detect_risks, rank_risks
@@ -43,6 +49,7 @@ from app.chat.tickets import get_ticket_store
 from app.common.errors import AppError
 from app.common.site_events import latest_event_clause
 from app.db import get_session
+from app.extraction.llm import get_llm_client
 from app.homeowner.scoping import homeowner_site_ids
 from app.models import (
     AckKind,
@@ -61,6 +68,7 @@ from app.models import (
     MessageAck,
     MessageSide,
     RawMessageModel,
+    SenderKind,
     Site,
     SiteEventModel,
     User,
@@ -107,6 +115,9 @@ class ChatSendIn(BaseModel):
     media_type: str = "text"
     # Content hash from the upload (1.7 dedupe) — a replayed challan is caught.
     attachment_sha256: str | None = None
+    # Ask Nivaan to DRAFT a card from this capture_type+fields instead of
+    # committing it — the response is a sender_kind=nivaan proposal a human taps.
+    nivaan_propose: bool = False
 
     @model_validator(mode="after")
     def _one_target(self):
@@ -161,6 +172,8 @@ class ChatMessageOut(BaseModel):
     conversation_id: UUID
     sender_id: UUID | None
     sender_side: MessageSide
+    # Who/what authored the row (human|nivaan|system) — drives client rendering.
+    sender_kind: SenderKind
     seq: int
     body: str | None
     reply_to_id: UUID | None
@@ -219,6 +232,60 @@ def _side_for(user: User) -> MessageSide:
         if user.role is UserRole.homeowner
         else MessageSide.contractor
     )
+
+
+async def post_agent_message(
+    session: AsyncSession,
+    conv: Conversation,
+    *,
+    sender_kind: SenderKind,
+    body: str | None,
+    meta: dict | None = None,
+) -> ChatMessage:
+    """Mint a seq-ordered nivaan/system row (sender_id NULL) and broadcast it.
+
+    Same ordering authority as a human send: seq is assigned under a row lock on
+    the conversation. These rows are real — receipted, searchable, gap-free.
+
+    NOTE: This commits its own transaction. It is meant to be called AFTER the
+    caller's own send has committed (the agent reply is a separate, best-effort
+    step — a failure here must never roll back the human message), or as the sole
+    writer of a request (the nivaan_propose short-circuit). Do not call it mid-send
+    before the caller's own commit, or you fragment one logical send into two
+    transactions.
+    """
+    locked = (
+        await session.execute(
+            select(Conversation).where(Conversation.id == conv.id).with_for_update()
+        )
+    ).scalar_one()
+    now = datetime.now(UTC)
+    seq = locked.last_seq + 1
+    locked.last_seq = seq
+    locked.last_message_at = now
+
+    msg = ChatMessage(
+        conversation_id=conv.id,
+        sender_id=None,
+        sender_side=MessageSide.contractor,  # agent rows live on the crew surface; never homeowner
+        sender_kind=sender_kind,
+        client_msg_id=uuid4(),
+        seq=seq,
+        body=body,
+        media_type="text",
+        meta=meta,
+    )
+    session.add(msg)
+    await session.flush()
+    await session.commit()
+    await session.refresh(msg)
+
+    out = ChatMessageOut.model_validate(msg)
+    await get_broadcaster().publish(
+        conv.id,
+        {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
+    )
+    return msg
 
 
 async def _require_site(session: AsyncSession, user: User, site_id: UUID) -> None:
@@ -525,6 +592,29 @@ async def send_message(
         target_site_id = body.site_id
         talk_only = False
 
+    # Nivaan proposal request (a card button): draft a card, don't commit. Crew
+    # rooms only — never the homeowner room.
+    # NOTE: proposals are not idempotent on client_msg_id — a retried propose
+    # mints a fresh draft card (cheap; the human commits at most one). Intentional.
+    if (
+        body.nivaan_propose
+        and conv.kind is not ConversationKind.homeowner
+        and user.role is not UserRole.homeowner
+    ):
+        if not body.capture_type or body.fields is None:
+            raise AppError(422, "bad_proposal", "nivaan_propose needs capture_type and fields")
+        reply = await build_proposal(
+            session, user, conv,
+            ProposalRequest(capture_type=body.capture_type, fields=body.fields),
+        )
+        nivaan_msg = await post_agent_message(
+            session, conv, sender_kind=SenderKind.nivaan, body=reply.body, meta=reply.meta,
+        )
+        out = ChatMessageOut.model_validate(nivaan_msg)
+        # text-only nivaan row has no attachment; keep the field shape consistent
+        out.attachment_url = _safe_attachment_url(nivaan_msg.attachment_key)
+        return out
+
     if body.media_type not in _CHAT_MEDIA_TYPES:
         raise AppError(422, "bad_media_type", f"media_type must be one of {_CHAT_MEDIA_TYPES}")
     has_content = (
@@ -536,6 +626,18 @@ async def send_message(
         raise AppError(
             422, "empty_message", "Provide body text, structured fields, or an attachment"
         )
+
+    # @nivaan / /nivaan summons the constrained crew agent. Explicit-invocation
+    # only, crew rooms only (the agent never reaches the homeowner room or a
+    # homeowner caller). When summoned, the human message is NOT booked as a
+    # capture (it's a question, not a delivery) — the reply runs best-effort
+    # after the human send commits, below.
+    nivaan_utterance = parse_nivaan_invocation(body.body)
+    summons_nivaan = (
+        nivaan_utterance is not None
+        and conv.kind is not ConversationKind.homeowner
+        and user.role is not UserRole.homeowner
+    )
 
     # Adversarial-capture dedupe (1.7): a replayed attachment (same content hash
     # already in this thread) is recorded as a duplicate and NOT extracted, so it
@@ -641,6 +743,7 @@ async def send_message(
     if (
         target_site_id is not None
         and not talk_only
+        and not summons_nivaan
         and body.body
         and not body.capture_type
         and not body.fields
@@ -658,7 +761,7 @@ async def send_message(
     # and broadcasts. ``target_site_id`` is never None in Phase 2 (groups require a
     # site), but be defensive.
     raw = None
-    if target_site_id is not None and not talk_only:
+    if target_site_id is not None and not talk_only and not summons_nivaan:
         raw = RawMessageModel(
             source="app_chat",
             external_group_id=f"app:{target_site_id}",
@@ -701,6 +804,20 @@ async def send_message(
         {"v": 1, "type": "msg", "conv": str(conv.id), "payload": out.model_dump(mode="json")},
     )
     await _push_offline_members(session, conv, msg, user)
+
+    # Best-effort Nivaan reply — runs strictly AFTER the human message has
+    # committed + broadcast, so a Nivaan failure can never roll back the human
+    # send. run_nivaan_turn + post_agent_message each manage their own commit.
+    if summons_nivaan:
+        try:
+            reply = await run_nivaan_turn(
+                session, user, conv, nivaan_utterance, llm=get_llm_client()
+            )
+            await post_agent_message(
+                session, conv, sender_kind=SenderKind.nivaan, body=reply.body, meta=reply.meta,
+            )
+        except Exception:  # noqa: BLE001 — a Nivaan failure must never fail the human send
+            logger.exception("nivaan in-thread turn failed")
     return out
 
 

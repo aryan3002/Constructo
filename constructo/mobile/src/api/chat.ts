@@ -50,8 +50,21 @@ export interface ChatMessage {
   sender_kind?: 'user' | 'nivaan' | 'system'
   /** Per-message metadata stamped by the backend (Task B-T3). A blocked reply
    *  carries `blocked.reason = "contested"` when an open dispute freezes an
-   *  approve/correct action. */
-  meta?: { blocked?: { reason?: string; event_id?: string } } | null
+   *  approve/correct action. Nivaan answer rows carry `nivaan.kind`; Nivaan
+   *  proposal rows carry a `proposal` draft-capture card (Task B-T8). */
+  meta?: {
+    blocked?: { reason?: string; event_id?: string }
+    nivaan?: { kind?: string; tool?: string; evidence_event_ids?: string[] }
+    proposal?: {
+      tier: 'commit' | 'money'
+      kind: 'capture' | 'missing_proof'
+      capture_type: string
+      fields: Record<string, unknown>
+      summary: string
+      evidence_event_ids: string[]
+      committable: boolean
+    }
+  } | null
 }
 
 /** One member's read/delivered cursor pair (spine A10) — the client derives

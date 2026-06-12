@@ -21,6 +21,7 @@ import { Body, BodyStrong, Micro, Mono, Small, StatusPill } from '../ui'
 import type { ChatEvent } from '../api/chat'
 import { tickGlyph, isReadTick } from './tick'
 import type { DeliveryState } from './threadState'
+import type { NivaanProposalView } from './nivaanProposal'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -244,6 +245,106 @@ export function CaptureCard({
 }
 
 // ---------------------------------------------------------------------------
+// NivaanProposalCard — a left-aligned card for a Nivaan-drafted proposal.
+// Shows a "Nivaan · proposal" eyebrow label (warn/amber = AI-proposed), the
+// human-readable summary, a Confirm Pressable (marigold accent, only when
+// committable), and a Dismiss. A missing_proof row renders without Confirm.
+// Uses semantic theme tokens only — no hardcoded hex.
+// ---------------------------------------------------------------------------
+
+export function NivaanProposalCard({
+  view,
+  onConfirm,
+  onDismiss,
+}: {
+  view: NivaanProposalView
+  onConfirm: () => void
+  onDismiss: () => void
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  // (1) Guard against double-commit: once confirmed or dismissed the buttons
+  // are replaced by a muted status line, so neither action can fire again.
+  const [status, setStatus] = useState<'open' | 'confirmed' | 'dismissed'>('open')
+
+  return (
+    <View
+      style={[
+        {
+          alignSelf: 'flex-start',
+          maxWidth: '92%',
+          backgroundColor: c.card,
+          borderRadius: theme.radii.card,
+          borderWidth: 1,
+          borderColor: c.line,
+          padding: SPACE.lg,
+          gap: SPACE.sm,
+        },
+        theme.shadowCard,
+      ]}
+    >
+      {/* (3) Eyebrow collapsed to a single text node — the ✦ is inline text,
+          not a sibling, so the wrapping View + its gap are unnecessary. */}
+      <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+        ✦ Nivaan · proposal
+      </Micro>
+
+      {/* Draft summary */}
+      <Body style={{ color: c.text }}>{view.summary}</Body>
+
+      {/* Action row — replaced by a status line once acted upon. */}
+      {status === 'confirmed' ? (
+        <Small style={{ color: c.textMute }}>✓ Added</Small>
+      ) : status === 'dismissed' ? (
+        <Small style={{ color: c.textMute }}>Dismissed</Small>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xs }}>
+          {view.committable ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm"
+              onPress={() => { setStatus('confirmed'); onConfirm() }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                minHeight: TAP,
+                paddingHorizontal: SPACE.lg,
+                borderRadius: theme.radii.control,
+                backgroundColor: c.accent,
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              <Feather name="check" size={15} color={c.onAccent} />
+              <BodyStrong style={{ color: c.onAccent }}>Confirm</BodyStrong>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            onPress={() => { setStatus('dismissed'); onDismiss() }}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: TAP,
+              paddingHorizontal: SPACE.md,
+              borderRadius: theme.radii.control,
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: c.paper,
+              opacity: pressed ? 0.88 : 1,
+            })}
+          >
+            <Small style={{ color: c.textMute }}>Dismiss</Small>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // MessageBubble — a plain chat bubble (own = amber bg, other = card bg) with an
 // optional attachment image, the body text, and a Mono timestamp. Copied
 // verbatim from the supervisor screen's inline bubble so the owner Chat screen
@@ -257,6 +358,7 @@ export function MessageBubble({
   timestamp,
   deliveryState,
   onLongPress,
+  nivaan,
 }: {
   body: string | null
   mine: boolean
@@ -264,6 +366,9 @@ export function MessageBubble({
   timestamp?: string
   deliveryState?: DeliveryState
   onLongPress?: () => void
+  /** (2) When true, renders a small "✦ Nivaan" caption above the body to
+   *  visually distinguish AI-generated answer rows from human messages. */
+  nivaan?: boolean
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -305,6 +410,11 @@ export function MessageBubble({
 
   const content = (
     <>
+      {nivaan ? (
+        <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 }}>
+          ✦ Nivaan
+        </Micro>
+      ) : null}
       {attachmentUrl ? (
         <Image
           source={{ uri: attachmentUrl }}

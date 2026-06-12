@@ -27,7 +27,8 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
-import { CaptureCard, MessageBubble, SystemNotice } from '../../../../src/chat/MessageView'
+import { CaptureCard, MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
+import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
 import { useChatThread } from '../../../../src/chat'
 import { systemNotice } from '../../../../src/chat/systemNotice'
 import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
@@ -283,6 +284,24 @@ export default function OwnerConversation() {
           renderItem={({ item }) => {
             const notice = systemNotice(item)
             if (notice !== null) return <SystemNotice text={notice} />
+            const proposal = nivaanProposal(item)
+            if (proposal) {
+              return (
+                <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+                  <NivaanProposalCard
+                    view={proposal}
+                    onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
+                    onDismiss={() => {}}
+                  />
+                </View>
+              )
+            }
+            if (isNivaanAnswer(item)) {
+              return (
+                <MessageBubble body={item.body} mine={false} nivaan
+                  timestamp={new Date(item.created_at).toLocaleTimeString()} />
+              )
+            }
             const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
             if (cardEvents.length > 0) {
               const mine = item.sender_side === 'contractor'
