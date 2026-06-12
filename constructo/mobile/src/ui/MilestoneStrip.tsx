@@ -3,7 +3,8 @@
  *
  * Driven by `homeowner.milestones()`. Three dot states:
  *   done     → filled check circle (ok / sage green)
- *   now      → clay pulse outline dot (secondary / warm clay)
+ *   now      → clay RING (you-are-here marker): outer clay border, card-colored
+ *              center so it reads as a punched-out ring, not a solid disk
  *   upcoming → small outline dot (muted line color)
  *
  * Design rules (Calm Cockpit §8):
@@ -18,8 +19,8 @@ import { ScrollView, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../theme/ThemeProvider'
-import { SPACE, STATUS } from '../theme/tokens'
-import { Micro, Small } from './Typography'
+import { SPACE } from '../theme/tokens'
+import { Small } from './Typography'
 import type { Milestone } from '../api/types'
 
 const DOT_SIZE = 18
@@ -30,28 +31,19 @@ interface MilestoneStripProps {
   milestones: Milestone[]
   /** Label displayed under the "now" dot (e.g. "Now" / "अभी"). */
   nowLabel?: string
-  /** Label for upcoming dots (hidden unless in a legend — not shown per-dot). */
-  upcomingLabel?: string
 }
 
 function Dot({
   status,
   name,
   nowLabel,
-  isLast,
 }: {
   status: Milestone['status']
   name: string
   nowLabel: string
-  isLast: boolean
 }) {
   const { theme } = useTheme()
   const c = theme.colors
-
-  const dotColor =
-    status === 'done' ? c.ok : status === 'now' ? c.secondary : 'transparent'
-  const borderColor =
-    status === 'done' ? c.ok : status === 'now' ? c.secondary : c.line
 
   return (
     <View
@@ -65,12 +57,14 @@ function Dot({
           width: DOT_SIZE,
           height: DOT_SIZE,
           borderRadius: DOT_SIZE / 2,
-          backgroundColor: dotColor,
-          borderWidth: status === 'upcoming' ? 1.5 : 0,
-          borderColor,
+          // done: filled sage circle; now: transparent center (ring); upcoming: transparent
+          backgroundColor: status === 'done' ? c.ok : 'transparent',
+          // done: no border; now: clay ring border; upcoming: muted outline
+          borderWidth: status === 'done' ? 0 : status === 'now' ? 2.5 : 1.5,
+          borderColor: status === 'done' ? c.ok : status === 'now' ? c.secondary : c.line,
           alignItems: 'center',
           justifyContent: 'center',
-          // "now" gets a soft clay halo to signal "active" without a pulse
+          // "now" ring gets a soft clay halo to reinforce the you-are-here marker
           ...(status === 'now'
             ? {
                 shadowColor: c.secondary,
@@ -82,25 +76,26 @@ function Dot({
         }}
       >
         {status === 'done' ? (
-          <Feather name="check" size={11} color="#ffffff" />
+          // White check on sage green — onAccent is #ffffff on Daylight
+          <Feather name="check" size={11} color={c.onAccent} />
         ) : status === 'now' ? (
-          // Inner white circle to make it a ring/outline feel
+          // Small filled clay dot in the center of the ring (you-are-here pip)
           <View
             style={{
-              width: DOT_SIZE - 6,
-              height: DOT_SIZE - 6,
-              borderRadius: (DOT_SIZE - 6) / 2,
+              width: DOT_SIZE - 10,
+              height: DOT_SIZE - 10,
+              borderRadius: (DOT_SIZE - 10) / 2,
               backgroundColor: c.secondary,
             }}
           />
         ) : null}
       </View>
 
-      {/* "Now" label beneath the active dot */}
+      {/* "Now" label beneath the active dot — use Small to match milestone-name labels */}
       {status === 'now' ? (
-        <Micro color={c.secondary} style={{ fontWeight: '700' }}>
+        <Small color={c.secondary} style={{ fontWeight: '700' }}>
           {nowLabel}
-        </Micro>
+        </Small>
       ) : null}
     </View>
   )
@@ -145,7 +140,6 @@ export function MilestoneStrip({
       }}
     >
       {sorted.map((m, i) => {
-        const isLast = i === sorted.length - 1
         // Connector is filled (ok) only if BOTH this dot and the previous are done
         const connectorFilled = i > 0 && sorted[i - 1]?.status === 'done' && m.status === 'done'
         return (
@@ -157,7 +151,6 @@ export function MilestoneStrip({
                 status={m.status}
                 name={m.name}
                 nowLabel={nowLabel}
-                isLast={isLast}
               />
               {/* Milestone name below each dot — truncated */}
               <Small

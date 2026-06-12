@@ -55,7 +55,7 @@ import {
 } from '../../src/ui'
 import type { PhotoTileData } from '../../src/ui'
 import type { AttentionItem, QuietPeriod } from '../../src/api/types'
-import { REQUEST_STATUS_META } from '../_requests.util'
+import { REQUEST_STATUS_META, slaPromise } from '../_requests.util'
 
 const STR = {
   en: {
@@ -339,17 +339,17 @@ export default function Home() {
   const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
   const photosQ = useQuery({ queryKey: ['home', 'photos'], queryFn: () => homeowner.photos() })
   const weeklyQ = useQuery({ queryKey: ['home', 'weekly'], queryFn: () => homeowner.weeklySummary() })
-  // B2 — milestone strip
+  // B2 — milestone strip (only fire if home query succeeded; skip on error)
   const milestonesQ = useQuery({
     queryKey: ['home', 'milestones'],
     queryFn: () => homeowner.milestones(),
-    enabled: !homeQ.isLoading,
+    enabled: homeQ.isSuccess,
   })
-  // B3 — my requests (open only)
+  // B3 — my requests (open only; only fire if home query succeeded)
   const requestsQ = useQuery({
     queryKey: ['home', 'requests'],
     queryFn: () => homeowner.requests(),
-    enabled: !homeQ.isLoading,
+    enabled: homeQ.isSuccess,
   })
 
   if (homeQ.isLoading) {
@@ -588,7 +588,8 @@ export default function Home() {
                 accessibilityRole="button"
                 accessibilityLabel={t.requestsSeeAll}
                 onPress={() => router.push('/(homeowner)/requests')}
-                hitSlop={8}
+                hitSlop={16}
+                style={{ paddingVertical: 6 }}
               >
                 <Small color={c.accent} style={{ fontWeight: '600' }}>{t.requestsSeeAll}</Small>
               </Pressable>
@@ -598,7 +599,7 @@ export default function Home() {
                 key={req.id}
                 icon="message-square"
                 title={req.title}
-                subtitle={req.sla_due_at ? undefined : undefined}
+                subtitle={slaPromise(req, lang) || undefined}
                 last={idx === openRequests.length - 1}
                 onPress={() => router.push('/(homeowner)/requests')}
                 right={
@@ -618,7 +619,8 @@ export default function Home() {
               accessibilityRole="button"
               accessibilityLabel={t.requestsAdd}
               onPress={() => router.push('/(homeowner)/issue')}
-              style={{ marginTop: SPACE.sm }}
+              hitSlop={16}
+              style={{ marginTop: SPACE.sm, paddingVertical: 6, minHeight: 48, justifyContent: 'center' }}
             >
               <Small color={c.accent} style={{ fontWeight: '600' }}>+ {t.requestsAdd}</Small>
             </Pressable>
@@ -638,7 +640,8 @@ export default function Home() {
                 accessibilityRole="button"
                 accessibilityLabel={t.activitySeeAll}
                 onPress={() => router.push('/(homeowner)/photos')}
-                hitSlop={8}
+                hitSlop={16}
+                style={{ paddingVertical: 6 }}
               >
                 <Small color={c.accent} style={{ fontWeight: '600' }}>{t.activitySeeAll}</Small>
               </Pressable>
