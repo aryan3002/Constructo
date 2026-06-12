@@ -15,6 +15,7 @@ export interface Paginated<T> {
 export type Role =
   | 'owner'
   | 'pm'
+  | 'architect'
   | 'supervisor'
   | 'accountant'
   | 'procurement'
