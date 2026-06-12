@@ -5,7 +5,7 @@
  * thread identically to the supervisor crew chat. Site-keyed chat API, no schema
  * change. Radar / dispute / recap / smart-suggest / voice are deferred (Phase 2).
  *
- * Blueprint theme: warm paper, amber Send fill with dark ink, ≥48px targets,
+ * Neev theme: warm paper, amber Send fill with dark ink, ≥48px targets,
  * Hindi-first copy. A header cue + composer; the read cursor advances on the
  * newest seq and invalidates the inbox so its unread badge clears.
  */

@@ -15,6 +15,7 @@ export interface Paginated<T> {
 export type Role =
   | 'owner'
   | 'pm'
+  | 'architect'
   | 'supervisor'
   | 'accountant'
   | 'procurement'
@@ -35,6 +36,8 @@ export interface LoginResponse {
 export interface Me {
   id: string
   company_id: string
+  /** Human-readable company name — prefer this over company_id in UI. */
+  company_name?: string | null
   name: string | null
   phone: string
   role: Role

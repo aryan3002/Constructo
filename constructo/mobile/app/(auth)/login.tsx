@@ -3,10 +3,10 @@
  * are you?" chooser). Two steps: enter phone → request code → enter the 6-digit
  * OTP. Dev OTP is 000000.
  *
- * Rendered in the **Blueprint** theme (amber-on-ink) — builders see their brand
+ * Rendered in the **Neev** theme (amber-on-ink) — builders see their brand
  * here even though the auth group default is Daylight, since only staff reach
  * this screen. The themed body lives in `LoginInner` so its `useTheme()` reads
- * the nested Blueprint provider.
+ * the nested Neev provider.
  */
 import { useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
@@ -51,7 +51,7 @@ function homeFor(role: Role | null): string {
 
 export default function Login() {
   return (
-    <ThemeProvider initial="blueprint">
+    <ThemeProvider initial="neev">
       <LoginInner />
     </ThemeProvider>
   )

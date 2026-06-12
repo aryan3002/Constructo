@@ -1,11 +1,11 @@
 /**
- * Owner branch — Blueprint tab set (Brief / Sites / Approvals / Search / More).
+ * Owner branch — Neev tab set (Brief / Chat / Sites / Approvals / More).
  *
- * The parent (contractor) group already wraps <ThemeProvider initial="blueprint">,
- * so this layout only defines the expo-router Tabs (text-glyph icons, ≥48px,
+ * The parent (contractor) group already wraps <ThemeProvider initial="neev">,
+ * so this layout only defines the expo-router Tabs (Ionicons outline, ≥48px,
  * amber active tint). Home = Brief, the 7am cross-site command screen.
  */
-import { Text, type ColorValue } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -17,11 +17,10 @@ const LABELS = {
   hi: { brief: 'ब्रीफ़', chat: 'चैट', sites: 'साइट', approvals: 'मंज़ूरी', search: 'खोज', more: 'और' },
 } as const
 
-function icon(glyph: string) {
-  return ({ color }: { color: ColorValue }) => (
-    <Text style={{ fontSize: 20, color }}>{glyph}</Text>
-  )
-}
+const tabIcon =
+  (name: keyof typeof Ionicons.glyphMap) =>
+  ({ color }: { color: string; size: number }) =>
+    <Ionicons name={name} size={22} color={color} />
 
 export default function OwnerLayout() {
   const { lang } = useT()
@@ -45,11 +44,11 @@ export default function OwnerLayout() {
         tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12 },
       }}
     >
-      <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: icon('◆') }} />
-      <Tabs.Screen name="chat" options={{ title: L.chat, tabBarIcon: icon('✉') }} />
-      <Tabs.Screen name="sites" options={{ title: L.sites, tabBarIcon: icon('▦') }} />
-      <Tabs.Screen name="approvals" options={{ title: L.approvals, tabBarIcon: icon('✓') }} />
-      <Tabs.Screen name="more" options={{ title: L.more, tabBarIcon: icon('☰') }} />
+      <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: tabIcon('grid-outline') }} />
+      <Tabs.Screen name="chat" options={{ title: L.chat, tabBarIcon: tabIcon('chatbubble-ellipses-outline') }} />
+      <Tabs.Screen name="sites" options={{ title: L.sites, tabBarIcon: tabIcon('business-outline') }} />
+      <Tabs.Screen name="approvals" options={{ title: L.approvals, tabBarIcon: tabIcon('checkbox-outline') }} />
+      <Tabs.Screen name="more" options={{ title: L.more, tabBarIcon: tabIcon('ellipsis-horizontal-outline') }} />
       {/* Search stays routable (pushed from More), off-tab. */}
       <Tabs.Screen name="search" options={{ href: null }} />
       {/* Conversation detail, off-tab. */}
@@ -58,6 +57,10 @@ export default function OwnerLayout() {
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
       {/* Foresight (portfolio) — pushed from More, off-tab. */}
       <Tabs.Screen name="foresight" options={{ href: null }} />
+      {/* Team & roles — pushed from Account hub, off-tab. */}
+      <Tabs.Screen name="team" options={{ href: null }} />
+      {/* Permits — pushed from Account hub, off-tab. */}
+      <Tabs.Screen name="permits" options={{ href: null }} />
       {/* Dispute pack — pushed from the site detail, off-tab. */}
       <Tabs.Screen name="dispute-pack" options={{ href: null }} />
     </Tabs>

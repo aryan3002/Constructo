@@ -2,40 +2,50 @@
  * Brief (Tab 1 — THE HERO). The 7am cross-site command screen.
  *
  * One screen, two altitudes (Owner.md §6.1):
- *   - Decide:   ≤3 highest-severity risks across all sites, each an EvidenceCard
- *               (proof on tap) with inline Approve / Hold / Assign chips that
+ *   - Decide:   ≤3 highest-severity risks across all sites, each a NeedsYouCard
+ *               (proof on tap) with inline Approve / Hold / Assign actions that
  *               create a logged decision (optimistic collapse + refetch).
  *   - Scan:     a 2×2 Cash / Labor / Material / Progress pulse derived from the
  *               brief counts (calm, hide-empty).
  *   - Roll-up:  a worst-first per-site list.
  * Empty/first-run = a calm "connect a group" card. If today's brief is missing,
  * we POST /briefs/run as a fallback before showing empty.
+ *
+ * Slice B adds:
+ *   - Sticky header with SiteSwitcher (All sites ▾) + bell + avatar initials.
+ *   - Client-side site scope: selecting a site filters risk list + roll-up strip.
+ *   - Risk cards are NeedsYouCard (with Hold wired as secondaryLabel + Assign button).
+ *   - Premium EmptyState for first-run.
  */
-import { useMemo, useState } from 'react'
-import { RefreshControl, ScrollView, View } from 'react-native'
+import React, { useMemo, useState } from 'react'
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, severityToStatus, type Status } from '../../../src/theme/tokens'
+import { SPACE, severityToStatus } from '../../../src/theme/tokens'
 import { owner, type BriefSite, type OwnerBrief, type Risk } from '../../../src/api/owner'
-import { Body, Button, Display, EmptyState, Mono, Small } from '../../../src/ui'
+import { Button, Display, EmptyState, Micro, Mono, NeedsYouCard, Small, StatusPill } from '../../../src/ui'
 import {
-  BriefCommandCard,
   ErrorBlock,
   LoadingBlock,
   PulseCard,
   SectionLabel,
   SiteRollupRow,
+  SiteSwitcher,
+  type SiteSwitcherItem,
   formatWhen,
+  idsToEvidence,
 } from './_components'
+import { buildRanked, scopeRanked, scopeSites, siteWorstStatus } from './_brief.util'
 
 const STR = {
   en: {
     greeting: 'Good morning',
     needToday: (n: number, s: number) => `${n} thing${n === 1 ? '' : 's'} need you today across ${s} site${s === 1 ? '' : 's'}.`,
+    needTodaySite: (n: number) => `${n} thing${n === 1 ? '' : 's'} need you today at this site.`,
     calmTitle: 'All sites are calm.',
     calmBody: 'Nothing needs you today. Numbers below are still confirmable.',
     moreInApprovals: (n: number) => `+${n} more in Approvals`,
@@ -56,10 +66,13 @@ const STR = {
     errorLine: 'We could not load your brief just now.',
     tryAgain: 'Try again',
     deliveries: 'deliveries', issues: 'issues', present: 'present',
+    // Site switcher
+    allSites: 'All sites',
   },
   hi: {
     greeting: 'सुप्रभात',
     needToday: (n: number, s: number) => `आज ${s} साइट पर ${n} चीज़ों को आपकी ज़रूरत है।`,
+    needTodaySite: (n: number) => `इस साइट पर आज ${n} चीज़ों को आपकी ज़रूरत है।`,
     calmTitle: 'सभी साइट शांत हैं।',
     calmBody: 'आज कुछ भी आपकी ज़रूरत नहीं। नीचे के आँकड़े फिर भी जाँचे जा सकते हैं।',
     moreInApprovals: (n: number) => `+${n} और मंज़ूरी में`,
@@ -77,24 +90,13 @@ const STR = {
     connectTitle: 'आपकी साइट बात करना शुरू करते ही ब्रीफ़ जीवंत हो जाएगा।',
     connectBody: 'शुरू करने के लिए एक WhatsApp ग्रुप जोड़ें — हर अपडेट यहाँ एक भरोसेमंद सत्य के रूप में आता है।',
     connect: 'ग्रुप जोड़ें',
-    errorLine: 'अभी आपका ब्रीफ़ लोड नहीं हो सका।',
+    errorLine: 'अभी आपका ब्रीफ़ लोड नहो सका।',
     tryAgain: 'फिर कोशिश करें',
     deliveries: 'डिलीवरी', issues: 'मुद्दे', present: 'उपस्थित',
+    // Site switcher
+    allSites: 'सभी साइट',
   },
 } as const
-
-const SEV_RANK: Record<string, number> = { high: 0, med: 1, low: 2 }
-
-/** Worst status across a site's risks. */
-function siteStatus(site: BriefSite): Status {
-  let worst: Status = 'ok'
-  const order: Status[] = ['ok', 'info', 'warn', 'risk']
-  for (const r of site.top_risks) {
-    const s = severityToStatus(r.severity)
-    if (order.indexOf(s) > order.indexOf(worst)) worst = s
-  }
-  return worst
-}
 
 export default function Brief() {
   const { lang } = useT()
@@ -106,6 +108,9 @@ export default function Brief() {
 
   // resolved decisions (local optimistic state keyed by risk index).
   const [resolved, setResolved] = useState<Record<string, string>>({})
+
+  // Site switcher — client-side scope filter (null = All sites).
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
 
   const briefQ = useQuery<OwnerBrief | null>({
     queryKey: ['owner', 'brief'],
@@ -154,16 +159,18 @@ export default function Brief() {
 
   const { sites, ranked } = useMemo(() => {
     const sites = briefQ.data?.payload.sites ?? []
-    const ranked: { risk: Risk; site: BriefSite; key: string }[] = []
-    for (const site of sites) {
-      for (let i = 0; i < site.top_risks.length; i++) {
-        const risk = site.top_risks[i]
-        ranked.push({ risk, site, key: `${site.site_id}:${i}` })
-      }
-    }
-    ranked.sort((a, b) => (SEV_RANK[a.risk.severity] ?? 9) - (SEV_RANK[b.risk.severity] ?? 9))
-    return { sites, ranked }
+    return { sites, ranked: buildRanked(sites) }
   }, [briefQ.data])
+
+  // --- Client-side site scope (no new backend call) ---
+  const scopedRanked = useMemo(() => scopeRanked(ranked, selectedSiteId), [ranked, selectedSiteId])
+  const scopedSites = useMemo(() => scopeSites(sites, selectedSiteId), [sites, selectedSiteId])
+
+  // SiteSwitcher items — one entry per site with worst status dot.
+  const switcherItems: SiteSwitcherItem[] = useMemo(
+    () => sites.map((s) => ({ id: s.site_id, name: s.name, status: siteWorstStatus(s) })),
+    [sites],
+  )
 
   if (briefQ.isLoading) {
     return <Wrap><LoadingBlock /></Wrap>
@@ -182,20 +189,27 @@ export default function Brief() {
       <Wrap>
         <EmptyState
           variant="empty"
+          icon="link"
           title={t.connectTitle}
           body={t.connectBody}
-          action={<Button title={t.connect} size="lg" onPress={() => { /* connect-group flow (O5) — phased */ }} />}
+          action={
+            <Button
+              title={t.connect}
+              size="lg"
+              onPress={() => { /* connect-group flow (O5) — phased */ }}
+            />
+          }
         />
       </Wrap>
     )
   }
 
-  const top = ranked.slice(0, 3)
-  const overflow = Math.max(0, ranked.length - 3)
-  const allCalm = ranked.length === 0
+  const top = scopedRanked.slice(0, 3)
+  const overflow = Math.max(0, scopedRanked.length - 3)
+  const allCalm = scopedRanked.length === 0
 
-  // --- pulse (cross-site, derived from counts) ---
-  const totals = sites.reduce(
+  // --- pulse (scoped, derived from counts) ---
+  const totals = scopedSites.reduce(
     (acc, s) => {
       acc.attendance += s.counts.attendance
       acc.deliveries += s.counts.deliveries
@@ -204,66 +218,140 @@ export default function Brief() {
     },
     { attendance: 0, deliveries: 0, issues: 0 },
   )
-  const cashRisks = ranked.filter((r) => /cash|payment|invoice|bill|money/i.test(r.risk.kind)).length
-  const laborRisks = ranked.filter((r) => /labor|labour|attendance|crew/i.test(r.risk.kind)).length
-  const materialRisks = ranked.filter((r) => /material|cement|steel|delivery|stock/i.test(r.risk.kind)).length
-  const onTrack = sites.filter((s) => siteStatus(s) === 'ok').length
+  const cashRisks = scopedRanked.filter((r) => /cash|payment|invoice|bill|money/i.test(r.risk.kind)).length
+  const laborRisks = scopedRanked.filter((r) => /labor|labour|attendance|crew/i.test(r.risk.kind)).length
+  const materialRisks = scopedRanked.filter((r) => /material|cement|steel|delivery|stock/i.test(r.risk.kind)).length
+  const onTrack = scopedSites.filter((s) => siteWorstStatus(s) === 'ok').length
 
   const greetName = me?.name ?? null
 
   return (
     <Wrap onRefresh={() => qc.invalidateQueries({ queryKey: ['owner', 'brief'] })} refreshing={briefQ.isRefetching}>
-      {/* title row */}
+      {/* ── Sticky header row: site switcher pill + avatar ─────────────────── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <SiteSwitcher
+          sites={switcherItems}
+          selectedId={selectedSiteId}
+          onSelect={setSelectedSiteId}
+          allLabel={t.allSites}
+          totalCount={sites.length}
+        />
+        {/* Owner avatar — initials pill */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={greetName ?? 'Account'}
+          onPress={() => router.push('/(contractor)/owner/more')}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: theme.colors.accentWarm,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Micro color={theme.colors.accentDeep} style={{ fontWeight: '700' }}>
+            {(greetName ?? 'O').slice(0, 2).toUpperCase()}
+          </Micro>
+        </Pressable>
+      </View>
+
+      {/* ── Title row ───────────────────────────────────────────────────────── */}
       <View style={{ gap: SPACE.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <Small muted>{greetName ? `${t.greeting}, ${greetName}` : t.greeting}</Small>
           <Mono muted style={{ fontSize: 12 }}>{formatWhen(briefQ.data.sent_at ?? new Date().toISOString())}</Mono>
         </View>
         <Display style={{ fontSize: 22, lineHeight: 28 }}>
-          {allCalm ? t.calmTitle : t.needToday(ranked.length, sites.length)}
+          {allCalm
+            ? t.calmTitle
+            : selectedSiteId != null
+              ? t.needTodaySite(scopedRanked.length)
+              : t.needToday(ranked.length, sites.length)}
         </Display>
       </View>
 
-      {/* exceptions */}
+      {/* ── Exceptions (risk cards) ─────────────────────────────────────────── */}
       {allCalm ? (
         <EmptyState variant="clear" title={t.calmTitle} body={t.calmBody} />
       ) : (
         <View style={{ gap: SPACE.md }}>
-          {top.map(({ risk, site, key }, idx) => (
-            <BriefCommandCard
-              key={key}
-              risk={risk}
-              siteName={site.name}
-              rank={idx + 1}
-              pending={decide.isPending}
-              resolvedLabel={resolved[key]}
-              proofLabel={t.proof}
-              chips={{ approve: t.approve, hold: t.hold, assign: t.assign }}
-              onChip={(action) => {
-                const label = action === 'approve' ? t.approvedBy : action === 'hold' ? t.heldBy : t.assignedBy
-                setResolved((m) => ({ ...m, [key]: label }))
-                decide.mutate(
-                  { risk, site, action },
-                  { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
-                )
-              }}
-            />
-          ))}
+          {top.map(({ risk, site, key }, idx) => {
+            const status = severityToStatus(risk.severity)
+            const domain = risk.kind.replace(/_/g, ' ')
+            const evidenceChips = idsToEvidence(risk.evidence_event_ids, t.proof).map(
+              (item) => ({ kind: 'message' as const, label: item.label ?? t.proof }),
+            )
+
+            // Resolved → collapsed confirmation pill
+            if (resolved[key]) {
+              return (
+                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm }}>
+                  <StatusPill status="ok" size="sm" label={resolved[key]} />
+                </View>
+              )
+            }
+
+            return (
+              <View key={key} style={{ gap: SPACE.sm }}>
+                <NeedsYouCard
+                  rank={idx + 1}
+                  status={status}
+                  statusLabel={domain}
+                  title={risk.message}
+                  detail={site.name}
+                  evidence={evidenceChips}
+                  primaryLabel={t.approve}
+                  secondaryLabel={t.hold}
+                  tone={status === 'risk' ? 'cautionary' : 'affirmative'}
+                  canApprove={true}
+                  onPrimary={decide.isPending ? undefined : () => {
+                    setResolved((m) => ({ ...m, [key]: t.approvedBy }))
+                    decide.mutate(
+                      { risk, site, action: 'approve' },
+                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
+                    )
+                  }}
+                  onSecondary={decide.isPending ? undefined : () => {
+                    setResolved((m) => ({ ...m, [key]: t.heldBy }))
+                    decide.mutate(
+                      { risk, site, action: 'hold' },
+                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
+                    )
+                  }}
+                />
+                {/* Assign — tertiary action below the card (owner-assigns-to-PM) */}
+                <Button
+                  title={t.assign}
+                  variant="secondary"
+                  size="md"
+                  disabled={decide.isPending}
+                  onPress={() => {
+                    setResolved((m) => ({ ...m, [key]: t.assignedBy }))
+                    decide.mutate(
+                      { risk, site, action: 'assign' },
+                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
+                    )
+                  }}
+                />
+              </View>
+            )
+          })}
           {overflow > 0 ? (
             <Button title={t.moreInApprovals(overflow)} variant="ghost" onPress={() => router.push('/(contractor)/owner/approvals')} />
           ) : null}
         </View>
       )}
 
-      {/* sites roll-up */}
+      {/* ── Sites roll-up ──────────────────────────────────────────────────── */}
       <SectionLabel trailing={<Small color={theme.colors.accentDeep} onPress={() => router.push('/(contractor)/owner/sites')}>{t.seeAll}</Small>}>
         {t.sites}
       </SectionLabel>
       <View style={{ gap: SPACE.sm }}>
-        {[...sites]
+        {[...scopedSites]
           .sort((a, b) => b.top_risks.length - a.top_risks.length)
           .map((s) => {
-            const st = siteStatus(s)
+            const st = siteWorstStatus(s)
             return (
               <SiteRollupRow
                 key={s.site_id}
@@ -277,7 +365,7 @@ export default function Brief() {
           })}
       </View>
 
-      {/* pulse 2×2 */}
+      {/* ── Pulse 2×2 ────────────────────────────────────────────────────── */}
       <SectionLabel>{t.pulse}</SectionLabel>
       <View style={{ gap: SPACE.sm }}>
         <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
@@ -306,8 +394,8 @@ export default function Brief() {
           <PulseCard
             glyph="↗"
             label={t.progress}
-            status={onTrack === sites.length ? 'ok' : 'info'}
-            headline={`${onTrack}/${sites.length}`}
+            status={onTrack === scopedSites.length ? 'ok' : 'info'}
+            headline={`${onTrack}/${scopedSites.length}`}
             supporting={totals.issues > 0 ? `${totals.issues} ${t.issues}` : undefined}
           />
         </View>

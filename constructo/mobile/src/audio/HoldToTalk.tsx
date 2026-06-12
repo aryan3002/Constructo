@@ -1,5 +1,5 @@
 /**
- * HoldToTalk — a REAL on-device voice recorder (Blueprint theme), "voice before
+ * HoldToTalk — a REAL on-device voice recorder (Neev theme), "voice before
  * forms" made honest. Press-and-hold the big mic to record actual audio via
  * `expo-audio` to a file URI; release to stop. While held, a live duration
  * counts up and the button pulses amber. A start/stop haptic gives gloved,

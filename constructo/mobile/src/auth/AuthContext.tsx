@@ -1,7 +1,7 @@
 /**
  * Session state. On mount it reads any stored JWT and resolves the current user
  * (`/auth/me`) to learn their role — which the root layout uses to branch the
- * navigation (homeowner → Daylight tabs, contractor → Blueprint shell).
+ * navigation (homeowner → Daylight tabs, contractor → Neev shell).
  *
  * After a successful login/join the screen calls `refresh()` (the token is
  * already persisted by `authApi`); `signOut()` clears it.

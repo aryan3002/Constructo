@@ -1,5 +1,5 @@
 /**
- * Supervisor (field/contractor) API layer — Blueprint role.
+ * Supervisor (field/contractor) API layer — Neev role.
  *
  * Ported from the web client shapes (`web/src/api/types.ts` Site / SiteEvent,
  * `web/src/api/attendance.ts`) and reuses the mobile `request` helper + the

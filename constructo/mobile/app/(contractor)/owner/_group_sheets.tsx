@@ -10,7 +10,7 @@
  *    delegate-demote, add more site users, and archive. Every last_admin guard
  *    (409) surfaces inline — never a silent failure.
  *
- * Blueprint theme: warm paper, amber FILL with dark ink for the one primary
+ * Neev theme: warm paper, amber FILL with dark ink for the one primary
  * action, ≥48px taps, Mono for nothing here (ids hidden), bilingual EN/HI, no
  * emoji. The "Client" cue pairs a ◆ shape with the --info tint, never color-
  * alone. Modal sheets squared to `radii.sheet`, safe-area bottom pad.

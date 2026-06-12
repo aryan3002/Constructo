@@ -1,6 +1,6 @@
 /**
  * Root layout: global providers + font gate. Theme is applied per route GROUP
- * (homeowner → Daylight, contractor → Blueprint) so the surface matches the
+ * (homeowner → Daylight, contractor → Neev) so the surface matches the
  * role; here we only set up Query, i18n, auth, safe-area, and load fonts.
  */
 import { useEffect, useMemo } from 'react'

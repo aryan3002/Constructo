@@ -1,25 +1,22 @@
 /**
- * Accountant tabs — Blueprint theme. The accountant's slice is read-mostly,
+ * Accountant tabs — Neev theme. The accountant's slice is read-mostly,
  * evidence-anchored, and exceptions-first (CA5). It is TRACKING-ONLY: nothing
  * here moves money — the accountant flags, the owner resolves.
  *
- * The parent (contractor) group already wraps <ThemeProvider initial="blueprint">,
- * so this layout only defines the Tabs. Icons are premium Feather glyphs (no
- * emoji), amber active tint.
+ * The parent (contractor) group already wraps <ThemeProvider initial="neev">,
+ * so this layout only defines the Tabs. Icons are Ionicons outline,
+ * amber active tint.
  */
-import { Feather } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 
-type FeatherName = React.ComponentProps<typeof Feather>['name']
-
-function icon(name: FeatherName) {
-  return ({ color }: { color: string }) => (
-    <Feather name={name} size={20} color={color} />
-  )
-}
+const tabIcon =
+  (name: keyof typeof Ionicons.glyphMap) =>
+  ({ color }: { color: string; size: number }) =>
+    <Ionicons name={name} size={22} color={color} />
 
 export default function AccountantLayout() {
   const { t } = useT()
@@ -39,20 +36,20 @@ export default function AccountantLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: theme.name === 'blueprint' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: theme.name === 'neev' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
       }}
     >
       <Tabs.Screen
         name="reconcile"
-        options={{ title: t('accountant.tabReconcile'), tabBarIcon: icon('check-circle') }}
+        options={{ title: t('accountant.tabReconcile'), tabBarIcon: tabIcon('card-outline') }}
       />
       <Tabs.Screen
         name="payments"
-        options={{ title: t('accountant.tabPayments'), tabBarIcon: icon('credit-card') }}
+        options={{ title: t('accountant.tabPayments'), tabBarIcon: tabIcon('cash-outline') }}
       />
       <Tabs.Screen
         name="more"
-        options={{ title: t('accountant.tabMore'), tabBarIcon: icon('menu') }}
+        options={{ title: t('accountant.tabMore'), tabBarIcon: tabIcon('ellipsis-horizontal-outline') }}
       />
       {/* Site detail is a pushed route, not a tab. */}
       <Tabs.Screen name="site/[id]" options={{ href: null }} />

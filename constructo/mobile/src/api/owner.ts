@@ -150,6 +150,34 @@ export interface Member {
   name: string
   phone: string | null
   role: Role
+  is_active: boolean
+}
+
+// ============================================================================
+// Invite (POST /api/v1/invites) — contractor team member join token.
+// ============================================================================
+export interface Invite {
+  id: string
+  company_id: string
+  phone: string
+  role: Role
+  name: string | null
+  status: 'pending' | 'accepted' | 'revoked'
+  token: string
+  created_at: string
+}
+
+// ============================================================================
+// HomeownerMemberInvite (POST /api/v1/homeowner/members) — client join code.
+// ============================================================================
+export interface HomeownerMemberInvite {
+  id: string
+  site_id: string
+  phone: string | null
+  display_name: string | null
+  join_code: string
+  invite_link: string
+  status: string
 }
 
 // ============================================================================
@@ -401,8 +429,37 @@ export const owner = {
       body: JSON.stringify({ ids, note: note ?? null }),
     }),
 
-  // --- Team members (assignable users for the Assign picker) ---
+  // --- Team members (assignable users for the Assign picker + Team screen) ---
   members: () => request<Paginated<Member>>('/api/v1/users'),
+
+  /** Invite a contractor team member. POST /api/v1/invites.
+   *  Owner-only. Returns the invite row; the join link is WEB_BASE/join/<token>. */
+  invite: (body: { phone: string; role: Role; name?: string }) =>
+    request<Invite>('/api/v1/invites', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Invite a homeowner/client for a specific site. POST /api/v1/homeowner/members.
+   *  Sends sub_role='primary_owner'; the client redeems the join_code in the mobile app. */
+  inviteClient: (body: { site_id: string; phone?: string; name?: string }) =>
+    request<HomeownerMemberInvite>('/api/v1/homeowner/members', {
+      method: 'POST',
+      body: JSON.stringify({
+        site_id: body.site_id,
+        sub_role: 'primary_owner',
+        phone: body.phone || undefined,
+        display_name: body.name || undefined,
+      }),
+    }),
+
+  /** Update a team member's role or active status. PATCH /api/v1/users/{id}.
+   *  Owner-only; the backend rejects self-edit with 403. */
+  updateMember: (id: string, patch: { role?: Role; is_active?: boolean }) =>
+    request<Member>(`/api/v1/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
 
   // --- Sites ---
   sites: () => request<Paginated<Site>>('/api/v1/sites'),

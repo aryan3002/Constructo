@@ -1,7 +1,7 @@
 /**
  * Crew chat (`/chat`) — the site's in-app thread (Phase 1). Every message also
  * flows into extraction server-side, so this is "capture with a conversation
- * around it". Blueprint theme: warm paper, amber for own messages + Send,
+ * around it". Neev theme: warm paper, amber for own messages + Send,
  * ≥48px tap targets, Hindi-first copy.
  *
  * v1: the supervisor's assigned site(s); messages poll every ~8s; sends are
