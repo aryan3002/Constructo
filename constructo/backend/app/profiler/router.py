@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -31,6 +32,8 @@ from app.profiler.schemas import (
     ReferenceOut,
 )
 from app.profiler.taste import build_taste_model, check_consistency
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
 
@@ -163,6 +166,7 @@ async def add_reference(
         try:
             attrs = await extract_reference_attributes(llm, image_url)
         except Exception:  # never fail the request on extraction
+            logger.exception("profiler: vision extraction failed for reference %s", ref.id)
             attrs = None
         if attrs:
             confidence = float(attrs.get("confidence") or 0.0)
