@@ -6,7 +6,7 @@
  *                      NOTE: For new joins, join.tsx routes directly to welcome
  *                      (bypassing this gate entirely). This gate only handles
  *                      returning sessions (app restart / re-open).
- *   owner            → /(contractor)/owner/brief  (Blueprint, H4)
+ *   owner            → /(contractor)/owner/brief  (Neev, H4)
  *   supervisor       → /(contractor)/supervisor/capture
  *   labor_contractor → /(contractor)/mukadam/attendance
  *   pm               → /(contractor)/pm/dpr        (C4 Auto-DPR review)

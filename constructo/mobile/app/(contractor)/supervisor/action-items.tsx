@@ -1,6 +1,6 @@
 /**
  * Action Items dashboard (Phase 1.6 manual + 2.7 AI-detected) — the site's
- * to-dos so nothing falls through. Blueprint theme. Open items first (status
+ * to-dos so nothing falls through. Neev theme. Open items first (status
  * spine + due date + "Nivaan" badge for AI-detected ones), then completed.
  * Tap the circle to complete/reopen; "+" adds one. Distinct from approvals
  * (Tasks/Asks) — this is do-a-task, not approve-an-act.

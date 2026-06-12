@@ -1,4 +1,4 @@
-/** Contractor shell — Blueprint theme. Phased (H4+); the web app covers
+/** Contractor shell — Neev theme. Phased (H4+); the web app covers
  * contractors today, so this group is a placeholder behind an auth guard. */
 import { Redirect, Stack } from 'expo-router'
 
@@ -12,7 +12,7 @@ export default function ContractorLayout() {
   if (role === 'homeowner') return <Redirect href="/(homeowner)/home" />
 
   return (
-    <ThemeProvider initial="blueprint">
+    <ThemeProvider initial="neev">
       <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   )

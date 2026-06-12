@@ -1,6 +1,6 @@
 /**
  * Owner-local composite components + helpers (NOT in src/ui — these are
- * Owner-branch specific). Built on the shared kit + Blueprint theme:
+ * Owner-branch specific). Built on the shared kit + Neev theme:
  *
  *   - formatDate / formatWhen                     — time formatting
  *   - riskToEvidence                              — Risk → EvidenceCard items

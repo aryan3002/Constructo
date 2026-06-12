@@ -1,4 +1,4 @@
-// Constructo "Blueprint & Daylight" RN design system — public surface.
+// Constructo "Neev & Daylight" RN design system — public surface.
 export {
   Display,
   H1,

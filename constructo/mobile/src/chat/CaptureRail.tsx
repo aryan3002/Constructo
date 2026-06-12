@@ -3,7 +3,7 @@
  * text looks like a structured capture (delivery / attendance), this offers a
  * one-tap "Log …?" chip that sends it as a `capture_type` message. Theme-aware:
  * the chip tint derives from `theme.colors.accent` (sage on daylight, amber on
- * blueprint) — NOT the old hardcoded amber. Slash-command parsing stays in the
+ * neev) — NOT the old hardcoded amber. Slash-command parsing stays in the
  * screen's send handler (`src/capture/slash.ts`); this is the suggest half only.
  */
 import { Pressable, View } from 'react-native'

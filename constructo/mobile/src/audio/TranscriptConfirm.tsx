@@ -11,7 +11,7 @@
  *   - 'heard'      → transcript + confirmable numeral + Confirm / Fix buttons.
  *   - (dismissed)  → parent unmounts it.
  *
- * Blueprint theme, premium icons (`@expo/vector-icons`), ≥48px targets. Lives in
+ * Neev theme, premium icons (`@expo/vector-icons`), ≥48px targets. Lives in
  * src/audio (the recorder's sibling), NOT src/ui.
  */
 import { useEffect, useState } from 'react'

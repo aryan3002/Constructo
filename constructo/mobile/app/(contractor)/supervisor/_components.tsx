@@ -1,5 +1,5 @@
 /**
- * Local composite components for the Supervisor branch (Blueprint theme). These
+ * Local composite components for the Supervisor branch (Neev theme). These
  * are NOT in src/ui — they are role-specific compositions of the shared kit
  * (Button, Card, Typography, StatusDot) and live with the screens that use them.
  *

@@ -10,7 +10,7 @@
  *    raiser proposed corrected fields — which writes a NEW superseding version,
  *    append-only and attributed. Never a silent overwrite.
  *
- * Blueprint theme, ≥48px targets, Hindi-first. Honest-AI: a human commits; the
+ * Neev theme, ≥48px targets, Hindi-first. Honest-AI: a human commits; the
  * proposed correction is shown verbatim so the resolver decides on evidence.
  */
 import { useState } from 'react'

@@ -1,5 +1,5 @@
 /**
- * Owner Chat inbox primitives (Blueprint theme). A `ConversationRow` is one
+ * Owner Chat inbox primitives (Neev theme). A `ConversationRow` is one
  * accessible crew thread in the inbox: an initials avatar, the thread title, a
  * "client present" cue when the homeowner is in the thread (shape + --info, never
  * color alone), a compact recency string, and an amber-fill unread badge.
