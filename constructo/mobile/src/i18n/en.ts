@@ -50,6 +50,7 @@ export const en = {
   },
   pm: {
     tabDpr: 'DPR',
+    tabChat: 'Chat',
     tabMore: 'More',
     dprTitle: 'Daily Progress Report',
     dprSubtitle: 'Auto-drafted from today’s site activity. Review and send.',

@@ -52,6 +52,7 @@ export const hi: Dict = {
   },
   pm: {
     tabDpr: 'DPR',
+    tabChat: 'चैट',
     tabMore: 'और',
     dprTitle: 'दैनिक प्रगति रिपोर्ट',
     dprSubtitle: 'आज की साइट गतिविधि से अपने-आप तैयार। जाँचें और भेजें।',
