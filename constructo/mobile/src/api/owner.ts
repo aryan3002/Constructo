@@ -454,11 +454,23 @@ export const owner = {
     }),
 
   /** Update a team member's role or active status. PATCH /api/v1/users/{id}.
-   *  Owner-only; the backend rejects self-edit with 403. */
-  updateMember: (id: string, patch: { role?: Role; is_active?: boolean }) =>
+   *  Owner-only; the backend rejects self-edit with 403.
+   *
+   *  Sensitive changes (deactivate, privileged role assignment) require a
+   *  `step_up_token` obtained via `authApi.stepUpVerify()`. When supplied the
+   *  token is forwarded as the `X-Step-Up-Token` request header so the backend
+   *  step-up gate is satisfied. Non-sensitive patches (e.g. reactivation, role
+   *  changes to non-privileged roles) do NOT need the token — omit it and the
+   *  first call succeeds without an OTP prompt. */
+  updateMember: (
+    id: string,
+    patch: { role?: Role; is_active?: boolean },
+    stepUpToken?: string,
+  ) =>
     request<Member>(`/api/v1/users/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
+      ...(stepUpToken ? { headers: { 'X-Step-Up-Token': stepUpToken } } : {}),
     }),
 
   // --- Sites ---

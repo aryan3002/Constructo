@@ -650,6 +650,11 @@ export const en = {
   'admin.team.deactivate': 'Deactivate',
   'admin.team.reactivate': 'Reactivate',
   'admin.team.read_only': 'Only the owner can change roles.',
+  'admin.team.step_up_otp_prompt': 'Enter your verification code to confirm this change',
+  'admin.team.step_up_otp_label': 'Verification code',
+  'admin.team.step_up_verify_cta': 'Verify & save',
+  'admin.team.step_up_bad_otp': 'That code didn’t work — try again.',
+  'admin.team.step_up_cancel': 'Cancel',
   // Site baselines (W4.4)
   'admin.baselines.title': 'Site baselines',
   'admin.baselines.subtitle': 'Set each site’s expected daily headcount so labor shortfalls fire against a real number.',

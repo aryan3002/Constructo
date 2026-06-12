@@ -9,6 +9,8 @@
 
 import { API_BASE, USE_MOCKS } from './config'
 import { ApiError } from './client'
+import { StepUpRequiredError } from './errors'
+export { StepUpRequiredError } from './errors'
 
 // ---------------------------------------------------------------------------
 // Token storage. Token persists in localStorage so a refresh keeps you signed in.
@@ -384,18 +386,62 @@ export const authApi = {
     return page.items
   },
 
-  /** Change a teammate's role / active status (PATCH /api/v1/users/{id}). */
-  updateTeamMember(id: string, patch: TeamMemberUpdate): Promise<TeamMember> {
+  /**
+   * Change a teammate's role / active status (PATCH /api/v1/users/{id}).
+   *
+   * Sensitive changes (deactivating a user or assigning a privileged role) require
+   * a fresh step-up token in `X-Step-Up-Token`. When the server responds with
+   * 403 `step_up_required` this method throws `StepUpRequiredError` so the caller
+   * can run the OTP flow and retry with a token.
+   */
+  async updateTeamMember(
+    id: string,
+    patch: TeamMemberUpdate,
+    stepUpToken?: string,
+  ): Promise<TeamMember> {
     if (USE_MOCKS) {
       const m = mockTeam.find((x) => x.id === id)
       if (!m) return Promise.reject(new ApiError(404, 'User not found'))
+      // Mirror the real gate in dev: deactivation or privileged role → demand step-up.
+      const PRIVILEGED_ROLES: Role[] = ['owner', 'pm', 'accountant', 'procurement']
+      const isSensitive =
+        patch.is_active === false ||
+        (patch.role !== undefined && PRIVILEGED_ROLES.includes(patch.role))
+      if (isSensitive && !stepUpToken) throw new StepUpRequiredError()
       Object.assign(m, patch)
       return Promise.resolve({ ...m })
     }
-    return call(`/api/v1/users/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    })
+    const headers = new Headers({ 'Content-Type': 'application/json' })
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    if (stepUpToken) headers.set('X-Step-Up-Token', stepUpToken)
+
+    const res = await fetch(
+      `${API_BASE}/api/v1/users/${encodeURIComponent(id)}`,
+      { method: 'PATCH', headers, body: JSON.stringify(patch) },
+    )
+    if (res.status === 403) {
+      let code = ''
+      try {
+        const body = await res.json()
+        code = body?.error?.code ?? ''
+      } catch {
+        /* non-JSON */
+      }
+      if (code === 'step_up_required') throw new StepUpRequiredError()
+      throw new ApiError(403, 'Forbidden')
+    }
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = await res.json()
+        detail = body?.error?.message ?? body?.detail ?? body?.message ?? detail
+      } catch {
+        /* non-JSON */
+      }
+      throw new ApiError(res.status, detail)
+    }
+    return (await res.json()) as TeamMember
   },
 }
 

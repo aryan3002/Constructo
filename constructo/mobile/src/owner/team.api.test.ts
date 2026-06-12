@@ -2,21 +2,26 @@
  * Tests for Slice D — Team & roles screen.
  *
  * Covers:
- *   1. owner.invite()       → hits POST /api/v1/invites with correct body
- *   2. owner.inviteClient() → hits POST /api/v1/homeowner/members with
- *                             sub_role='primary_owner' + display_name
- *   3. owner.updateMember() → hits PATCH /api/v1/users/{id} with role patch
- *   4. owner.updateMember() → hits PATCH /api/v1/users/{id} with is_active patch
- *   5. buildJoinLink()      → builds the correct web join URL
- *   6. isSelf()             → correctly identifies the signed-in user's own row
- *   7. Self-row guard       → self-row actions are disabled in rendered output
- *      (pure logic: isSelf returns true only when ids match)
- *   8. Invite branch        → contractor role ≠ 'client' → invite() called (not inviteClient)
- *   9. Client branch        → role === 'client' → inviteClient() called (not invite)
- *  10. Role-change confirm  → updateMember called with role patch only
- *  11. Deactivate confirm   → updateMember called with is_active:false
- *  12. Reactivate confirm   → updateMember called with is_active:true
- *  13. Member.is_active     → Member type accepts is_active boolean
+ *   1.  owner.invite()       → hits POST /api/v1/invites with correct body
+ *   2.  owner.inviteClient() → hits POST /api/v1/homeowner/members with
+ *                              sub_role='primary_owner' + display_name
+ *   3.  owner.updateMember() → hits PATCH /api/v1/users/{id} with role patch
+ *   4.  owner.updateMember() → hits PATCH /api/v1/users/{id} with is_active patch
+ *   5.  buildJoinLink()      → builds the correct web join URL
+ *   6.  isSelf()             → correctly identifies the signed-in user's own row
+ *   7.  Self-row guard       → self-row actions are disabled in rendered output
+ *       (pure logic: isSelf returns true only when ids match)
+ *   8.  Invite branch        → contractor role ≠ 'client' → invite() called (not inviteClient)
+ *   9.  Client branch        → role === 'client' → inviteClient() called (not invite)
+ *  10.  Role-change confirm  → updateMember called with role patch only
+ *  11.  Deactivate confirm   → updateMember called with is_active:false
+ *  12.  Reactivate confirm   → updateMember called with is_active:true
+ *  13.  Member.is_active     → Member type accepts is_active boolean
+ *  14.  updateMember with stepUpToken → sends X-Step-Up-Token header
+ *  15.  authApi.stepUpRequestOtp()   → POST /api/v1/auth/step-up/request-otp
+ *  16.  authApi.stepUpVerify()       → POST /api/v1/auth/step-up/verify with otp body
+ *  17.  step_up_required retry path → on ApiError code=step_up_required, verify then
+ *       retry updateMember with the obtained token (integration)
  */
 
 // ---------------------------------------------------------------------------
@@ -66,6 +71,8 @@ jest.mock('expo-router', () => ({
 
 import { owner } from '../api/owner'
 import type { Member } from '../api/owner'
+import { authApi } from '../api/auth'
+import { ApiError } from '../api/client'
 import type { Role } from '../api/types'
 import { buildJoinLink, isSelf } from '../../app/(contractor)/owner/team'
 import { WEB_BASE } from '../api/config'
@@ -387,5 +394,177 @@ describe('Member type', () => {
       is_active: false,
     }
     expect(m.is_active).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 14. updateMember forwards X-Step-Up-Token when a token is supplied
+// ---------------------------------------------------------------------------
+
+describe('updateMember with step-up token', () => {
+  it('sends X-Step-Up-Token header when stepUpToken is provided', async () => {
+    const fakeMember: Member = {
+      id: 'user-42',
+      company_id: 'co-1',
+      name: 'Ritu',
+      phone: null,
+      role: 'pm',
+      is_active: false,
+    }
+    mockOk(fakeMember)
+
+    await owner.updateMember('user-42', { is_active: false }, 'sut_abc123')
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    // The Headers constructor merges all passed headers; inspect as object.
+    const headers = init.headers as Headers
+    // In a jsdom/node environment, Headers may be a plain object or Headers instance.
+    const getHeader = (h: unknown, name: string): string | null =>
+      typeof (h as Headers).get === 'function'
+        ? (h as Headers).get(name)
+        : ((h as Record<string, string>)[name] ?? null)
+
+    expect(getHeader(headers, 'X-Step-Up-Token')).toBe('sut_abc123')
+  })
+
+  it('does NOT send X-Step-Up-Token when no token is provided', async () => {
+    mockOk({ id: 'u', company_id: 'c', name: 'N', phone: null, role: 'pm', is_active: true })
+    await owner.updateMember('u', { is_active: true })
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const headers = init.headers as Headers
+    const getHeader = (h: unknown, name: string): string | null =>
+      typeof (h as Headers).get === 'function'
+        ? (h as Headers).get(name)
+        : ((h as Record<string, string>)[name] ?? null)
+
+    expect(getHeader(headers, 'X-Step-Up-Token')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 15. authApi.stepUpRequestOtp → hits POST /api/v1/auth/step-up/request-otp
+// ---------------------------------------------------------------------------
+
+describe('authApi.stepUpRequestOtp', () => {
+  it('POSTs to /api/v1/auth/step-up/request-otp', async () => {
+    mockOk({ sent: true, dev_otp: '000000' })
+    const resp = await authApi.stepUpRequestOtp()
+    expect(resp.sent).toBe(true)
+    expect(resp.dev_otp).toBe('000000')
+
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/api/v1/auth/step-up/request-otp')
+    expect(init.method).toBe('POST')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 16. authApi.stepUpVerify → hits POST /api/v1/auth/step-up/verify with otp
+// ---------------------------------------------------------------------------
+
+describe('authApi.stepUpVerify', () => {
+  it('POSTs to /api/v1/auth/step-up/verify with the otp in the body', async () => {
+    mockOk({ step_up_token: 'sut_xyz999', expires_in: 300 })
+    const resp = await authApi.stepUpVerify('123456')
+    expect(resp.step_up_token).toBe('sut_xyz999')
+    expect(resp.expires_in).toBe(300)
+
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/api/v1/auth/step-up/verify')
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string)
+    expect(body.otp).toBe('123456')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 17. step_up_required retry integration
+//
+// Simulates the full retry path:
+//   1. updateMember fails with ApiError(403, 'step_up_required')
+//   2. Caller detects the code → calls stepUpVerify to get a token
+//   3. Caller retries updateMember with the token
+//   4. Final result is the updated Member
+// ---------------------------------------------------------------------------
+
+describe('step_up_required retry path', () => {
+  it('retries updateMember with token after step_up_required error', async () => {
+    const MEMBER_ID = 'user-step'
+    const PATCH = { is_active: false }
+    const FAKE_TOKEN = 'sut_retry_token'
+
+    // First call: backend rejects with step_up_required
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { code: 'step_up_required', message: 'Step-up required' } }),
+    })
+
+    // Second call (stepUpVerify): returns the token
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ step_up_token: FAKE_TOKEN, expires_in: 300 }),
+    })
+
+    // Third call (retry updateMember with token): succeeds
+    const updatedMember: Member = {
+      id: MEMBER_ID,
+      company_id: 'co-1',
+      name: 'Test',
+      phone: null,
+      role: 'pm',
+      is_active: false,
+    }
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => updatedMember,
+    })
+
+    // --- Simulate the ManageSheet retry logic ---
+    let result: Member | undefined
+    let stepUpToken: string | undefined
+
+    try {
+      // Attempt 1: no token
+      result = await owner.updateMember(MEMBER_ID, PATCH)
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'step_up_required') {
+        // OTP verified (mocked above)
+        const verifyResp = await authApi.stepUpVerify('000000')
+        stepUpToken = verifyResp.step_up_token
+        // Retry with token
+        result = await owner.updateMember(MEMBER_ID, PATCH, stepUpToken)
+      } else {
+        throw err
+      }
+    }
+
+    // Should have made 3 fetch calls total
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+
+    // Third call must carry the step-up token header
+    const [, retryInit] = mockFetch.mock.calls[2] as [string, RequestInit]
+    const retryHeaders = retryInit.headers as Headers
+    const getHeader = (h: unknown, name: string): string | null =>
+      typeof (h as Headers).get === 'function'
+        ? (h as Headers).get(name)
+        : ((h as Record<string, string>)[name] ?? null)
+    expect(getHeader(retryHeaders, 'X-Step-Up-Token')).toBe(FAKE_TOKEN)
+    expect(result?.is_active).toBe(false)
+    expect(stepUpToken).toBe(FAKE_TOKEN)
+  })
+
+  it('does NOT trigger step-up for a non-sensitive patch (reactivate)', async () => {
+    // Reactivation (is_active: true) must succeed without any OTP prompt.
+    mockOk({ id: 'u', company_id: 'c', name: 'N', phone: null, role: 'pm', is_active: true })
+
+    const result = await owner.updateMember('u', { is_active: true })
+
+    // Only one fetch call — no step-up roundtrip.
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(result.is_active).toBe(true)
   })
 })

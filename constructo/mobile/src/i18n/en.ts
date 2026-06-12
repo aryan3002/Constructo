@@ -257,6 +257,19 @@ export const en = {
     title: 'Component gallery',
     subtitle: 'The Constructo kit, in both themes.',
   },
+  stepUp: {
+    title: 'Verify your identity',
+    body: 'This change is sensitive. We sent a one-time code to your registered phone number.',
+    otpLabel: 'One-time code',
+    sending: 'Sending code…',
+    verify: 'Verify & continue',
+    verifying: 'Verifying…',
+    resend: 'Resend code',
+    cancel: 'Cancel',
+    whyTitle: 'Why is this needed?',
+    whyBody: 'Deactivating a user or assigning a privileged role (owner, PM, accountant, procurement) changes who can access your workspace. We ask for a one-time code to confirm it is really you.',
+    errorWrongCode: 'Incorrect code — please try again.',
+  },
 }
 
 export type Dict = typeof en
