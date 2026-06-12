@@ -1,0 +1,126 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import get_current_user, require_role
+from app.common.errors import AppError
+from app.db import get_session
+from app.models import User, UserRole
+from app.models.profiler import (
+    ProfilerArea,
+    ProfilerContributor,
+    ProfilerProfile,
+    ProfileStatus,
+)
+from app.profiler.schemas import (
+    AreaOut,
+    ContributorIn,
+    ContributorOut,
+    ProfileCreate,
+    ProfileDetailOut,
+    ProfileOut,
+)
+
+router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
+
+# Who may create/edit a profile on the contractor side (homeowner-side gating is added in Plan 3).
+_EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+
+
+async def _load_owned_profile(
+    session: AsyncSession, profile_id: UUID, user: User
+) -> ProfilerProfile:
+    profile = await session.get(ProfilerProfile, profile_id)
+    if profile is None or profile.company_id != user.company_id:
+        raise AppError(404, "not_found", "Profile not found")
+    return profile
+
+
+@router.post("/profiles", response_model=ProfileOut, status_code=201)
+async def create_profile(
+    body: ProfileCreate,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileOut:
+    profile = ProfilerProfile(
+        company_id=user.company_id,
+        site_id=body.site_id,
+        scope_type=body.scope_type,
+        created_by=user.id,
+        status=ProfileStatus.intake_started,
+    )
+    session.add(profile)
+    await session.flush()
+    for a in body.areas:
+        session.add(
+            ProfilerArea(
+                profile_id=profile.id,
+                area_kind=a.area_kind,
+                area_key=a.area_key,
+                space_id=a.space_id,
+                component_id=a.component_id,
+                recommended_count=a.recommended_count,
+            )
+        )
+    for c in body.contributors:
+        session.add(
+            ProfilerContributor(
+                profile_id=profile.id,
+                member_id=c.member_id,
+                user_id=c.user_id,
+                role=c.role,
+                is_decision_owner=c.is_decision_owner,
+            )
+        )
+    await session.commit()
+    await session.refresh(profile)
+    return ProfileOut.model_validate(profile)
+
+
+@router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)
+async def get_profile(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    profile = await _load_owned_profile(session, profile_id, user)
+    areas = (
+        (await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile_id)))
+        .scalars()
+        .all()
+    )
+    contributors = (
+        (
+            await session.execute(
+                select(ProfilerContributor).where(ProfilerContributor.profile_id == profile_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out = ProfileDetailOut.model_validate(profile)
+    out.areas = [AreaOut.model_validate(a) for a in areas]
+    out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    return out
+
+
+@router.post("/profiles/{profile_id}/contributors", status_code=201)
+async def add_contributor(
+    profile_id: UUID,
+    body: ContributorIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    profile = await _load_owned_profile(session, profile_id, user)
+    c = ProfilerContributor(
+        profile_id=profile.id,
+        member_id=body.member_id,
+        user_id=body.user_id,
+        role=body.role,
+        is_decision_owner=body.is_decision_owner,
+    )
+    session.add(c)
+    await session.commit()
+    return {"id": str(c.id)}
