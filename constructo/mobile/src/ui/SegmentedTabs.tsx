@@ -32,7 +32,7 @@ export function SegmentedTabs({ tabs, active, onChange, style }: SegmentedTabsPr
 
   // Active fill: ink on neev (survives direct sun), accent on daylight.
   const activeBg = neev ? c.text : c.accent
-  const activeFg = neev ? '#f4f0e7' : c.onAccent // ON_INK on neev, onAccent on daylight
+  const activeFg = neev ? c.paper : c.onAccent // ON_INK on neev, onAccent on daylight
 
   return (
     <View

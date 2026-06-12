@@ -73,19 +73,6 @@ describe('theme tokens — Wave-0 component surface', () => {
 // ─── Toggle logic — the one pure-helper we can extract ───────────────────────
 
 describe('Toggle — value logic (no RN renderer)', () => {
-  // The toggle fires onValueChange(!value). Verify the inversion in isolation.
-  it('inverts false → true', () => {
-    const value = false
-    const next = !value
-    expect(next).toBe(true)
-  })
-
-  it('inverts true → false', () => {
-    const value = true
-    const next = !value
-    expect(next).toBe(false)
-  })
-
   it('disabled prop prevents calling onValueChange (guard logic)', () => {
     const disabled = true
     const onValueChange = jest.fn()

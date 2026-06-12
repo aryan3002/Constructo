@@ -119,7 +119,7 @@ export function Toggle({ value, onValueChange, disabled = false, style }: Toggle
             borderRadius: THUMB / 2,
             backgroundColor: '#ffffff',
             transform: [{ translateX: thumbX }],
-            shadowColor: '#1b1916',
+            shadowColor: c.text,
             shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.28,
             shadowRadius: 3,
