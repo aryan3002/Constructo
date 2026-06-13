@@ -46,6 +46,26 @@ async def test_get_profile_by_site_resolves_for_member_and_404s_for_stranger(
         app.dependency_overrides.pop(get_llm, None)
 
 
+async def test_profile_detail_exposes_my_contributor_id(client, factory, db_session):
+    app.dependency_overrides[get_llm] = _llm
+    try:
+        architect, owner, site, pid, _area, contrib_id = (
+            await _profile_with_homeowner_contributor(client, factory, db_session)
+        )
+        # the homeowner sees THEIR contributor id on both detail endpoints
+        by_id = (await client.get(f"/api/v1/design/profiles/{pid}", headers=auth(owner))).json()
+        assert by_id["my_contributor_id"] == contrib_id
+        by_site = (await client.get(
+            f"/api/v1/design/profiles/by-site/{site.id}", headers=auth(owner))).json()
+        assert by_site["my_contributor_id"] == contrib_id
+        # the contractor architect is not a contributor here -> None
+        as_arch = (await client.get(
+            f"/api/v1/design/profiles/{pid}", headers=auth(architect))).json()
+        assert as_arch["my_contributor_id"] is None
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
 async def test_homeowner_can_add_reference_and_rank_as_self(client, factory, db_session):
     app.dependency_overrides[get_llm] = _llm
     try:

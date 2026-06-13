@@ -181,6 +181,33 @@ async def _resolve_area_component(
     return component.id
 
 
+async def _my_contributor_id(
+    session: AsyncSession,
+    profile: ProfilerProfile,
+    contributors: list[ProfilerContributor],
+    user: User,
+) -> UUID | None:
+    """The requesting user's own contributor on this profile, if any (so a client can
+    rank as themselves). Maps by user_id, or by an active HomeownerMember of theirs."""
+    member_ids: set[UUID] = set()
+    if user.role is UserRole.homeowner:
+        member_ids = set(
+            (
+                await session.execute(
+                    select(HomeownerMember.id).where(
+                        HomeownerMember.user_id == user.id,
+                        HomeownerMember.site_id == profile.site_id,
+                        HomeownerMember.status == MemberStatus.active,
+                    )
+                )
+            ).scalars().all()
+        )
+    for c in contributors:
+        if c.user_id == user.id or (c.member_id is not None and c.member_id in member_ids):
+            return c.id
+    return None
+
+
 async def _area_signals(
     session: AsyncSession, area_id: UUID
 ) -> tuple[list[dict], list[dict]]:
@@ -388,6 +415,7 @@ async def get_profile(
     out = ProfileDetailOut.model_validate(profile)
     out.areas = [AreaOut.model_validate(a) for a in areas]
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
     return out
 
 
@@ -421,6 +449,7 @@ async def get_profile_by_site(
     out = ProfileDetailOut.model_validate(profile)
     out.areas = [AreaOut.model_validate(a) for a in areas]
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
     return out
 
 

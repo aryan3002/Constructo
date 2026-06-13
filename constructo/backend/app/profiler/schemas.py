@@ -66,6 +66,9 @@ class ProfileOut(BaseModel):
 class ProfileDetailOut(ProfileOut):
     areas: list[AreaOut] = []
     contributors: list[ContributorOut] = []
+    # The requesting user's own contributor on this profile (so a client can rank
+    # as themselves). None when the caller is not a contributor (e.g. a contractor).
+    my_contributor_id: UUID | None = None
 
 
 class ReferenceIn(BaseModel):
