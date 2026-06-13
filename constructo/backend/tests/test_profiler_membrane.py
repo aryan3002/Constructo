@@ -165,3 +165,70 @@ async def test_cross_company_and_cross_site_get_404(client, factory, db_session)
         assert r_brief.status_code == 404
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_cross_site_homeowner_cannot_act_on_brief(client, factory, db_session):
+    """A primary_owner of a DIFFERENT site (same company) cannot even load the
+    brief to act on it — the loader 404s before any authority check."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        other_site = await factory.site(w["company"], name="Other")
+        stranger = await factory.user(company=w["company"], role=UserRole.homeowner)
+        await _member(db_session, other_site.id, stranger.id, HomeownerSubRole.primary_owner)
+        resp = await client.post(f"/api/v1/design/briefs/{w['bid']}/approval",
+            json={"action": "send_to_architect"}, headers=auth(stranger))
+        assert resp.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_contractor_side_cannot_do_owner_or_architect_actions(client, factory, db_session):
+    """A contractor-side pm is neither a homeowner owner nor the architect: it is
+    refused the owner action (approve_forbidden) and the sign-off (architect_only)."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        bid = w["bid"]
+        pm = await factory.user(company=w["company"], role=UserRole.pm)
+        # owner action from homeowner_review -> valid transition, fails authority
+        owner_act = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(pm))
+        assert owner_act.status_code == 403
+        assert owner_act.json()["error"]["code"] == "approve_forbidden"
+        # move to architect_review (owner), then pm attempts architect sign-off
+        await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(w["owner"]))
+        signoff = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "architect_sign_off"}, headers=auth(pm))
+        assert signoff.status_code == 403
+        assert signoff.json()["error"]["code"] == "architect_only"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_answer_clarification_is_membrane_scoped(client, factory, db_session):
+    """A cross-site stranger cannot answer a clarification on a profile they
+    cannot access; the site owner can."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        pid, area_id = w["pid"], w["area_id"]
+        gen = await client.post(
+            f"/api/v1/design/profiles/{pid}/areas/{area_id}/clarifications",
+            headers=auth(w["architect"]))
+        assert gen.status_code == 201 and gen.json()
+        qid = gen.json()[0]["id"]
+        # cross-site stranger -> 404
+        other_site = await factory.site(w["company"], name="Other")
+        stranger = await factory.user(company=w["company"], role=UserRole.homeowner)
+        await _member(db_session, other_site.id, stranger.id, HomeownerSubRole.primary_owner)
+        blocked = await client.post(f"/api/v1/design/clarifications/{qid}/answer",
+            json={"answer": "no"}, headers=auth(stranger))
+        assert blocked.status_code == 404
+        # the site owner can answer
+        ok = await client.post(f"/api/v1/design/clarifications/{qid}/answer",
+            json={"answer": "Matte."}, headers=auth(w["owner"]))
+        assert ok.status_code == 200 and ok.json()["answer"] == "Matte."
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
