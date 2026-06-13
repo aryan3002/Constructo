@@ -1,12 +1,10 @@
 /**
- * Staff phone + OTP login (the contractor/builder entry, reached from the "Who
- * are you?" chooser). Two steps: enter phone → request code → enter the 6-digit
- * OTP. Dev OTP is 000000.
+ * Homeowner phone+OTP login — the returning-user path.
  *
- * Rendered in the **Neev** theme (amber-on-ink) — builders see their brand
- * here even though the auth group default is Daylight, since only staff reach
- * this screen. The themed body lives in `LoginInner` so its `useTheme()` reads
- * the nested Neev provider.
+ * Existing homeowners (who have already joined via a join code) log in here
+ * with just their phone number. After OTP verification we confirm the backend
+ * role is "homeowner" — if the number has no homeowner account we sign back
+ * out immediately and prompt them to use the join-code flow instead.
  */
 import { useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
@@ -17,51 +15,15 @@ import { authApi } from '../../src/api/auth'
 import { ApiError } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
-import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
+import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import type { Role } from '../../src/api/types'
 import { Body, Button, Display, Screen, Small, useInputStyle, Logo } from '../../src/ui'
 
-/**
- * Role → home route. Mirrors the map in app/index.tsx. We navigate to the
- * resolved home DIRECTLY rather than `router.replace('/')`: from inside the
- * `(auth)` Stack a bare `'/'` REPLACE resolves to THIS group's own `index`
- * route (the "Who are you?" chooser), which is exactly the bounce we were
- * chasing — and in some nav states it throws "no route named 'index'".
- */
-function homeFor(role: Role | null): string {
-  switch (role) {
-    case 'owner':
-      return '/(contractor)/owner/brief'
-    case 'pm':
-      return '/(contractor)/pm/dpr'
-    case 'supervisor':
-      return '/(contractor)/supervisor/capture'
-    case 'accountant':
-      return '/(contractor)/accountant/reconcile'
-    case 'labor_contractor':
-      return '/(contractor)/mukadam/attendance'
-    case 'homeowner':
-      return '/(homeowner)/home'
-    default:
-      // procurement (Tier-2 placeholder) and any future role
-      return '/(contractor)'
-  }
-}
-
-export default function Login() {
-  return (
-    <ThemeProvider initial="neev">
-      <LoginInner />
-    </ThemeProvider>
-  )
-}
-
-function LoginInner() {
+export default function HomeownerLogin() {
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
-  const { refresh, status, role } = useAuth()
+  const { refresh, signOut, status, role } = useAuth()
 
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [phone, setPhone] = useState('+91')
@@ -90,9 +52,18 @@ function LoginInner() {
     try {
       await authApi.login(phone, otp)
       const me = await refresh()
-      // On success, navigation is handled declaratively by the `status==='authed'`
-      // redirect in the render body below — no imperative router.replace here.
-      if (!me) setError(t('common.somethingWrong'))
+      if (!me) {
+        setError(t('common.somethingWrong'))
+        return
+      }
+      if (me.role !== 'homeowner') {
+        // This phone belongs to a contractor account — sign back out and warn.
+        await signOut()
+        setStep('phone')
+        setOtp('')
+        setError(t('auth.notHomeowner'))
+      }
+      // If homeowner, the Redirect below handles navigation declaratively.
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
     } finally {
@@ -100,16 +71,13 @@ function LoginInner() {
     }
   }
 
-  // Once the session is authed (after verify() resolves, or if a valid token
-  // already exists when this screen mounts), redirect to the role's real home.
-  // Declarative <Redirect> is resolved by the ROOT navigator, so it correctly
-  // leaves the (auth) group — unlike router.replace('/'), which resolved to the
-  // chooser inside this group and caused the login bounce.
-  if (status === 'authed') return <Redirect href={homeFor(role) as never} />
+  // Once authed as homeowner, leave the auth group.
+  if (status === 'authed' && role === 'homeowner') {
+    return <Redirect href="/(homeowner)/home" />
+  }
 
   return (
     <Screen>
-      {/* Back button → chooser */}
       <Pressable
         onPress={() => router.canGoBack() ? router.back() : router.replace('/(auth)')}
         accessibilityRole="button"
@@ -121,8 +89,8 @@ function LoginInner() {
 
       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
         <Logo size={48} />
-        <Display>{t('auth.welcome')}</Display>
-        <Small muted>{t('auth.staffLogin')}</Small>
+        <Display>{t('auth.homeownerLoginTitle')}</Display>
+        <Small muted>{t('auth.homeownerLoginSubtitle')}</Small>
       </View>
 
       <View style={{ gap: SPACE.md, marginTop: SPACE.xl }}>
@@ -131,14 +99,25 @@ function LoginInner() {
             <Small muted>{t('auth.phoneLabel')}</Small>
             <TextInput
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(text) => {
+                if (!text.startsWith('+91')) {
+                  setPhone('+91')
+                } else {
+                  setPhone(text)
+                }
+              }}
               keyboardType="phone-pad"
               autoFocus
               style={inputStyle}
               placeholder={t('auth.phonePlaceholder')}
               placeholderTextColor={theme.colors.textMute}
             />
-            <Button title={t('auth.sendCode')} block loading={busy} onPress={sendCode} />
+            <Button
+              title={t('auth.sendCode')}
+              block
+              loading={busy}
+              onPress={() => void sendCode()}
+            />
           </>
         ) : (
           <>
@@ -149,20 +128,27 @@ function LoginInner() {
               keyboardType="number-pad"
               autoFocus
               maxLength={6}
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
               style={[inputStyle, { letterSpacing: 8, textAlign: 'center' }]}
               placeholder="••••••"
               placeholderTextColor={theme.colors.textMute}
             />
             {__DEV__ && <Small muted>{t('auth.devOtpHint')}</Small>}
-            <Button title={t('auth.verify')} block loading={busy} onPress={verify} />
+            <Button
+              title={t('auth.verify')}
+              block
+              loading={busy}
+              onPress={() => void verify()}
+            />
           </>
         )}
         {error ? <Small color={theme.colors.risk}>{error}</Small> : null}
       </View>
 
       <View style={{ marginTop: SPACE.xl, alignItems: 'center' }}>
-        <Link href="/(auth)/homeowner-login" asChild>
-          <Body color={theme.colors.accentDeep}>{t('auth.homeownerCard')}</Body>
+        <Link href="/(auth)/join" asChild>
+          <Body color={theme.colors.accent}>{t('auth.newHere')}</Body>
         </Link>
       </View>
     </Screen>

@@ -108,7 +108,7 @@ export default function MySites() {
 
   async function onSignOut() {
     await signOut()
-    router.replace('/')
+    router.replace('/(auth)/login')
   }
 
   const sitesQ = useQuery({

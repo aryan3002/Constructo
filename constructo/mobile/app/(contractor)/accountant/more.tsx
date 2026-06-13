@@ -63,7 +63,7 @@ export default function AccountantMore() {
 
   async function onSignOut() {
     await signOut()
-    router.replace('/')
+    router.replace('/(auth)/login')
   }
 
   const roleLabel = me?.role ? (ROLE_LABEL[me.role]?.[lang] ?? me.role) : str.noValue

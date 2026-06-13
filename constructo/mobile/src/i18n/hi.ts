@@ -35,6 +35,10 @@ export const hi: Dict = {
     homeownerCardSub: 'अपने घर का बनना देखें — तस्वीरें, अपडेट, फ़ैसले।',
     staffCard: 'बिल्डर / साइट टीम',
     staffCardSub: 'अपनी साइट और टीम संभालें। मालिक, PM, सुपरवाइज़र, अकाउंटेंट, मुकादम।',
+    homeownerLoginTitle: 'वापस आपका स्वागत है',
+    homeownerLoginSubtitle: 'साइन इन करने के लिए अपना नंबर डालें।',
+    newHere: 'पहली बार? मेरे पास जॉइन कोड है →',
+    notHomeowner: 'इस नंबर पर कोई घर-मालिक खाता नहीं मिला। अगर आप नए हैं, तो नीचे जॉइन कोड का उपयोग करें।',
   },
   nav: {
     home: 'होम',
@@ -52,6 +56,7 @@ export const hi: Dict = {
   },
   pm: {
     tabDpr: 'DPR',
+    tabChat: 'चैट',
     tabMore: 'और',
     dprTitle: 'दैनिक प्रगति रिपोर्ट',
     dprSubtitle: 'आज की साइट गतिविधि से अपने-आप तैयार। जाँचें और भेजें।',

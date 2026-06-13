@@ -52,6 +52,7 @@ import {
   StatusPill,
   WeeklySummaryCard,
   FLOATING_NAV_CLEARANCE,
+  Logo,
 } from '../../src/ui'
 import type { PhotoTileData } from '../../src/ui'
 import type { AttentionItem, QuietPeriod } from '../../src/api/types'
@@ -442,7 +443,8 @@ export default function Home() {
       {/* ---- Top bar: greeting + date (left) · settings (right). No photo hero. ---- */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <BodyLg style={{ fontWeight: '600' }}>{greetingFor(t)}</BodyLg>
+          <Logo size={40} />
+          <BodyLg style={{ fontWeight: '600', marginTop: SPACE.sm }}>{greetingFor(t)}</BodyLg>
           <Small muted style={{ marginTop: 2 }} numberOfLines={1}>
             {property?.display_name ? `${property.display_name} · ${weekdayDate(lang)}` : weekdayDate(lang)}
           </Small>

@@ -75,6 +75,7 @@ export type { WeeklySummaryCardProps } from './WeeklySummaryCard'
 export { SettingsRow, SettingsGroup } from './SettingsRow'
 export type { SettingsRowProps } from './SettingsRow'
 export { useInputStyle } from './useInputStyle'
+export * from './Logo'
 export { StepUpModal } from './StepUpModal'
 export type { StepUpModalProps } from './StepUpModal'
 // ── Wave-0 shared kit (theme-aware, both neev + daylight) ─────────────────────

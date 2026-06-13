@@ -116,6 +116,46 @@ async def test_events_pagination(client, factory, db_session, owner):
     assert len(seen) == 5
 
 
+async def test_unknown_events_excluded_from_timeline(client, factory, db_session, owner):
+    """A failed extraction (event_type='unknown', e.g. "Message received is
+    unclear") is a non-event — it must never surface in the site timeline.
+    Real needs_clarification captures of known types are still returned."""
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    await _add_event(db_session, site.id, event_type="attendance", summary="24 mazdoor aaye")
+    await _add_event(
+        db_session, site.id, event_type="unknown", summary="Message received is unclear"
+    )
+
+    resp = await client.get(f"/api/v1/sites/{site.id}/events", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert {i["event_type"] for i in items} == {"attendance"}
+    assert not any("unclear" in (i["summary"] or "").lower() for i in items)
+
+
+async def test_needs_clarification_known_events_still_listed(client, factory, db_session, owner):
+    """A known-type capture awaiting confirmation (needs_clarification=True) is a
+    real event (an amber card) — it must NOT be filtered out with the unknowns."""
+    site = await factory.site(company=await _company(db_session, owner.company_id))
+    ev = SiteEventModel(
+        site_id=site.id,
+        event_type="progress_update",
+        occurred_on=date(2026, 5, 28),
+        summary="slab 70%",
+        fields={"percent": 70},
+        confidence=0.6,
+        needs_clarification=True,
+        source_message_ids=[],
+        version=1,
+    )
+    db_session.add(ev)
+    await db_session.flush()
+
+    resp = await client.get(f"/api/v1/sites/{site.id}/events", headers=auth(owner))
+    assert resp.status_code == 200, resp.text
+    assert {i["event_type"] for i in resp.json()["items"]} == {"progress_update"}
+
+
 async def test_events_missing_site_is_404(client, owner):
     from uuid import uuid4
 

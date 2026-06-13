@@ -45,6 +45,9 @@ export default function Index() {
   if (role === 'labor_contractor') {
     return <Redirect href="/(contractor)/mukadam/attendance" />
   }
+  // Architect — desk/design role; mobile gives Chat (read + respond to site
+  // design questions) + More. Heavy design work stays web-primary.
+  if (role === 'architect') return <Redirect href="/(contractor)/architect/chat" />
   // PM (C4) — native Auto-DPR review surface.
   if (role === 'pm') return <Redirect href="/(contractor)/pm/dpr" />
   // Accountant (C4) — native Reconcile cockpit (read-mostly, tracking-only).
