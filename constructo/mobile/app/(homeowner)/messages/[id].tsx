@@ -364,9 +364,40 @@ export default function HomeownerThread() {
           style={{ flexDirection: 'row', alignItems: 'center' }}
         >
           {kind === 'homeowner' ? (
-            /* Builder channel: a single avatar using the thread title as the
-               initials source (visual stand-in until real participant data arrives). */
-            <Avatar name={headerTitle} size={40} />
+            /* Builder channel: stacked initials cluster — site team (hard-hat),
+               co-owner (user), you (home) — matching the prototype's participant
+               header. Three overlapping circles for a "whole team" feel. */
+            <View style={{ width: 76, height: 40, position: 'relative' }}>
+              {/* S — site team */}
+              <View style={{
+                position: 'absolute', left: 0, top: 0,
+                width: 34, height: 34, borderRadius: 17,
+                backgroundColor: AP.surfaceContainer,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Feather name="tool" size={14} color={c.textMute} />
+              </View>
+              {/* R — co-owner */}
+              <View style={{
+                position: 'absolute', left: 18, top: 0,
+                width: 34, height: 34, borderRadius: 17,
+                backgroundColor: c.secondaryContainer,
+                borderWidth: 2, borderColor: c.card,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Feather name="user" size={14} color={c.secondary} />
+              </View>
+              {/* P — you (homeowner, accent) */}
+              <View style={{
+                position: 'absolute', left: 36, top: 0,
+                width: 34, height: 34, borderRadius: 17,
+                backgroundColor: AP.chip,
+                borderWidth: 2, borderColor: c.card,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Feather name="home" size={14} color={AP.onChip} />
+              </View>
+            </View>
           ) : (
             /* Group thread: stacked pair (the title Avatar + a "+group" cue). */
             <View style={{ flexDirection: 'row' }}>
@@ -390,9 +421,22 @@ export default function HomeownerThread() {
           )}
         </Pressable>
 
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, gap: 2 }}>
           <BodyStrong numberOfLines={1}>{headerTitle}</BodyStrong>
-          {siteName ? (
+          {/* Subtitle: site name for the builder channel; participants for groups.
+              An online dot + participant list mirrors the prototype's header. */}
+          {kind === 'homeowner' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent }} />
+              <Small muted numberOfLines={1}>
+                {siteName
+                  ? siteName
+                  : lang === 'hi'
+                    ? 'साइट टीम · आप · सह-मालिक'
+                    : 'Site team · You · Co-owner'}
+              </Small>
+            </View>
+          ) : siteName ? (
             <Small muted numberOfLines={1}>
               {siteName}
             </Small>

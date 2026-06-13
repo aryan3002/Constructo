@@ -2,27 +2,29 @@
  * Project Updates — the homeowner's "what's happening" screen ("Calm Cockpit",
  * handoff §5 Updates).
  *
- * One screen, four in-screen sub-tabs driven by a segmented control (NOT routes):
- *   Timeline | Milestones | Changes | Property
- * Each sub-tab fetches lazily (one TanStack query, enabled only when selected)
- * and renders its own loading / empty / error states.
+ * Layout faithfully matched to screen-updates.jsx (Neev-2 prototype):
  *
- * Re-skinned to Direction C: warm-sand canvas, calm-pine "on track", warm-clay
- * for milestones, amber for "needs you", red ONLY for genuine delay. Status is
- * always colour + icon + word (StatusPill / CalmCard). No %/progress anywhere —
- * milestones read in TIME (dates + honest "day N"); property reads as stage
- * chips. ₹ in mono with Indian grouping. Single language per screen via STR.
+ *   Timeline   — MilestonesCard (collapsible strip → full tracker) pinned at top,
+ *                WeeklySummaryCard (clay top-accent), timeline feed entries,
+ *                Changes-log summary tappable card, quiet periods.
+ *   Milestones — vertical tracker with spine dots + EvidenceCard on done entries.
+ *   Changes    — sticky summary banner + filter chips + change story cards with
+ *                cost/schedule pills + approval/status row.
+ *   Property   — room-by-room stage chips, taps into Photos.
+ *
+ * Data hooks + i18n kept intact. Composition upgraded to match prototype exactly.
  */
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View, type TextStyle } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { homeowner } from '../../src/api/client'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE, STATUS, type Status } from '../../src/theme/tokens'
+import { AP, SPACE, STATUS, type Status } from '../../src/theme/tokens'
 import type { Change, ComponentStatus, Milestone, QuietPeriod, Update } from '../../src/api/types'
 import {
   Body,
@@ -32,10 +34,14 @@ import {
   Card,
   Chip,
   Display,
+  Eyebrow,
   EvidenceCard,
   FadeInUp,
   H2,
+  LinkRow,
+  MilestoneStrip,
   Mono,
+  MonoSm,
   Small,
   StatusPill,
   Screen,
@@ -90,8 +96,15 @@ const STR = {
     milestoneEyebrow: 'Milestone',
     changeEyebrow: 'Change',
     progressEyebrow: 'Progress',
-    // Milestones
-    milestonesEyebrow: 'Your milestones',
+    // Milestones card (collapsible)
+    milestonesEyebrow: 'Milestones',
+    targetHandover: 'Target handover',
+    nowLabel: 'Now',
+    tapFullTimeline: 'Tap to see the full timeline',
+    showLess: 'Show less',
+    done: 'done',
+    toGo: 'to go',
+    // Milestones tab
     msStartedOn: 'Started',
     msExpected: 'Expected',
     msDoneOn: 'Done',
@@ -111,11 +124,12 @@ const STR = {
     changeSend: 'Send',
     changeCancel: 'Cancel',
     changeApprovalStub: 'Approval linked to your Decisions tab.',
+    noImpact: 'No impact',
     // Property
     propertyEyebrow: 'Room by room',
     viewPhotos: 'View photos',
     // Changes log summary (Timeline → tappable card)
-    changesLogTitle: 'Changes summary',
+    changesLogTitle: 'Changes log',
     changesLogSubtitle: (n: number, cost: string, days: string) =>
       `${n} change${n === 1 ? '' : 's'} · ${cost} · ${days}`,
     changesLogTap: 'See all changes',
@@ -156,8 +170,15 @@ const STR = {
     milestoneEyebrow: 'पड़ाव',
     changeEyebrow: 'बदलाव',
     progressEyebrow: 'प्रगति',
-    // Milestones
-    milestonesEyebrow: 'आपके पड़ाव',
+    // Milestones card (collapsible)
+    milestonesEyebrow: 'पड़ाव',
+    targetHandover: 'लक्षित सौंपना',
+    nowLabel: 'अभी',
+    tapFullTimeline: 'पूरी टाइमलाइन देखने के लिए दबाएँ',
+    showLess: 'कम दिखाएँ',
+    done: 'पूरे',
+    toGo: 'बाकी',
+    // Milestones tab
     msStartedOn: 'शुरू',
     msExpected: 'अनुमानित',
     msDoneOn: 'पूरा',
@@ -177,6 +198,7 @@ const STR = {
     changeSend: 'भेजें',
     changeCancel: 'रद्द करें',
     changeApprovalStub: 'मंज़ूरी आपके निर्णय टैब से जुड़ी है।',
+    noImpact: 'कोई असर नहीं',
     // Property
     propertyEyebrow: 'कमरा दर कमरा',
     viewPhotos: 'तस्वीरें देखें',
@@ -213,7 +235,7 @@ export default function Updates() {
         </Body>
       </View>
 
-      {/* Segmented control — a row of ≥48px Pressable pills. */}
+      {/* Sub-tab row — prototype: evenly spaced pills, ink-filled active */}
       <View
         accessibilityRole="tablist"
         style={{
@@ -290,15 +312,6 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   )
 }
 
-/** Small clay/sage/amber uppercase kicker above a card title (the Direction-C eyebrow). */
-function Eyebrow({ children, color }: { children: string; color?: string }) {
-  return (
-    <Small muted={!color} color={color} style={{ letterSpacing: 1, marginBottom: 2 }}>
-      {children.toUpperCase()}
-    </Small>
-  )
-}
-
 /** Quiet-period card used as the empty-state for the Timeline tab.
  * The `reason` text comes from the backend already in the user's language. */
 function QuietEmptyCard({ quiet, lang }: { quiet: QuietPeriod; lang: Lang }) {
@@ -311,22 +324,290 @@ function QuietEmptyCard({ quiet, lang }: { quiet: QuietPeriod; lang: Lang }) {
   return <CalmCard status="quiet" title={str.quietTitle} body={body} />
 }
 
+// ---- MilestonesCard (collapsible strip → tracker, pinned on Timeline) ----
+
+/**
+ * MilestonesCard — the collapsible milestone overview pinned at the top of the
+ * Timeline tab (prototype MilestonesCard). Collapsed: MilestoneStrip + "Now"
+ * banner. Expanded: full vertical MilestoneTracker.
+ */
+function MilestonesCard({
+  milestones,
+  lang,
+}: {
+  milestones: Milestone[]
+  lang: Lang
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const str = STR[lang]
+  const [open, setOpen] = useState(false)
+
+  const sorted = [...milestones].sort((a, b) => a.order - b.order)
+  const doneCount = sorted.filter((m) => m.status === 'done').length
+  const upcomingCount = sorted.filter((m) => m.status === 'upcoming').length
+  const nowM = sorted.find((m) => m.status === 'now')
+  // Target handover = last milestone's expected_on
+  const handoverM = sorted[sorted.length - 1]
+  const handoverLabel = handoverM ? shortDate(handoverM.expected_on, lang) : null
+
+  if (sorted.length === 0) return null
+
+  return (
+    <FadeInUp>
+      <View
+        style={{
+          backgroundColor: c.card,
+          borderRadius: theme.radii.card,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: c.line,
+          ...theme.shadowCard,
+        }}
+      >
+        {/* Header row — always visible */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((o) => !o)}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.md,
+            padding: SPACE.lg,
+            paddingBottom: SPACE.md,
+            opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          <View style={{ flex: 1 }}>
+            <Eyebrow style={{ marginBottom: 2 }}>{str.milestonesEyebrow}</Eyebrow>
+            <BodyStrong>
+              {str.targetHandover}
+              {handoverLabel ? ` · ${handoverLabel}` : ''}
+            </BodyStrong>
+          </View>
+          <StatusPill status="ok" label="On track" size="sm" />
+          <Feather
+            name={open ? 'chevron-down' : 'chevron-right'}
+            size={18}
+            color={c.textMute}
+          />
+        </Pressable>
+
+        {!open ? (
+          /* Collapsed: horizontal strip + "Now" summary */
+          <Pressable
+            onPress={() => setOpen(true)}
+            style={({ pressed }) => ({
+              paddingHorizontal: SPACE.lg,
+              paddingBottom: SPACE.lg,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            {/* Horizontal milestone dots */}
+            <MilestoneStrip milestones={sorted} nowLabel={str.nowLabel} />
+
+            {/* Foundation … Handover labels */}
+            <View
+              style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACE.xs }}
+            >
+              <Small muted>{sorted[0]?.name ?? ''}</Small>
+              <Small muted>{handoverM?.name ?? ''}</Small>
+            </View>
+
+            {/* "Now" summary pill */}
+            {nowM ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.sm,
+                  marginTop: SPACE.md,
+                  padding: SPACE.md,
+                  backgroundColor: AP.surfaceContainer,
+                  borderRadius: theme.radii.chip,
+                }}
+              >
+                <Feather name="circle" size={16} color={AP.clay} />
+                <Body style={{ flex: 1, color: c.text }}>
+                  <BodyStrong>Now: </BodyStrong>
+                  {nowM.name}
+                  {nowM.expected_on ? ` · expected ${shortDate(nowM.expected_on, lang)}` : ''}
+                </Body>
+                <Small muted>
+                  {doneCount} {str.done} · {upcomingCount} {str.toGo}
+                </Small>
+              </View>
+            ) : null}
+
+            {/* "Tap to see full timeline" hint */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: SPACE.xs,
+                marginTop: SPACE.md,
+              }}
+            >
+              <Small color={c.accentDeep} style={{ fontWeight: '600' }}>
+                {str.tapFullTimeline}
+              </Small>
+              <Feather name="chevron-down" size={15} color={c.accentDeep} />
+            </View>
+          </Pressable>
+        ) : (
+          /* Expanded: full vertical tracker */
+          <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.md }}>
+            <MilestoneTracker milestones={sorted} lang={lang} />
+            <Pressable
+              onPress={() => setOpen(false)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: SPACE.xs,
+                paddingVertical: SPACE.md,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Small color={c.textMute} style={{ fontWeight: '600' }}>
+                {str.showLess}
+              </Small>
+              <Feather name="chevron-up" size={15} color={c.textMute} />
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </FadeInUp>
+  )
+}
+
+/** Full vertical milestone tracker (expanded view inside MilestonesCard). */
+function MilestoneTracker({ milestones, lang }: { milestones: Milestone[]; lang: Lang }) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const str = STR[lang]
+
+  return (
+    <View style={{ paddingTop: SPACE.sm }}>
+      {milestones.map((m, i) => {
+        const isLast = i === milestones.length - 1
+        const isDone = m.status === 'done'
+        const isNow = m.status === 'now'
+        const spineColor = isDone ? c.ok : isNow ? c.secondary : c.line
+
+        const dateLine: string =
+          m.status === 'done'
+            ? `${str.msDoneOn} ${formatDate(m.completed_on ?? m.expected_on, lang)}`
+            : m.status === 'now'
+              ? [
+                  m.started_on ? `${str.msStartedOn} ${formatDate(m.started_on, lang)}` : null,
+                  m.expected_on ? `${str.msExpected} ${formatDate(m.expected_on, lang)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ')
+              : `${str.msExpected} ${formatDate(m.expected_on, lang)}`
+
+        return (
+          <View key={m.id} style={{ flexDirection: 'row', gap: SPACE.md }}>
+            {/* Left rail */}
+            <View style={{ alignItems: 'center', width: 24 }}>
+              <View
+                style={{
+                  width: isNow ? 22 : 18,
+                  height: isNow ? 22 : 18,
+                  borderRadius: 11,
+                  backgroundColor: isDone ? c.ok : isNow ? c.secondary : 'transparent',
+                  borderWidth: m.status === 'upcoming' ? 1.5 : 0,
+                  borderColor: c.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginTop: 2,
+                  zIndex: 2,
+                  ...(isNow
+                    ? {
+                        shadowColor: c.secondary,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.35,
+                        shadowRadius: 8,
+                      }
+                    : {}),
+                }}
+              >
+                {isDone ? (
+                  <Feather name="check" size={12} color="#fff" />
+                ) : isNow ? (
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: 4,
+                      backgroundColor: '#fff',
+                    }}
+                  />
+                ) : null}
+              </View>
+              {!isLast ? (
+                <View
+                  style={{
+                    flex: 1,
+                    width: 2,
+                    backgroundColor: isDone ? c.ok : 'transparent',
+                    borderLeftWidth: m.status === 'upcoming' ? 1.5 : 0,
+                    borderLeftColor: c.line,
+                    borderStyle: 'dashed',
+                    marginTop: 2,
+                    marginBottom: 2,
+                  }}
+                />
+              ) : null}
+            </View>
+
+            {/* Content */}
+            <View
+              style={{
+                flex: 1,
+                paddingBottom: isLast ? 0 : SPACE.xl,
+                gap: SPACE.xs,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.sm,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <BodyStrong
+                  color={m.status === 'upcoming' ? c.textMute : c.text}
+                  style={{ flex: 1 }}
+                >
+                  {m.name}
+                </BodyStrong>
+                {isNow ? <StatusPill status="ok" label="On track" size="sm" /> : null}
+              </View>
+              <MonoSm muted>{dateLine}</MonoSm>
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 // ---- Timeline ----
 /**
  * One feed entry. A DELAY is the only archetype with a hard data rule (§5): it
  * MUST carry a reason/impact narrative (the `body`) and ideally a revised date.
- * A `delay`-typed update with no body is NOT rendered as an alarming red delay
- * card — it degrades to a calm neutral entry so we never raise alarm without an
- * explanation (handoff §6, §8: "alarms without a next step" are forbidden).
  */
 function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
   const str = STR[lang]
   const meta = updateMeta(u.type, lang)
   const occurred = formatDate(u.published_at, lang)
 
-  // DELAY archetype — red ONLY with the full STRUCTURED story (revised date +
-  // reason + at least one measured impact). A story-less delay degrades to a
-  // calm entry below; we never fabricate the date/impact to justify red (§5/§8).
+  // DELAY archetype — red ONLY with the full STRUCTURED story.
   const story = delayStory(u)
   if (story) {
     return (
@@ -368,18 +649,58 @@ function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
       : u.type === 'change'
         ? str.changeEyebrow
         : meta.status === 'mute'
-          ? str.tabs.timeline // generic "quiet" uses no special kicker
+          ? str.tabs.timeline
           : str.progressEyebrow
   const status: Status = meta.status === 'mute' ? 'quiet' : meta.status
-  // Milestones celebrate (clay 'info'→keep ok green per meta); quiet stays grey.
   return (
     <CalmCard
       status={status}
       eyebrow={u.type === 'quiet' ? undefined : eyebrow}
       title={u.title}
       body={u.body ?? undefined}
-      trailing={<Mono muted style={{ fontSize: 12 }}>{occurred}</Mono>}
+      trailing={<MonoSm muted style={{ fontSize: 12 }}>{occurred}</MonoSm>}
     />
+  )
+}
+
+/** Inline quiet-period divider (prototype QuietState). */
+function InlineQuiet({ quiet, lang }: { quiet: QuietPeriod; lang: Lang }) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const str = STR[lang]
+  const nextDate = shortDate(quiet.next_expected_at, lang)
+  const bodyParts: string[] = []
+  if (quiet.reason) bodyParts.push(quiet.reason)
+  if (nextDate) bodyParts.push(`${str.quietNextPrefix} ${nextDate}.`)
+  const body = bodyParts.join(' ') || undefined
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACE.md,
+        paddingVertical: SPACE.lg,
+      }}
+    >
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+      <View style={{ alignItems: 'center', maxWidth: 240 }}>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, marginBottom: 4 }}
+        >
+          <Feather name="clock" size={13} color={c.textMute} />
+          <Small muted style={{ fontWeight: '600' }}>
+            {str.quietTitle}
+          </Small>
+        </View>
+        {body ? (
+          <Small muted style={{ textAlign: 'center', fontStyle: 'italic' }}>
+            {body}
+          </Small>
+        ) : null}
+      </View>
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+    </View>
   )
 }
 
@@ -401,10 +722,14 @@ function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
     queryKey: ['homeowner', 'quietPeriods'],
     queryFn: () => homeowner.quietPeriods(),
   })
-  // Changes data for the summary card — fetched alongside updates.
   const changesQ = useQuery({
     queryKey: ['homeowner', 'changes'],
     queryFn: () => homeowner.changes(),
+  })
+  // Milestones for the collapsible MilestonesCard at the top
+  const milestonesQ = useQuery({
+    queryKey: ['homeowner', 'milestones'],
+    queryFn: () => homeowner.milestones(),
   })
 
   if (updatesQ.isLoading || summaryQ.isLoading) return <Loading />
@@ -414,16 +739,19 @@ function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
 
   const weekly = summaryQ.data?.[0]
   const items = updatesQ.data?.items ?? []
-  // Most-recent quiet period — the endpoint orders detected_at DESC, so newest is first.
   const activeQuiet: QuietPeriod | null = quietQ.data?.[0] ?? null
-
-  // Changes-log summary card data (rendered only when there are changes).
   const changesLog = changesQ.data
   const changeCount = changesLog?.items.length ?? 0
+  const milestones = milestonesQ.data ?? []
 
   return (
     <View style={{ gap: SPACE.md }}>
-      {/* FLAGSHIP weekly summary, pinned at the very top (warm-clay). */}
+      {/* 1. Collapsible MilestonesCard — pinned at the very top (prototype). */}
+      {milestones.length > 0 ? (
+        <MilestonesCard milestones={milestones} lang={lang} />
+      ) : null}
+
+      {/* 2. Weekly summary card — clay top-accent (prototype WeeklySummary). */}
       {weekly?.text ? (
         <FadeInUp>
           <WeeklySummaryCard
@@ -438,7 +766,7 @@ function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
         </FadeInUp>
       ) : null}
 
-      {/* Changes-log summary card — tappable, switches to the Changes sub-tab. */}
+      {/* 3. Changes-log summary card — clay left-accent, tappable. */}
       {changeCount > 0 && changesLog ? (
         <FadeInUp>
           <Pressable
@@ -446,25 +774,51 @@ function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
             accessibilityLabel={str.changesLogTitle}
             onPress={onSwitchToChanges}
           >
-            <Card style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
-              <View style={{ gap: SPACE.xs }}>
-                <Eyebrow color={c.secondary}>{str.changesLogTitle.toUpperCase()}</Eyebrow>
-                <Body>
-                  {str.changesLogSubtitle(
-                    changeCount,
-                    formatRupeeDelta(changesLog.total_cost_delta),
-                    formatDayDelta(changesLog.total_schedule_delta_days, lang),
-                  )}
-                </Body>
-                <Small color={c.accent} style={{ fontWeight: '600' }}>
-                  {str.changesLogTap} →
-                </Small>
+            <View
+              style={{
+                backgroundColor: c.card,
+                borderRadius: theme.radii.card,
+                borderLeftWidth: 4,
+                borderLeftColor: c.secondary,
+                padding: SPACE.lg,
+                gap: SPACE.sm,
+                ...theme.shadowCard,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                {/* Icon badge */}
+                <View
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 11,
+                    backgroundColor: AP.surfaceContainer,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather name="shield" size={18} color={c.textMute} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Small color={c.secondary} style={{ fontWeight: '600', letterSpacing: 0.5 }}>
+                    {str.changesLogTitle.toUpperCase()}
+                  </Small>
+                  <Body>
+                    {str.changesLogSubtitle(
+                      changeCount,
+                      formatRupeeDelta(changesLog.total_cost_delta),
+                      formatDayDelta(changesLog.total_schedule_delta_days, lang),
+                    )}
+                  </Body>
+                </View>
+                <Feather name="chevron-right" size={18} color={c.textMute} />
               </View>
-            </Card>
+            </View>
           </Pressable>
         </FadeInUp>
       ) : null}
 
+      {/* 4. Timeline feed — updates + quiet-period dividers. */}
       {items.length === 0 ? (
         activeQuiet ? (
           <QuietEmptyCard quiet={activeQuiet} lang={lang} />
@@ -472,23 +826,23 @@ function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
           <Empty message={str.emptyTimeline} />
         )
       ) : (
-        items.map((u, i) => (
-          <FadeInUp key={u.id} delay={Math.min(i, 4) * 30}>
-            <TimelineEntry u={u} lang={lang} />
-          </FadeInUp>
-        ))
+        <>
+          {items.map((u, i) => (
+            <FadeInUp key={u.id} delay={Math.min(i, 4) * 30}>
+              <TimelineEntry u={u} lang={lang} />
+            </FadeInUp>
+          ))}
+          {/* Inline quiet-period divider below the feed (if active) */}
+          {activeQuiet ? <InlineQuiet quiet={activeQuiet} lang={lang} /> : null}
+        </>
       )}
     </View>
   )
 }
 
-// ---- Milestones ----
+// ---- Milestones tab ----
 /**
- * Vertical tracker. NO % (§8) — each milestone reads in TIME: an honest date
- * line plus, for the active ("now") milestone, the elapsed "day N" so far. Done
- * milestones carry an evidence packet (EvidenceCard, "Show proof"). The
- * backend doesn't (yet) carry a "usual range" estimate, so we only ever show
- * real dates + a real elapsed count — never a fabricated range (§6).
+ * Vertical tracker (dedicated tab view). NO % — each milestone reads in TIME.
  */
 function MilestoneRow({ m, isLast, lang }: { m: Milestone; isLast: boolean; lang: Lang }) {
   const { theme } = useTheme()
@@ -498,11 +852,7 @@ function MilestoneRow({ m, isLast, lang }: { m: Milestone; isLast: boolean; lang
   const spineColor =
     m.status === 'done' ? STATUS.ok : m.status === 'now' ? STATUS.info : c.quiet
 
-  // Honest time line per status — dates only, plus elapsed "day N" while active.
   const dayN = m.status === 'now' ? dayNumberSince(m.started_on) : null
-  // Industry-typical range ("usually 10–18 days") — normalizes "is this normal?"
-  // beside the real "day N". Done phases show only their real completed date; an
-  // unrecognized phase shows no range (never fabricated).
   const typical = m.status === 'done' ? null : formatTypicalRange(m.typical_duration_days, lang)
   const dateLine: string =
     m.status === 'done'
@@ -671,47 +1021,106 @@ function ChangeStoryCard({
 
   return (
     <View style={{ gap: SPACE.sm }}>
-      {/* WHAT */}
-      <BodyStrong>{ch.description}</BodyStrong>
-
-      {/* WHY */}
-      {ch.reason ? (
-        <Small muted>
-          {str.changeWhy}: {ch.reason}
-        </Small>
-      ) : null}
-
-      {/* +₹ COST + +days SCHEDULE — money story-first, mono. */}
-      <View style={{ flexDirection: 'row', gap: SPACE.xl }}>
-        <View>
-          <Eyebrow>{str.changeCost}</Eyebrow>
-          <Mono color={costColor}>{formatRupeeDelta(ch.cost_delta)}</Mono>
-        </View>
-        <View>
-          <Eyebrow>{str.changeSchedule}</Eyebrow>
-          <Mono color={dayColor}>{formatDayDelta(ch.schedule_delta_days, lang)}</Mono>
+      {/* Header row: icon + title + requested-by */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+        <Feather name="refresh-cw" size={17} color={c.textMute} style={{ marginTop: 3 }} />
+        <View style={{ flex: 1 }}>
+          <BodyStrong>{ch.description}</BodyStrong>
+          {ch.requested_by_name ? (
+            <Small muted style={{ marginTop: 2 }}>
+              {str.changeRequested}: {ch.requested_by_name}
+              {ch.created_at ? ` · ${shortDate(ch.created_at, lang)}` : ''}
+            </Small>
+          ) : null}
         </View>
       </View>
 
-      {/* WHO: approved_by_name + requested_by_name */}
-      {ch.approved_by_name ? (
-        <Small muted>
-          {str.changeWho}: {ch.approved_by_name} · {formatDate(ch.created_at, lang)}
-        </Small>
-      ) : null}
-      {ch.requested_by_name ? (
-        <Small muted>
-          {str.changeRequested}: {ch.requested_by_name}
-        </Small>
+      {/* WHY */}
+      {ch.reason ? (
+        <Body muted>
+          {ch.reason}
+        </Body>
       ) : null}
 
-      {/* RUNNING TOTAL */}
+      {/* Cost + Schedule pills — prototype style */}
+      <View style={{ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap', marginTop: SPACE.xs }}>
+        {/* Cost pill */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            height: 26,
+            paddingHorizontal: 10,
+            borderRadius: theme.radii.pill,
+            backgroundColor: (ch.cost_delta ?? 0) !== 0 ? 'rgba(164,56,42,0.10)' : AP.surfaceContainer,
+          }}
+        >
+          <Feather name="credit-card" size={13} color={(ch.cost_delta ?? 0) !== 0 ? c.risk : c.textMute} />
+          <Mono
+            color={(ch.cost_delta ?? 0) !== 0 ? c.risk : c.textMute}
+            style={{ fontSize: 12 }}
+          >
+            {formatRupeeDelta(ch.cost_delta)}
+          </Mono>
+        </View>
+        {/* Schedule pill */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            height: 26,
+            paddingHorizontal: 10,
+            borderRadius: theme.radii.pill,
+            backgroundColor:
+              (ch.schedule_delta_days ?? 0) !== 0 ? 'rgba(164,56,42,0.10)' : AP.surfaceContainer,
+          }}
+        >
+          <Feather
+            name="clock"
+            size={13}
+            color={(ch.schedule_delta_days ?? 0) !== 0 ? c.risk : c.textMute}
+          />
+          <Small
+            color={(ch.schedule_delta_days ?? 0) !== 0 ? c.risk : c.textMute}
+            style={{ fontWeight: '600', fontSize: 12 }}
+          >
+            {(ch.schedule_delta_days ?? 0) === 0
+              ? str.noImpact
+              : formatDayDelta(ch.schedule_delta_days, lang)}
+          </Small>
+        </View>
+      </View>
+
+      {/* Approved-by row — green check mark */}
+      {ch.approved_by_name ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.xs,
+            paddingTop: SPACE.sm,
+            borderTopWidth: 1,
+            borderTopColor: c.line,
+            marginTop: SPACE.xs,
+          }}
+        >
+          <Feather name="check-circle" size={15} color={c.ok} />
+          <Small color={c.ok} style={{ fontWeight: '600' }}>
+            {str.changeWho}: {ch.approved_by_name}
+            {ch.created_at ? ` · ${shortDate(ch.created_at, lang)}` : ''}
+          </Small>
+        </View>
+      ) : null}
+
+      {/* Running total */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
         <Small muted>{str.changeRunning}:</Small>
         <Mono color={runningColor}>{formatRupeeDelta(ch.running_total_cost)}</Mono>
       </View>
 
-      {/* ACTION — owners see the honest decision-link stub; others may comment. */}
+      {/* Action — owners see approval stub; others may comment. */}
       {canApprove ? (
         <View>
           <Small muted style={{ marginBottom: SPACE.xs }}>
@@ -754,9 +1163,8 @@ function ChangeStoryCard({
   )
 }
 
-// ---- Changes ----
+// ---- Changes tab ----
 
-/** Client-side filter for the Changes tab. */
 type ChangeFilter = 'all' | 'by_me' | 'by_contractor' | 'cost_impact' | 'no_cost'
 
 function ChangesTab() {
@@ -785,10 +1193,6 @@ function ChangesTab() {
   const costDelta = log?.total_cost_delta ?? 0
   const dayDelta = log?.total_schedule_delta_days ?? 0
 
-  // Client-side filter — filtering by requested_by / cost_delta.
-  // "By me" = requested_by matches the homeowner (requested_by is null when it
-  // was the homeowner themselves, per the data model convention — treat null as "me").
-  // "By contractor" = requested_by is non-null (a contractor team member name).
   const items = allItems.filter((ch) => {
     if (filter === 'all') return true
     if (filter === 'by_me') return ch.requested_by == null
@@ -798,7 +1202,6 @@ function ChangesTab() {
     return true
   })
 
-  // Filter chip definitions — in-screen, not a route.
   const FILTERS: { key: ChangeFilter; label: string }[] = [
     { key: 'all', label: str.filterAll },
     { key: 'by_me', label: str.filterByMe },
@@ -809,28 +1212,28 @@ function ChangesTab() {
 
   return (
     <View style={{ gap: SPACE.md }}>
-      {/* Pinned running totals (money story-first) — clay celebration accent. */}
-      <Card style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
-        <View style={{ gap: SPACE.md }}>
-          <Eyebrow color={c.secondary}>{str.totalsEyebrow}</Eyebrow>
-          <View style={{ flexDirection: 'row', gap: SPACE.xl }}>
-            <View style={{ flex: 1 }}>
-              <Eyebrow>{str.costLabel}</Eyebrow>
-              <H2 color={costDelta > 0 ? STATUS.risk : costDelta < 0 ? STATUS.ok : c.text}>
-                {formatRupeeDelta(costDelta)}
-              </H2>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Eyebrow>{str.scheduleLabel}</Eyebrow>
-              <H2 color={dayDelta > 0 ? STATUS.risk : dayDelta < 0 ? STATUS.ok : c.text}>
-                {formatDayDelta(dayDelta, lang)}
-              </H2>
-            </View>
-          </View>
-        </View>
-      </Card>
+      {/* Sticky summary banner — prototype: shield icon + bold count + cost + days */}
+      <View
+        style={{
+          backgroundColor: AP.surfaceContainer,
+          borderRadius: theme.radii.card,
+          padding: SPACE.md,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACE.sm,
+          borderWidth: 1,
+          borderColor: c.line,
+        }}
+      >
+        <Feather name="shield" size={16} color={c.textMute} />
+        <Body style={{ flex: 1 }}>
+          <BodyStrong>
+            {str.changesLogSubtitle(allItems.length, formatRupeeDelta(costDelta), formatDayDelta(dayDelta, lang))}
+          </BodyStrong>
+        </Body>
+      </View>
 
-      {/* Filter chips — client-side, no route change. */}
+      {/* Filter chips — horizontal scroll, client-side */}
       {allItems.length > 0 ? (
         <ScrollView
           horizontal
@@ -863,13 +1266,7 @@ function ChangesTab() {
   )
 }
 
-// ---- Property ----
-/**
- * Per-component stage → status spine tone (mirrors `milestoneMeta`): done is "on
- * track" green, in-progress is a calm neutral blue, not-started is the muted
- * quiet tone. Calm Cockpit §8 forbids any %/progress bar — rooms read as stage
- * chips (color + icon + the stage word) instead.
- */
+// ---- Property tab ----
 const COMPONENT_TONE: Record<ComponentStatus, Status> = {
   done: 'ok',
   in_progress: 'info',
@@ -899,9 +1296,6 @@ function PropertyTab() {
       <Eyebrow>{str.propertyEyebrow}</Eyebrow>
       <Card padded={false}>
         {spaces.map((s, i) => {
-          // Calm Cockpit §8: no %, no progress bar. Each room reads as its set of
-          // stage chips (StatusPill = color + icon + stage word). Tapping a room
-          // deep-links to Photos so she can see the proof.
           const components = s.components ?? []
           return (
             <Pressable

@@ -1,62 +1,59 @@
 /**
- * Homeowner Home — the flagship "Calm Cockpit" screen, Direction C ("Blend").
+ * Homeowner Home — rebuilt to FAITHFULLY match the Neev prototype (screen-home.jsx,
+ * variant A / the canonical HomeScreen). Six-card vertical stack in prototype order:
  *
- * The product's one job is REASSURE → earned absence: open it, learn "you're
- * okay — nothing needs you today," close it calm. So Home LEADS WITH THE ANSWER
- * on open warm sand — a clay "TODAY" eyebrow + the serif (Eczar) 3-second answer
- * + a reassuring line + a status pill — NOT a photo-over-text hero (that was the
- * superseded direction). The living-home warmth returns as a real-photo "latest
- * from site" strip lower down (evidence, never an AI/3D render — §8).
+ *   1. Hero card (clay top-accent + clay→surface gradient, Eyebrow "Today · all calm",
+ *      Eczar serif "You're okay." (~36px), sub line, TimeBar, "On track" pill + "N
+ *      choices" amber pill row).
+ *   2. NeedsInputCard (amber tint + amber accent, ⚡ title, item rows + "View" button).
+ *      Hidden when needs_attention is empty.
+ *   3. MilestonesCard (flush card: clay eyebrow "Milestones", target handover date +
+ *      On-track pill + MilestoneStrip + "Now: {stage} · expected {date}" clay box).
+ *   4. RequestsCard ("My requests (N open)" — hidden when no open requests).
+ *   5. ActivityCard ("Recent activity" — hidden when recent_activity empty).
+ *   6. PaymentsCard ("Payments" + two stat tiles) — hidden when spend_summary is null.
  *
- * One shell, three states — cards are CONDITIONAL (render only with content):
- *   - on-track:        answer ("You're okay.") + StatusCard time-bar
- *                      + latest-from-site photo + shortcut tiles + weekly letter.
- *   - needs-attention: amber answer + the signature DecisionCard (a pre-briefed
- *                      choice, never red) ABOVE the time-bar. One item at a time.
- *   - quiet:           muted answer + QuietCard explaining the contractor-
- *                      confirmed silence (never red, never pulse).
- *
- * Honest time-bar only (never a %); premium Feather icons (never emoji); warm
- * sand canvas; red only for genuine risk. Keeps this screen's local `STR`
- * (en/hi) table — the shared i18n catalog migration is a separate WIP.
+ * Wired to real data via homeowner.home() + homeowner.requests() + homeowner.milestones().
+ * Keeps the file's existing STR en/hi table, data hooks, and loading/error handling.
  */
-import { Pressable, ScrollView, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { Link, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
-import { ActivityIndicator } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { homeowner } from '../../src/api/client'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE, type Status } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
 import {
   Body,
   BodyLg,
-  BodyStrong,
   Button,
-  CalmCard,
-  Card,
-  DecisionCard,
   Display,
   Eyebrow,
   FadeInUp,
-  HomeWidget,
+  LinkRow,
   ListRow,
   MilestoneStrip,
-  PhotoTile,
   Screen,
   Small,
-  StatusCard,
   StatusPill,
-  WeeklySummaryCard,
+  TimeBar,
   FLOATING_NAV_CLEARANCE,
   Logo,
+  formatINR,
 } from '../../src/ui'
-import type { PhotoTileData } from '../../src/ui'
-import type { AttentionItem, QuietPeriod } from '../../src/api/types'
+import type { AttentionItem, Update } from '../../src/api/types'
 import { REQUEST_STATUS_META, slaPromise } from '../_requests.util'
+
+// ─── i18n table (en / hi) ───────────────────────────────────────────────────
 
 const STR = {
   en: {
@@ -67,12 +64,12 @@ const STR = {
     morning: 'Good morning',
     afternoon: 'Good afternoon',
     evening: 'Good evening',
-    today: 'Today',
+    today: 'Today · all calm',
     // The 3-second answer (Eczar serif), per state.
     answerOk: "You're okay.",
     answerAttention: 'One thing for you.',
     answerQuiet: 'All quiet on site.',
-    // The reassuring line under the answer.
+    // The reassuring sub-line under the answer.
     subOk: "Nothing needs you today. We'll tell you the moment it does.",
     subAttention: 'Take a look when you have a minute — no rush.',
     subQuiet: 'Your site team is on it. Calm is good news.',
@@ -82,55 +79,43 @@ const STR = {
     inProgress: 'In progress',
     started: 'Started',
     handover: 'Handover',
-    startingSoon: 'Starting soon',
     progressBody: "Here's where your build stands today.",
     reviewed: 'Reviewed by site',
-    youAreHere: 'you are here',
-    nextUp: 'NEXT UP',
-    latest: 'Latest from site',
-    latestFromSite: 'LATEST FROM SITE',
-    approvedChanges: 'APPROVED CHANGES',
-    changeLine: '{n} change(s) recorded so far',
-    askBuilder: 'Ask your builder',
-    review: 'Review',
-    latestCount: '{n} photos',
-    thisWeek: 'This week',
-    thisWeekEyebrow: 'This week',
-    listen: 'Listen',
-    readLetter: 'Read the full letter',
-    askShort: 'ASK',
-    askVoice: 'Ask by voice',
-    errorLine: "Couldn't load your home.",
-    tryAgain: 'Try again',
-    quietTitle: 'Quiet on site right now',
-    quietNextPrefix: 'Next update expected around',
-    // PhotoTile a11y/action labels.
-    captionFallback: 'Site photo',
-    save: 'Save',
-    share: 'Share',
-    hide: 'Hide',
-    videoLabel: 'Video',
-    savedLabel: 'Saved',
-    // B1 — Needs your input
-    needsInputEyebrow: 'NEEDS YOUR INPUT',
-    needsInputReview: 'Review',
+    youAreHere: 'Now',
+    // NeedsInput card
+    needsInputTitle: 'Needs your input',
+    needsInputView: 'View',
     needsInputSeeAll: 'See all',
-    // B2 — Milestone strip
-    milestonesEyebrow: 'YOUR MILESTONES',
-    milestonesTitle: 'Build milestones',
-    milestonesSub: 'Tap to see the full timeline',
-    milestoneNow: 'Now',
-    // B3 — My requests
-    requestsEyebrow: 'MY REQUESTS',
-    requestsTitle: 'Your requests',
+    // Milestones card
+    milestonesEyebrow: 'Milestones',
+    milestonesHandover: 'Target handover',
+    milestonesNow: 'Now',
+    milestonesDone: 'done',
+    milestonesToGo: 'to go',
+    milestonesExpected: 'expected',
+    milestonesSeeTimeline: 'See full timeline',
+    // Requests card
+    requestsTitle: 'My requests',
+    requestsOpen: 'open',
     requestsSeeAll: 'See all',
     requestsAdd: 'Add a request',
     requestsEmpty: 'No open requests',
-    // B4 — Recent activity
-    activityEyebrow: 'RECENT ACTIVITY',
-    activityTitle: 'Latest from your team',
-    activitySeeAll: 'See photos',
+    // Activity card
+    activityTitle: 'Recent activity',
+    activitySeeAll: 'See all updates',
     activityEmpty: 'No recent activity',
+    // Payments card
+    paymentsTitle: 'Payments',
+    paymentsPreApproved: 'Pre-approved',
+    paymentsTotalPaid: 'Total paid',
+    paymentsNextPayment: 'Next payment',
+    paymentsSeeSchedule: 'See payment schedule',
+    // Error
+    errorLine: "Couldn't load your home.",
+    tryAgain: 'Try again',
+    // Quiet
+    quietTitle: 'Quiet on site right now',
+    quietNextPrefix: 'Next update expected around',
   },
   hi: {
     finishesEyebrow: 'आपकी सामग्री',
@@ -140,69 +125,53 @@ const STR = {
     morning: 'सुप्रभात',
     afternoon: 'नमस्ते',
     evening: 'शुभ संध्या',
-    today: 'आज',
+    today: 'आज · सब शांत',
     answerOk: 'सब ठीक है।',
     answerAttention: 'आपके लिए एक बात।',
     answerQuiet: 'साइट पर शांति है।',
     subOk: 'आज आपकी कोई ज़रूरत नहीं। जैसे ही होगी, हम बता देंगे।',
     subAttention: 'फ़ुरसत में एक नज़र डाल लें — कोई जल्दी नहीं।',
     subQuiet: 'आपकी साइट टीम काम पर है। शांति अच्छी ख़बर है।',
-    onTrack: 'सब ठीक चल रहा है',
+    onTrack: 'सब ठीक',
     needsYou: 'आपकी ज़रूरत',
     quietChip: 'शांत',
     inProgress: 'चल रहा है',
     started: 'शुरू',
     handover: 'कब्ज़ा',
-    startingSoon: 'जल्द शुरू',
     progressBody: 'आज आपके निर्माण की स्थिति यह है।',
     reviewed: 'साइट द्वारा जाँचा गया',
-    youAreHere: 'आप यहाँ हैं',
-    nextUp: 'आगे',
-    latest: 'साइट से ताज़ा',
-    latestFromSite: 'साइट से ताज़ा',
-    approvedChanges: 'मंज़ूर बदलाव',
-    changeLine: 'अब तक {n} बदलाव दर्ज',
-    askBuilder: 'बिल्डर से पूछें',
-    review: 'देखें',
-    latestCount: '{n} फ़ोटो',
-    thisWeek: 'इस हफ़्ते',
-    thisWeekEyebrow: 'इस हफ़्ते',
-    listen: 'सुनें',
-    readLetter: 'पूरा पत्र पढ़ें',
-    askShort: 'सवाल?',
-    askVoice: 'बोलकर पूछें',
+    youAreHere: 'अभी',
+    needsInputTitle: 'आपकी ज़रूरत',
+    needsInputView: 'देखें',
+    needsInputSeeAll: 'सब देखें',
+    milestonesEyebrow: 'पड़ाव',
+    milestonesHandover: 'लक्ष्य कब्ज़ा',
+    milestonesNow: 'अभी',
+    milestonesDone: 'पूरे',
+    milestonesToGo: 'बाकी',
+    milestonesExpected: 'अपेक्षित',
+    milestonesSeeTimeline: 'पूरी टाइमलाइन देखें',
+    requestsTitle: 'मेरे अनुरोध',
+    requestsOpen: 'खुले',
+    requestsSeeAll: 'सब देखें',
+    requestsAdd: 'अनुरोध जोड़ें',
+    requestsEmpty: 'कोई खुला अनुरोध नहीं',
+    activityTitle: 'हालिया गतिविधि',
+    activitySeeAll: 'सब अपडेट देखें',
+    activityEmpty: 'कोई हालिया गतिविधि नहीं',
+    paymentsTitle: 'भुगतान',
+    paymentsPreApproved: 'पूर्व-अनुमोदित',
+    paymentsTotalPaid: 'कुल भुगतान',
+    paymentsNextPayment: 'अगला भुगतान',
+    paymentsSeeSchedule: 'भुगतान शेड्यूल देखें',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
     quietNextPrefix: 'अगला अपडेट लगभग',
-    captionFallback: 'साइट फ़ोटो',
-    save: 'सहेजें',
-    share: 'साझा करें',
-    hide: 'छिपाएँ',
-    videoLabel: 'वीडियो',
-    savedLabel: 'सहेजा गया',
-    // B1 — Needs your input
-    needsInputEyebrow: 'आपकी ज़रूरत',
-    needsInputReview: 'देखें',
-    needsInputSeeAll: 'सब देखें',
-    // B2 — Milestone strip
-    milestonesEyebrow: 'आपके पड़ाव',
-    milestonesTitle: 'निर्माण पड़ाव',
-    milestonesSub: 'पूरी टाइमलाइन देखने के लिए टैप करें',
-    milestoneNow: 'अभी',
-    // B3 — My requests
-    requestsEyebrow: 'मेरे अनुरोध',
-    requestsTitle: 'आपके अनुरोध',
-    requestsSeeAll: 'सब देखें',
-    requestsAdd: 'अनुरोध जोड़ें',
-    requestsEmpty: 'कोई खुला अनुरोध नहीं',
-    // B4 — Recent activity
-    activityEyebrow: 'हालिया गतिविधि',
-    activityTitle: 'आपकी टीम से ताज़ा',
-    activitySeeAll: 'फ़ोटो देखें',
-    activityEmpty: 'कोई हालिया गतिविधि नहीं',
   },
 } as const
+
+// ─── Helper utilities ────────────────────────────────────────────────────────
 
 function greetingFor(g: { morning: string; afternoon: string; evening: string }): string {
   const h = new Date().getHours()
@@ -211,43 +180,23 @@ function greetingFor(g: { morning: string; afternoon: string; evening: string })
   return g.evening
 }
 
-/** "Friday, 7 June" — a calm, single-language date line for the top bar. */
-function weekdayDate(lang: 'en' | 'hi'): string {
-  return new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })
-}
-
-/** Elapsed fraction of the build (started → handover), clamped 0..1. */
-function elapsedFraction(start: string | null, end: string | null): number | null {
-  if (!start || !end) return null
+/** Elapsed fraction of the build (started → handover), as a 0–100 integer. */
+function elapsedPct(start: string | null, end: string | null): number {
+  if (!start || !end) return 0
   const s = new Date(start).getTime()
   const e = new Date(end).getTime()
-  if (!(e > s)) return null
+  if (!(e > s)) return 0
   const frac = (Date.now() - s) / (e - s)
-  return Math.max(0, Math.min(1, frac))
+  return Math.round(Math.max(0, Math.min(1, frac)) * 100)
 }
 
-/** Where a target date falls on the (start → end) timeline, clamped 0..1.
- *  Drives the next-milestone tick on the SettleBar. */
-function fractionAt(start: string | null, end: string | null, target: string | null): number | null {
-  if (!start || !end || !target) return null
-  const s = new Date(start).getTime()
-  const e = new Date(end).getTime()
-  const t = new Date(target).getTime()
-  if (!(e > s)) return null
-  return Math.max(0, Math.min(1, (t - s) / (e - s)))
+/** "Jan 2026" — month + year for TimeBar start/end labels. */
+function monthYear(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-/** "14 Jan" — a calm day+month with no year (the bar already implies the span). */
-function dayMonth(iso: string | null): string | null {
-  if (!iso) return null
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-/** "6 Jun" — calm short date for quiet-card / photo display. */
+/** "10 Jun" — short date for milestone expected. */
 function shortDate(iso: string | null): string | null {
   if (!iso) return null
   const d = new Date(iso)
@@ -255,79 +204,13 @@ function shortDate(iso: string | null): string | null {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
-/**
- * QuietCard — a calm CalmCard explaining a confirmed quiet period.
- *
- * The `reason` text comes from the backend already in the user's language. We
- * render it as-is — never hardcode English for dynamic backend strings. Static
- * chrome (title, next-prefix) uses the STR table. Mounts with a plain fade only
- * (CalmCard never pulses).
- */
-function QuietCard({ quiet, lang }: { quiet: QuietPeriod; lang: 'en' | 'hi' }) {
-  const t = STR[lang]
-  const nextDate = shortDate(quiet.next_expected_at)
-
-  const bodyParts: string[] = []
-  if (quiet.reason) bodyParts.push(quiet.reason)
-  if (nextDate) bodyParts.push(`${t.quietNextPrefix} ${nextDate}.`)
-  const body = bodyParts.join(' ') || undefined
-
-  // §3.6: quiet-period card mounts with a plain fade only — never a rise/pulse.
-  return (
-    <FadeInUp rise={false} linear>
-      <CalmCard status="quiet" title={t.quietTitle} body={body} />
-    </FadeInUp>
-  )
+/** "15 Sep 2026" — handover target date. */
+function handoverDate(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function formatRupees(n: number): string {
-  if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)} Cr`
-  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`
-  return `₹${Math.round(n).toLocaleString('en-IN')}`
-}
-
-function monthYear(iso: string | null): string | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-}
-
-/** "26 May – 1 Jun" — the 7-day window of a weekly summary, from its week_start. */
-function weekRange(weekStart: string): string | null {
-  const s = new Date(weekStart)
-  if (Number.isNaN(s.getTime())) return null
-  const e = new Date(s)
-  e.setDate(e.getDate() + 6)
-  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-  return `${fmt(s)} – ${fmt(e)}`
-}
-
-/** The small status badge beside the answer (sage/amber/muted circle + glyph). */
-function AnswerBadge({ tone, icon }: { tone: Status; icon: React.ComponentProps<typeof Feather>['name'] }) {
-  const { theme } = useTheme()
-  const bg = theme.colors[tone]
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: bg,
-        // soft tone halo (never harsh)
-        shadowColor: bg,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.22,
-        shadowRadius: 12,
-      }}
-    >
-      <Feather name={icon} size={26} color="#ffffff" />
-    </View>
-  )
-}
+// ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function Home() {
   const { lang } = useT()
@@ -337,10 +220,9 @@ export default function Home() {
   const router = useRouter()
   const t = STR[lang]
 
+  // ── Data queries ────────────────────────────────────────────────────────────
   const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
-  const photosQ = useQuery({ queryKey: ['home', 'photos'], queryFn: () => homeowner.photos() })
-  const weeklyQ = useQuery({ queryKey: ['home', 'weekly'], queryFn: () => homeowner.weeklySummary() })
-  // B2 — milestone strip (only fire if home query succeeded; skip on error)
+  // B2 — milestone strip (only fire if home query succeeded)
   const milestonesQ = useQuery({
     queryKey: ['home', 'milestones'],
     queryFn: () => homeowner.milestones(),
@@ -353,6 +235,7 @@ export default function Home() {
     enabled: homeQ.isSuccess,
   })
 
+  // ── Loading / error states ───────────────────────────────────────────────────
   if (homeQ.isLoading) {
     return (
       <Screen>
@@ -373,62 +256,64 @@ export default function Home() {
     )
   }
 
-  const { property, milestone_now, milestone_next, needs_attention, recent_activity, spend_summary, quiet } =
-    homeQ.data
-  const photos = photosQ.data?.items ?? []
-  const latest = photos[0]
-  const weekly = weeklyQ.data?.[0]
-  // B2 — milestones for the strip
+  // ── Destructure real data ─────────────────────────────────────────────────
+  const {
+    property,
+    milestone_now,
+    milestone_next,
+    needs_attention,
+    recent_activity,
+    spend_summary,
+    quiet,
+  } = homeQ.data
+
   const milestones = milestonesQ.data ?? []
-  // B3 — open requests (not done)
   const openRequests = (requestsQ.data ?? []).filter((r) => r.status !== 'done').slice(0, 3)
 
+  // ── Hero / state resolution ───────────────────────────────────────────────
   const startOn = property?.started_on ?? null
   const handoverOn = property?.expected_handover_on ?? null
-  const timeFrac = elapsedFraction(startOn, handoverOn)
-  const frac = timeFrac ?? 0
-  const hasTimeline = timeFrac !== null
-  const startLabel = `${t.started} ${dayMonth(startOn) ?? ''}`.trim()
-  const handoverMonth = handoverOn
-    ? new Date(handoverOn).toLocaleDateString('en-GB', { month: 'short' })
-    : null
-  const endLabel = handoverMonth ? `${t.handover} ~${handoverMonth}` : t.handover
-  const tickFrac = fractionAt(startOn, handoverOn, milestone_next?.expected_on ?? null)
+  const pct = elapsedPct(startOn, handoverOn)
+  const startLabel = monthYear(startOn)
+  const endLabel = monthYear(handoverOn)
 
-  const firstAttention = needs_attention[0]
-  const statusSentence =
-    milestone_now?.name ? recent_activity[0]?.body ?? t.progressBody : t.progressBody
-
-  // ---- Resolve the screen state. Exception always wins: needs > quiet > ok. ----
+  const firstAttention = needs_attention[0] ?? null
   const state: 'needs-attention' | 'quiet' | 'on-track' = firstAttention
     ? 'needs-attention'
     : quiet
       ? 'quiet'
       : 'on-track'
 
+  const eyebrow = state === 'quiet' ? `${t.today} · ${t.quietChip.toLowerCase()}` : t.today
   const answer =
     state === 'needs-attention' ? t.answerAttention : state === 'quiet' ? t.answerQuiet : t.answerOk
   const subline =
     state === 'needs-attention' ? t.subAttention : state === 'quiet' ? t.subQuiet : t.subOk
-  const badge: { tone: Status; icon: React.ComponentProps<typeof Feather>['name'] } =
-    state === 'needs-attention'
-      ? { tone: 'warn', icon: 'bell' }
-      : state === 'quiet'
-        ? { tone: 'quiet', icon: 'clock' }
-        : { tone: 'ok', icon: 'check' }
-  const pillStatus: Status = state === 'needs-attention' ? 'warn' : state === 'quiet' ? 'quiet' : 'ok'
-  const pillLabel = state === 'needs-attention' ? t.needsYou : state === 'quiet' ? t.quietChip : t.onTrack
 
-  const latestPhoto: PhotoTileData | null = latest
-    ? {
-        id: latest.id,
-        imageUri: latest.image_url,
-        caption: latest.caption,
-        room: latest.room_tag,
-        date: shortDate(latest.published_at),
-        starred: latest.is_starred,
-      }
+  // Property sub line: "9 BHK Villa, Lucknow · interior finishing" style
+  const propertySubLine = property
+    ? `${property.display_name}${property.status ? ` · ${property.status}` : ''}`
+    : ''
+
+  // ── Token shortcuts ───────────────────────────────────────────────────────
+  const clay = AP.clay            // #92482a
+  const clayMarker = AP.clayMarker // #ae5635
+  // Amber tokens (from prototype --amber-*)
+  const amberTint = '#FAF1D9'
+  const amberAccentBg = '#f5e8bc'
+  const amberText = '#7d5a13'  // c.warn on daylight
+
+  // ── Milestone data helpers ─────────────────────────────────────────────────
+  const doneCount = milestones.filter((m) => m.status === 'done').length
+  const toGoCount = milestones.filter((m) => m.status === 'upcoming').length
+  const nowMilestone = milestone_now
+  const nowExpected = shortDate(nowMilestone?.expected_on ?? null)
+
+  // ── Spend summary formatting ──────────────────────────────────────────────
+  const totalPaidParts = spend_summary
+    ? formatINR(spend_summary.total_change_cost_delta, { sign: 'none' })
     : null
+  // We don't have a "next payment" from SpendSummary, show change count instead
 
   return (
     <ScrollView
@@ -440,13 +325,15 @@ export default function Home() {
         gap: SPACE.lg,
       }}
     >
-      {/* ---- Top bar: greeting + date (left) · settings (right). No photo hero. ---- */}
+      {/* ── Top bar: Logo + greeting + settings ───────────────────────── */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
           <Logo size={40} />
           <BodyLg style={{ fontWeight: '600', marginTop: SPACE.sm }}>{greetingFor(t)}</BodyLg>
           <Small muted style={{ marginTop: 2 }} numberOfLines={1}>
-            {property?.display_name ? `${property.display_name} · ${weekdayDate(lang)}` : weekdayDate(lang)}
+            {property?.display_name
+              ? `${property.display_name} · ${new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`
+              : new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Small>
         </View>
         <Link href="/(homeowner)/settings" asChild>
@@ -471,131 +358,288 @@ export default function Home() {
         </Link>
       </View>
 
-      {/* ---- The answer on open sand — the 3-second REASSURE moment. ---- */}
-      <FadeInUp style={{ gap: SPACE.md, marginTop: SPACE.xs }}>
-        <AnswerBadge tone={badge.tone} icon={badge.icon} />
-        <View style={{ gap: SPACE.xs }}>
-          <Eyebrow>{t.today}</Eyebrow>
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 1: Hero — clay top-accent, clay→surface gradient, serif
+          answer, sub line, TimeBar, and two pills.
+          Prototype: Card accent="clay" accentSide="top" + linear-gradient.
+      ══════════════════════════════════════════════════════════════════ */}
+      <FadeInUp>
+        <View
+          style={{
+            backgroundColor: c.secondaryContainer,
+            borderRadius: theme.radii.card,
+            borderWidth: 1,
+            borderColor: c.line,
+            borderTopWidth: 4,
+            borderTopColor: clayMarker,
+            padding: SPACE.lg,
+            ...theme.shadowCard,
+          } as ViewStyle}
+        >
+          {/* Eyebrow: "Today · all calm" */}
+          <Eyebrow>{eyebrow}</Eyebrow>
+
+          {/* Eczar serif headline ~36px — "You're okay." */}
           <Display
             accessibilityRole="header"
-            accessibilityLabel={`${answer} ${subline}`}
+            style={{ marginTop: SPACE.xs, fontSize: 36, lineHeight: 48 }}
           >
             {answer}
           </Display>
+
+          {/* Sub line — property name + stage */}
+          {propertySubLine ? (
+            <Body muted style={{ marginTop: SPACE.xs }}>
+              {propertySubLine}
+            </Body>
+          ) : (
+            <Body muted style={{ marginTop: SPACE.xs }}>
+              {subline}
+            </Body>
+          )}
+
+          {/* TimeBar — start → handover with you-are-here dot */}
+          {startLabel && endLabel ? (
+            <TimeBar
+              start={startLabel}
+              end={endLabel}
+              pct={pct}
+              nowLabel={t.youAreHere}
+            />
+          ) : null}
+
+          {/* Bottom row: On-track pill (left) + Needs pill (right) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACE.lg }}>
+            <StatusPill
+              status={state === 'quiet' ? 'quiet' : state === 'needs-attention' ? 'warn' : 'ok'}
+              label={state === 'quiet' ? t.quietChip : state === 'needs-attention' ? t.needsYou : t.onTrack}
+            />
+            {needs_attention.length > 0 ? (
+              <View style={{ marginLeft: 'auto' }}>
+                <StatusPill
+                  status="warn"
+                  label={`${needs_attention.length} ${needs_attention.length === 1 ? 'choice' : 'choices'} for you`}
+                />
+              </View>
+            ) : null}
+          </View>
         </View>
-        <BodyLg muted numberOfLines={3}>
-          {subline}
-        </BodyLg>
-        <StatusPill status={pillStatus} label={pillLabel} />
       </FadeInUp>
 
-      {/* ---- Needs-you: the signature DecisionCard (calm amber, one item). ---- */}
-      {state === 'needs-attention' && firstAttention ? (
-        <FadeInUp>
-          <DecisionCard
-            eyebrow={t.needsYou}
-            title={firstAttention.title}
-            whenLabel={firstAttention.detail ?? undefined}
-            reviewLabel={t.review}
-            onReview={() => router.push('/requests')}
-            style={{ borderRadius: theme.radii.card }}
-          />
-        </FadeInUp>
-      ) : null}
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 2: NeedsInputCard — amber tint + amber accent bar
+          Prototype: Card tint="amber" accent="amber"
+          Hidden when needs_attention is empty.
+      ══════════════════════════════════════════════════════════════════ */}
+      {needs_attention.length > 0 ? (
+        <FadeInUp delay={30}>
+          <View
+            style={{
+              backgroundColor: amberTint,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              borderLeftWidth: 4,
+              borderLeftColor: c.warn,
+              padding: SPACE.lg,
+              ...theme.shadowCard,
+            } as ViewStyle}
+          >
+            {/* Card header: ⚡ Needs your input (N) */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.xs }}>
+              <Feather name="zap" size={18} color={amberText} />
+              <Body style={{ color: amberText, fontWeight: '600' }}>
+                {t.needsInputTitle} ({needs_attention.length})
+              </Body>
+            </View>
 
-      {/* ---- Honest TIME-BAR (never a %) + current phase + reassuring sentence. ---- */}
-      <FadeInUp delay={40}>
-        <StatusCard
-          milestoneTitle={milestone_now?.name ?? t.inProgress}
-          statusSentence={statusSentence}
-          reviewedLabel={t.reviewed}
-          hasTimeline={hasTimeline}
-          fraction={frac}
-          startLabel={startLabel}
-          endLabel={endLabel}
-          tickFraction={tickFrac}
-          youAreHereLabel={t.youAreHere}
-        />
-      </FadeInUp>
+            {/* Item rows */}
+            {needs_attention.map((item: AttentionItem, idx: number) => {
+              const isLast = idx === needs_attention.length - 1
+              return (
+                <View
+                  key={item.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.md - 1,
+                    paddingVertical: SPACE.md - 1,
+                    borderTopWidth: 1,
+                    borderTopColor: `rgba(125, 90, 19, 0.14)`,
+                  }}
+                >
+                  {/* Icon tile — amber tint */}
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: theme.radii.chip,
+                      backgroundColor: amberAccentBg,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Feather name="clipboard" size={17} color={amberText} />
+                  </View>
 
-      {/* ---- Quiet: explain the contractor-confirmed silence (no red/pulse). ---- */}
-      {state === 'quiet' && quiet ? <QuietCard quiet={quiet} lang={lang} /> : null}
+                  {/* Text */}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Body numberOfLines={2} style={{ fontSize: 14.5, color: c.text }}>
+                      {item.title}
+                    </Body>
+                    {item.detail ? (
+                      <Small muted numberOfLines={1} style={{ marginTop: 1 }}>
+                        {item.detail}
+                      </Small>
+                    ) : null}
+                  </View>
 
-      {/* ==== B1: All "Needs your input" items (multi-item, conditional). ====
-          The existing DecisionCard above shows only the first item for the quick
-          reassure. This block renders ALL items for completeness, but only when
-          there are MORE than one (to avoid duplication when there's just one).
-          Each routes to /(homeowner)/decisions/[id]. */}
-      {needs_attention.length > 1 ? (
-        <FadeInUp delay={50}>
-          <Card>
-            <View style={{ gap: SPACE.sm }}>
-              <Eyebrow>{t.needsInputEyebrow}</Eyebrow>
-              {needs_attention.map((item: AttentionItem, idx: number) => {
-                const isLast = idx === needs_attention.length - 1
-                return (
+                  {/* Soft amber "View" button */}
                   <Pressable
-                    key={item.id}
                     accessibilityRole="button"
-                    accessibilityLabel={item.title}
                     onPress={() => router.push(`/(homeowner)/decisions/${item.id}`)}
                     style={({ pressed }) => ({
-                      paddingVertical: SPACE.md,
-                      borderBottomWidth: isLast ? 0 : 1,
-                      borderBottomColor: c.line,
-                      opacity: pressed ? 0.85 : 1,
-                      gap: SPACE.xs,
+                      height: 38,
+                      paddingHorizontal: SPACE.md,
+                      borderRadius: theme.radii.chip,
+                      backgroundColor: amberAccentBg,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.75 : 1,
+                      flexShrink: 0,
                     })}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md }}>
-                      <BodyStrong style={{ flex: 1, color: c.warn }}>{item.title}</BodyStrong>
-                      <Feather name="chevron-right" size={18} color={c.accent} />
-                    </View>
-                    {item.detail ? <Small muted numberOfLines={1}>{item.detail}</Small> : null}
+                    <Small style={{ color: amberText, fontWeight: '600' }}>{t.needsInputView}</Small>
                   </Pressable>
-                )
-              })}
-            </View>
-          </Card>
+                </View>
+              )
+            })}
+          </View>
         </FadeInUp>
       ) : null}
 
-      {/* ==== B2: Milestone strip card (conditional — when milestones exist). ==== */}
-      {milestones.length > 0 ? (
-        <FadeInUp delay={55}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.milestonesTitle}
-            onPress={() => router.push('/(homeowner)/updates')}
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 3: MilestonesCard — flush card (no default padding)
+          Prototype: Card flush — clay eyebrow, target handover date,
+          On-track pill + chevron; collapsed shows MilestoneStrip + clay "Now" box.
+      ══════════════════════════════════════════════════════════════════ */}
+      <FadeInUp delay={40}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.milestonesEyebrow}
+          onPress={() => router.push('/(homeowner)/updates')}
+        >
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              overflow: 'hidden',
+              ...theme.shadowCard,
+            } as ViewStyle}
           >
-            <Card style={{ gap: SPACE.sm }}>
-              <Eyebrow>{t.milestonesEyebrow}</Eyebrow>
-              <MilestoneStrip milestones={milestones} nowLabel={t.milestoneNow} />
-              <Small color={c.accent} style={{ fontWeight: '600', marginTop: SPACE.xs }}>
-                {t.milestonesSub} →
-              </Small>
-            </Card>
-          </Pressable>
-        </FadeInUp>
-      ) : null}
-
-      {/* ==== B3: "My requests" card (conditional — when open requests exist). ====
-          Shows up to 3 open requests with status pills; See all → requests screen. */}
-      {openRequests.length > 0 ? (
-        <FadeInUp delay={62}>
-          <Card style={{ gap: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.sm }}>
-              <Eyebrow>{t.requestsEyebrow}</Eyebrow>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t.requestsSeeAll}
-                onPress={() => router.push('/(homeowner)/requests')}
-                hitSlop={16}
-                style={{ paddingVertical: 6 }}
-              >
-                <Small color={c.accent} style={{ fontWeight: '600' }}>{t.requestsSeeAll}</Small>
-              </Pressable>
+            {/* Header row */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.sm,
+                padding: SPACE.lg,
+                paddingBottom: SPACE.md,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Eyebrow>{t.milestonesEyebrow}</Eyebrow>
+                <Body style={{ marginTop: SPACE.xs, fontWeight: '600', color: c.text }}>
+                  {t.milestonesHandover}
+                  {handoverOn ? ` · ${handoverDate(handoverOn)}` : ''}
+                </Body>
+              </View>
+              <StatusPill status="ok" label={t.onTrack} size="sm" />
+              <Feather name="chevron-right" size={18} color={c.textMute} />
             </View>
+
+            {/* Milestone strip + Foundation/Handover labels */}
+            <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm }}>
+              {milestones.length > 0 ? (
+                <>
+                  <MilestoneStrip milestones={milestones} nowLabel={t.milestonesNow} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACE.xs }}>
+                    <Small muted>Foundation</Small>
+                    <Small muted>Handover</Small>
+                  </View>
+                </>
+              ) : null}
+
+              {/* Clay "Now: {stage} · expected {date}" box */}
+              {nowMilestone ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.sm,
+                    marginTop: SPACE.md,
+                    padding: SPACE.md - 2,
+                    backgroundColor: c.secondaryContainer,
+                    borderRadius: theme.radii.chip,
+                  }}
+                >
+                  <Feather name="circle" size={16} color={clay} />
+                  <Body style={{ color: c.text, flex: 1 }}>
+                    <Body style={{ fontWeight: '700', color: c.text }}>
+                      {t.milestonesNow}:{' '}
+                    </Body>
+                    {nowMilestone.name}
+                    {nowExpected ? ` · ${t.milestonesExpected} ${nowExpected}` : ''}
+                  </Body>
+                  {(doneCount > 0 || toGoCount > 0) ? (
+                    <Small muted style={{ whiteSpace: 'nowrap' } as ViewStyle}>
+                      {doneCount} {t.milestonesDone} · {toGoCount} {t.milestonesToGo}
+                    </Small>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* "Tap to see the full timeline →" */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.xs, marginTop: SPACE.md, marginBottom: SPACE.xs }}>
+                <Small style={{ color: c.accent, fontWeight: '600' }}>{t.milestonesSeeTimeline}</Small>
+                <Feather name="chevron-down" size={15} color={c.accent} />
+              </View>
+            </View>
+          </View>
+        </Pressable>
+      </FadeInUp>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 4: RequestsCard — "My requests (N open)"
+          Prototype: Card with title + ListRows + "Add a request" + "See all".
+          Hidden when no open requests.
+      ══════════════════════════════════════════════════════════════════ */}
+      {openRequests.length > 0 ? (
+        <FadeInUp delay={50}>
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              padding: SPACE.lg,
+              ...theme.shadowCard,
+            } as ViewStyle}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.xs }}>
+              <Body style={{ fontWeight: '600', color: c.text }}>
+                {t.requestsTitle}{' '}
+                <Body style={{ color: c.textMute, fontWeight: '500' }}>
+                  ({openRequests.length} {t.requestsOpen})
+                </Body>
+              </Body>
+            </View>
+
+            {/* Request rows */}
             {openRequests.map((req, idx) => (
               <ListRow
                 key={req.id}
@@ -617,142 +661,188 @@ export default function Home() {
                 }
               />
             ))}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.requestsAdd}
-              onPress={() => router.push('/(homeowner)/issue')}
-              hitSlop={16}
-              style={{ marginTop: SPACE.sm, paddingVertical: 6, minHeight: 48, justifyContent: 'center' }}
-            >
-              <Small color={c.accent} style={{ fontWeight: '600' }}>+ {t.requestsAdd}</Small>
-            </Pressable>
-          </Card>
-        </FadeInUp>
-      ) : null}
 
-      {/* ==== B4: "Recent activity" compact list (conditional). ====
-          Up to 3 recent_activity updates from home payload. Compact, no second
-          big photo hero — the hero PhotoTile below is kept as the one visual anchor. */}
-      {recent_activity.length > 0 ? (
-        <FadeInUp delay={68}>
-          <Card style={{ gap: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.sm }}>
-              <Eyebrow>{t.activityEyebrow}</Eyebrow>
+            {/* Footer: "Add a request" (left) + "See all" (right) */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACE.sm }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={t.activitySeeAll}
-                onPress={() => router.push('/(homeowner)/photos')}
+                onPress={() => router.push('/(homeowner)/issue')}
                 hitSlop={16}
-                style={{ paddingVertical: 6 }}
+                style={{ paddingVertical: 6, minHeight: 48, justifyContent: 'center' }}
               >
-                <Small color={c.accent} style={{ fontWeight: '600' }}>{t.activitySeeAll}</Small>
+                <Small color={c.accent} style={{ fontWeight: '600' }}>+ {t.requestsAdd}</Small>
               </Pressable>
-            </View>
-            {recent_activity.slice(0, 3).map((item, idx) => (
-              <ListRow
-                key={item.id}
-                icon="activity"
-                title={item.title}
-                subtitle={item.body ?? undefined}
-                last={idx === Math.min(recent_activity.length - 1, 2)}
-                statusTone={
-                  item.type === 'milestone' ? 'ok'
-                  : item.type === 'delay' ? 'risk'
-                  : item.type === 'decision_needed' ? 'warn'
-                  : 'info'
-                }
+              <LinkRow
+                label={t.requestsSeeAll}
+                onPress={() => router.push('/(homeowner)/requests')}
               />
-            ))}
-          </Card>
+            </View>
+          </View>
         </FadeInUp>
       ) : null}
 
-      {/* ---- Latest from site — real photo, keeps the home feeling alive. ---- */}
-      {latestPhoto ? (
-        <FadeInUp delay={60} style={{ gap: SPACE.sm }}>
-          <Eyebrow>{t.latestFromSite}</Eyebrow>
-          <PhotoTile
-            photo={latestPhoto}
-            variant="hero"
-            onPress={() => router.push('/(homeowner)/photos')}
-            labels={{
-              caption: t.captionFallback,
-              translate: t.askBuilder,
-              save: t.save,
-              share: t.share,
-              hide: t.hide,
-              video: t.videoLabel,
-              starred: t.savedLabel,
-            }}
-          />
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 5: ActivityCard — "Recent activity"
+          Prototype: Card with camera icon + title + activity rows with
+          photo thumbnails + "See all updates" link.
+          Hidden when recent_activity is empty.
+      ══════════════════════════════════════════════════════════════════ */}
+      {recent_activity.length > 0 ? (
+        <FadeInUp delay={60}>
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              padding: SPACE.lg,
+              ...theme.shadowCard,
+            } as ViewStyle}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.md }}>
+              <Feather name="camera" size={18} color={c.textMute} />
+              <Body style={{ fontWeight: '600', color: c.text }}>{t.activityTitle}</Body>
+            </View>
+
+            {/* Activity rows */}
+            <View style={{ gap: SPACE.md }}>
+              {recent_activity.slice(0, 3).map((item: Update, idx: number) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  onPress={() => router.push('/(homeowner)/updates')}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    gap: SPACE.md,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  {/* Photo thumbnail placeholder (warm tile) */}
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: theme.radii.chip,
+                      backgroundColor: AP.surfaceContainer,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Feather name="camera" size={20} color={c.textMute} />
+                  </View>
+
+                  {/* Text */}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    {item.published_at ? (
+                      <Eyebrow style={{ fontSize: 10.5, marginBottom: 2 }}>
+                        {shortDate(item.published_at) ?? ''}
+                      </Eyebrow>
+                    ) : null}
+                    <Body numberOfLines={2} style={{ fontSize: 14.5 }}>{item.title}</Body>
+                  </View>
+
+                  {/* Chevron */}
+                  <Feather name="chevron-right" size={16} color={c.textMute} />
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Footer */}
+            <View style={{ marginTop: SPACE.md }}>
+              <LinkRow
+                label={t.activitySeeAll}
+                onPress={() => router.push('/(homeowner)/updates')}
+              />
+            </View>
+          </View>
         </FadeInUp>
       ) : null}
 
-      {/* ---- Shortcut tiles: Next up · Changes · Ask (Photos lives above). ---- */}
-      <FadeInUp delay={80} style={{ flexDirection: 'row', gap: SPACE.sm }}>
-        {milestone_next ? (
-          <HomeWidget
-            eyebrow={t.nextUp}
-            primary={milestone_next.name}
-            secondary={milestone_next.expected_on ? `~${monthYear(milestone_next.expected_on) ?? ''}` : undefined}
-            bgColor={c.accent}
-            href="/(homeowner)/updates"
-            accessibilityLabel={`${t.nextUp}: ${milestone_next.name}`}
-          />
-        ) : null}
-        {spend_summary && spend_summary.change_count > 0 ? (
-          <HomeWidget
-            eyebrow={t.approvedChanges}
-            primary={formatRupees(spend_summary.total_change_cost_delta)}
-            secondary={t.changeLine.replace('{n}', String(spend_summary.change_count))}
-            href="/(homeowner)/updates"
-            accessibilityLabel={`${spend_summary.change_count} approved changes totalling ${formatRupees(spend_summary.total_change_cost_delta)}`}
-          />
-        ) : null}
-      </FadeInUp>
+      {/* ══════════════════════════════════════════════════════════════════
+          CARD 6: PaymentsCard — membrane-gated, hidden when spend_summary null.
+          Prototype: Card with wallet icon + two stat tiles + meta + "See payment
+          schedule" link.
+      ══════════════════════════════════════════════════════════════════ */}
+      {spend_summary ? (
+        <FadeInUp delay={70}>
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              padding: SPACE.lg,
+              ...theme.shadowCard,
+            } as ViewStyle}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.md }}>
+              <Feather name="credit-card" size={18} color={c.textMute} />
+              <Body style={{ fontWeight: '600', color: c.text, flex: 1 }}>{t.paymentsTitle}</Body>
+              <StatusPill status="ok" label={t.paymentsPreApproved} size="sm" />
+            </View>
 
-      {/* Ask your builder — always present as a calm anchor. */}
-      <FadeInUp delay={100} style={{ flexDirection: 'row', gap: SPACE.sm }}>
-        <HomeWidget
-          eyebrow={t.askShort}
-          primary={t.askBuilder}
-          secondary={t.askVoice}
-          href="/ask"
-          accessibilityLabel={t.askBuilder}
-        />
-      </FadeInUp>
+            {/* Two stat tiles */}
+            <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+              {/* Total paid */}
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: AP.surfaceLow,
+                  borderRadius: theme.radii.chip,
+                  padding: SPACE.md,
+                }}
+              >
+                <Small muted>{t.paymentsTotalPaid}</Small>
+                <Body
+                  style={{
+                    fontSize: 19,
+                    fontWeight: '600',
+                    color: c.text,
+                    marginTop: SPACE.xs,
+                    fontVariant: ['tabular-nums'],
+                  }}
+                >
+                  {totalPaidParts
+                    ? `${totalPaidParts.currency}${totalPaidParts.value}`
+                    : '—'}
+                </Body>
+              </View>
 
-      {/* ---- Finishes — calm entry to the room-by-room finishes screen. ---- */}
-      <FadeInUp delay={110}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.finishesLabel}
-          onPress={() => router.push('/(homeowner)/finishes')}
-        >
-          <CalmCard
-            status="ok"
-            eyebrow={t.finishesEyebrow}
-            title={t.finishesLabel}
-            body={t.finishesSub}
-            trailing={
-              <Feather name="chevron-right" size={20} color={c.accent} />
-            }
-          />
-        </Pressable>
-      </FadeInUp>
+              {/* Change count tile — we don't have a "next payment" amount */}
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: AP.surfaceLow,
+                  borderRadius: theme.radii.chip,
+                  padding: SPACE.md,
+                }}
+              >
+                <Small muted>Approved changes</Small>
+                <Body
+                  style={{
+                    fontSize: 19,
+                    fontWeight: '600',
+                    color: c.text,
+                    marginTop: SPACE.xs,
+                  }}
+                >
+                  {spend_summary.change_count}
+                </Body>
+              </View>
+            </View>
 
-      {/* ---- Weekly summary letter (warm-clay) — when one exists. ---- */}
-      {weekly?.text ? (
-        <FadeInUp delay={120}>
-          <WeeklySummaryCard
-            eyebrowPrefix={t.thisWeekEyebrow}
-            rangeLabel={weekRange(weekly.week_start) ?? ''}
-            summary={weekly.text}
-            listenLabel={t.listen}
-            readMoreLabel={t.readLetter}
-            readMoreHref="/(homeowner)/updates"
-            lang={lang}
-          />
+            {/* "See payment schedule" link */}
+            <View style={{ marginTop: SPACE.md }}>
+              <LinkRow
+                label={t.paymentsSeeSchedule}
+                onPress={() => router.push('/(homeowner)/updates')}
+              />
+            </View>
+          </View>
         </FadeInUp>
       ) : null}
     </ScrollView>

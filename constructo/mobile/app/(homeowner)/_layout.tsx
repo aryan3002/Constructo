@@ -16,7 +16,7 @@ import { Redirect, Tabs, usePathname } from 'expo-router'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
-import { AskPill, FloatingTabBar } from '../../src/ui'
+import { AskPill, FloatingTabBar, ToastProvider } from '../../src/ui'
 
 function HomeownerTabs() {
   const { t } = useT()
@@ -54,6 +54,10 @@ function HomeownerTabs() {
         <Tabs.Screen name="design/profile" options={{ href: null }} />
         {/* Wave 2b — per-room references + drawing detail */}
         <Tabs.Screen name="design/references/[room]" options={{ href: null }} />
+        {/* Design Profiler — intake hub, per-area ranking, brief review */}
+        <Tabs.Screen name="design/profiler" options={{ href: null }} />
+        <Tabs.Screen name="design/profiler/[area]" options={{ href: null }} />
+        <Tabs.Screen name="design/brief" options={{ href: null }} />
         <Tabs.Screen name="drawings/[id]" options={{ href: null }} />
         {/* Her To-dos — pushed from the chat thread, no tab bar entry */}
         <Tabs.Screen name="todos" options={{ href: null }} />
@@ -84,7 +88,9 @@ export default function HomeownerLayout() {
 
   return (
     <ThemeProvider initial="daylight">
-      <HomeownerTabs />
+      <ToastProvider>
+        <HomeownerTabs />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

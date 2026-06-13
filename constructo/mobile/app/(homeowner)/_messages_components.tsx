@@ -56,9 +56,14 @@ const STR = {
   },
 } as const
 
-/** An inbox row — her builder channel (pinned) or a group. ≥48px tap (64
- *  minHeight), warm surface card, Mono recency, an unread pill (sage dot +
- *  count — shape + colour, never colour alone). */
+/** An inbox row — her builder channel (pinned) or a group. ≥48px tap (72
+ *  minHeight), warm surface card with a richer leading avatar cluster for the
+ *  builder channel (stacked team initials, like the prototype), Mono recency,
+ *  an unread pill (sage dot + count — shape + colour, never colour alone).
+ *
+ *  The builder channel gets a warm stacked-avatar cluster (S + R + P) to visually
+ *  signal "the whole team is in here" at a glance — matches the prototype feel.
+ *  Group threads keep the simpler people-chip icon. */
 export function ChannelRow({
   conversation,
   siteName,
@@ -89,44 +94,69 @@ export function ChannelRow({
           flexDirection: 'row',
           alignItems: 'center',
           gap: SPACE.md,
-          minHeight: 64,
+          minHeight: 72,
           paddingHorizontal: SPACE.lg,
           paddingVertical: SPACE.md,
           backgroundColor: c.card,
           borderRadius: theme.radii.card,
           borderWidth: 1,
           borderColor: c.line,
-          transform: [{ scale: pressed ? 0.99 : 1 }],
-          opacity: pressed ? 0.94 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
+          opacity: pressed ? 0.93 : 1,
         },
         theme.shadowCard,
       ]}
     >
-      {/* Leading glyph chip — colour + icon (never a bare initial). A house for
-          her builder; people for a group thread. */}
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: isBuilder ? AP.chip : c.secondaryContainer,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Feather
-          name={isBuilder ? 'home' : 'users'}
-          size={20}
-          color={isBuilder ? AP.onChip : c.secondary}
-        />
-      </View>
+      {isBuilder ? (
+        /* Builder channel: stacked initials cluster — site team visual shorthand.
+           Three overlapping circles (S = site, R = co-owner, P = you), matching
+           the prototype's multi-participant avatar treatment. */
+        <View style={{ width: 54, height: 44, position: 'relative' }}>
+          {/* S — site team (blue tint) */}
+          <View style={[stackedAvatarStyle(0, theme.radii.pill), { backgroundColor: AP.surfaceContainer }]}>
+            <Feather name="tool" size={13} color={c.textMute} />
+          </View>
+          {/* R — co-owner (clay tint) */}
+          <View style={[stackedAvatarStyle(14, theme.radii.pill), { backgroundColor: c.secondaryContainer, borderColor: c.card }]}>
+            <Feather name="user" size={13} color={c.secondary} />
+          </View>
+          {/* P — you (sage chip, the primary accent) */}
+          <View style={[stackedAvatarStyle(28, theme.radii.pill), { backgroundColor: AP.chip, borderColor: c.card }]}>
+            <Feather name="home" size={13} color={AP.onChip} />
+          </View>
+        </View>
+      ) : (
+        /* Group thread: simpler people-chip icon. */
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: c.secondaryContainer,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Feather name="users" size={20} color={c.secondary} />
+        </View>
+      )}
 
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
           <Body style={{ flex: 0, fontWeight: '600' }} numberOfLines={1}>
             {title}
           </Body>
-          {!isBuilder ? (
+          {/* Calm online dot for the builder channel — a quiet green pulse cue. */}
+          {isBuilder ? (
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: c.accent,
+              }}
+            />
+          ) : (
             <View
               style={{
                 flexDirection: 'row',
@@ -141,7 +171,7 @@ export function ChannelRow({
               <Feather name="users" size={11} color={c.secondary} />
               <Small style={{ color: c.secondary, fontWeight: '600' }}>{t.group}</Small>
             </View>
-          ) : null}
+          )}
         </View>
         {subtitle ? (
           <Small muted numberOfLines={1}>
@@ -180,6 +210,22 @@ export function ChannelRow({
       </View>
     </Pressable>
   )
+}
+
+/** Returns position styles for a stacked avatar circle (left-offset + border). */
+function stackedAvatarStyle(leftOffset: number, pillRadius: number) {
+  return {
+    position: 'absolute' as const,
+    left: leftOffset,
+    top: 2,
+    width: 30,
+    height: 30,
+    borderRadius: pillRadius,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  }
 }
 
 /**
