@@ -59,7 +59,10 @@ export interface SiteEvent {
 // present the pending ones with a respond affordance.
 // ---------------------------------------------------------------------------
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | string
+// Mirrors the backend Decision state machine (DecisionOut.state). NOTE: the API
+// returns `state`, not `status` — the field was previously mis-named here, which
+// silently filtered every ask out (state === undefined). Keep this as `state`.
+export type ApprovalState = 'pending' | 'resolved' | 'acknowledged' | 'rejected' | string
 
 export interface Approval {
   id: string
@@ -67,7 +70,7 @@ export interface Approval {
   kind: string
   title: string
   detail: string | null
-  status: ApprovalStatus
+  state: ApprovalState
   created_at: string
 }
 

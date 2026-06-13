@@ -1,11 +1,19 @@
 /**
- * Owner Audit + Survey API surface — the "Site Audit" (AI quality inspection) and
+ * Audit + Survey API surface — the "Site Audit" (AI quality inspection) and
  * "SiteSync" (first-visit survey) features. Backed by the Labs-gated
  * `/api/v1/audits/*` and `/api/v1/surveys/*` routers.
  *
+ * Two callers share this client:
+ *   - the OWNER reads (list / get / assign findings) and requests audits;
+ *   - the SITE ENGINEER (supervisor) CONDUCTS them — `upsertSection` marks a
+ *     section's checks pass/observe/fail, `score` finalizes, `addFinding`
+ *     records a defect.
+ *
  * Determinism doctrine: quality scores / risk scores are computed by the backend
- * in deterministic Python; the LLM only drafts the prose (finding notes, the
- * survey AI-analysis). The client never computes or trusts a score it made up.
+ * in deterministic Python (section score = round(100·(pass+0.5·obs)/total);
+ * audit score = mean of section scores); the LLM only drafts the prose (finding
+ * notes, the survey AI-analysis). The client never computes or trusts a score it
+ * made up.
  */
 import { request } from './client'
 import type { Paginated } from './types'
@@ -74,6 +82,29 @@ export interface CreateAuditRequest {
   sections: string[]
   scheduled_for?: 'today' | 'this_week'
   conducted_by?: string | null
+}
+
+/** Body for `POST /audits/{id}/sections` — the engineer's marked checklist. */
+export interface UpsertSectionRequest {
+  name: string
+  items: AuditSectionItem[]
+}
+
+/** Body for `POST /audits/{id}/findings` — a defect the engineer logs. */
+export interface CreateFindingRequest {
+  title: string
+  severity: FindingSeverity
+  room?: string | null
+  location?: string | null
+  note?: string | null
+  photo_url?: string | null
+}
+
+/** Body for `PATCH /audits/{id}`. */
+export interface PatchAuditRequest {
+  status?: AuditStatus
+  conducted_by?: string | null
+  conducted_at?: string | null
 }
 
 // ---- Survey ---------------------------------------------------------------
@@ -150,6 +181,28 @@ export const audit = {
   create: (body: CreateAuditRequest) =>
     request<Audit>('/api/v1/audits', { method: 'POST', body: JSON.stringify(body) }),
 
+  /** Patch an audit (e.g. flip status → in_progress when the engineer starts). */
+  patch: (id: string, body: PatchAuditRequest) =>
+    request<Audit>(`/api/v1/audits/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** Upsert a section's marked checklist — backend scores it deterministically. */
+  upsertSection: (id: string, body: UpsertSectionRequest) =>
+    request<AuditSection>(`/api/v1/audits/${id}/sections`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Finalize: compute the overall score (mean of sections) + mark completed. */
+  score: (id: string) =>
+    request<AuditDetail>(`/api/v1/audits/${id}/score`, { method: 'POST' }),
+
+  /** Log a finding (defect) against the audit. */
+  addFinding: (id: string, body: CreateFindingRequest) =>
+    request<AuditFinding>(`/api/v1/audits/${id}/findings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   assignFinding: (findingId: string, patch: { status?: FindingStatus; assignee_id?: string; note?: string }) =>
     request<AuditFinding>(`/api/v1/audits/findings/${findingId}`, {
       method: 'PATCH',
@@ -167,4 +220,8 @@ export const audit = {
 
   onboardSurvey: (id: string) =>
     request<Survey>(`/api/v1/surveys/${id}/onboard`, { method: 'POST' }),
+
+  /** Analyze a survey — deterministic risk_score/filled_pct + AI prose draft. */
+  analyzeSurvey: (id: string) =>
+    request<Survey>(`/api/v1/surveys/${id}/analyze`, { method: 'POST' }),
 }
