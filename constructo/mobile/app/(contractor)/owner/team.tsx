@@ -14,10 +14,12 @@
  *     - Client role → site picker → POST /api/v1/homeowner/members → join code.
  *   • Manage member (tap non-self row) → manage sheet.
  *     - Role change → honest confirm dialog → PATCH /api/v1/users/{id}.
- *     - Deactivate/reactivate → honest confirm dialog → PATCH.
- *
- * No fake OTP step-up — the backend has no step-up on these endpoints. We use
- * honest confirmation dialogs (Alert.alert) instead.
+ *       Privileged role (owner/pm/accountant/procurement) → backend may return
+ *       403 step_up_required → StepUpModal → retry with X-Step-Up-Token.
+ *     - Deactivate → honest confirm dialog → PATCH; backend always requires
+ *       step-up for deactivation → StepUpModal flow.
+ *     - Reactivate / non-privileged role changes → no OTP required; succeed on
+ *       first attempt.
  */
 import { useState } from 'react'
 import {
@@ -54,6 +56,7 @@ import {
   Screen,
   Small,
   StatusPill,
+  StepUpModal,
 } from '../../../src/ui'
 import { ROLE_LABEL } from './_account.util'
 
@@ -592,16 +595,53 @@ function ManageSheet({
   const queryClient = useQueryClient()
   const [newRole, setNewRole] = useState<Role | null>(null)
 
+  // ---------------------------------------------------------------------------
+  // Step-up state — holds the pending patch until the OTP is verified.
+  // ---------------------------------------------------------------------------
+  const [stepUpVisible, setStepUpVisible] = useState(false)
+  const [pendingPatch, setPendingPatch] = useState<{ role?: Role; is_active?: boolean } | null>(null)
+
+  // ---------------------------------------------------------------------------
+  // Core mutation — accepts optional step-up token.
+  // ---------------------------------------------------------------------------
   const updateMut = useMutation({
-    mutationFn: (patch: { role?: Role; is_active?: boolean }) =>
-      owner.updateMember(member!.id, patch),
+    mutationFn: ({
+      patch,
+      stepUpToken,
+    }: {
+      patch: { role?: Role; is_active?: boolean }
+      stepUpToken?: string
+    }) => owner.updateMember(member!.id, patch, stepUpToken),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['owner', 'members'] })
+      setPendingPatch(null)
       onDone()
+    },
+    onError: (err: Error) => {
+      if (err instanceof ApiError && err.code === 'step_up_required') {
+        // Backend demands a step-up token — open the OTP modal.
+        setStepUpVisible(true)
+      } else {
+        // Non-step-up error; surface it in the sheet and clear pending.
+        setPendingPatch(null)
+      }
     },
   })
 
   if (!member) return null
+
+  // ---------------------------------------------------------------------------
+  // Entry point for all mutations: try without a token first; the onError
+  // handler opens the step-up modal if the backend says step_up_required.
+  // ---------------------------------------------------------------------------
+  function applyPatch(patch: { role?: Role; is_active?: boolean }) {
+    setPendingPatch(patch)
+    updateMut.mutate({ patch })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Confirm dialogs (intent gate — always shown before any mutation).
+  // ---------------------------------------------------------------------------
 
   function confirmChangeRole(targetRole: Role) {
     const roleName = ROLE_LABEL[targetRole]?.en ?? targetRole
@@ -612,7 +652,7 @@ function ManageSheet({
         { text: t('team.confirmCancel'), style: 'cancel' },
         {
           text: t('team.confirmOk'),
-          onPress: () => updateMut.mutate({ role: targetRole }),
+          onPress: () => applyPatch({ role: targetRole }),
         },
       ],
     )
@@ -627,7 +667,7 @@ function ManageSheet({
         {
           text: t('team.confirmOk'),
           style: 'destructive',
-          onPress: () => updateMut.mutate({ is_active: false }),
+          onPress: () => applyPatch({ is_active: false }),
         },
       ],
     )
@@ -641,81 +681,112 @@ function ManageSheet({
         { text: t('team.confirmCancel'), style: 'cancel' },
         {
           text: t('team.confirmOk'),
-          onPress: () => updateMut.mutate({ is_active: true }),
+          onPress: () => applyPatch({ is_active: true }),
         },
       ],
     )
   }
 
+  // ---------------------------------------------------------------------------
+  // Step-up callback: OTP verified → retry original patch with the token.
+  // ---------------------------------------------------------------------------
+  function handleStepUpVerified(token: string) {
+    setStepUpVisible(false)
+    if (pendingPatch) {
+      updateMut.mutate({ patch: pendingPatch, stepUpToken: token })
+    }
+  }
+
+  function handleStepUpCancel() {
+    setStepUpVisible(false)
+    setPendingPatch(null)
+    updateMut.reset()
+  }
+
+  // Show a non-step-up error in the sheet only when the modal is not open.
+  const showError =
+    updateMut.isError &&
+    !(updateMut.error instanceof ApiError && updateMut.error.code === 'step_up_required')
+
   return (
-    <Sheet visible={!!member} onClose={onClose}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.sm }}>
-        <Avatar name={member.name} size={48} />
-        <View style={{ flex: 1 }}>
-          <BodyStrong>{member.name || '—'}</BodyStrong>
-          {member.phone ? <Mono muted style={{ marginTop: 2 }}>{member.phone}</Mono> : null}
+    <>
+      <Sheet visible={!!member} onClose={onClose}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.sm }}>
+          <Avatar name={member.name} size={48} />
+          <View style={{ flex: 1 }}>
+            <BodyStrong>{member.name || '—'}</BodyStrong>
+            {member.phone ? <Mono muted style={{ marginTop: 2 }}>{member.phone}</Mono> : null}
+          </View>
         </View>
-      </View>
 
-      {/* Role change */}
-      <View style={{ gap: SPACE.xs }}>
-        <Small muted style={{ letterSpacing: 1 }}>
-          {t('team.manageRole').toUpperCase()}
-        </Small>
-        <View
-          style={{
-            borderWidth: 1,
-            borderColor: theme.colors.line,
-            borderRadius: theme.radii.card,
-            overflow: 'hidden',
-          }}
-        >
-          {CHANGEABLE_ROLES.map((opt) => (
-            <RoleOption
-              key={opt.value}
-              label={t(opt.labelKey)}
-              selected={(newRole ?? member.role) === opt.value}
-              onPress={() => {
-                if (opt.value !== member.role) {
-                  setNewRole(opt.value)
-                  confirmChangeRole(opt.value)
-                }
-              }}
-            />
-          ))}
+        {/* Role change */}
+        <View style={{ gap: SPACE.xs }}>
+          <Small muted style={{ letterSpacing: 1 }}>
+            {t('team.manageRole').toUpperCase()}
+          </Small>
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: theme.colors.line,
+              borderRadius: theme.radii.card,
+              overflow: 'hidden',
+            }}
+          >
+            {CHANGEABLE_ROLES.map((opt) => (
+              <RoleOption
+                key={opt.value}
+                label={t(opt.labelKey)}
+                selected={(newRole ?? member.role) === opt.value}
+                onPress={() => {
+                  if (opt.value !== member.role) {
+                    setNewRole(opt.value)
+                    confirmChangeRole(opt.value)
+                  }
+                }}
+              />
+            ))}
+          </View>
         </View>
-      </View>
 
-      {updateMut.isError ? (
-        <Body color={theme.colors.risk}>
-          {updateMut.error instanceof ApiError
-            ? updateMut.error.message
-            : t('common.somethingWrong')}
-        </Body>
-      ) : null}
+        {showError ? (
+          <Body color={theme.colors.risk}>
+            {updateMut.error instanceof ApiError
+              ? updateMut.error.message
+              : t('common.somethingWrong')}
+          </Body>
+        ) : null}
 
-      {/* Deactivate / Reactivate */}
-      {member.is_active ? (
-        <Button
-          title={updateMut.isPending ? t('team.manageSaving') : t('team.manageDeactivate')}
-          variant="danger"
-          block
-          disabled={updateMut.isPending}
-          onPress={confirmDeactivate}
-        />
-      ) : (
-        <Button
-          title={updateMut.isPending ? t('team.manageSaving') : t('team.manageReactivate')}
-          variant="secondary"
-          block
-          disabled={updateMut.isPending}
-          onPress={confirmReactivate}
-        />
-      )}
-    </Sheet>
+        {/* Deactivate / Reactivate */}
+        {member.is_active ? (
+          <Button
+            title={updateMut.isPending ? t('team.manageSaving') : t('team.manageDeactivate')}
+            variant="danger"
+            block
+            disabled={updateMut.isPending}
+            onPress={confirmDeactivate}
+          />
+        ) : (
+          <Button
+            title={updateMut.isPending ? t('team.manageSaving') : t('team.manageReactivate')}
+            variant="secondary"
+            block
+            disabled={updateMut.isPending}
+            onPress={confirmReactivate}
+          />
+        )}
+      </Sheet>
+
+      {/* Step-up OTP modal — rendered outside Sheet so it layers on top */}
+      <StepUpModal
+        visible={stepUpVisible}
+        onVerified={handleStepUpVerified}
+        onCancel={handleStepUpCancel}
+      />
+    </>
   )
 }
+
 
 // ---------------------------------------------------------------------------
 // Helper: map a Role to the labelKey suffix used in i18n

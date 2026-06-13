@@ -9,12 +9,12 @@ through `effective_visible_site_ids`, which extends the frozen
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user, require_role
+from app.auth.deps import assert_valid_step_up, get_current_user, require_role
 from app.auth.scoping import visible_site_ids
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
@@ -48,6 +48,13 @@ from app.sites.schemas import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["sites"])
+
+# Roles that carry elevated access (financial, export, or admin reach).
+# Assigning ANY of these to a teammate is considered a sensitive action and
+# requires a fresh step-up token in ``PATCH /users/{id}``.
+STEP_UP_ROLES: frozenset[UserRole] = frozenset(
+    {UserRole.owner, UserRole.pm, UserRole.accountant, UserRole.procurement}
+)
 
 _ALL_SITES_ROLES = {UserRole.owner, UserRole.pm, UserRole.architect}
 
@@ -427,16 +434,31 @@ async def update_user(
     body: UserUpdate,
     actor: User = Depends(require_role(UserRole.owner)),
     session: AsyncSession = Depends(get_session),
+    x_step_up_token: str | None = Header(default=None),
 ) -> UserOut:
     """Change a teammate's role or active status (W4.3). Owner-only, scoped to
     the caller's company. The owner can't edit their OWN role/status — which
     also guarantees the company always keeps at least one active owner (the
-    acting owner remains), so there is no separate last-owner check to do."""
+    acting owner remains), so there is no separate last-owner check to do.
+
+    Sensitive changes (deactivation OR assigning a privileged role from
+    ``STEP_UP_ROLES``) require a valid ``X-Step-Up-Token`` header minted by
+    ``POST /auth/step-up/verify``.  Non-sensitive changes (assigning a
+    non-privileged role, or reactivation) proceed without a token.
+    """
     target = await session.get(User, user_id)
     if target is None or target.company_id != actor.company_id:
         raise AppError(404, "not_found", "User not found")
     if target.id == actor.id:
         raise AppError(403, "forbidden", "You can't change your own role or status")
+
+    # A change is sensitive when it deactivates a user OR assigns a role that
+    # carries elevated (financial / admin) reach.
+    sensitive = (body.is_active is False) or (
+        body.role is not None and body.role in STEP_UP_ROLES
+    )
+    if sensitive:
+        assert_valid_step_up(x_step_up_token, actor)
 
     if body.role is not None:
         target.role = body.role

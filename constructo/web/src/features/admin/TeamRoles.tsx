@@ -3,15 +3,23 @@
 // GET /api/v1/users + the owner-only PATCH /api/v1/users/{id}. The server is the
 // authority (owner-only, no self-edit, deactivation blocks login + tokens); this
 // shapes the UI to match and updates optimistically.
+//
+// Sensitive changes (deactivate or assign a privileged role) trigger a 403
+// `step_up_required` from the server. When that happens we flip into an inline
+// OTP prompt, call `authApi.stepUpVerify(otp)` for a short-lived token, and
+// retry the original mutation with that token attached. Non-sensitive changes
+// (reactivate, unprivileged role) pass through with no prompt.
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   authApi,
+  StepUpRequiredError,
   type Me,
   type Role,
   type TeamMember,
   type TeamMemberUpdate,
 } from '../../api/auth'
+import { ApiError } from '../../api/client'
 import { qk } from '../../api/queryKeys'
 import { useCan } from '../../auth/useCan'
 import { useT, type TranslationKey } from '../../i18n'
@@ -35,6 +43,13 @@ const roleKey = (r: Role) => `invite.role.${r}` as TranslationKey
 interface MutateVars {
   id: string
   patch: TeamMemberUpdate
+  stepUpToken?: string
+}
+
+/** Pending change that is waiting for OTP verification. */
+interface PendingStepUp {
+  id: string
+  patch: TeamMemberUpdate
 }
 
 export function TeamRoles() {
@@ -47,13 +62,20 @@ export function TeamRoles() {
 
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
 
+  // Step-up OTP state — non-null means a sensitive change is waiting for a token.
+  const [pendingStepUp, setPendingStepUp] = useState<PendingStepUp | null>(null)
+  const [otp, setOtp] = useState('')
+  const [otpError, setOtpError] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
   const mutation = useMutation<
     TeamMember,
     Error,
     MutateVars,
     { prev?: TeamMember[] }
   >({
-    mutationFn: ({ id, patch }) => authApi.updateTeamMember(id, patch),
+    mutationFn: ({ id, patch, stepUpToken }) =>
+      authApi.updateTeamMember(id, patch, stepUpToken),
     async onMutate({ id, patch }) {
       await qc.cancelQueries({ queryKey: qk.team() })
       const prev = qc.getQueryData<TeamMember[]>(qk.team())
@@ -65,17 +87,59 @@ export function TeamRoles() {
       }
       return { prev }
     },
-    onError(_e, _v, ctx) {
+    onError(e, vars, ctx) {
+      if (e instanceof StepUpRequiredError) {
+        // Roll back the optimistic update and open the OTP prompt.
+        if (ctx?.prev) qc.setQueryData(qk.team(), ctx.prev)
+        setPendingStepUp({ id: vars.id, patch: vars.patch })
+        setOtp('')
+        setOtpError(null)
+        setToast(null)
+        return
+      }
       if (ctx?.prev) qc.setQueryData(qk.team(), ctx.prev)
       setToast({ status: 'risk', msg: t('admin.team.save_failed') })
     },
     onSuccess() {
+      setPendingStepUp(null)
+      setOtp('')
+      setOtpError(null)
       setToast({ status: 'ok', msg: t('admin.team.saved') })
     },
     onSettled() {
       qc.invalidateQueries({ queryKey: qk.team() })
     },
   })
+
+  /** Called when the user submits the OTP form. */
+  async function verifyAndRetry() {
+    if (!pendingStepUp) return
+    setVerifying(true)
+    setOtpError(null)
+    try {
+      const { token } = await authApi.stepUpVerify(otp)
+      setOtp('')
+      mutation.mutate({
+        id: pendingStepUp.id,
+        patch: pendingStepUp.patch,
+        stepUpToken: token,
+      })
+    } catch (e) {
+      setOtpError(
+        e instanceof ApiError && e.status === 401
+          ? t('admin.team.step_up_bad_otp')
+          : t('admin.team.save_failed'),
+      )
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  function cancelStepUp() {
+    setPendingStepUp(null)
+    setOtp('')
+    setOtpError(null)
+  }
 
   if (team.isLoading) return <Spinner label={t('admin.team.loading')} />
   if (team.isError || !team.data) {
@@ -107,16 +171,68 @@ export function TeamRoles() {
         </a>
       </header>
 
-      {toast ? (
+      {toast && !pendingStepUp ? (
         <p role="status" aria-live="polite">
           <StatusPill status={toast.status} label={toast.msg} />
         </p>
       ) : null}
 
+      {/* Step-up OTP prompt — shown inline above the list when a sensitive change needs verification. */}
+      {pendingStepUp ? (
+        <div
+          data-testid="step-up-prompt"
+          className="rounded-card border border-primary/40 bg-surface-sunken px-4 py-3"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void verifyAndRetry()
+            }}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <label className="sr-only" htmlFor="team-step-up-otp">
+              {t('admin.team.step_up_otp_label')}
+            </label>
+            <span className="font-body text-small text-text-mute">
+              {t('admin.team.step_up_otp_prompt')}
+            </span>
+            <input
+              id="team-step-up-otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="000000"
+              className="min-h-tap w-36 rounded-control border border-line bg-paper px-3 font-body text-small text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={otp.length === 0 || verifying}
+            >
+              {t('admin.team.step_up_verify_cta')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={verifying}
+              onClick={cancelStepUp}
+            >
+              {t('admin.team.step_up_cancel')}
+            </Button>
+          </form>
+          {otpError ? (
+            <p role="alert" className="mt-2">
+              <StatusPill status="risk" label={otpError} size="sm" />
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <ul className="flex flex-col divide-y divide-line overflow-hidden rounded-card border border-line">
         {members.map((m) => {
           const isSelf = m.id === selfId
-          const locked = !canManage || isSelf || mutation.isPending
+          const locked = !canManage || isSelf || mutation.isPending || pendingStepUp !== null
           return (
             <li
               key={m.id}
