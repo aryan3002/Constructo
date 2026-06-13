@@ -153,3 +153,23 @@ async def test_materialize_rejects_unshared_brief(client, factory, db_session):
         assert resp.json()["error"]["code"] == "brief_not_ready"
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_contractor_trigger_to_materialize_e2e(client, factory, db_session):
+    """The full contractor seam: POST /profiles (the 'Build Design Profile' trigger)
+    -> rank -> approve theme -> brief -> homeowner+architect sign-off -> materialize
+    -> a pending Spec lands in the Spec engine ready for human confirmation."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        architect, site, pid, bid, comp_id = await _shared_brief_with_component(
+            client, factory, db_session)
+        assert pid and bid and comp_id  # the trigger created a usable profile
+        body = (await client.post(
+            f"/api/v1/design/briefs/{bid}/materialize", headers=auth(architect))).json()
+        assert body["specs_created"] >= 1
+        spec_id = body["specs"][0]["id"]
+        approved = await client.post(f"/api/v1/specs/{spec_id}/approve",
+            json={"status": "approved"}, headers=auth(architect))
+        assert approved.status_code == 200 and approved.json()["approval_status"] == "approved"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
