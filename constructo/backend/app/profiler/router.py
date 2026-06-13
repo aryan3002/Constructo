@@ -10,7 +10,9 @@ from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.models import User, UserRole
+from app.homeowner.authority import can_approve
+from app.homeowner.scoping import homeowner_site_ids, member_sub_role
+from app.models import HomeownerMember, MemberStatus, User, UserRole
 from app.models.profiler import (
     BriefAction,
     BriefAudience,
@@ -84,6 +86,46 @@ async def _load_owned_profile(
     if profile is None or profile.company_id != user.company_id:
         raise AppError(404, "not_found", "Profile not found")
     return profile
+
+
+async def _load_accessible_profile(
+    session: AsyncSession, profile_id: UUID, user: User
+) -> ProfilerProfile:
+    """Load a profile the caller may ACCESS (read-class), enforcing the membrane.
+
+    Homeowner Users share the contractor's company_id (POST /homeowner/join sets
+    company_id = site.company_id), so company-scope alone is too permissive for them.
+    Mirror app/homeowner/router.py::_can_access_site: a homeowner must hold an active
+    membership on the profile's site; contractor-side roles keep company-scope.
+    """
+    profile = await session.get(ProfilerProfile, profile_id)
+    if profile is None:
+        raise AppError(404, "not_found", "Profile not found")
+    if user.role is UserRole.homeowner:
+        if profile.site_id not in await homeowner_site_ids(session, user):
+            raise AppError(404, "not_found", "Profile not found")
+    elif profile.company_id != user.company_id:
+        raise AppError(404, "not_found", "Profile not found")
+    return profile
+
+
+_HOMEOWNER_BRIEF_ACTIONS = {
+    BriefAction.approve, BriefAction.request_changes, BriefAction.send_to_architect,
+}
+
+
+def _audience_allowed(user: User, audience: BriefAudience) -> bool:
+    """Which audience renderings a role may read (the homeowner controls the contractor view)."""
+    if user.role is UserRole.homeowner:
+        return True  # their own data — any audience
+    if user.role is UserRole.architect:
+        return audience in (BriefAudience.architect, BriefAudience.contractor)
+    return audience is BriefAudience.contractor  # other contractor-side roles = "the contractor"
+
+
+_CONTRACTOR_VISIBLE_STATES = {
+    BriefState.contractor_brief_ready, BriefState.approved, BriefState.locked,
+}
 
 
 async def _area_signals(
@@ -275,7 +317,7 @@ async def get_profile(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ProfileDetailOut:
-    profile = await _load_owned_profile(session, profile_id, user)
+    profile = await _load_accessible_profile(session, profile_id, user)
     areas = (
         (await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile_id)))
         .scalars()
@@ -406,7 +448,7 @@ async def get_area_taste(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     area = await session.get(ProfilerArea, area_id)
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
@@ -487,7 +529,7 @@ async def list_themes(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ThemeOut]:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     area = await session.get(ProfilerArea, area_id)
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
@@ -507,7 +549,7 @@ async def list_conflicts(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ConflictOut]:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     rows = (
         await session.execute(
             select(ProfilerConflict)
@@ -641,35 +683,111 @@ async def generate_brief(
 async def act_on_brief(
     brief_id: UUID,
     body: BriefApprovalIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> BriefOut:
     brief = await session.get(ProfilerBrief, brief_id)
     if brief is None:
         raise AppError(404, "not_found", "Brief not found")
-    await _load_owned_profile(session, brief.profile_id, user)
+    profile = await _load_accessible_profile(session, brief.profile_id, user)
 
     action = BriefAction(body.action)
     target = _BRIEF_TRANSITIONS.get((action, brief.state))
     if target is None:
         raise AppError(
-            409,
-            "invalid_transition",
+            409, "invalid_transition",
             f"Cannot {action.value} a brief in state {brief.state.value}",
         )
+
+    # --- the membrane: authority per action ---------------------------------
+    actor_member_id: UUID | None = None
+    if action in _HOMEOWNER_BRIEF_ACTIONS:
+        # Money/scope commit -> owner/co_owner only. Family/advisor get a comment box.
+        sub_role = await member_sub_role(session, user, profile.site_id)
+        if sub_role is None or not can_approve(sub_role):
+            raise AppError(
+                403, "approve_forbidden",
+                "Only a property owner can approve this. You can add a comment.",
+                extra={"can_comment": True},
+            )
+        actor_role = sub_role.value
+        actor_member_id = (
+            await session.execute(
+                select(HomeownerMember.id).where(
+                    HomeownerMember.user_id == user.id,
+                    HomeownerMember.site_id == profile.site_id,
+                    HomeownerMember.status == MemberStatus.active,
+                )
+            )
+        ).scalars().first()
+    elif action is BriefAction.architect_sign_off:
+        if user.role is not UserRole.architect:
+            raise AppError(403, "architect_only", "Only the architect can sign off this brief.")
+        actor_role = user.role.value
+    else:  # contractor_received
+        if user.role not in _EDIT_ROLES:
+            raise AppError(403, "contractor_only", "Only the contractor can mark this received.")
+        actor_role = user.role.value
+
     brief.state = target
     session.add(
         ProfilerBriefApproval(
-            brief_id=brief.id,
-            actor_user_id=user.id,
-            actor_role=user.role.value,
-            action=action,
-            note=body.note,
+            brief_id=brief.id, actor_user_id=user.id, actor_member_id=actor_member_id,
+            actor_role=actor_role, action=action, note=body.note,
         )
     )
     await session.commit()
     await session.refresh(brief)
     return BriefOut.model_validate(brief)
+
+
+@router.get("/profiles/{profile_id}/brief", response_model=BriefRenderingOut)
+async def get_brief_rendering(
+    profile_id: UUID,
+    audience: str = "homeowner",
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> BriefRenderingOut:
+    await _load_accessible_profile(session, profile_id, user)
+    try:
+        aud = BriefAudience(audience)
+    except ValueError as exc:
+        raise AppError(422, "bad_audience", "Unknown audience") from exc
+
+    brief = (
+        await session.execute(
+            select(ProfilerBrief)
+            .where(ProfilerBrief.profile_id == profile_id)
+            .order_by(ProfilerBrief.version.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if brief is None:
+        raise AppError(404, "not_found", "No brief generated yet")
+
+    if not _audience_allowed(user, aud):
+        raise AppError(403, "audience_forbidden", "Not permitted to view this rendering")
+    # The contractor (non-architect contractor-side) sees the brief only once shared.
+    if (
+        user.role is not UserRole.homeowner
+        and user.role is not UserRole.architect
+        and brief.state not in _CONTRACTOR_VISIBLE_STATES
+    ):
+        raise AppError(
+            403, "brief_not_shared", "This brief has not been shared with the contractor yet"
+        )
+
+    rendering = (
+        await session.execute(
+            select(ProfilerBriefRendering).where(
+                ProfilerBriefRendering.brief_id == brief.id,
+                ProfilerBriefRendering.audience == aud,
+            )
+        )
+    ).scalars().first()
+    if rendering is None:
+        raise AppError(404, "not_found", "Rendering not found")
+    return BriefRenderingOut.model_validate(rendering)
 
 
 # ---------------------------------------------------------------------------
@@ -729,7 +847,7 @@ async def list_clarifications(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ClarificationOut]:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     rows = (
         await session.execute(
             select(ProfilerClarification)
@@ -750,7 +868,7 @@ async def answer_clarification(
     row = await session.get(ProfilerClarification, clarification_id)
     if row is None:
         raise AppError(404, "not_found", "Clarification not found")
-    await _load_owned_profile(session, row.profile_id, user)
+    await _load_accessible_profile(session, row.profile_id, user)
     row.answer = body.answer
     row.answered_at = datetime.now(UTC)
     await session.commit()

@@ -3,6 +3,7 @@
 the deterministic payload."""
 from app.extraction.llm import FakeLLMClient
 from app.main import app
+from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, UserRole
 from app.profiler.brief import (
     PROFILER_BRIEF_SYSTEM,
     build_area_brief_payload,
@@ -185,62 +186,52 @@ async def test_generate_brief_snapshots_three_renderings_with_deterministic_numb
 # ---------------------------------------------------------------------------
 
 
-async def test_brief_state_machine_transitions_and_records_actor(client, factory):
+async def test_brief_state_machine_transitions_and_records_actor(client, factory, db_session):
     app.dependency_overrides[get_llm] = _brief_llm
     try:
         architect, pid, area_id, _ = await _seed_ranked_area(client, factory)
-        brief = (
-            await client.post(f"/api/v1/design/profiles/{pid}/brief", headers=auth(architect))
-        ).json()
+        site_id = (await client.get(
+            f"/api/v1/design/profiles/{pid}", headers=auth(architect))).json()["site_id"]
+        # a homeowner primary_owner on this site drives the owner-authority actions
+        owner = await factory.user(role=UserRole.homeowner)
+        db_session.add(HomeownerMember(
+            site_id=site_id, user_id=owner.id,
+            sub_role=HomeownerSubRole.primary_owner, status=MemberStatus.active))
+        await db_session.flush()
+
+        brief = (await client.post(
+            f"/api/v1/design/profiles/{pid}/brief", headers=auth(architect))).json()
         bid = brief["id"]
         assert brief["state"] == "homeowner_review"
 
-        # illegal transition from homeowner_review -> 409
-        bad = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "architect_sign_off"},
-            headers=auth(architect),
-        )
+        # illegal transition from homeowner_review -> 409 (checked before authority)
+        bad = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "architect_sign_off"}, headers=auth(architect))
         assert bad.status_code == 409
 
-        # homeowner_review --send_to_architect--> architect_review
-        r1 = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "send_to_architect"},
-            headers=auth(architect),
-        )
+        # owner: homeowner_review --send_to_architect--> architect_review
+        r1 = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(owner))
         assert r1.status_code == 200 and r1.json()["state"] == "architect_review"
 
-        # architect_review --architect_sign_off--> contractor_brief_ready
-        r2 = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "architect_sign_off"},
-            headers=auth(architect),
-        )
+        # architect: architect_review --architect_sign_off--> contractor_brief_ready
+        r2 = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "architect_sign_off"}, headers=auth(architect))
         assert r2.json()["state"] == "contractor_brief_ready"
 
-        # contractor_brief_ready --approve--> approved
-        r3 = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "approve"},
-            headers=auth(architect),
-        )
+        # owner: contractor_brief_ready --approve--> approved
+        r3 = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "approve"}, headers=auth(owner))
         assert r3.json()["state"] == "approved"
 
-        # approved --contractor_received--> locked
-        r4 = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "contractor_received"},
-            headers=auth(architect),
-        )
+        # contractor-side (architect is in _EDIT_ROLES): approved --contractor_received--> locked
+        r4 = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "contractor_received"}, headers=auth(architect))
         assert r4.json()["state"] == "locked"
 
         # bad action rejected by schema
-        bad2 = await client.post(
-            f"/api/v1/design/briefs/{bid}/approval",
-            json={"action": "nope"},
-            headers=auth(architect),
-        )
+        bad2 = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "nope"}, headers=auth(architect))
         assert bad2.status_code == 422
     finally:
         app.dependency_overrides.pop(get_llm, None)
