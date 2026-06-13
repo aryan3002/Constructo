@@ -10,6 +10,7 @@ from app.models.profiler import (
     ProfileStatus,
     ReferenceSource,
 )
+from app.specs.schemas import SpecOut
 
 
 class AreaIn(BaseModel):
@@ -182,3 +183,12 @@ class ClarificationOut(BaseModel):
 
 class ClarificationAnswerIn(BaseModel):
     answer: str = Field(min_length=1)
+
+
+class MaterializeOut(BaseModel):
+    materials_created: int
+    materials_reused: int
+    specs_created: int
+    specs_reused: int
+    skipped_areas: list[str] = []
+    specs: list[SpecOut] = []
