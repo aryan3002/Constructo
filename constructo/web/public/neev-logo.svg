@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="252" height="64" viewBox="0 0 252 64" fill="none" role="img" aria-label="Neev">
+  <rect width="64" height="64" rx="15" fill="#1B1916"></rect>
+  <g transform="translate(12.8,12.8) scale(0.384)">
+    <circle cx="50" cy="28" r="5.5" fill="#F0A21F"></circle>
+    <path d="M29 67 L50 45 L71 67" stroke="#F0A21F" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <rect x="24" y="74" width="52" height="8" rx="4" fill="#F0A21F"></rect>
+  </g>
+  <text x="84" y="45" font-family="&#39;Bricolage Grotesque&#39;, system-ui, sans-serif" font-size="42" font-weight="700" letter-spacing="-2" fill="#1B1916">Neev</text>
+</svg>

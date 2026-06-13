@@ -1,9 +1,9 @@
 /**
- * PM · More — identity + sign out. Heavy desk work (full schedule, reports,
- * exports) stays web-primary; this MVP ships identity + the sign-out path.
+ * Architect · More — identity + sign out. Heavy design work (material spec,
+ * drawings, RFIs) stays web-primary; this MVP ships identity + the sign-out path.
  *
  * Neev re-skin: SettingsGroup + SettingsRow (no raw Card/Button), theme fonts,
- * no hardcoded colours.
+ * no hardcoded colours. Mirrors pm/more.tsx.
  */
 import { useRouter } from 'expo-router'
 
@@ -19,10 +19,12 @@ import {
 
 const STR = {
   en: {
+    title: 'More',
     phone: 'Phone',
     company: 'Company',
   },
   hi: {
+    title: 'और',
     phone: 'फ़ोन',
     company: 'कंपनी',
   },
@@ -31,12 +33,13 @@ const STR = {
 const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
   owner: { en: 'Owner', hi: 'मालिक' },
   pm: { en: 'Project Manager', hi: 'प्रोजेक्ट मैनेजर' },
+  architect: { en: 'Architect', hi: 'आर्किटेक्ट' },
   accountant: { en: 'Accountant', hi: 'लेखाकार' },
   procurement: { en: 'Procurement', hi: 'खरीद' },
   supervisor: { en: 'Supervisor', hi: 'सुपरवाइज़र' },
 }
 
-export default function PmMore() {
+export default function ArchitectMore() {
   const { t, lang } = useT()
   const { me, signOut } = useAuth()
   const router = useRouter()
@@ -51,7 +54,7 @@ export default function PmMore() {
 
   return (
     <Screen>
-      <H1>{t('pm.tabMore')}</H1>
+      <H1>{str.title}</H1>
 
       {/* Identity group */}
       <SettingsGroup>

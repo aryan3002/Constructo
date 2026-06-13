@@ -13,7 +13,7 @@ export default function ContractorHome() {
 
   async function onSignOut() {
     await signOut()
-    router.replace('/')
+    router.replace('/(auth)/login')
   }
 
   return (

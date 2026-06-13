@@ -169,15 +169,7 @@ export function AppShell({
         {/* Desktop sidebar header: brand + ⌘K. Hidden on phone. */}
         <div className="hidden md:block">
           <div className="flex items-center gap-2 px-4 pb-2 pt-5">
-            <span
-              aria-hidden
-              className="grid h-7 w-7 place-items-center rounded-control bg-primary font-display text-small font-bold text-on-primary"
-            >
-              C
-            </span>
-            <span className="font-display text-h2 font-bold tracking-tight text-text">
-              Constructo
-            </span>
+            <img src="/neev-logo.svg" alt="Neev" className="h-8" />
           </div>
           <button
             type="button"

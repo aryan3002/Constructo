@@ -51,7 +51,7 @@ export default function AccountHub() {
 
   async function onSignOut() {
     await signOut()
-    router.replace('/')
+    router.replace('/(auth)/login')
   }
 
   const companyLine = buildProfileSubtitle({
