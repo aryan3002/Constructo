@@ -100,3 +100,32 @@ async def test_ranking_unknown_contributor_is_404(client, factory, db_session):
         assert bad.status_code == 404
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_cross_site_homeowner_cannot_add_reference(client, factory, db_session):
+    """A homeowner of a DIFFERENT site (same company) cannot add a reference to this
+    profile's area — the loader 404s before the write."""
+    app.dependency_overrides[get_llm] = _llm
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post("/api/v1/design/profiles", json={
+            "site_id": str(site.id),
+            "areas": [{"area_kind": "interior", "area_key": "kitchen", "recommended_count": 2}],
+            "contributors": [{"role": "owner"}]}, headers=auth(architect))
+        pid = created.json()["id"]
+        area_id = (await client.get(
+            f"/api/v1/design/profiles/{pid}", headers=auth(architect))).json()["areas"][0]["id"]
+        # a homeowner who belongs to a DIFFERENT site in the same company
+        other_site = await factory.site(company, name="Other")
+        stranger = await factory.user(company=company, role=UserRole.homeowner)
+        db_session.add(HomeownerMember(site_id=other_site.id, user_id=stranger.id,
+            sub_role=HomeownerSubRole.primary_owner, status=MemberStatus.active))
+        await db_session.flush()
+        resp = await client.post("/api/v1/design/references", json={
+            "area_id": area_id, "source_type": "upload", "source_url": "https://x.test/a.jpg"},
+            headers=auth(stranger))
+        assert resp.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
