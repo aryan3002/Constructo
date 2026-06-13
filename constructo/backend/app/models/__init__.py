@@ -7,6 +7,14 @@ from app.models.action_item import (
     ActionItemStatus,
 )
 from app.models.agent_turn import AgentResultKind, AgentTurn
+from app.models.audit import (
+    Audit,
+    AuditFinding,
+    AuditSection,
+    AuditStatus,
+    FindingSeverity,
+    FindingStatus,
+)
 from app.models.bet_metrics import BetMetricsWeekly
 from app.models.chat import (
     ChatMessage,
@@ -97,6 +105,7 @@ from app.models.site_baseline import SiteBaseline
 from app.models.site_event import SiteEventModel
 from app.models.site_financials import SiteFinancials
 from app.models.spec import Spec, SpecApprovalStatus
+from app.models.survey import Survey, SurveyStatus
 from app.models.translation_cache import TranslationCache
 from app.models.user import User, UserRole
 from app.models.vendor import Vendor
@@ -111,6 +120,12 @@ __all__ = [
     "ActionItemStatus",
     "AgentResultKind",
     "AgentTurn",
+    "Audit",
+    "AuditFinding",
+    "AuditSection",
+    "AuditStatus",
+    "FindingSeverity",
+    "FindingStatus",
     "Change",
     "ChatMessage",
     "Company",
@@ -199,6 +214,8 @@ __all__ = [
     "Material",
     "Spec",
     "SpecApprovalStatus",
+    "Survey",
+    "SurveyStatus",
     "User",
     "UserRole",
     "Vendor",

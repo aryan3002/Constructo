@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.aggregate import EventLike, reducer_for, sum_amount, sum_headcount, sum_quantity
+from app.common.language import language_instruction
 from app.common.site_events import latest_event_clause
 from app.extraction.llm import LLMClient
 from app.models import (
@@ -53,13 +54,19 @@ _GROUNDED_SCHEMA = {
     },
     "required": ["grounded"],
 }
-_GROUNDED_SYS = (
+_GROUNDED_SYS_BASE = (
     "You are Nivaan, answering a question about a construction site. Use ONLY the "
     "CONTEXT below (captured events + thread messages). Answer in ONE concise "
     "sentence. If the context does not contain the answer, set grounded=false and "
     "leave answer empty. NEVER invent a fact, number, name, or date that isn't in "
-    "the context. Mirror the user's language (Hindi/Hinglish/English)."
+    "the context."
 )
+
+
+def _grounded_sys(language: str | None) -> str:
+    """Grounded-answer prompt + an explicit output-language directive (the
+    asker's account language), so an English owner stops getting a Hindi reply."""
+    return f"{_GROUNDED_SYS_BASE} {language_instruction(language)}"
 
 _MATERIALS = (
     "cement", "steel", "sariya", "rebar", "sand", "reti", "brick", "eint",
@@ -195,7 +202,7 @@ async def _answer_grounded(
     ] + [f"- (message) {m.body}" for m in messages if m.body]
     context = "\n".join(lines)
     out = await llm.complete(
-        system=_GROUNDED_SYS,
+        system=_grounded_sys(user.language),
         user=f"QUESTION: {utterance}\n\nCONTEXT:\n{context}",
         json_schema=_GROUNDED_SCHEMA,
     )

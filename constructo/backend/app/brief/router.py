@@ -81,7 +81,9 @@ async def run_brief(
     brief_date = body.brief_date or (
         dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)
     )
-    result = await build_brief(session, user.company_id, brief_date, llm=None)
+    result = await build_brief(
+        session, user.company_id, brief_date, llm=None, language=user.language or "en"
+    )
     return BriefRunOut(
         payload=result["payload"], text=result["text"], brief_id=result["brief_id"]
     )

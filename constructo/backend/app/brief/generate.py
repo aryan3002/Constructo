@@ -16,22 +16,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brief.risk import detect_risks, rank_risks
+from app.common.language import language_instruction
 from app.common.site_events import latest_event_clause
 from app.config import settings
 from app.contracts.events import EventType, SiteEvent
 from app.extraction.llm import LLMClient, get_llm_client
-from app.models import OwnerBrief, Site, SiteBaseline, SiteEventModel
+from app.models import OwnerBrief, Site, SiteBaseline, SiteEventModel, User, UserRole
 
 MAX_TOP_RISKS = 3
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_BASE = (
     "You write a daily WhatsApp morning brief for the owner of an Indian "
     "construction company. Lead with exceptions and risks, NOT an activity dump. "
-    "Keep it under a 2-minute read. Use simple Hindi/English (Hinglish) the way "
-    "site owners speak. Be concise: per-site, surface the top risks first, then a "
-    "one-line activity summary. Never invent data beyond the JSON provided. "
-    'Return strict JSON of the form {"text": "<the brief>"}.'
+    "Keep it under a 2-minute read. Be concise: per-site, surface the top risks "
+    "first, then a one-line activity summary. Never invent data beyond the JSON "
+    'provided. Return strict JSON of the form {"text": "<the brief>"}.'
 )
+
+
+def _system_prompt(language: str | None) -> str:
+    """The brief system prompt + an explicit output-language directive (the
+    recipient's account language), so an English owner stops getting a Hindi brief."""
+    return f"{_SYSTEM_PROMPT_BASE} {language_instruction(language)}"
 
 _RESPONSE_SCHEMA = {
     "type": "object",
@@ -98,6 +104,7 @@ async def build_brief(
     brief_date: date,
     *,
     llm: LLMClient | None = None,
+    language: str | None = None,
 ) -> dict:
     """Build, render, and persist the owner brief for one company/day.
 
@@ -111,6 +118,11 @@ async def build_brief(
     Returns ``{"payload": dict, "text": str, "brief_id": UUID}``.
     """
     llm = llm or get_llm_client()
+    # Default the output language to the company owner's account language (an
+    # explicit arg from the POST /briefs/run caller wins). Keeps an English
+    # owner from receiving a Hindi brief.
+    if language is None:
+        language = await _owner_language(session, company_id)
 
     # company sites
     sites = (
@@ -196,7 +208,7 @@ async def build_brief(
 
     payload: dict = {"brief_date": brief_date.isoformat(), "sites": site_payloads}
 
-    text = await _render_text(llm, payload)
+    text = await _render_text(llm, payload, language)
 
     # Idempotent per (company, day): replace any existing brief(s) for this date
     # rather than inserting a duplicate. Without this, re-running (a re-import, a
@@ -236,9 +248,21 @@ async def build_brief(
     return {"payload": payload, "text": text, "brief_id": brief.id}
 
 
-async def _render_text(llm: LLMClient, payload: dict) -> str:
+async def _owner_language(session: AsyncSession, company_id: UUID) -> str:
+    """The company owner's account language (default 'en') — the brief's reader."""
+    owner = (
+        await session.execute(
+            select(User)
+            .where(User.company_id == company_id, User.role == UserRole.owner)
+            .order_by(User.id)
+        )
+    ).scalars().first()
+    return owner.language if owner and owner.language else "en"
+
+
+async def _render_text(llm: LLMClient, payload: dict, language: str | None = "en") -> str:
     user = json.dumps(payload, ensure_ascii=False)
-    result = await llm.complete(_SYSTEM_PROMPT, user, _RESPONSE_SCHEMA)
+    result = await llm.complete(_system_prompt(language), user, _RESPONSE_SCHEMA)
     text = result.get("text") if isinstance(result, dict) else None
     if isinstance(text, str) and text.strip():
         return text

@@ -40,4 +40,6 @@ export const ROUTES = {
   search: '/(contractor)/owner/search',
   foresight: '/(contractor)/owner/foresight',
   permits: '/(contractor)/owner/permits',
+  audit: '/(contractor)/owner/audit',
+  design: '/(contractor)/owner/design',
 } as const

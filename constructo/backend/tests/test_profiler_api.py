@@ -176,3 +176,30 @@ async def test_e2e_two_owners_conflict_surfaces_in_taste(client, factory):
         assert any(c["dimension"] == "colors" and c["value"] == "dark" for c in taste["conflicts"])
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_list_profiles_filters_by_site_and_is_company_scoped(client, factory):
+    company = await factory.company()
+    architect = await factory.user(company=company, role=UserRole.architect)
+    site_a = await factory.site(company, name="Site A")
+    site_b = await factory.site(company, name="Site B")
+    for sid in (site_a.id, site_a.id, site_b.id):
+        await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(sid), "areas": [], "contributors": []},
+            headers=auth(architect),
+        )
+
+    all_resp = await client.get("/api/v1/design/profiles", headers=auth(architect))
+    assert all_resp.status_code == 200
+    assert len(all_resp.json()) == 3
+
+    site_resp = await client.get(
+        f"/api/v1/design/profiles?site_id={site_a.id}", headers=auth(architect)
+    )
+    assert {p["site_id"] for p in site_resp.json()} == {str(site_a.id)}
+    assert len(site_resp.json()) == 2
+
+    other = await factory.user(role=UserRole.architect)  # different company
+    other_resp = await client.get("/api/v1/design/profiles", headers=auth(other))
+    assert other_resp.status_code == 200 and other_resp.json() == []

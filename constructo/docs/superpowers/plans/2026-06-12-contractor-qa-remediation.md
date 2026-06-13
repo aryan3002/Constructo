@@ -569,9 +569,9 @@ git commit -m "feat(contractor): architect mobile app (Chat+More) + PM Chat tab"
 
 ---
 
-## PHASE 3 — Supervisor Flagship → Chat Kit Migration (OWN PLAN)
+## PHASE 3 — Supervisor Flagship → Chat Kit Migration (✅ IMPLEMENTED 2026-06-12, awaits device verify)
 
-> This is the largest, riskiest piece and the deferred migration from the chat-build notes. It gets its own plan file: `docs/superpowers/plans/2026-06-13-supervisor-chat-kit-migration.md`. Outline only here.
+> **Status: SHIPPED on branch `feat/supervisor-chat-kit` (commit 5b6e11e), tsc clean + jest 217/217. NOT merged — needs founder on-device verify (flagship field screen).** Done in a single careful refactor (−92 lines) rather than the separate plan file originally proposed: `supervisor/chat.tsx` now runs on `useChatThread` + `MessageView`, gaining delivery ticks, durable offline outbox, tap-to-retry, live socket, system notices, and server-driven Nivaan rows/proposals — while preserving @ask, slash/smart-suggest (→ sendProposal), camera/voice (→ sendMedia), the long-press card menu, pinned brief, recap, radar, and quote-reply. `@nivaan` now routes through the live thread (server agent) instead of the local one-liner. Original outline kept below for reference.
 
 **Goal:** Migrate `supervisor/chat.tsx` from its bespoke poll/optimistic implementation onto the `src/chat` kit (`useChatThread` + `MessageView`), gaining **delivery ticks**, **tap-to-retry**, **real Nivaan proposals** (`@nivaan` → `NivaanProposalCard`), and **system notices**, while **preserving** the supervisor-only features the owner screen lacks: dispute/resolve, recap, radar, pinned brief, camera, voice, slash-commands, smart-suggest.
 
@@ -589,7 +589,9 @@ git commit -m "feat(contractor): architect mobile app (Chat+More) + PM Chat tab"
 
 ---
 
-## PHASE 4 — AI Output Language Correctness
+## PHASE 4 — AI Output Language Correctness (✅ DONE 2026-06-12)
+
+> **Status: SHIPPED on branch `fix/ai-output-language` (commit 5344f17), backend 997 passed / 1 skipped, ruff clean. Backend-only, fully tested — no device verify needed.** Added `app/common/language.py` `language_instruction(lang)`; `build_brief` gains a `language` arg defaulting to the company owner's account language (POST /briefs/run passes the triggering owner's); the Nivaan/@ask grounded prompt (`_grounded_sys`) uses the asker's `user.language`. (The DPR draft summary still mirrors its events; left for a follow-up if it surfaces.)
 
 **Goal:** The brief, Nivaan, and DPR answer in the recipient's `user.language`, not always Hindi.
 
