@@ -3,17 +3,35 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.models import User, UserRole
+from app.homeowner.authority import can_approve
+from app.homeowner.scoping import homeowner_site_ids, member_sub_role
+from app.models import (
+    Component,
+    HomeownerMember,
+    Material,
+    MemberStatus,
+    Space,
+    Spec,
+    User,
+    UserRole,
+)
 from app.models.profiler import (
+    BriefAction,
+    BriefAudience,
+    BriefState,
     ConflictStatus,
     ProfilerArea,
+    ProfilerBrief,
+    ProfilerBriefApproval,
+    ProfilerBriefRendering,
+    ProfilerClarification,
     ProfilerConflict,
     ProfilerContributor,
     ProfilerProfile,
@@ -24,13 +42,23 @@ from app.models.profiler import (
     ProfileStatus,
     ThemeStatus,
 )
+from app.profiler.bridge import bridge_id, plan_proposals
+from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
+    BriefApprovalIn,
+    BriefApprovalOut,
+    BriefDetailOut,
+    BriefOut,
+    BriefRenderingOut,
+    ClarificationAnswerIn,
+    ClarificationOut,
     ConflictOut,
     ConflictResolveIn,
     ContributorIn,
     ContributorOut,
+    MaterializeOut,
     ProfileCreate,
     ProfileDetailOut,
     ProfileOut,
@@ -42,6 +70,7 @@ from app.profiler.schemas import (
 )
 from app.profiler.taste import build_taste_model, check_consistency
 from app.profiler.themes import narrate_themes, top_reference_ids
+from app.specs.schemas import SpecOut
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +78,18 @@ router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
 
 # Who may create/edit a profile on the contractor side (homeowner-side gating is added in Plan 3).
 _EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+
+# (action, from_state) -> to_state. Any pair not present is an illegal transition.
+_BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
+    (BriefAction.request_changes, BriefState.homeowner_review): BriefState.revision_requested,
+    (BriefAction.request_changes, BriefState.architect_review): BriefState.revision_requested,
+    (BriefAction.send_to_architect, BriefState.homeowner_review): BriefState.architect_review,
+    (BriefAction.architect_sign_off, BriefState.architect_review): (
+        BriefState.contractor_brief_ready
+    ),
+    (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
+    (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
+}
 
 
 async def _load_owned_profile(
@@ -58,6 +99,113 @@ async def _load_owned_profile(
     if profile is None or profile.company_id != user.company_id:
         raise AppError(404, "not_found", "Profile not found")
     return profile
+
+
+async def _load_accessible_profile(
+    session: AsyncSession, profile_id: UUID, user: User
+) -> ProfilerProfile:
+    """Load a profile the caller may ACCESS (read-class), enforcing the membrane.
+
+    Homeowner Users share the contractor's company_id (POST /homeowner/join sets
+    company_id = site.company_id), so company-scope alone is too permissive for them.
+    Mirror app/homeowner/router.py::_can_access_site: a homeowner must hold an active
+    membership on the profile's site; contractor-side roles keep company-scope.
+    """
+    profile = await session.get(ProfilerProfile, profile_id)
+    if profile is None:
+        raise AppError(404, "not_found", "Profile not found")
+    if user.role is UserRole.homeowner:
+        if profile.site_id not in await homeowner_site_ids(session, user):
+            raise AppError(404, "not_found", "Profile not found")
+    elif profile.company_id != user.company_id:
+        raise AppError(404, "not_found", "Profile not found")
+    return profile
+
+
+async def _validate_contributor(
+    session: AsyncSession, profile: ProfilerProfile, contributor_id: UUID, user: User
+) -> ProfilerContributor:
+    """The contributor must belong to ``profile``; a homeowner may act only as THEIR
+    own contributor (mapped by user_id, or by an active HomeownerMember of theirs)."""
+    contributor = await session.get(ProfilerContributor, contributor_id)
+    if contributor is None or contributor.profile_id != profile.id:
+        raise AppError(404, "not_found", "Contributor not found")
+    if user.role is UserRole.homeowner:
+        member_ids = (
+            await session.execute(
+                select(HomeownerMember.id).where(
+                    HomeownerMember.user_id == user.id,
+                    HomeownerMember.site_id == profile.site_id,
+                    HomeownerMember.status == MemberStatus.active,
+                )
+            )
+        ).scalars().all()
+        owns = contributor.user_id == user.id or contributor.member_id in set(member_ids)
+        if not owns:
+            raise AppError(403, "not_your_contributor", "You can only rank as yourself.")
+    return contributor
+
+
+_HOMEOWNER_BRIEF_ACTIONS = {
+    BriefAction.approve, BriefAction.request_changes, BriefAction.send_to_architect,
+}
+
+
+def _audience_allowed(user: User, audience: BriefAudience) -> bool:
+    """Which audience renderings a role may read (the homeowner controls the contractor view)."""
+    if user.role is UserRole.homeowner:
+        return True  # their own data — any audience
+    if user.role is UserRole.architect:
+        return audience in (BriefAudience.architect, BriefAudience.contractor)
+    return audience is BriefAudience.contractor  # other contractor-side roles = "the contractor"
+
+
+_CONTRACTOR_VISIBLE_STATES = {
+    BriefState.contractor_brief_ready, BriefState.approved, BriefState.locked,
+}
+
+
+async def _resolve_area_component(
+    session: AsyncSession, area: ProfilerArea | None, site_id: UUID
+) -> UUID | None:
+    """The area's bound Component id IF it exists and belongs to ``site_id`` (via its
+    Space). Returns None when the area has no component or the component is off-site."""
+    if area is None or area.component_id is None:
+        return None
+    component = await session.get(Component, area.component_id)
+    if component is None:
+        return None
+    space = await session.get(Space, component.space_id)
+    if space is None or space.site_id != site_id:
+        return None
+    return component.id
+
+
+async def _my_contributor_id(
+    session: AsyncSession,
+    profile: ProfilerProfile,
+    contributors: list[ProfilerContributor],
+    user: User,
+) -> UUID | None:
+    """The requesting user's own contributor on this profile, if any (so a client can
+    rank as themselves). Maps by user_id, or by an active HomeownerMember of theirs."""
+    member_ids: set[UUID] = set()
+    if user.role is UserRole.homeowner:
+        member_ids = set(
+            (
+                await session.execute(
+                    select(HomeownerMember.id).where(
+                        HomeownerMember.user_id == user.id,
+                        HomeownerMember.site_id == profile.site_id,
+                        HomeownerMember.status == MemberStatus.active,
+                    )
+                )
+            ).scalars().all()
+        )
+    for c in contributors:
+        if c.user_id == user.id or (c.member_id is not None and c.member_id in member_ids):
+            return c.id
+    return None
 
 
 async def _area_signals(
@@ -132,6 +280,76 @@ async def _sync_conflicts(
         )
 
 
+async def _brief_payload(session: AsyncSession, profile: ProfilerProfile) -> dict:
+    """Deterministically gather the whole-profile structured brief payload.
+
+    For each area: the reducer's taste model + APPROVED/adjusted themes + RESOLVED
+    conflicts. No LLM here — every number/material is computed."""
+    areas = (
+        await session.execute(
+            select(ProfilerArea).where(ProfilerArea.profile_id == profile.id)
+        )
+    ).scalars().all()
+    area_payloads: list[dict] = []
+    for area in areas:
+        rankings, attrs = await _area_signals(session, area.id)
+        model = build_taste_model(rankings, attrs, area.recommended_count)
+        themes = (
+            await session.execute(
+                select(ProfilerTheme).where(ProfilerTheme.area_id == area.id)
+            )
+        ).scalars().all()
+        conflicts = (
+            await session.execute(
+                select(ProfilerConflict).where(ProfilerConflict.area_id == area.id)
+            )
+        ).scalars().all()
+        area_payloads.append(
+            build_area_brief_payload(
+                area.area_key,
+                model,
+                [
+                    {
+                        "name": t.name,
+                        "palette": t.palette,
+                        "materials": t.materials,
+                        "status": t.status.value if hasattr(t.status, "value") else t.status,
+                    }
+                    for t in themes
+                ],
+                [
+                    {
+                        "dimension": c.dimension,
+                        "value": c.value,
+                        "decision_note": c.decision_note,
+                        "resolution_status": (
+                            c.resolution_status.value
+                            if hasattr(c.resolution_status, "value")
+                            else c.resolution_status
+                        ),
+                    }
+                    for c in conflicts
+                ],
+            )
+        )
+    return {
+        "scope_type": (
+            profile.scope_type.value
+            if hasattr(profile.scope_type, "value")
+            else profile.scope_type
+        ),
+        "areas": area_payloads,
+    }
+
+
+def _brief_detail(
+    brief: ProfilerBrief, renderings: list[ProfilerBriefRendering]
+) -> BriefDetailOut:
+    out = BriefDetailOut.model_validate(brief)
+    out.renderings = [BriefRenderingOut.model_validate(r) for r in renderings]
+    return out
+
+
 @router.post("/profiles", response_model=ProfileOut, status_code=201)
 async def create_profile(
     body: ProfileCreate,
@@ -198,7 +416,7 @@ async def get_profile(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ProfileDetailOut:
-    profile = await _load_owned_profile(session, profile_id, user)
+    profile = await _load_accessible_profile(session, profile_id, user)
     areas = (
         (await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile_id)))
         .scalars()
@@ -216,6 +434,41 @@ async def get_profile(
     out = ProfileDetailOut.model_validate(profile)
     out.areas = [AreaOut.model_validate(a) for a in areas]
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
+    return out
+
+
+@router.get("/profiles/by-site/{site_id}", response_model=ProfileDetailOut)
+async def get_profile_by_site(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    """Resolve the most recent profile for a site, membrane-scoped (homeowner needs
+    membership; contractor company-scope). 404 if none accessible."""
+    profile = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == site_id)
+            .order_by(ProfilerProfile.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if profile is None:
+        raise AppError(404, "not_found", "No design profile for this site")
+    await _load_accessible_profile(session, profile.id, user)
+    areas = (
+        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
+    ).scalars().all()
+    contributors = (
+        await session.execute(
+            select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
+        )
+    ).scalars().all()
+    out = ProfileDetailOut.model_validate(profile)
+    out.areas = [AreaOut.model_validate(a) for a in areas]
+    out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
     return out
 
 
@@ -242,14 +495,16 @@ async def add_contributor(
 @router.post("/references", response_model=ReferenceOut, status_code=201)
 async def add_reference(
     body: ReferenceIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> ReferenceOut:
     area = await session.get(ProfilerArea, body.area_id)
     if area is None:
         raise AppError(404, "not_found", "Area not found")
-    await _load_owned_profile(session, area.profile_id, user)
+    profile = await _load_accessible_profile(session, area.profile_id, user)
+    if body.contributor_id is not None:
+        await _validate_contributor(session, profile, body.contributor_id, user)
     ref = ProfilerReference(
         profile_id=area.profile_id,
         area_id=area.id,
@@ -285,17 +540,43 @@ async def add_reference(
     return ReferenceOut.model_validate(ref)
 
 
+@router.get(
+    "/profiles/{profile_id}/areas/{area_id}/references", response_model=list[ReferenceOut]
+)
+async def list_references(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ReferenceOut]:
+    """The references for one area (membrane-scoped read). The homeowner intake
+    ranking screen lists these to rank."""
+    await _load_accessible_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+    rows = (
+        await session.execute(
+            select(ProfilerReference)
+            .where(ProfilerReference.area_id == area_id)
+            .order_by(ProfilerReference.created_at)
+        )
+    ).scalars().all()
+    return [ReferenceOut.model_validate(r) for r in rows]
+
+
 @router.post("/references/{reference_id}/rankings", status_code=201)
 async def rank_reference(
     reference_id: UUID,
     body: RankingIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     ref = await session.get(ProfilerReference, reference_id)
     if ref is None:
         raise AppError(404, "not_found", "Reference not found")
-    await _load_owned_profile(session, ref.profile_id, user)
+    profile = await _load_accessible_profile(session, ref.profile_id, user)
+    await _validate_contributor(session, profile, body.contributor_id, user)
     existing = (
         await session.execute(
             select(ProfilerRanking).where(
@@ -329,7 +610,7 @@ async def get_area_taste(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     area = await session.get(ProfilerArea, area_id)
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
@@ -410,7 +691,7 @@ async def list_themes(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ThemeOut]:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     area = await session.get(ProfilerArea, area_id)
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
@@ -430,7 +711,7 @@ async def list_conflicts(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ConflictOut]:
-    await _load_owned_profile(session, profile_id, user)
+    await _load_accessible_profile(session, profile_id, user)
     rows = (
         await session.execute(
             select(ProfilerConflict)
@@ -486,3 +767,370 @@ async def resolve_conflict(
     await session.commit()
     await session.refresh(conflict)
     return ConflictOut.model_validate(conflict)
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Brief generation
+# ---------------------------------------------------------------------------
+
+
+@router.post("/profiles/{profile_id}/brief", response_model=BriefDetailOut, status_code=201)
+async def generate_brief(
+    profile_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> BriefDetailOut:
+    profile = await _load_owned_profile(session, profile_id, user)
+    payload = await _brief_payload(session, profile)
+
+    next_version = (
+        await session.scalar(
+            select(func.coalesce(func.max(ProfilerBrief.version), 0)).where(
+                ProfilerBrief.profile_id == profile_id
+            )
+        )
+    ) + 1
+    brief = ProfilerBrief(
+        profile_id=profile_id,
+        version=next_version,
+        state=BriefState.homeowner_review,
+        summary_json=payload,
+        created_by=user.id,
+    )
+    session.add(brief)
+    await session.flush()
+
+    renderings: list[ProfilerBriefRendering] = []
+    for audience in (
+        BriefAudience.homeowner,
+        BriefAudience.architect,
+        BriefAudience.contractor,
+    ):
+        try:
+            prose = await narrate_brief(llm, audience.value, payload)
+        except Exception:  # narration must never 500 the request
+            logger.exception(
+                "profiler: brief narration failed for %s/%s", profile_id, audience
+            )
+            prose = {"headline": "", "summary": "", "sections": []}
+        # content = deterministic payload (numbers/materials) + LLM prose (phrasing only)
+        content = {
+            "areas": payload["areas"],
+            "scope_type": payload["scope_type"],
+            "narrative": prose,
+        }
+        rendering = ProfilerBriefRendering(
+            brief_id=brief.id,
+            audience=audience,
+            scope="whole_house",
+            content_json=content,
+        )
+        session.add(rendering)
+        renderings.append(rendering)
+
+    await session.commit()
+    await session.refresh(brief)
+    for r in renderings:
+        await session.refresh(r)
+    return _brief_detail(brief, renderings)
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Brief approval state-machine
+# ---------------------------------------------------------------------------
+
+
+@router.post("/briefs/{brief_id}/approval", response_model=BriefOut)
+async def act_on_brief(
+    brief_id: UUID,
+    body: BriefApprovalIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> BriefOut:
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    profile = await _load_accessible_profile(session, brief.profile_id, user)
+
+    action = BriefAction(body.action)
+    target = _BRIEF_TRANSITIONS.get((action, brief.state))
+    if target is None:
+        raise AppError(
+            409, "invalid_transition",
+            f"Cannot {action.value} a brief in state {brief.state.value}",
+        )
+
+    # --- the membrane: authority per action ---------------------------------
+    actor_member_id: UUID | None = None
+    if action in _HOMEOWNER_BRIEF_ACTIONS:
+        # Money/scope commit -> owner/co_owner only. Family/advisor get a comment box.
+        sub_role = await member_sub_role(session, user, profile.site_id)
+        if sub_role is None or not can_approve(sub_role):
+            raise AppError(
+                403, "approve_forbidden",
+                "Only a property owner can approve this. You can add a comment.",
+                extra={"can_comment": True},
+            )
+        actor_role = sub_role.value
+        actor_member_id = (
+            await session.execute(
+                select(HomeownerMember.id).where(
+                    HomeownerMember.user_id == user.id,
+                    HomeownerMember.site_id == profile.site_id,
+                    HomeownerMember.status == MemberStatus.active,
+                )
+            )
+        ).scalars().first()
+    elif action is BriefAction.architect_sign_off:
+        if user.role is not UserRole.architect:
+            raise AppError(403, "architect_only", "Only the architect can sign off this brief.")
+        actor_role = user.role.value
+    else:  # contractor_received
+        if user.role not in _EDIT_ROLES:
+            raise AppError(403, "contractor_only", "Only the contractor can mark this received.")
+        actor_role = user.role.value
+
+    brief.state = target
+    session.add(
+        ProfilerBriefApproval(
+            brief_id=brief.id, actor_user_id=user.id, actor_member_id=actor_member_id,
+            actor_role=actor_role, action=action, note=body.note,
+        )
+    )
+    await session.commit()
+    await session.refresh(brief)
+    return BriefOut.model_validate(brief)
+
+
+@router.get("/profiles/{profile_id}/brief", response_model=BriefRenderingOut)
+async def get_brief_rendering(
+    profile_id: UUID,
+    audience: str = "homeowner",
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> BriefRenderingOut:
+    await _load_accessible_profile(session, profile_id, user)
+    try:
+        aud = BriefAudience(audience)
+    except ValueError as exc:
+        raise AppError(422, "bad_audience", "Unknown audience") from exc
+
+    brief = (
+        await session.execute(
+            select(ProfilerBrief)
+            .where(ProfilerBrief.profile_id == profile_id)
+            .order_by(ProfilerBrief.version.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if brief is None:
+        raise AppError(404, "not_found", "No brief generated yet")
+
+    if not _audience_allowed(user, aud):
+        raise AppError(403, "audience_forbidden", "Not permitted to view this rendering")
+    # The contractor (non-architect contractor-side) sees the brief only once shared.
+    if (
+        user.role is not UserRole.homeowner
+        and user.role is not UserRole.architect
+        and brief.state not in _CONTRACTOR_VISIBLE_STATES
+    ):
+        raise AppError(
+            403, "brief_not_shared", "This brief has not been shared with the contractor yet"
+        )
+
+    rendering = (
+        await session.execute(
+            select(ProfilerBriefRendering).where(
+                ProfilerBriefRendering.brief_id == brief.id,
+                ProfilerBriefRendering.audience == aud,
+            )
+        )
+    ).scalars().first()
+    if rendering is None:
+        raise AppError(404, "not_found", "Rendering not found")
+    return BriefRenderingOut.model_validate(rendering)
+
+
+@router.get("/briefs/{brief_id}/approvals", response_model=list[BriefApprovalOut])
+async def list_brief_approvals(
+    brief_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BriefApprovalOut]:
+    """The attributed approval timeline (§8): every action with actor name + role.
+
+    Membrane-scoped — only someone who can access the profile sees its timeline.
+    """
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    await _load_accessible_profile(session, brief.profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerBriefApproval)
+            .where(ProfilerBriefApproval.brief_id == brief_id)
+            .order_by(ProfilerBriefApproval.created_at)
+        )
+    ).scalars().all()
+    return [BriefApprovalOut.model_validate(r) for r in rows]
+
+
+@router.post("/briefs/{brief_id}/materialize", response_model=MaterializeOut, status_code=201)
+async def materialize_brief(
+    brief_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> MaterializeOut:
+    """Propose Material + Spec rows (pending) from a SHARED brief's deterministic
+    payload. No LLM; quantities left NULL; a human confirms via /specs/{id}/approve.
+    Idempotent via uuid5 keys — re-running reuses, never duplicates."""
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    profile = await _load_owned_profile(session, brief.profile_id, user)
+    if brief.state not in _CONTRACTOR_VISIBLE_STATES:
+        raise AppError(
+            409, "brief_not_ready",
+            "Materialize a brief only after architect sign-off (contractor_brief_ready+).",
+        )
+
+    areas = (
+        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
+    ).scalars().all()
+    areas_by_key = {a.area_key: a for a in areas}
+
+    materials_created = materials_reused = specs_created = specs_reused = 0
+    skipped: list[str] = []
+    created_specs: list[Spec] = []
+
+    for prop in plan_proposals(brief.summary_json or {}):
+        area = areas_by_key.get(prop["area_key"])
+        mat_id = bridge_id("material", profile.company_id, prop["material_name"])
+        material = await session.get(Material, mat_id)
+        if material is None:
+            material = Material(
+                id=mat_id, company_id=profile.company_id, name=prop["material_name"],
+                category="design-brief",
+            )
+            session.add(material)
+            await session.flush()
+            materials_created += 1
+        else:
+            materials_reused += 1
+
+        component_id = await _resolve_area_component(session, area, profile.site_id)
+        if component_id is None:
+            if prop["area_key"] not in skipped:
+                skipped.append(prop["area_key"])
+            continue
+
+        spec_id = bridge_id("spec", component_id, prop["label"])
+        spec = await session.get(Spec, spec_id)
+        if spec is None:
+            spec = Spec(
+                id=spec_id, company_id=profile.company_id, site_id=profile.site_id,
+                component_id=component_id, material_id=material.id, label=prop["label"],
+                notes="Proposed from the design brief — confirm.",
+            )
+            session.add(spec)
+            await session.flush()
+            specs_created += 1
+        else:
+            specs_reused += 1
+        created_specs.append(spec)
+
+    await session.commit()
+    for s in created_specs:
+        await session.refresh(s)
+    return MaterializeOut(
+        materials_created=materials_created, materials_reused=materials_reused,
+        specs_created=specs_created, specs_reused=specs_reused,
+        skipped_areas=skipped, specs=[SpecOut.model_validate(s) for s in created_specs],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Clarifications — generate / list / answer
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/profiles/{profile_id}/areas/{area_id}/clarifications",
+    response_model=list[ClarificationOut],
+    status_code=201,
+)
+async def generate_clarifications_endpoint(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> list[ClarificationOut]:
+    await _load_owned_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+
+    rankings, attrs = await _area_signals(session, area_id)
+    model = build_taste_model(rankings, attrs, area.recommended_count)
+    try:
+        questions = await generate_clarifications(llm, area.area_key, model)
+    except Exception:  # never 500 on narration
+        logger.exception(
+            "profiler: clarification generation failed for area %s", area_id
+        )
+        questions = []
+
+    created: list[ProfilerClarification] = []
+    for q in questions:
+        row = ProfilerClarification(
+            profile_id=profile_id,
+            area_id=area_id,
+            question=q,
+            source_attribution={
+                "confidence": model["confidence"],
+                "has_conflict": model["has_conflict"],
+            },
+        )
+        session.add(row)
+        created.append(row)
+    await session.commit()
+    for row in created:
+        await session.refresh(row)
+    return [ClarificationOut.model_validate(c) for c in created]
+
+
+@router.get("/profiles/{profile_id}/clarifications", response_model=list[ClarificationOut])
+async def list_clarifications(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ClarificationOut]:
+    await _load_accessible_profile(session, profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerClarification)
+            .where(ProfilerClarification.profile_id == profile_id)
+            .order_by(ProfilerClarification.asked_at)
+        )
+    ).scalars().all()
+    return [ClarificationOut.model_validate(c) for c in rows]
+
+
+@router.post("/clarifications/{clarification_id}/answer", response_model=ClarificationOut)
+async def answer_clarification(
+    clarification_id: UUID,
+    body: ClarificationAnswerIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ClarificationOut:
+    row = await session.get(ProfilerClarification, clarification_id)
+    if row is None:
+        raise AppError(404, "not_found", "Clarification not found")
+    await _load_accessible_profile(session, row.profile_id, user)
+    row.answer = body.answer
+    row.answered_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(row)
+    return ClarificationOut.model_validate(row)

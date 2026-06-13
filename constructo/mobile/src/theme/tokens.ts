@@ -142,7 +142,7 @@ const DAYLIGHT_COLORS: ThemeColors = {
   bg: '#f3efe6', // sand-200 — app canvas (warm sand, never pure white)
   card: '#fcfaf3', // surface — card surfaces
   paper: '#f8f4ec', // sand-100 — letter / elevated panel
-  line: '#e3dccb', // hairline (≈ rgba(42,37,25,.09) over sand)
+  line: '#d7cfbc', // hairline-strong — crisper card edges (≈ rgba(42,37,25,.15))
   accent: '#3e7a66', // sage green-600 — primary actions, active nav, on-track fill
   accentDeep: '#2f6151', // green-700 — pressed, on-track text, links
   accentWarm: '#cfe3d9', // soft sage chip / selected (green-tint as solid)
@@ -200,17 +200,19 @@ export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     name: 'daylight',
     colors: DAYLIGHT_COLORS,
-    // Direction C — soft, residential "pebbles, not boxes": buttons/inputs 14,
-    // primary cards 22, hero 28, sheet 24, pill full. (Tiles use 18 directly.)
-    radii: { chip: 14, card: 22, hero: 28, sheet: 24, pill: 9999, control: 14 },
-    // Warm, soft "lifted paper" lift — ink-tinted, never a hard black drop
-    // (skill --shadow-card: 0 14px 30px -24px rgba(42,37,25,.50)).
+    // Direction C "Sharper" refresh (2026-06) — crisper, more modern geometry
+    // while keeping the warm residential soul: buttons/inputs 11, primary cards
+    // 16, hero 20, sheet 18, pill full. (Tiles track `card`.) Tightened from the
+    // original soft 14/22/28/24 "pebbles".
+    radii: { chip: 11, card: 16, hero: 20, sheet: 18, pill: 9999, control: 11 },
+    // Crisper "lifted paper" — a tighter, more DEFINED ink-tinted lift (far less
+    // diffuse than the original blur-24 soft drop), never a hard black shadow.
     shadowCard: {
       shadowColor: '#2a2519',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.1,
-      shadowRadius: 24,
-      elevation: 3,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      elevation: 4,
     },
   },
 }
@@ -229,12 +231,12 @@ export const TYPE = {
   // generous (~1.27–1.36×) so the serif tops never cut off. Don't tighten them.
   /** Hero "You're okay." — the 3-second answer (Eczar serif, 500). */
   display: { fontSize: 44, lineHeight: 60, letterSpacing: -0.7 },
-  /** Screen titles (Eczar 600). */
-  h1: { fontSize: 28, lineHeight: 38, letterSpacing: -0.3 },
+  /** Screen titles (Eczar 600). Sharper refresh: tighter tracking. */
+  h1: { fontSize: 28, lineHeight: 38, letterSpacing: -0.4 },
   /** Section / letter headings (Eczar 600). */
-  h2: { fontSize: 22, lineHeight: 30, letterSpacing: -0.2 },
+  h2: { fontSize: 22, lineHeight: 30, letterSpacing: -0.3 },
   /** Card titles (Eczar 600 — the skill's h3). */
-  title: { fontSize: 18, lineHeight: 25 },
+  title: { fontSize: 18, lineHeight: 25, letterSpacing: -0.2 },
   /** Primary reading copy / status sentence (Hind). */
   bodyLg: { fontSize: 18, lineHeight: 27 },
   body: { fontSize: 16, lineHeight: 24 },

@@ -10,6 +10,7 @@ from app.models.profiler import (
     ProfileStatus,
     ReferenceSource,
 )
+from app.specs.schemas import SpecOut
 
 
 class AreaIn(BaseModel):
@@ -65,6 +66,9 @@ class ProfileOut(BaseModel):
 class ProfileDetailOut(ProfileOut):
     areas: list[AreaOut] = []
     contributors: list[ContributorOut] = []
+    # The requesting user's own contributor on this profile (so a client can rank
+    # as themselves). None when the caller is not a contributor (e.g. a contractor).
+    my_contributor_id: UUID | None = None
 
 
 class ReferenceIn(BaseModel):
@@ -126,3 +130,69 @@ class ConflictOut(BaseModel):
 class ConflictResolveIn(BaseModel):
     resolution: str = Field(pattern="^(keep_a|keep_b|compromise|defer_to_architect)$")
     note: str | None = None
+
+
+class BriefRenderingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    brief_id: UUID
+    audience: str
+    scope: str
+    area_id: UUID | None = None
+    content_json: dict = {}
+    created_at: datetime
+
+
+class BriefOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    profile_id: UUID
+    version: int
+    state: str
+    created_at: datetime
+
+
+class BriefDetailOut(BriefOut):
+    renderings: list[BriefRenderingOut] = []
+
+
+class BriefApprovalIn(BaseModel):
+    action: str = Field(
+        pattern="^(approve|request_changes|send_to_architect|architect_sign_off|contractor_received)$"
+    )
+    note: str | None = None
+
+
+class BriefApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    brief_id: UUID
+    actor_user_id: UUID | None = None
+    actor_member_id: UUID | None = None
+    actor_role: str
+    action: str
+    note: str | None = None
+    created_at: datetime
+
+
+class ClarificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_id: UUID | None = None
+    question: str
+    answer: str | None = None
+    asked_at: datetime
+    answered_at: datetime | None = None
+
+
+class ClarificationAnswerIn(BaseModel):
+    answer: str = Field(min_length=1)
+
+
+class MaterializeOut(BaseModel):
+    materials_created: int
+    materials_reused: int
+    specs_created: int
+    specs_reused: int
+    skipped_areas: list[str] = []
+    specs: list[SpecOut] = []

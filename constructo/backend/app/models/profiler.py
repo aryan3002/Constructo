@@ -329,3 +329,115 @@ class ProfilerConflict(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BriefState(StrEnum):
+    homeowner_review = "homeowner_review"
+    revision_requested = "revision_requested"
+    architect_review = "architect_review"
+    contractor_brief_ready = "contractor_brief_ready"
+    approved = "approved"
+    locked = "locked"
+
+
+class BriefAudience(StrEnum):
+    homeowner = "homeowner"
+    architect = "architect"
+    contractor = "contractor"
+
+
+class BriefAction(StrEnum):
+    approve = "approve"
+    request_changes = "request_changes"
+    send_to_architect = "send_to_architect"
+    architect_sign_off = "architect_sign_off"
+    contractor_received = "contractor_received"
+
+
+class ProfilerClarification(Base):
+    __tablename__ = "profiler_clarifications"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    area_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_areas.id", ondelete="CASCADE"), nullable=True
+    )
+    contributor_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiler_contributors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_attribution: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    asked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProfilerBrief(Base):
+    __tablename__ = "profiler_briefs"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    state: Mapped[BriefState] = mapped_column(
+        SAEnum(BriefState, name="profiler_brief_state"),
+        nullable=False,
+        server_default=BriefState.homeowner_review.value,
+    )
+    summary_json: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    created_by: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ProfilerBriefRendering(Base):
+    __tablename__ = "profiler_brief_renderings"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    brief_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_briefs.id", ondelete="CASCADE"), nullable=False
+    )
+    audience: Mapped[BriefAudience] = mapped_column(
+        SAEnum(BriefAudience, name="profiler_brief_audience"), nullable=False
+    )
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, server_default="whole_house")
+    area_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_areas.id", ondelete="SET NULL"), nullable=True
+    )
+    content_json: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ProfilerBriefApproval(Base):
+    __tablename__ = "profiler_brief_approvals"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    brief_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_briefs.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_member_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("homeowner_members.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[BriefAction] = mapped_column(
+        SAEnum(BriefAction, name="profiler_brief_action"), nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

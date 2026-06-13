@@ -5,24 +5,29 @@
  * Members & Notifications are PUSHED screens (declared `href:null` in the Tabs
  * layout). Premium Feather icons + chevrons, warm-paper tokens, no emoji, no %.
  *
+ * Matches the prototype composition: profile card (avatar + name + role +
+ * language badge) at the top, then HOUSEHOLD / APP / ACCOUNT section groups.
  * Reached from the Home hero avatar (→ /settings). Language toggle and Sign out
  * live here too. Strings follow the per-screen en/hi pattern (the language
  * mechanism still comes from the shared provider).
  */
 import { useEffect, useState } from 'react'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
+import { Feather } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { homeowner } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import type { Language } from '../../src/api/types'
-import { SPACE } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
+import { useTheme } from '../../src/theme/ThemeProvider'
 import {
-  BodyLg,
-  Display,
+  Avatar,
+  BodyStrong,
+  Card,
   Eyebrow,
   FadeInUp,
   Screen,
@@ -57,7 +62,7 @@ const STR = {
     signOut: 'Sign out',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo',
+    footer: 'Constructo · your calm view of the build',
   },
   hi: {
     title: 'सेटिंग्स',
@@ -81,7 +86,7 @@ const STR = {
     signOut: 'साइन आउट',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo',
+    footer: 'Constructo · आपका शांत निर्माण दृष्टिकोण',
   },
 } as const
 
@@ -89,6 +94,8 @@ export default function Settings() {
   const { lang, setLang } = useT()
   const { signOut, siteId, me } = useAuth()
   const router = useRouter()
+  const { theme } = useTheme()
+  const c = theme.colors
   const L: Lang = lang === 'hi' ? 'hi' : 'en'
   const tx = STR[L]
 
@@ -132,12 +139,41 @@ export default function Settings() {
 
   return (
     <Screen floatingNav>
-      {/* Calm-on-sand intro — serif title + one reassuring line, like Home. */}
-      <FadeInUp style={{ gap: SPACE.xs }}>
-        <Display>{tx.title}</Display>
-        <BodyLg muted numberOfLines={2}>
-          {tx.intro}
-        </BodyLg>
+      {/* Profile card — avatar + name + role badge + language toggle.
+          Mirrors the prototype header: a warm card with the person's
+          identity at a glance and a quick language-switch badge. */}
+      <FadeInUp style={{ gap: SPACE.sm }}>
+        <Card
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.md,
+          }}
+        >
+          <Avatar name={me?.name} size={52} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <BodyStrong numberOfLines={1}>{me?.name ?? tx.profile}</BodyStrong>
+            <Small muted numberOfLines={1}>{me?.phone ?? tx.profileSubUnknown}</Small>
+          </View>
+          {/* Language badge — taps to toggle, shows current language. */}
+          <Pressable
+            onPress={toggleLanguage}
+            accessibilityRole="button"
+            accessibilityLabel={tx.language}
+            style={{
+              height: 28,
+              paddingHorizontal: SPACE.md,
+              borderRadius: theme.radii.pill,
+              backgroundColor: AP.chip,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Small style={{ color: AP.onChip, fontWeight: '700' }}>
+              {lang === 'hi' ? 'हिं / EN' : 'EN / हिं'}
+            </Small>
+          </Pressable>
+        </Card>
       </FadeInUp>
 
       {/* HOUSEHOLD */}
@@ -188,19 +224,10 @@ export default function Settings() {
         </SettingsGroup>
       </FadeInUp>
 
-      {/* ACCOUNT */}
+      {/* ACCOUNT — sign out only (profile identity lives in the top card). */}
       <FadeInUp delay={120} style={{ gap: SPACE.sm }}>
         <Eyebrow>{tx.account}</Eyebrow>
         <SettingsGroup>
-          <SettingsRow
-            icon="user"
-            title={me?.name ?? tx.profile}
-            subtitle={me?.phone ?? tx.profileSubUnknown}
-            hideChevron
-            onPress={() => {
-              /* No profile-edit screen yet — honest no-op. */
-            }}
-          />
           <SettingsRow
             icon="log-out"
             title={tx.signOut}
@@ -212,9 +239,20 @@ export default function Settings() {
         </SettingsGroup>
       </FadeInUp>
 
-      <Small muted style={{ textAlign: 'center' }}>
-        {tx.footer}
-      </Small>
+      {/* Footer — shield icon + calm brand line, matching the prototype. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: SPACE.xs,
+        }}
+      >
+        <Feather name="shield" size={13} color={c.textMute} />
+        <Small muted style={{ textAlign: 'center' }}>
+          {tx.footer}
+        </Small>
+      </View>
     </Screen>
   )
 }
