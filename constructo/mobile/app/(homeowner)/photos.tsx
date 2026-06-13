@@ -481,7 +481,7 @@ function StandardCard({
           ...theme.shadowCard,
         }}
       >
-        {/* Large photo (hero aspect ratio) */}
+        {/* Large photo (hero aspect ratio, flush — no inner radius) */}
         <PhotoTile
           photo={{
             id: photo.id,
@@ -498,25 +498,53 @@ function StandardCard({
           style={{ borderRadius: 0, borderWidth: 0 }}
         />
 
-        {/* Metadata row: "Shared by builder · date" */}
+        {/* Metadata: room pill + "· Today · shared by contractor" */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            gap: SPACE.sm,
+            flexWrap: 'wrap',
+            gap: SPACE.xs,
             paddingHorizontal: SPACE.lg,
-            paddingTop: SPACE.xs,
-            paddingBottom: SPACE.sm,
+            paddingTop: SPACE.sm,
+            paddingBottom: SPACE.xs,
           }}
         >
-          <Feather name="camera" size={12} color={c.textMute} />
-          <Small muted style={{ flex: 1 }}>{s.sharedBy}</Small>
-          {photo.published_at ? (
-            <MonoSm muted>{shortDate(photo.published_at, lang)}</MonoSm>
+          {photo.room_tag ? (
+            <View
+              style={{
+                height: 24,
+                paddingHorizontal: 10,
+                borderRadius: theme.radii.pill,
+                backgroundColor: c.paper,
+                borderWidth: 1,
+                borderColor: c.line,
+                justifyContent: 'center',
+              }}
+            >
+              <Small color={c.text} style={{ fontWeight: '600', fontSize: 12 }}>
+                {photo.room_tag}
+              </Small>
+            </View>
           ) : null}
+          <Small muted style={{ fontSize: 12 }}>
+            {[
+              photo.published_at ? shortDate(photo.published_at, lang) : null,
+              s.sharedBy,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Small>
         </View>
 
-        {/* Action bar */}
+        {/* Caption */}
+        {photo.caption ? (
+          <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm }}>
+            <Body style={{ fontSize: 14 }}>{photo.caption}</Body>
+          </View>
+        ) : null}
+
+        {/* Action bar — sits on a top hairline */}
         <ActionBar
           photoId={photo.id}
           imageUrl={photo.image_url}
@@ -580,6 +608,8 @@ interface FeedViewProps {
   lang: 'en' | 'hi'
   tileLabels: PhotoTileProps['labels']
   quietBody: string | undefined
+  /** Count of photos published in the last 24 h (drives the "N new since yesterday" banner). */
+  newSinceCount: number
 }
 
 function FeedView({
@@ -599,6 +629,7 @@ function FeedView({
   lang,
   tileLabels,
   quietBody,
+  newSinceCount,
 }: FeedViewProps) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -640,6 +671,41 @@ function FeedView({
 
   return (
     <View style={{ gap: SPACE.lg }}>
+      {/* "N new since yesterday" banner — clay/sand tone (no blue in Daylight). */}
+      {newSinceCount > 0 ? (
+        <FadeInUp>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.md,
+              padding: SPACE.md,
+              backgroundColor: c.secondaryContainer,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+            }}
+          >
+            <View
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: c.secondary,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Feather name="arrow-down" size={16} color="#fff" />
+            </View>
+            <Small color={c.secondary} style={{ fontWeight: '600', flex: 1 }}>
+              {newSinceCount} new since yesterday
+            </Small>
+            <Feather name="chevron-right" size={18} color={c.secondary} />
+          </View>
+        </FadeInUp>
+      ) : null}
+
       {/* In-feed quiet state (when site is quiet, shown before photos) */}
       {activeQuiet ? (
         <FadeInUp rise={false} linear>
@@ -769,6 +835,16 @@ export default function Photos() {
     const forGrid = latest ? sitePhotos.filter((p) => p.id !== latest.id) : sitePhotos
     return groupPhotos(forGrid, view, lang, s)
   }, [sitePhotos, latest, view, lang, s, tab])
+
+  // "N new since yesterday" count — photos published in the last 24 h.
+  const newSinceCount = useMemo(() => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    return (query.data?.items ?? []).filter((p) => {
+      if (!p.published_at) return false
+      const d = new Date(p.published_at)
+      return !Number.isNaN(d.getTime()) && d > cutoff
+    }).length
+  }, [query.data])
 
   const hide = useCallback((id: string) => {
     setHidden((prev) => {
@@ -1008,6 +1084,7 @@ export default function Photos() {
           lang={lang}
           tileLabels={tileLabels}
           quietBody={quietBody}
+          newSinceCount={newSinceCount}
         />
       ) : tab === 'mine' ? (
         /* ---- MY VISITS TAB (unchanged) ---- */
