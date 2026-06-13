@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -171,6 +171,25 @@ async def create_profile(
     await session.commit()
     await session.refresh(profile)
     return ProfileOut.model_validate(profile)
+
+
+@router.get("/profiles", response_model=list[ProfileOut])
+async def list_profiles(
+    site_id: UUID | None = Query(None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ProfileOut]:
+    """List design profiles for the company (optionally filtered to one site).
+
+    Powers the owner Design hub — there is no per-site lookup otherwise. Read is
+    open to any authenticated member; everything stays company-scoped.
+    """
+    stmt = select(ProfilerProfile).where(ProfilerProfile.company_id == user.company_id)
+    if site_id is not None:
+        stmt = stmt.where(ProfilerProfile.site_id == site_id)
+    stmt = stmt.order_by(ProfilerProfile.created_at.desc())
+    rows = (await session.execute(stmt)).scalars().all()
+    return [ProfileOut.model_validate(p) for p in rows]
 
 
 @router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)

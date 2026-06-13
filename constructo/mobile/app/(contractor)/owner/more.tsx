@@ -134,8 +134,14 @@ export default function AccountHub() {
           icon="shield"
           title={lang === 'hi' ? 'साइट ऑडिट' : 'Site audit'}
           subtitle={lang === 'hi' ? 'AI गुणवत्ता निरीक्षण' : 'AI quality inspections'}
-          last
           onPress={() => router.push(ROUTES.audit)}
+        />
+        <SettingsRow
+          icon="feather"
+          title={lang === 'hi' ? 'डिज़ाइन ब्रीफ़' : 'Design briefs'}
+          subtitle={lang === 'hi' ? 'प्रति-साइट डिज़ाइन दिशा' : 'Per-site design direction'}
+          last
+          onPress={() => router.push(ROUTES.design)}
         />
       </SettingsGroup>
 

@@ -67,6 +67,10 @@ function OwnerTabs() {
       <Tabs.Screen name="audit" options={{ href: null }} />
       <Tabs.Screen name="audit/[id]" options={{ href: null }} />
       <Tabs.Screen name="survey/[id]" options={{ href: null }} />
+      {/* Design profiler: hub + per-site profile + full brief, off-tab. */}
+      <Tabs.Screen name="design" options={{ href: null }} />
+      <Tabs.Screen name="designsite/[id]" options={{ href: null }} />
+      <Tabs.Screen name="dp/[id]" options={{ href: null }} />
       {/* Foresight (portfolio) — pushed from More, off-tab. */}
       <Tabs.Screen name="foresight" options={{ href: null }} />
       {/* Team & roles — pushed from Account hub, off-tab. */}

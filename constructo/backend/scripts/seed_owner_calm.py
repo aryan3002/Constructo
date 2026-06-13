@@ -53,6 +53,20 @@ from app.models import (
     User,
     UserRole,
 )
+from app.models.profiler import (
+    AreaKind,
+    AreaStatus,
+    ConflictStatus,
+    ContributorRole,
+    ProfilerArea,
+    ProfilerConflict,
+    ProfilerContributor,
+    ProfilerProfile,
+    ProfilerTheme,
+    ProfileScope,
+    ProfileStatus,
+    ThemeStatus,
+)
 
 NS = uuid5(NAMESPACE_URL, "constructo.seed.civilarch-owner-demo")
 
@@ -283,6 +297,61 @@ async def seed() -> dict[str, int]:
             submitted_at=NOW - timedelta(days=2),
         )
         counts["surveys"] = 1
+
+        # --- Design profile (Design Profiler) on Kutumb Nivaas ---
+        profile = await _upsert(
+            session, ProfilerProfile, _id("dp", "kutumb"), company_id=company.id,
+            site_id=sites["kutumb"].id, scope_type=ProfileScope.rooms,
+            created_by=owner.id, status=ProfileStatus.theme_suggested,
+        )
+        await session.flush()
+        await _upsert(
+            session, ProfilerContributor, _id("dpc", "owner"), profile_id=profile.id,
+            user_id=owner.id, role=ContributorRole.owner, is_decision_owner=True,
+        )
+        area_kitchen = await _upsert(
+            session, ProfilerArea, _id("dpa", "kitchen"), profile_id=profile.id,
+            area_kind=AreaKind.interior, area_key="kitchen", recommended_count=6,
+            status=AreaStatus.in_progress, confidence=0.82, has_conflict=True,
+        )
+        area_living = await _upsert(
+            session, ProfilerArea, _id("dpa", "living"), profile_id=profile.id,
+            area_kind=AreaKind.interior, area_key="living_room", recommended_count=6,
+            status=AreaStatus.ready, confidence=0.88, has_conflict=False,
+        )
+        await session.flush()
+        await _upsert(
+            session, ProfilerTheme, _id("dpt", "warm-min"), profile_id=profile.id,
+            area_id=area_kitchen.id, name="Warm Minimal", confidence=0.82,
+            palette=["warm oak", "matte brass", "off-white"],
+            materials=["oak veneer", "quartz counter", "brushed brass"],
+            rationale="Light oak cabinetry with brass accents and quartz reads warm yet minimal "
+                      "— the consistent thread across the family's kitchen inspiration.",
+            status=ThemeStatus.suggested,
+        )
+        await _upsert(
+            session, ProfilerTheme, _id("dpt", "soft-scandi"), profile_id=profile.id,
+            area_id=area_kitchen.id, name="Soft Scandi", confidence=0.64,
+            palette=["cool grey", "pale birch", "white"],
+            materials=["birch ply", "matte laminate", "stone composite"],
+            rationale="A cooler, paler take if the family leans Scandinavian over warm-trad.",
+            status=ThemeStatus.suggested,
+        )
+        await _upsert(
+            session, ProfilerTheme, _id("dpt", "earthy"), profile_id=profile.id,
+            area_id=area_living.id, name="Earthy Calm", confidence=0.88,
+            palette=["terracotta", "olive", "sand"],
+            materials=["lime plaster", "cane", "teak"],
+            rationale="Grounded earth tones with natural cane and teak — relaxed and timeless.",
+            status=ThemeStatus.approved,
+        )
+        await _upsert(
+            session, ProfilerConflict, _id("dpx", "palette"), profile_id=profile.id,
+            area_id=area_kitchen.id, dimension="palette",
+            value="Warm oak vs cool grey kitchen cabinetry",
+            resolution_status=ConflictStatus.open,
+        )
+        counts["design_profiles"] = 1
 
         await session.commit()
     return counts
