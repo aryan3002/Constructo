@@ -122,6 +122,30 @@ async def _load_accessible_profile(
     return profile
 
 
+async def _validate_contributor(
+    session: AsyncSession, profile: ProfilerProfile, contributor_id: UUID, user: User
+) -> ProfilerContributor:
+    """The contributor must belong to ``profile``; a homeowner may act only as THEIR
+    own contributor (mapped by user_id, or by an active HomeownerMember of theirs)."""
+    contributor = await session.get(ProfilerContributor, contributor_id)
+    if contributor is None or contributor.profile_id != profile.id:
+        raise AppError(404, "not_found", "Contributor not found")
+    if user.role is UserRole.homeowner:
+        member_ids = (
+            await session.execute(
+                select(HomeownerMember.id).where(
+                    HomeownerMember.user_id == user.id,
+                    HomeownerMember.site_id == profile.site_id,
+                    HomeownerMember.status == MemberStatus.active,
+                )
+            )
+        ).scalars().all()
+        owns = contributor.user_id == user.id or contributor.member_id in set(member_ids)
+        if not owns:
+            raise AppError(403, "not_your_contributor", "You can only rank as yourself.")
+    return contributor
+
+
 _HOMEOWNER_BRIEF_ACTIONS = {
     BriefAction.approve, BriefAction.request_changes, BriefAction.send_to_architect,
 }
@@ -367,6 +391,39 @@ async def get_profile(
     return out
 
 
+@router.get("/profiles/by-site/{site_id}", response_model=ProfileDetailOut)
+async def get_profile_by_site(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    """Resolve the most recent profile for a site, membrane-scoped (homeowner needs
+    membership; contractor company-scope). 404 if none accessible."""
+    profile = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == site_id)
+            .order_by(ProfilerProfile.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if profile is None:
+        raise AppError(404, "not_found", "No design profile for this site")
+    await _load_accessible_profile(session, profile.id, user)
+    areas = (
+        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
+    ).scalars().all()
+    contributors = (
+        await session.execute(
+            select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
+        )
+    ).scalars().all()
+    out = ProfileDetailOut.model_validate(profile)
+    out.areas = [AreaOut.model_validate(a) for a in areas]
+    out.contributors = [ContributorOut.model_validate(c) for c in contributors]
+    return out
+
+
 @router.post("/profiles/{profile_id}/contributors", status_code=201)
 async def add_contributor(
     profile_id: UUID,
@@ -390,14 +447,16 @@ async def add_contributor(
 @router.post("/references", response_model=ReferenceOut, status_code=201)
 async def add_reference(
     body: ReferenceIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> ReferenceOut:
     area = await session.get(ProfilerArea, body.area_id)
     if area is None:
         raise AppError(404, "not_found", "Area not found")
-    await _load_owned_profile(session, area.profile_id, user)
+    profile = await _load_accessible_profile(session, area.profile_id, user)
+    if body.contributor_id is not None:
+        await _validate_contributor(session, profile, body.contributor_id, user)
     ref = ProfilerReference(
         profile_id=area.profile_id,
         area_id=area.id,
@@ -437,13 +496,14 @@ async def add_reference(
 async def rank_reference(
     reference_id: UUID,
     body: RankingIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     ref = await session.get(ProfilerReference, reference_id)
     if ref is None:
         raise AppError(404, "not_found", "Reference not found")
-    await _load_owned_profile(session, ref.profile_id, user)
+    profile = await _load_accessible_profile(session, ref.profile_id, user)
+    await _validate_contributor(session, profile, body.contributor_id, user)
     existing = (
         await session.execute(
             select(ProfilerRanking).where(

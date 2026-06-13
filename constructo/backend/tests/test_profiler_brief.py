@@ -172,6 +172,9 @@ async def test_generate_brief_snapshots_three_renderings_with_deterministic_numb
         # contractor rendering carries material families straight from the approved theme
         contractor = next(r for r in brief["renderings"] if r["audience"] == "contractor")
         assert "light oak" in contractor["content_json"]["areas"][0]["material_families"]
+        # every rendering carries a non-null brief_id equal to the brief's id
+        for r in brief["renderings"]:
+            assert r["brief_id"] == brief["id"]
         # second generate bumps the version
         gen2 = await client.post(
             f"/api/v1/design/profiles/{pid}/brief", headers=auth(architect)

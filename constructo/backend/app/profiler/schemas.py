@@ -132,6 +132,7 @@ class ConflictResolveIn(BaseModel):
 class BriefRenderingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
+    brief_id: UUID
     audience: str
     scope: str
     area_id: UUID | None = None
