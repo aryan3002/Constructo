@@ -37,6 +37,8 @@ function homeFor(role: Role | null): string {
       return '/(contractor)/pm/dpr'
     case 'supervisor':
       return '/(contractor)/supervisor/home'
+    case 'architect':
+      return '/(contractor)/architect/home'
     case 'accountant':
       return '/(contractor)/accountant/reconcile'
     case 'labor_contractor':
