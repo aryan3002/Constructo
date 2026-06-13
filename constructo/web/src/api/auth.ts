@@ -205,6 +205,9 @@ const mockBilling: CompanyBilling = {
 export const authApi = {
   /** Request a login code (no-op in dev; OTP stays 000000). Powers resend. */
   requestOtp(phone: string): Promise<{ sent: boolean; dev_otp: string | null }> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ sent: true, dev_otp: '000000' })
+    }
     return call('/api/v1/auth/request-otp', {
       method: 'POST',
       body: JSON.stringify({ phone }),
@@ -213,6 +216,25 @@ export const authApi = {
 
   /** Phone+OTP login. Stores and returns the JWT. */
   async login(phone: string, otp: string): Promise<string> {
+    if (USE_MOCKS) {
+      if (otp !== '000000') throw new ApiError(401, 'invalid_otp')
+      const token = `mock-token-${phone}`
+      setToken(token)
+      
+      // Determine mock role based on the phone number entered
+      let role: Role = 'owner'
+      if (phone.includes('9800000002') || phone.includes('pm')) role = 'pm'
+      else if (phone.includes('9800000003') || phone.includes('accountant')) role = 'accountant'
+      else if (phone.includes('9800000004') || phone.includes('supervisor')) role = 'supervisor'
+      
+      try {
+        localStorage.setItem('cstk.mock.role', role)
+        localStorage.setItem('cstk.mock.phone', phone)
+      } catch {
+        /* ignore private mode */
+      }
+      return token
+    }
     const resp = await call<{ token: string }>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify({ phone, otp }),
@@ -245,11 +267,15 @@ export const authApi = {
         (typeof localStorage !== 'undefined' &&
           (localStorage.getItem('cstk.mock.role') as Role | null)) ||
         'owner'
+      const phone =
+        (typeof localStorage !== 'undefined' &&
+          localStorage.getItem('cstk.mock.phone')) ||
+        '+919800000001'
       return Promise.resolve({
         id: 'mock-user',
         company_id: 'mock-co',
-        name: 'Demo Owner',
-        phone: '+919800000001',
+        name: role === 'owner' ? 'Demo Owner' : role === 'pm' ? 'Anita Rao' : role === 'accountant' ? 'Ravi Kumar' : 'Suresh Patel',
+        phone,
         role,
         language: 'en',
       })
@@ -258,11 +284,41 @@ export const authApi = {
   },
 
   landing(): Promise<LandingInfo> {
+    if (USE_MOCKS) {
+      const role =
+        (typeof localStorage !== 'undefined' &&
+          (localStorage.getItem('cstk.mock.role') as Role | null)) ||
+        'owner'
+      // IA "where do I land" key: brief | today | capture | reconcile | attendance | approvals
+      const landing = role === 'owner' ? 'brief' : role === 'pm' ? 'today' : role === 'supervisor' ? 'capture' : 'brief'
+      return Promise.resolve({
+        role,
+        landing,
+      })
+    }
     return call('/api/v1/auth/me/landing')
   },
 
   /** Patch profile / preferred UI language (PATCH /api/v1/users/me). */
   updateProfile(patch: { name?: string; language?: Language }): Promise<Me> {
+    if (USE_MOCKS) {
+      const role =
+        (typeof localStorage !== 'undefined' &&
+          (localStorage.getItem('cstk.mock.role') as Role | null)) ||
+        'owner'
+      const phone =
+        (typeof localStorage !== 'undefined' &&
+          localStorage.getItem('cstk.mock.phone')) ||
+        '+919800000001'
+      return Promise.resolve({
+        id: 'mock-user',
+        company_id: 'mock-co',
+        name: patch.name ?? 'Demo Owner',
+        phone,
+        role,
+        language: patch.language ?? 'en',
+      })
+    }
     return call('/api/v1/users/me', {
       method: 'PATCH',
       body: JSON.stringify(patch),
@@ -313,6 +369,9 @@ export const authApi = {
 
   /** Create the first site (name + type only — we learn the rest). */
   createSite(body: { name: string; type: string }): Promise<{ id: string; name: string }> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ id: `mock-site-${Date.now()}`, name: body.name })
+    }
     return call('/api/v1/sites', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -326,6 +385,18 @@ export const authApi = {
     role: Role
     name?: string
   }): Promise<Invite> {
+    if (USE_MOCKS) {
+      return Promise.resolve({
+        id: `mock-invite-${Date.now()}`,
+        company_id: 'mock-co',
+        phone: body.phone,
+        role: body.role,
+        name: body.name ?? null,
+        status: 'pending',
+        token: `mock-token-${Date.now()}`,
+        created_at: new Date().toISOString(),
+      })
+    }
     return call('/api/v1/invites', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -333,6 +404,9 @@ export const authApi = {
   },
 
   listInvites(): Promise<Invite[]> {
+    if (USE_MOCKS) {
+      return Promise.resolve([])
+    }
     return call('/api/v1/invites')
   },
 
@@ -347,6 +421,17 @@ export const authApi = {
     phone?: string
     name?: string
   }): Promise<HomeownerMemberInvite> {
+    if (USE_MOCKS) {
+      return Promise.resolve({
+        id: `mock-client-${Date.now()}`,
+        site_id: body.siteId,
+        phone: body.phone ?? null,
+        display_name: body.name ?? null,
+        join_code: '123456',
+        invite_link: 'constructo://join/123456',
+        status: 'pending',
+      })
+    }
     return call('/api/v1/homeowner/members', {
       method: 'POST',
       body: JSON.stringify({
@@ -360,11 +445,23 @@ export const authApi = {
 
   /** Public pre-login peek at an invite for the join screen. */
   previewInvite(token: string): Promise<InvitePreview> {
+    if (USE_MOCKS) {
+      return Promise.resolve({
+        role: 'pm',
+        company_name: 'Demo Construction Co',
+        name: 'Demo Team Member',
+        status: 'pending',
+      })
+    }
     return call(`/api/v1/invites/${encodeURIComponent(token)}`)
   },
 
   /** Accept an invite (caller must be logged in); stores the fresh JWT. */
   async acceptInvite(token: string): Promise<InviteAcceptResult> {
+    if (USE_MOCKS) {
+      setToken('mock-jwt-token')
+      return { token: 'mock-jwt-token', role: 'pm', landing: 'today' }
+    }
     const resp = await call<InviteAcceptResult>(
       `/api/v1/invites/${encodeURIComponent(token)}/accept`,
       { method: 'POST' },

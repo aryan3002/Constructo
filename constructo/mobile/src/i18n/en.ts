@@ -33,6 +33,10 @@ export const en = {
     homeownerCardSub: 'Follow your home being built — photos, updates, decisions.',
     staffCard: 'Builder / site team',
     staffCardSub: 'Manage your sites and crew. Owner, PM, supervisor, accountant, mukadam.',
+    homeownerLoginTitle: 'Welcome back',
+    homeownerLoginSubtitle: 'Enter your number to sign in.',
+    newHere: 'First time? I have a join code →',
+    notHomeowner: "No homeowner account found for this number. If you're new, use a join code below.",
   },
   nav: {
     home: 'Home',

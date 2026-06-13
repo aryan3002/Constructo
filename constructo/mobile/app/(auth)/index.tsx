@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import { Body, Display, Screen, Small, Title } from '../../src/ui'
+import { Body, Display, Screen, Small, Title, Logo } from '../../src/ui'
 
 function RoleCard({
   icon,
@@ -77,6 +77,7 @@ export default function ChooseRole() {
   return (
     <Screen>
       <View style={{ marginTop: SPACE.xxl, gap: SPACE.sm }}>
+        <Logo size={48} />
         <Display>{t('auth.chooseTitle')}</Display>
         <Body muted>{t('auth.chooseSubtitle')}</Body>
       </View>
@@ -87,7 +88,7 @@ export default function ChooseRole() {
           title={t('auth.homeownerCard')}
           subtitle={t('auth.homeownerCardSub')}
           accent={theme.colors.accent}
-          onPress={() => router.push('/(auth)/join')}
+          onPress={() => router.push('/(auth)/homeowner-login')}
         />
         <RoleCard
           icon="briefcase"

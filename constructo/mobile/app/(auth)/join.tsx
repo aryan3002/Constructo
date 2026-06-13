@@ -21,7 +21,7 @@ import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import { Body, Button, Display, Screen, Small, useInputStyle } from '../../src/ui'
+import { Body, Button, Display, Screen, Small, useInputStyle, Logo } from '../../src/ui'
 
 const RESEND_SECONDS = 30
 
@@ -150,6 +150,7 @@ export default function Join() {
       </Pressable>
 
       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
+        <Logo size={48} />
         <Display>{t('auth.joinTitle')}</Display>
         <Small muted>{t('auth.joinSubtitle')}</Small>
       </View>
