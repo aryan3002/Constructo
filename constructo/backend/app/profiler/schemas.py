@@ -90,3 +90,39 @@ class RankingIn(BaseModel):
     stars: int = Field(ge=1, le=5)
     tags: dict = Field(default_factory=lambda: {"positive": [], "negative": []})
     note: str | None = None
+
+
+class ThemeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_id: UUID | None = None
+    name: str
+    confidence: float
+    palette: list = []
+    materials: list = []
+    rationale: str | None = None
+    evidence_reference_ids: list = []
+    status: str
+    created_at: datetime
+
+
+class ThemeDecisionIn(BaseModel):
+    action: str = Field(pattern="^(approve|adjust|reject)$")
+    note: str | None = None
+
+
+class ConflictOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_id: UUID
+    dimension: str
+    value: str
+    contributor_a_id: UUID | None = None
+    contributor_b_id: UUID | None = None
+    resolution_status: str
+    decision_note: str | None = None
+
+
+class ConflictResolveIn(BaseModel):
+    resolution: str = Field(pattern="^(keep_a|keep_b|compromise|defer_to_architect)$")
+    note: str | None = None
