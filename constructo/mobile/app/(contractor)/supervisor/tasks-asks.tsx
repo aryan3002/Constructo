@@ -68,7 +68,7 @@ export default function TasksAsks() {
   })
 
   const pending: Approval[] = (q.data?.items ?? []).filter(
-    (a) => a.status === 'pending' && !responded.has(a.id),
+    (a) => a.state === 'pending' && !responded.has(a.id),
   )
 
   const respond = useCallback(

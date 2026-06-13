@@ -7,7 +7,7 @@
  *                      (bypassing this gate entirely). This gate only handles
  *                      returning sessions (app restart / re-open).
  *   owner            → /(contractor)/owner/brief  (Neev, H4)
- *   supervisor       → /(contractor)/supervisor/capture
+ *   supervisor       → /(contractor)/supervisor/home    (Calm Cockpit)
  *   labor_contractor → /(contractor)/mukadam/attendance
  *   pm               → /(contractor)/pm/dpr        (C4 Auto-DPR review)
  *   accountant       → /(contractor)/accountant/reconcile (C4 Reconcile cockpit)
@@ -41,13 +41,13 @@ export default function Index() {
   if (role === 'homeowner') return <Redirect href="/(homeowner)/home" />
   // H4 Tier-1 contractor branches (Owner / Supervisor / Mukadam).
   if (role === 'owner') return <Redirect href="/(contractor)/owner/brief" />
-  if (role === 'supervisor') return <Redirect href="/(contractor)/supervisor/capture" />
+  if (role === 'supervisor') return <Redirect href="/(contractor)/supervisor/home" />
   if (role === 'labor_contractor') {
     return <Redirect href="/(contractor)/mukadam/attendance" />
   }
-  // Architect — desk/design role; mobile gives Chat (read + respond to site
-  // design questions) + More. Heavy design work stays web-primary.
-  if (role === 'architect') return <Redirect href="/(contractor)/architect/chat" />
+  // Architect (Designer) — daylight Calm Cockpit: Home · Brief · Selections ·
+  // Chat · More, wired to the design profiler + specs.
+  if (role === 'architect') return <Redirect href="/(contractor)/architect/home" />
   // PM (C4) — native Auto-DPR review surface.
   if (role === 'pm') return <Redirect href="/(contractor)/pm/dpr" />
   // Accountant (C4) — native Reconcile cockpit (read-mostly, tracking-only).

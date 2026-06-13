@@ -5,6 +5,7 @@ company member; create/edit is owner/pm/supervisor; approval is owner/pm.
 Company-scoped, mirroring app/materials/router.py.
 """
 import base64
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -16,7 +17,7 @@ from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.models import Component, Material, Space, Spec, User, UserRole
+from app.models import Component, Material, Space, Spec, SpecApprovalStatus, User, UserRole
 from app.specs.costing import line_total as line_total_fn
 from app.specs.costing import rollup_by_room
 from app.specs.extraction import extract_material_from_image, get_llm
@@ -228,6 +229,46 @@ async def approve_spec(
     spec.approval_status = body.status
     if body.client_final_code is not None:
         spec.client_final_code = body.client_final_code
+    await session.commit()
+    await session.refresh(spec)
+    return SpecOut.model_validate(spec)
+
+
+@router.post("/{spec_id}/route", response_model=SpecOut)
+async def route_spec(
+    spec_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> SpecOut:
+    """Send a selection out for approval (the designer routes it). Restarts the
+    approval clock — back to pending — so a revised, returned selection re-sends
+    cleanly. Derived routing_status → "out_for_approval"."""
+    spec = await session.get(Spec, spec_id)
+    if spec is None or spec.company_id != user.company_id:
+        raise AppError(404, "not_found", "Spec not found")
+    spec.sent_at = datetime.now(UTC)
+    spec.approval_status = SpecApprovalStatus.pending
+    spec.released_at = None
+    await session.commit()
+    await session.refresh(spec)
+    return SpecOut.model_validate(spec)
+
+
+@router.post("/{spec_id}/release", response_model=SpecOut)
+async def release_spec(
+    spec_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> SpecOut:
+    """Release an APPROVED selection to site. Only an approved selection may be
+    released (the state machine refuses otherwise). Derived routing_status →
+    "released"."""
+    spec = await session.get(Spec, spec_id)
+    if spec is None or spec.company_id != user.company_id:
+        raise AppError(404, "not_found", "Spec not found")
+    if spec.approval_status != SpecApprovalStatus.approved:
+        raise AppError(409, "not_approved", "Only an approved selection can be released to site")
+    spec.released_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(spec)
     return SpecOut.model_validate(spec)

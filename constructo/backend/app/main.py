@@ -51,6 +51,7 @@ from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
+from app.site_changes.router import router as site_changes_router
 from app.sites.router import router as sites_router
 from app.specs.router import router as specs_router
 from app.survey.router import router as survey_router
@@ -132,6 +133,7 @@ app.include_router(capture_router)  # app-authenticated field capture → extrac
 app.include_router(chat_router)  # Phase 1.0 in-app chat (crew site thread)
 app.include_router(chat_groups_router)  # Phase 2 groups CRUD + members + RBAC
 app.include_router(action_items_router)  # Phase 1.6 action items / to-dos
+app.include_router(site_changes_router)  # field → designer site-condition changes
 app.include_router(disputes_router)  # Phase 1.7 contested-truth (disputes)
 app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggregation)
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
