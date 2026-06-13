@@ -99,3 +99,52 @@ async def test_generate_themes_persists_with_reducer_confidence_and_syncs_confli
         assert len(listed) == 1
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_theme_decision_and_conflict_resolve(client, factory):
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(
+        canned={"themes": [{"name": "Soft Minimal", "palette": ["beige"], "materials": ["oak"],
+                            "rationale": "warm"}], "colors": ["dark"], "confidence": 0.9})
+    try:
+        architect, pid, area_id, contrib_ids = await _profile_with_area_and_two_contributors(
+            client, factory
+        )
+        for _ in range(2):
+            r = await client.post("/api/v1/design/references",
+                json={"area_id": area_id, "source_type": "upload",
+                      "source_url": "https://example.test/x.jpg"}, headers=auth(architect))
+            rid = r.json()["id"]
+            await client.post(f"/api/v1/design/references/{rid}/rankings",
+                json={"contributor_id": contrib_ids[0], "stars": 5}, headers=auth(architect))
+            await client.post(f"/api/v1/design/references/{rid}/rankings",
+                json={"contributor_id": contrib_ids[1], "stars": 1}, headers=auth(architect))
+        themes = (
+            await client.post(
+                f"/api/v1/design/profiles/{pid}/areas/{area_id}/themes", headers=auth(architect)
+            )
+        ).json()
+        theme_id = themes[0]["id"]
+
+        # approve the theme
+        dec = await client.post(f"/api/v1/design/themes/{theme_id}/decision",
+            json={"action": "approve"}, headers=auth(architect))
+        assert dec.status_code == 200
+        assert dec.json()["status"] == "approved"
+
+        # bad action rejected by schema
+        bad = await client.post(f"/api/v1/design/themes/{theme_id}/decision",
+            json={"action": "nope"}, headers=auth(architect))
+        assert bad.status_code == 422
+
+        # resolve a conflict
+        conflicts = (await client.get(
+            f"/api/v1/design/profiles/{pid}/conflicts", headers=auth(architect))).json()
+        cid = conflicts[0]["id"]
+        res = await client.post(f"/api/v1/design/conflicts/{cid}/resolve",
+            json={"resolution": "compromise", "note": "light oak + subtle contrast"},
+            headers=auth(architect))
+        assert res.status_code == 200
+        assert res.json()["resolution_status"] == "resolved"
+        assert res.json()["decision_note"] == "light oak + subtle contrast"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)

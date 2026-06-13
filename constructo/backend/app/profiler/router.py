@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone  # noqa: F401 – used in Task 5 decide/resolve endpoints
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -28,7 +28,7 @@ from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
     ConflictOut,
-    ConflictResolveIn,  # noqa: F401 – used in Task 5 decide/resolve endpoints
+    ConflictResolveIn,
     ContributorIn,
     ContributorOut,
     ProfileCreate,
@@ -37,7 +37,7 @@ from app.profiler.schemas import (
     RankingIn,
     ReferenceIn,
     ReferenceOut,
-    ThemeDecisionIn,  # noqa: F401 – used in Task 5 decide/resolve endpoints
+    ThemeDecisionIn,
     ThemeOut,
 )
 from app.profiler.taste import build_taste_model, check_consistency
@@ -392,6 +392,9 @@ async def list_themes(
     session: AsyncSession = Depends(get_session),
 ) -> list[ThemeOut]:
     await _load_owned_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
     rows = (
         await session.execute(
             select(ProfilerTheme)
@@ -417,3 +420,50 @@ async def list_conflicts(
         )
     ).scalars().all()
     return [ConflictOut.model_validate(c) for c in rows]
+
+
+@router.post("/themes/{theme_id}/decision", response_model=ThemeOut)
+async def decide_theme(
+    theme_id: UUID,
+    body: ThemeDecisionIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> ThemeOut:
+    theme = await session.get(ProfilerTheme, theme_id)
+    if theme is None:
+        raise AppError(404, "not_found", "Theme not found")
+    await _load_owned_profile(session, theme.profile_id, user)
+    theme.status = {
+        "approve": ThemeStatus.approved,
+        "adjust": ThemeStatus.adjusted,
+        "reject": ThemeStatus.rejected,
+    }[body.action]
+    theme.decided_by = user.id
+    theme.decided_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(theme)
+    return ThemeOut.model_validate(theme)
+
+
+@router.post("/conflicts/{conflict_id}/resolve", response_model=ConflictOut)
+async def resolve_conflict(
+    conflict_id: UUID,
+    body: ConflictResolveIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> ConflictOut:
+    conflict = await session.get(ProfilerConflict, conflict_id)
+    if conflict is None:
+        raise AppError(404, "not_found", "Conflict not found")
+    await _load_owned_profile(session, conflict.profile_id, user)
+    conflict.resolution_status = (
+        ConflictStatus.deferred_to_architect
+        if body.resolution == "defer_to_architect"
+        else ConflictStatus.resolved
+    )
+    conflict.resolved_by = user.id
+    conflict.decision_note = body.note or body.resolution
+    conflict.resolved_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(conflict)
+    return ConflictOut.model_validate(conflict)
