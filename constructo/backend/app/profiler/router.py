@@ -12,7 +12,16 @@ from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.homeowner.authority import can_approve
 from app.homeowner.scoping import homeowner_site_ids, member_sub_role
-from app.models import HomeownerMember, MemberStatus, User, UserRole
+from app.models import (
+    Component,
+    HomeownerMember,
+    Material,
+    MemberStatus,
+    Space,
+    Spec,
+    User,
+    UserRole,
+)
 from app.models.profiler import (
     BriefAction,
     BriefAudience,
@@ -33,6 +42,7 @@ from app.models.profiler import (
     ProfileStatus,
     ThemeStatus,
 )
+from app.profiler.bridge import bridge_id, plan_proposals
 from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
@@ -48,6 +58,7 @@ from app.profiler.schemas import (
     ConflictResolveIn,
     ContributorIn,
     ContributorOut,
+    MaterializeOut,
     ProfileCreate,
     ProfileDetailOut,
     ProfileOut,
@@ -59,6 +70,7 @@ from app.profiler.schemas import (
 )
 from app.profiler.taste import build_taste_model, check_consistency
 from app.profiler.themes import narrate_themes, top_reference_ids
+from app.specs.schemas import SpecOut
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +139,22 @@ def _audience_allowed(user: User, audience: BriefAudience) -> bool:
 _CONTRACTOR_VISIBLE_STATES = {
     BriefState.contractor_brief_ready, BriefState.approved, BriefState.locked,
 }
+
+
+async def _resolve_area_component(
+    session: AsyncSession, area: ProfilerArea | None, site_id: UUID
+) -> UUID | None:
+    """The area's bound Component id IF it exists and belongs to ``site_id`` (via its
+    Space). Returns None when the area has no component or the component is off-site."""
+    if area is None or area.component_id is None:
+        return None
+    component = await session.get(Component, area.component_id)
+    if component is None:
+        return None
+    space = await session.get(Space, component.space_id)
+    if space is None or space.site_id != site_id:
+        return None
+    return component.id
 
 
 async def _area_signals(
@@ -813,6 +841,80 @@ async def list_brief_approvals(
         )
     ).scalars().all()
     return [BriefApprovalOut.model_validate(r) for r in rows]
+
+
+@router.post("/briefs/{brief_id}/materialize", response_model=MaterializeOut, status_code=201)
+async def materialize_brief(
+    brief_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> MaterializeOut:
+    """Propose Material + Spec rows (pending) from a SHARED brief's deterministic
+    payload. No LLM; quantities left NULL; a human confirms via /specs/{id}/approve.
+    Idempotent via uuid5 keys — re-running reuses, never duplicates."""
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    profile = await _load_owned_profile(session, brief.profile_id, user)
+    if brief.state not in _CONTRACTOR_VISIBLE_STATES:
+        raise AppError(
+            409, "brief_not_ready",
+            "Materialize a brief only after architect sign-off (contractor_brief_ready+).",
+        )
+
+    areas = (
+        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
+    ).scalars().all()
+    areas_by_key = {a.area_key: a for a in areas}
+
+    materials_created = materials_reused = specs_created = specs_reused = 0
+    skipped: list[str] = []
+    created_specs: list[Spec] = []
+
+    for prop in plan_proposals(brief.summary_json or {}):
+        area = areas_by_key.get(prop["area_key"])
+        mat_id = bridge_id("material", profile.company_id, prop["material_name"])
+        material = await session.get(Material, mat_id)
+        if material is None:
+            material = Material(
+                id=mat_id, company_id=profile.company_id, name=prop["material_name"],
+                category="design-brief",
+            )
+            session.add(material)
+            await session.flush()
+            materials_created += 1
+        else:
+            materials_reused += 1
+
+        component_id = await _resolve_area_component(session, area, profile.site_id)
+        if component_id is None:
+            if prop["area_key"] not in skipped:
+                skipped.append(prop["area_key"])
+            continue
+
+        spec_id = bridge_id("spec", component_id, prop["label"])
+        spec = await session.get(Spec, spec_id)
+        if spec is None:
+            spec = Spec(
+                id=spec_id, company_id=profile.company_id, site_id=profile.site_id,
+                component_id=component_id, material_id=material.id, label=prop["label"],
+                notes="Proposed from the design brief — confirm.",
+            )
+            session.add(spec)
+            await session.flush()
+            specs_created += 1
+        else:
+            specs_reused += 1
+        created_specs.append(spec)
+
+    await session.commit()
+    for s in created_specs:
+        await session.refresh(s)
+    return MaterializeOut(
+        materials_created=materials_created, materials_reused=materials_reused,
+        specs_created=specs_created, specs_reused=specs_reused,
+        skipped_areas=skipped, specs=[SpecOut.model_validate(s) for s in created_specs],
+    )
 
 
 # ---------------------------------------------------------------------------
