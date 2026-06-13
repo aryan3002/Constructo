@@ -194,12 +194,11 @@ function MemberCard({
             {name}
           </BodyStrong>
           {/* Kit Chip replaces the hand-rolled "you" pill — accent-filled,
-              not interactive here (no onPress action, so we block the press). */}
+              static label (no onPress) so screen readers skip the dead-end). */}
           {isYou ? (
             <Chip
               label={tx.you}
               active
-              onPress={() => {/* identity chip — no action */ }}
             />
           ) : null}
         </View>

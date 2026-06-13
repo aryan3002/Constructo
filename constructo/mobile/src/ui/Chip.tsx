@@ -7,8 +7,13 @@
  * ≥36px height, pill radius, optional leading Feather icon.
  * Tap target: padded to ≥48px height via minHeight so the icon is at 36 visually
  * but the pressable region is always ≥48px (§accessibility).
+ *
+ * `onPress` is OPTIONAL. When provided the chip is interactive: rendered as a
+ * `Pressable` with `accessibilityRole="button"`. When omitted the chip is a
+ * static label: rendered as a plain `View` (no press affordance, no button role)
+ * so screen readers do not announce a dead-end interactive element.
  */
-import { Pressable, type ViewStyle } from 'react-native'
+import { Pressable, View, type ViewStyle } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../theme/ThemeProvider'
@@ -18,7 +23,9 @@ import { Small } from './Typography'
 export interface ChipProps {
   label: string
   active: boolean
-  onPress: () => void
+  /** When provided the chip is interactive (Pressable, role="button").
+   *  When omitted the chip is a static label (View, no role). */
+  onPress?: () => void
   /** Optional leading Feather icon name. */
   icon?: React.ComponentProps<typeof Feather>['name']
   style?: ViewStyle
@@ -33,35 +40,50 @@ export function Chip({ label, active, onPress, icon, style }: ChipProps) {
   const textColor = active ? c.onAccent : c.text
   const borderColor = active ? 'transparent' : c.line
 
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: SPACE.xs + 2, // 6px
-          height: 36,
-          minHeight: TAP,
-          paddingHorizontal: SPACE.lg - 2, // 14px
-          borderRadius: theme.radii.pill,
-          backgroundColor: bgColor,
-          borderWidth: 1,
-          borderColor,
-          alignSelf: 'flex-start',
-          opacity: pressed ? 0.88 : 1,
-        },
-        style,
-      ]}
-    >
+  const sharedStyle = {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACE.xs + 2, // 6px
+    height: 36,
+    paddingHorizontal: SPACE.lg - 2, // 14px
+    borderRadius: theme.radii.pill,
+    backgroundColor: bgColor,
+    borderWidth: 1,
+    borderColor,
+    alignSelf: 'flex-start' as const,
+  }
+
+  const inner = (
+    <>
       {icon ? (
         <Feather name={icon} size={15} color={textColor} />
       ) : null}
       <Small color={textColor} style={{ fontWeight: '600' }}>
         {label}
       </Small>
-    </Pressable>
+    </>
+  )
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        onPress={onPress}
+        style={({ pressed }) => [
+          { ...sharedStyle, minHeight: TAP, opacity: pressed ? 0.88 : 1 },
+          style,
+        ]}
+      >
+        {inner}
+      </Pressable>
+    )
+  }
+
+  // Static label — no Pressable, no button role, no press affordance.
+  return (
+    <View style={[sharedStyle, style]}>
+      {inner}
+    </View>
   )
 }
