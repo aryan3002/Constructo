@@ -1,4 +1,6 @@
 """Profiler -> Spec engine bridge: pure deterministic planning (no LLM, no DB)."""
+from uuid import uuid4
+
 from app.main import app
 from app.models import (
     Component,
@@ -171,5 +173,25 @@ async def test_contractor_trigger_to_materialize_e2e(client, factory, db_session
         approved = await client.post(f"/api/v1/specs/{spec_id}/approve",
             json={"status": "approved"}, headers=auth(architect))
         assert approved.status_code == 200 and approved.json()["approval_status"] == "approved"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_materialize_unknown_brief_is_404(client, factory):
+    architect = await factory.user(role=UserRole.architect)
+    resp = await client.post(
+        f"/api/v1/design/briefs/{uuid4()}/materialize", headers=auth(architect))
+    assert resp.status_code == 404
+
+
+async def test_materialize_forbidden_for_homeowner_role(client, factory, db_session):
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        _architect, _site, _pid, bid, _comp = await _shared_brief_with_component(
+            client, factory, db_session)
+        homeowner = await factory.user(role=UserRole.homeowner)
+        resp = await client.post(
+            f"/api/v1/design/briefs/{bid}/materialize", headers=auth(homeowner))
+        assert resp.status_code == 403
     finally:
         app.dependency_overrides.pop(get_llm, None)
