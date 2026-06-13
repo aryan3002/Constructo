@@ -17,7 +17,7 @@
  * honest stubs (approve + digest), single language, advisory design tone never red.
  */
 import { useState } from 'react'
-import { Alert, Linking, View } from 'react-native'
+import { Alert, View } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
@@ -84,6 +84,7 @@ const TAB_STR = {
     decidedLabel: 'Decided',
     pendingLabel: 'Pending',
     allDecided: 'All selections decided.',
+    wholeHouse: 'Whole house',
     groupFloorPlan: 'Floor plans',
     groupElecPlumb: 'Electrical & plumbing',
     groupElevations: 'Elevations',
@@ -106,6 +107,7 @@ const TAB_STR = {
     decidedLabel: 'तय',
     pendingLabel: 'बाकी',
     allDecided: 'सभी चयन तय हो गए।',
+    wholeHouse: 'पूरा घर',
     groupFloorPlan: 'फ़्लोर प्लान',
     groupElecPlumb: 'इलेक्ट्रिकल और प्लंबिंग',
     groupElevations: 'एलिवेशन',
@@ -254,9 +256,9 @@ export default function Design() {
   const contributors = profileContributors(profile)
   const conflicts = profileConflicts(profile)
   const tones = profileTone(profile)
-  const hasPending = drawings.some(() => true) // all drawings shown as pending (approve not built)
+  const hasPending = drawings.length > 0 // all drawings shown as pending (approve not built)
   const drawingGroups = groupDrawings(drawings, T)
-  const selectionGroups = groupSelections(selections, STR.kinds.plan /* "whole house" fallback */)
+  const selectionGroups = groupSelections(selections, T.wholeHouse /* "whole house" fallback */)
 
   // ---- render helpers --------------------------------------------------------
   const eyebrow = (text: string) => (
