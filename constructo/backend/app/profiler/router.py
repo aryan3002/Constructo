@@ -31,12 +31,11 @@ from app.models.profiler import (
     ProfileStatus,
     ThemeStatus,
 )
-from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
+from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
     BriefApprovalIn,
-    BriefApprovalOut,
     BriefDetailOut,
     BriefOut,
     BriefRenderingOut,
@@ -70,7 +69,9 @@ _BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
     (BriefAction.request_changes, BriefState.homeowner_review): BriefState.revision_requested,
     (BriefAction.request_changes, BriefState.architect_review): BriefState.revision_requested,
     (BriefAction.send_to_architect, BriefState.homeowner_review): BriefState.architect_review,
-    (BriefAction.architect_sign_off, BriefState.architect_review): BriefState.contractor_brief_ready,
+    (BriefAction.architect_sign_off, BriefState.architect_review): (
+        BriefState.contractor_brief_ready
+    ),
     (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
     (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
 }
