@@ -93,7 +93,8 @@ def _payload_summary_text(audience: str, payload: dict) -> str:
         for t in area.get("themes", []):
             lines.append(f"  Theme: {t.get('name')}")
         for c in area.get("resolved_conflicts", []):
-            lines.append(f"  Resolved: {c.get('dimension')}={c.get('value')} ({c.get('decision_note')})")
+            note = c.get("decision_note")
+            lines.append(f"  Resolved: {c.get('dimension')}={c.get('value')} ({note})")
     return "\n".join(lines)
 
 

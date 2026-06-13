@@ -126,3 +126,59 @@ class ConflictOut(BaseModel):
 class ConflictResolveIn(BaseModel):
     resolution: str = Field(pattern="^(keep_a|keep_b|compromise|defer_to_architect)$")
     note: str | None = None
+
+
+class BriefRenderingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    audience: str
+    scope: str
+    area_id: UUID | None = None
+    content_json: dict = {}
+    created_at: datetime
+
+
+class BriefOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    profile_id: UUID
+    version: int
+    state: str
+    created_at: datetime
+
+
+class BriefDetailOut(BriefOut):
+    renderings: list[BriefRenderingOut] = []
+
+
+class BriefApprovalIn(BaseModel):
+    action: str = Field(
+        pattern="^(approve|request_changes|send_to_architect|architect_sign_off|contractor_received)$"
+    )
+    note: str | None = None
+
+
+class BriefApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    brief_id: UUID
+    actor_user_id: UUID | None = None
+    actor_member_id: UUID | None = None
+    actor_role: str
+    action: str
+    note: str | None = None
+    created_at: datetime
+
+
+class ClarificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_id: UUID | None = None
+    question: str
+    answer: str | None = None
+    asked_at: datetime
+    answered_at: datetime | None = None
+
+
+class ClarificationAnswerIn(BaseModel):
+    answer: str = Field(min_length=1)
