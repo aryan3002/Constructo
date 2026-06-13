@@ -249,3 +249,83 @@ class ProfilerReferenceAttributes(Base):
     extracted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ThemeStatus(StrEnum):
+    suggested = "suggested"
+    approved = "approved"
+    adjusted = "adjusted"
+    rejected = "rejected"
+
+
+class ConflictStatus(StrEnum):
+    open = "open"
+    resolved = "resolved"
+    deferred_to_architect = "deferred_to_architect"
+
+
+class ProfilerTheme(Base):
+    __tablename__ = "profiler_themes"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    area_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_areas.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    confidence: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False, server_default="0")
+    palette: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    materials: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_reference_ids: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    status: Mapped[ThemeStatus] = mapped_column(
+        SAEnum(ThemeStatus, name="profiler_theme_status"),
+        nullable=False,
+        server_default=ThemeStatus.suggested.value,
+    )
+    decided_by: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ProfilerConflict(Base):
+    __tablename__ = "profiler_conflicts"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    area_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("profiler_areas.id", ondelete="CASCADE"), nullable=False
+    )
+    dimension: Mapped[str] = mapped_column(String(64), nullable=False)
+    value: Mapped[str] = mapped_column(String(120), nullable=False)
+    contributor_a_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiler_contributors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    contributor_b_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiler_contributors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolution_status: Mapped[ConflictStatus] = mapped_column(
+        SAEnum(ConflictStatus, name="profiler_conflict_status"),
+        nullable=False,
+        server_default=ConflictStatus.open.value,
+    )
+    resolved_by: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
