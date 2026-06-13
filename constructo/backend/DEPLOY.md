@@ -85,9 +85,24 @@ az containerapp update -n $APP -g $RG \
     AZURE_OPENAI_API_VERSION="2024-10-21" \
     EXTRACTION_SYNC=true \
     ENABLE_SCHEDULER=true \
+    DEV_OTP_ENABLED=false \
+    AUTH_PHONE_ALLOWLIST='["+9198XXXXXXXX","+9198YYYYYYYY"]' \
     CORS_ORIGINS='["https://<your-web-dashboard-if-any>"]'
 ```
 > Tip: the simplest correct env is **"copy every key from your local `backend/.env` except `DATABASE_URL` and `REDIS_URL`"** (use your Neon URL for DATABASE_URL, omit REDIS_URL since `EXTRACTION_SYNC=true`). Put secret-ish values via `secret set` + `secretref:`.
+
+### Phase 0 — close the auth hole (do NOT skip on any public/pilot deploy)
+The dev OTP `000000` is open by default so local dev / CI work out of the box. On
+any internet-reachable deploy you MUST close it:
+- **`DEV_OTP_ENABLED=false`** — refuses the `000000` bypass. (With no SMS provider
+  wired yet, this makes login impossible *unless* you also keep the dev OTP on
+  behind an allowlist — see below. Pick one.)
+- **`AUTH_PHONE_ALLOWLIST=["+91…","+91…"]`** — restricts login to your known pilot
+  numbers, matched across phone formats. For a **private pilot** the simplest
+  secure posture is: keep `DEV_OTP_ENABLED=true` *and* set the allowlist to just
+  your pilot users — known people get in with the dev code, everyone else is
+  refused (`403`). For **public**, set `DEV_OTP_ENABLED=false` and wire a real SMS
+  provider in `app/auth/otp.py`.
 
 Get the public URL:
 ```sh

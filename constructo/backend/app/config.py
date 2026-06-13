@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     # egress). A fresh OTP re-verification mints a step-up token valid this long.
     step_up_expire_minutes: int = 5
 
+    # ---- Auth / OTP (STATE-AND-ROADMAP Phase 0: "close the 000000 hole") ----
+    # The dev OTP bypass. Defaults ON so dev / tests / CI sign in with the dev
+    # code out of the box. In the pilot/prod deploy set DEV_OTP_ENABLED=false to
+    # CLOSE the bypass — with it off and no SMS provider wired, OTP login is
+    # refused (no public, guessable auth). The code itself is configurable.
+    dev_otp_enabled: bool = True
+    dev_otp: str = "000000"
+    # Private-pilot lock: when non-empty, ONLY these phone numbers may sign in
+    # (matched across equivalent formats). Empty = no allowlist (dev). Pair it
+    # with the dev OTP so known pilot users get in while the door stays shut to
+    # everyone else — even before a real SMS provider is wired.
+    auth_phone_allowlist: list[str] = []
+
     # Browser origins allowed to call the API (CORS). The web dashboard dev
     # server runs on 5173 (Vite); 3000 covered for alternate setups.
     cors_origins: list[str] = [
