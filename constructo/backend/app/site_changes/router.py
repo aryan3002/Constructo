@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import SiteChange, SiteChangeStatus, User, UserRole
+from app.models import PublishedDrawing, SiteChange, SiteChangeStatus, User, UserRole
 from app.site_changes.schemas import SiteChangeCreate, SiteChangeOut, SiteChangeUpdate
 from app.sites.router import effective_visible_site_ids
 
@@ -110,6 +110,11 @@ async def update_site_change(
     if body.impact is not None:
         change.impact = body.impact
     if body.linked_drawing_id is not None:
+        # The revision must be a real drawing ON THE SAME SITE — never let a
+        # caller link a change to another site's (or company's) drawing.
+        drawing = await session.get(PublishedDrawing, body.linked_drawing_id)
+        if drawing is None or drawing.site_id != change.site_id:
+            raise AppError(404, "not_found", "Drawing not found on this site")
         change.linked_drawing_id = body.linked_drawing_id
         if change.status is SiteChangeStatus.new:
             change.status = SiteChangeStatus.linked

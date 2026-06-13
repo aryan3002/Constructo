@@ -34,12 +34,20 @@ export default function DesignerHome() {
     return m
   }, [sitesQ.data])
 
+  // Shares the ['architect','specs'] key + shape ({spec, siteName}[]) with the
+  // Selections screen — same key MUST mean same shape, or whichever renders
+  // second crashes on the other's cached data.
   const specsQ = useQuery({
     queryKey: ['architect', 'specs'],
     enabled: (sitesQ.data?.items.length ?? 0) > 0,
     queryFn: async () => {
       const sites = sitesQ.data?.items ?? []
-      const lists = await Promise.all(sites.map((s) => specsApi.list(s.id)))
+      const lists = await Promise.all(
+        sites.map(async (s) => {
+          const specs = await specsApi.list(s.id)
+          return specs.map((sp) => ({ spec: sp, siteName: s.name }))
+        }),
+      )
       return lists.flat()
     },
   })
@@ -58,11 +66,11 @@ export default function DesignerHome() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['architect', 'specs'] }),
   })
 
-  const specs = specsQ.data ?? []
-  const returned = specs.filter((s) => s.routing_status === 'returned')
-  const readyToRelease = specs.filter((s) => s.routing_status === 'approved')
-  const outForApproval = specs.filter((s) => s.routing_status === 'out_for_approval')
-  const released = specs.filter((s) => s.routing_status === 'released')
+  const specRows = specsQ.data ?? []
+  const returned = specRows.filter((r) => r.spec.routing_status === 'returned')
+  const readyToRelease = specRows.filter((r) => r.spec.routing_status === 'approved')
+  const outForApproval = specRows.filter((r) => r.spec.routing_status === 'out_for_approval')
+  const released = specRows.filter((r) => r.spec.routing_status === 'released')
   const newChanges = (changesQ.data ?? []).filter((c) => c.status === 'new')
   const needsYou = returned.length + readyToRelease.length + newChanges.length
 
@@ -117,22 +125,22 @@ export default function DesignerHome() {
                     onPress={() => router.push(`/(contractor)/architect/change/${c.id}`)}
                   />
                 ))}
-                {readyToRelease.map((s) => (
+                {readyToRelease.map((r) => (
                   <ReleaseCard
-                    key={s.id}
-                    s={s}
-                    site={siteName.get(s.site_id) ?? 'Site'}
+                    key={r.spec.id}
+                    s={r.spec}
+                    site={r.siteName}
                     pending={release.isPending}
-                    onRelease={() => release.mutate(s.id)}
-                    onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                    onRelease={() => release.mutate(r.spec.id)}
+                    onPress={() => router.push(`/(contractor)/architect/selection/${r.spec.id}`)}
                   />
                 ))}
-                {returned.map((s) => (
+                {returned.map((r) => (
                   <ReturnedCard
-                    key={s.id}
-                    s={s}
-                    site={siteName.get(s.site_id) ?? 'Site'}
-                    onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                    key={r.spec.id}
+                    s={r.spec}
+                    site={r.siteName}
+                    onPress={() => router.push(`/(contractor)/architect/selection/${r.spec.id}`)}
                   />
                 ))}
               </View>
@@ -151,10 +159,10 @@ export default function DesignerHome() {
             {outForApproval.length === 0 ? (
               <Small muted>Nothing waiting on owners right now.</Small>
             ) : (
-              outForApproval.map((s) => (
+              outForApproval.map((r) => (
                 <Pressable
-                  key={s.id}
-                  onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                  key={r.spec.id}
+                  onPress={() => router.push(`/(contractor)/architect/selection/${r.spec.id}`)}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -165,8 +173,8 @@ export default function DesignerHome() {
                   }}
                 >
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Body numberOfLines={1}>{s.label}</Body>
-                    <Small muted numberOfLines={1}>{siteName.get(s.site_id) ?? 'Site'}</Small>
+                    <Body numberOfLines={1}>{r.spec.label}</Body>
+                    <Small muted numberOfLines={1}>{r.siteName}</Small>
                   </View>
                   <StatusPill status="warn" size="sm" label="Awaiting" />
                 </Pressable>

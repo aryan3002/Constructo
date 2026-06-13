@@ -6,7 +6,7 @@ to a revision, and resolves it. Company-scoped + site-visibility-scoped.
 import pytest_asyncio
 
 from app.auth.jwt import create_access_token
-from app.models import UserRole
+from app.models import PublishedDrawing, UserRole
 
 
 def auth(user) -> dict[str, str]:
@@ -84,3 +84,30 @@ async def test_unassigned_supervisor_cannot_report(client, factory, world):
     sup = await factory.user(company=company, role=UserRole.supervisor)  # not assigned to `site`
     resp = await _report(client, sup, site)
     assert resp.status_code == 403
+
+
+async def test_link_to_drawing_must_be_same_site(client, factory, world, db_session):
+    company, arch, site = world
+    change = (await _report(client, arch, site)).json()
+
+    other_site = await factory.site(company, name="Other Site")
+    foreign = PublishedDrawing(site_id=other_site.id, title="Foreign", version="A", file_url="x")
+    same = PublishedDrawing(site_id=site.id, title="Kitchen", version="C", file_url="x")
+    db_session.add_all([foreign, same])
+    await db_session.flush()
+
+    bad = await client.patch(
+        f"/api/v1/site-changes/{change['id']}",
+        json={"linked_drawing_id": str(foreign.id)},
+        headers=auth(arch),
+    )
+    assert bad.status_code == 404
+
+    ok = await client.patch(
+        f"/api/v1/site-changes/{change['id']}",
+        json={"linked_drawing_id": str(same.id)},
+        headers=auth(arch),
+    )
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "linked"
+    assert ok.json()["linked_drawing_id"] == str(same.id)
