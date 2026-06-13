@@ -624,6 +624,11 @@ export const hi: Record<TranslationKey, string> = {
   'admin.team.deactivate': 'निष्क्रिय करें',
   'admin.team.reactivate': 'पुनः सक्रिय करें',
   'admin.team.read_only': 'केवल मालिक भूमिकाएँ बदल सकता है।',
+  'admin.team.step_up_otp_prompt': 'इस बदलाव की पुष्टि के लिए अपना सत्यापन कोड डालें',
+  'admin.team.step_up_otp_label': 'सत्यापन कोड',
+  'admin.team.step_up_verify_cta': 'सत्यापित कर सहेजें',
+  'admin.team.step_up_bad_otp': 'कोड काम नहीं आया — फिर कोशिश करें।',
+  'admin.team.step_up_cancel': 'रद्द करें',
   // Site baselines (W4.4)
   'admin.baselines.title': 'साइट बेसलाइन',
   'admin.baselines.subtitle': 'हर साइट की अपेक्षित दैनिक हाज़िरी तय करें ताकि मज़दूर-कमी सही संख्या पर पकड़ी जाए।',

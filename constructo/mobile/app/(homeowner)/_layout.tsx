@@ -52,6 +52,9 @@ function HomeownerTabs() {
         {/* Design write sub-routes — pushed from the Design tab, no tab bar entry */}
         <Tabs.Screen name="design/select" options={{ href: null }} />
         <Tabs.Screen name="design/profile" options={{ href: null }} />
+        {/* Wave 2b — per-room references + drawing detail */}
+        <Tabs.Screen name="design/references/[room]" options={{ href: null }} />
+        <Tabs.Screen name="drawings/[id]" options={{ href: null }} />
         {/* Her To-dos — pushed from the chat thread, no tab bar entry */}
         <Tabs.Screen name="todos" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
@@ -61,6 +64,12 @@ function HomeownerTabs() {
         {/* Onboarding screens — no tab bar entry */}
         <Tabs.Screen name="welcome" options={{ href: null }} />
         <Tabs.Screen name="household" options={{ href: null }} />
+        {/* Wave 1a — requests, issue-report, decision detail */}
+        <Tabs.Screen name="requests" options={{ href: null }} />
+        <Tabs.Screen name="issue" options={{ href: null }} />
+        <Tabs.Screen name="decisions/[id]" options={{ href: null }} />
+        {/* Wave 1b — dedicated storage-management screen */}
+        <Tabs.Screen name="storage" options={{ href: null }} />
       </Tabs>
       {!onThread ? <AskPill label={askLabel} /> : null}
     </View>

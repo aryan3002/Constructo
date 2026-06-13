@@ -61,4 +61,28 @@ export const authApi = {
       body: JSON.stringify({ language }),
     })
   },
+
+  /**
+   * Request a step-up OTP. The backend sends a one-time code to the signed-in
+   * user's registered phone. In dev the OTP stays `000000`. Fire-and-forget from
+   * the caller's perspective — the returned value is informational only.
+   */
+  stepUpRequestOtp(): Promise<{ sent: boolean; dev_otp: string | null }> {
+    return request('/api/v1/auth/step-up/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  },
+
+  /**
+   * Verify a step-up OTP. Returns a short-lived `step_up_token` (+ `expires_in`
+   * seconds). Pass the token as the `X-Step-Up-Token` header on the subsequent
+   * sensitive mutation to satisfy the backend gate.
+   */
+  stepUpVerify(otp: string): Promise<{ step_up_token: string; expires_in: number }> {
+    return request('/api/v1/auth/step-up/verify', {
+      method: 'POST',
+      body: JSON.stringify({ otp }),
+    })
+  },
 }

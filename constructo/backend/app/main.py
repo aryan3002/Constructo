@@ -45,6 +45,7 @@ from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.permits.router import router as permits_router
 from app.portfolio.router import router as portfolio_router
+from app.profiler.router import router as profiler_router
 from app.publish.router import router as publish_router
 from app.reconcile.router import router as reconcile_router
 from app.scheduler import shutdown_scheduler, start_scheduler
@@ -140,5 +141,6 @@ app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
 if settings.enable_labs:
     app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
     app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop
+    app.include_router(profiler_router)  # Design Profiler engine (Plan A) — Labs-gated
     app.include_router(audit_router)  # Labs: AI-assisted site quality audit
     app.include_router(survey_router)  # Labs: SiteSync first-visit intake

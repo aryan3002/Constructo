@@ -14,7 +14,7 @@
  * chips. ₹ in mono with Indian grouping. Single language per screen via STR.
  */
 import { useState } from 'react'
-import { ActivityIndicator, Pressable, TextInput, View, type TextStyle } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, TextInput, View, type TextStyle } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -30,6 +30,7 @@ import {
   Button,
   CalmCard,
   Card,
+  Chip,
   Display,
   EvidenceCard,
   FadeInUp,
@@ -113,6 +114,17 @@ const STR = {
     // Property
     propertyEyebrow: 'Room by room',
     viewPhotos: 'View photos',
+    // Changes log summary (Timeline → tappable card)
+    changesLogTitle: 'Changes summary',
+    changesLogSubtitle: (n: number, cost: string, days: string) =>
+      `${n} change${n === 1 ? '' : 's'} · ${cost} · ${days}`,
+    changesLogTap: 'See all changes',
+    // Changes filter chips
+    filterAll: 'All',
+    filterByMe: 'By me',
+    filterByContractor: 'By contractor',
+    filterCostImpact: 'Cost impact',
+    filterNoCost: 'No cost',
   },
   hi: {
     subtitle: 'आपका निर्माण, समझाया — पड़ाव, पैसा और क्या बदला।',
@@ -168,6 +180,17 @@ const STR = {
     // Property
     propertyEyebrow: 'कमरा दर कमरा',
     viewPhotos: 'तस्वीरें देखें',
+    // Changes log summary (Timeline → tappable card)
+    changesLogTitle: 'बदलावों का सारांश',
+    changesLogSubtitle: (n: number, cost: string, days: string) =>
+      `${n} बदलाव · ${cost} · ${days}`,
+    changesLogTap: 'सभी बदलाव देखें',
+    // Changes filter chips
+    filterAll: 'सभी',
+    filterByMe: 'मेरे द्वारा',
+    filterByContractor: 'ठेकेदार द्वारा',
+    filterCostImpact: 'लागत प्रभाव',
+    filterNoCost: 'बिना लागत',
   },
 } as const
 
@@ -229,7 +252,7 @@ export default function Updates() {
         })}
       </View>
 
-      {tab === 'timeline' ? <TimelineTab /> : null}
+      {tab === 'timeline' ? <TimelineTab onSwitchToChanges={() => setTab('changes')} /> : null}
       {tab === 'milestones' ? <MilestonesTab /> : null}
       {tab === 'changes' ? <ChangesTab /> : null}
       {tab === 'property' ? <PropertyTab /> : null}
@@ -360,8 +383,10 @@ function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
   )
 }
 
-function TimelineTab() {
+function TimelineTab({ onSwitchToChanges }: { onSwitchToChanges: () => void }) {
   const { lang } = useT()
+  const { theme } = useTheme()
+  const c = theme.colors
   const str = STR[lang]
 
   const summaryQ = useQuery({
@@ -376,6 +401,11 @@ function TimelineTab() {
     queryKey: ['homeowner', 'quietPeriods'],
     queryFn: () => homeowner.quietPeriods(),
   })
+  // Changes data for the summary card — fetched alongside updates.
+  const changesQ = useQuery({
+    queryKey: ['homeowner', 'changes'],
+    queryFn: () => homeowner.changes(),
+  })
 
   if (updatesQ.isLoading || summaryQ.isLoading) return <Loading />
   if (updatesQ.isError) {
@@ -386,6 +416,10 @@ function TimelineTab() {
   const items = updatesQ.data?.items ?? []
   // Most-recent quiet period — the endpoint orders detected_at DESC, so newest is first.
   const activeQuiet: QuietPeriod | null = quietQ.data?.[0] ?? null
+
+  // Changes-log summary card data (rendered only when there are changes).
+  const changesLog = changesQ.data
+  const changeCount = changesLog?.items.length ?? 0
 
   return (
     <View style={{ gap: SPACE.md }}>
@@ -401,6 +435,33 @@ function TimelineTab() {
             readMoreHref="/(homeowner)/updates"
             lang={lang}
           />
+        </FadeInUp>
+      ) : null}
+
+      {/* Changes-log summary card — tappable, switches to the Changes sub-tab. */}
+      {changeCount > 0 && changesLog ? (
+        <FadeInUp>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={str.changesLogTitle}
+            onPress={onSwitchToChanges}
+          >
+            <Card style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
+              <View style={{ gap: SPACE.xs }}>
+                <Eyebrow color={c.secondary}>{str.changesLogTitle.toUpperCase()}</Eyebrow>
+                <Body>
+                  {str.changesLogSubtitle(
+                    changeCount,
+                    formatRupeeDelta(changesLog.total_cost_delta),
+                    formatDayDelta(changesLog.total_schedule_delta_days, lang),
+                  )}
+                </Body>
+                <Small color={c.accent} style={{ fontWeight: '600' }}>
+                  {str.changesLogTap} →
+                </Small>
+              </View>
+            </Card>
+          </Pressable>
         </FadeInUp>
       ) : null}
 
@@ -694,11 +755,16 @@ function ChangeStoryCard({
 }
 
 // ---- Changes ----
+
+/** Client-side filter for the Changes tab. */
+type ChangeFilter = 'all' | 'by_me' | 'by_contractor' | 'cost_impact' | 'no_cost'
+
 function ChangesTab() {
   const { lang } = useT()
   const { theme } = useTheme()
   const c = theme.colors
   const str = STR[lang]
+  const [filter, setFilter] = useState<ChangeFilter>('all')
 
   const q = useQuery({
     queryKey: ['homeowner', 'changes'],
@@ -715,9 +781,31 @@ function ChangesTab() {
   if (q.isError) return <ErrorState message={str.errChanges} onRetry={() => void q.refetch()} />
 
   const log = q.data
-  const items = log?.items ?? []
+  const allItems = log?.items ?? []
   const costDelta = log?.total_cost_delta ?? 0
   const dayDelta = log?.total_schedule_delta_days ?? 0
+
+  // Client-side filter — filtering by requested_by / cost_delta.
+  // "By me" = requested_by matches the homeowner (requested_by is null when it
+  // was the homeowner themselves, per the data model convention — treat null as "me").
+  // "By contractor" = requested_by is non-null (a contractor team member name).
+  const items = allItems.filter((ch) => {
+    if (filter === 'all') return true
+    if (filter === 'by_me') return ch.requested_by == null
+    if (filter === 'by_contractor') return ch.requested_by != null
+    if (filter === 'cost_impact') return (ch.cost_delta ?? 0) !== 0
+    if (filter === 'no_cost') return (ch.cost_delta ?? 0) === 0
+    return true
+  })
+
+  // Filter chip definitions — in-screen, not a route.
+  const FILTERS: { key: ChangeFilter; label: string }[] = [
+    { key: 'all', label: str.filterAll },
+    { key: 'by_me', label: str.filterByMe },
+    { key: 'by_contractor', label: str.filterByContractor },
+    { key: 'cost_impact', label: str.filterCostImpact },
+    { key: 'no_cost', label: str.filterNoCost },
+  ]
 
   return (
     <View style={{ gap: SPACE.md }}>
@@ -741,6 +829,24 @@ function ChangesTab() {
           </View>
         </View>
       </Card>
+
+      {/* Filter chips — client-side, no route change. */}
+      {allItems.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ flexDirection: 'row', gap: SPACE.sm, paddingVertical: 2 }}
+        >
+          {FILTERS.map(({ key, label }) => (
+            <Chip
+              key={key}
+              label={label}
+              active={filter === key}
+              onPress={() => setFilter(key)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
 
       {items.length === 0 ? (
         <Empty message={str.emptyChanges} />

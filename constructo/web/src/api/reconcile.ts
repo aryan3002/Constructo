@@ -6,6 +6,10 @@
 import { ApiError } from './client'
 import { API_BASE, USE_MOCKS } from './config'
 import { getToken } from './auth'
+// Import + re-export from the shared module so existing callers (TallyExportButton, tests)
+// keep working without import-path changes, and the class is in scope for use below.
+import { StepUpRequiredError } from './errors'
+export { StepUpRequiredError } from './errors'
 
 export type ReconcileStatus =
   | 'matched'
@@ -35,14 +39,6 @@ export interface ReconcileEventSide {
   confidence: number
   source_message_ids: string[]
   proofs?: Proof[]
-}
-
-/** Thrown by the Tally export when the server demands a fresh OTP step-up. */
-export class StepUpRequiredError extends Error {
-  constructor() {
-    super('step_up_required')
-    this.name = 'StepUpRequiredError'
-  }
 }
 
 export interface ReconcileItem {

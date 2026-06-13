@@ -21,7 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../../src/theme/tokens'
-import { BodyStrong, QuietState, Small } from '../../../src/ui'
+import { Avatar, BodyStrong, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -57,6 +57,9 @@ const STR = {
     photo: 'Send a photo',
     photoErr: 'We couldn’t send that photo just now.',
     tapRetry: 'Tap to retry',
+    mic: 'Hold to record — coming soon',
+    micLabel: 'Voice message (coming soon)',
+    members: 'Participants',
   },
   hi: {
     builder: 'आपका बिल्डर',
@@ -74,6 +77,9 @@ const STR = {
     photo: 'फ़ोटो भेजें',
     photoErr: 'अभी फ़ोटो नहीं भेज सके।',
     tapRetry: 'फिर भेजने के लिए टैप करें',
+    mic: 'दबाकर रिकॉर्ड करें — जल्द आएगा',
+    micLabel: 'वॉयस संदेश (जल्द आएगा)',
+    members: 'प्रतिभागी',
   },
 } as const
 
@@ -348,22 +354,42 @@ export default function HomeownerThread() {
         >
           <Feather name="chevron-left" size={26} color={c.text} />
         </Pressable>
-        <View
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: kind === 'homeowner' ? AP.chip : c.secondaryContainer,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+
+        {/* D1: Participants avatar cluster — taps to the Members roster. */}
+        <Pressable
+          onPress={() => router.push('/(homeowner)/members')}
+          accessibilityRole="button"
+          accessibilityLabel={t.members}
+          hitSlop={8}
+          style={{ flexDirection: 'row', alignItems: 'center' }}
         >
-          <Feather
-            name={kind === 'homeowner' ? 'home' : 'users'}
-            size={18}
-            color={kind === 'homeowner' ? AP.onChip : c.secondary}
-          />
-        </View>
+          {kind === 'homeowner' ? (
+            /* Builder channel: a single avatar using the thread title as the
+               initials source (visual stand-in until real participant data arrives). */
+            <Avatar name={headerTitle} size={40} />
+          ) : (
+            /* Group thread: stacked pair (the title Avatar + a "+group" cue). */
+            <View style={{ flexDirection: 'row' }}>
+              <Avatar name={headerTitle} size={40} />
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: c.secondaryContainer,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: -12,
+                  borderWidth: 2,
+                  borderColor: c.card,
+                }}
+              >
+                <Feather name="users" size={16} color={c.secondary} />
+              </View>
+            </View>
+          )}
+        </Pressable>
+
         <View style={{ flex: 1 }}>
           <BodyStrong numberOfLines={1}>{headerTitle}</BodyStrong>
           {siteName ? (
@@ -422,23 +448,49 @@ export default function HomeownerThread() {
         onCancelReply={() => thread.setReply(null)}
         insetsBottom={insets.bottom}
         leadingActions={
-          <Pressable
-            onPress={() => void onCamera()}
-            accessibilityRole="button"
-            accessibilityLabel={t.photo}
-            style={{
-              width: TAP,
-              height: TAP,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: theme.radii.card,
-              borderWidth: 1,
-              borderColor: c.line,
-              backgroundColor: c.paper,
-            }}
-          >
-            <Feather name="camera" size={20} color={c.accentDeep} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+            {/* Camera — live action (picks from camera or library). */}
+            <Pressable
+              onPress={() => void onCamera()}
+              accessibilityRole="button"
+              accessibilityLabel={t.photo}
+              style={{
+                width: TAP,
+                height: TAP,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: theme.radii.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                backgroundColor: c.paper,
+              }}
+            >
+              <Feather name="camera" size={20} color={c.accentDeep} />
+            </Pressable>
+
+            {/* D4: Mic — honest coming-soon stub. Labeled in the UI; no
+                fake recording. The `belowComposer` slot (voice recorder)
+                will replace this once the audio slice ships. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.micLabel}
+              onLongPress={() => Alert.alert('', t.mic)}
+              onPress={() => Alert.alert('', t.mic)}
+              style={{
+                width: TAP,
+                height: TAP,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: theme.radii.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                backgroundColor: c.paper,
+                opacity: 0.5,
+              }}
+            >
+              <Feather name="mic" size={20} color={c.textMute} />
+            </Pressable>
+          </View>
         }
       />
     </KeyboardAvoidingView>
