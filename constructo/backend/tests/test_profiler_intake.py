@@ -66,6 +66,29 @@ async def test_profile_detail_exposes_my_contributor_id(client, factory, db_sess
         app.dependency_overrides.pop(get_llm, None)
 
 
+async def test_list_references_returns_area_refs_for_member(client, factory, db_session):
+    app.dependency_overrides[get_llm] = _llm
+    try:
+        architect, owner, site, pid, area_id, contrib_id = (
+            await _profile_with_homeowner_contributor(client, factory, db_session)
+        )
+        for _ in range(2):
+            await client.post("/api/v1/design/references", json={
+                "area_id": area_id, "contributor_id": contrib_id, "source_type": "upload",
+                "source_url": "https://x.test/a.jpg"}, headers=auth(owner))
+        # the homeowner member can list the area's references
+        listed = await client.get(
+            f"/api/v1/design/profiles/{pid}/areas/{area_id}/references", headers=auth(owner))
+        assert listed.status_code == 200 and len(listed.json()) == 2
+        # a different-company user cannot
+        other = await factory.user(role=UserRole.architect)
+        assert (await client.get(
+            f"/api/v1/design/profiles/{pid}/areas/{area_id}/references",
+            headers=auth(other))).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
 async def test_homeowner_can_add_reference_and_rank_as_self(client, factory, db_session):
     app.dependency_overrides[get_llm] = _llm
     try:
