@@ -40,8 +40,11 @@ export default function Specs() {
   const { theme } = useTheme()
   const [filter, setFilter] = useState<Filter>('all')
 
+  // NB: distinct from the Brief's ['owner','specs','summary'] key — this query
+  // returns {spec, siteName}[] whereas the Brief caches a raw Spec[]; sharing a
+  // key would cross-feed the wrong shape and crash on r.spec.
   const q = useQuery({
-    queryKey: ['owner', 'specs', 'all'],
+    queryKey: ['owner', 'specs', 'schedule'],
     queryFn: async () => {
       const sites = (await owner.sites()).items
       const perSite = await Promise.all(

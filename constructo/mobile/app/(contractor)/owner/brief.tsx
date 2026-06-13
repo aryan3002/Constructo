@@ -79,7 +79,7 @@ export default function Brief() {
   const homeQ = useQuery({ queryKey: ['owner', 'home'], queryFn: () => owner.home() })
   const logQ = useQuery({ queryKey: ['owner', 'approvals', 'resolved'], queryFn: () => owner.approvals('resolved') })
   const specsQ = useQuery({
-    queryKey: ['owner', 'specs', 'all'],
+    queryKey: ['owner', 'specs', 'summary'],
     queryFn: async () => {
       const sites = (await owner.sites()).items
       const per = await Promise.all(
