@@ -41,6 +41,7 @@ import {
   CalmCard,
   Display,
   H2,
+  LinkRow,
   Micro,
   MonoSm,
   PhotoTile,
@@ -654,6 +655,16 @@ export default function Design() {
         </View>
         <Body muted>{STR.digestComingSoon}</Body>
       </View>
+
+      {/* Design Profiler entry points */}
+      <LinkRow
+        label="Open your design profile"
+        onPress={() => router.push('/(homeowner)/design/profiler')}
+      />
+      <LinkRow
+        label="View your design brief"
+        onPress={() => router.push('/(homeowner)/design/brief')}
+      />
     </View>
   )
 
