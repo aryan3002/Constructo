@@ -14,6 +14,7 @@ function mockOk(body: unknown) {
 afterEach(() => jest.clearAllMocks())
 
 import { specsApi } from './specs'
+import { siteChangesApi } from './siteChanges'
 
 test('specsApi.list GETs specs scoped by site with auth', async () => {
   mockOk([])
@@ -30,4 +31,34 @@ test('specsApi.approve POSTs the approve action with status', async () => {
   expect(url).toContain('/api/v1/specs/sp1/approve')
   expect(init.method).toBe('POST')
   expect(JSON.parse(init.body as string)).toEqual({ status: 'approved' })
+})
+
+test('specsApi.route + release POST the routing actions', async () => {
+  mockOk({ id: 'sp1', routing_status: 'out_for_approval' })
+  await specsApi.route('sp1')
+  let [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/specs/sp1/route')
+  expect(init.method).toBe('POST')
+
+  mockOk({ id: 'sp1', routing_status: 'released' })
+  await specsApi.release('sp1')
+  ;[url, init] = mockFetch.mock.calls[1] as [string, RequestInit]
+  expect(url).toContain('/api/v1/specs/sp1/release')
+  expect(init.method).toBe('POST')
+})
+
+test('siteChangesApi.list filters by status', async () => {
+  mockOk([])
+  await siteChangesApi.list({ status: 'new' })
+  const [url] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/site-changes?status=new')
+})
+
+test('siteChangesApi.update PATCHes status (link / resolve)', async () => {
+  mockOk({ id: 'c1', status: 'resolved' })
+  await siteChangesApi.update('c1', { status: 'resolved' })
+  const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/site-changes/c1')
+  expect(init.method).toBe('PATCH')
+  expect(JSON.parse(init.body as string)).toEqual({ status: 'resolved' })
 })

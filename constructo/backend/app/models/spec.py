@@ -53,6 +53,14 @@ class Spec(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Designer routing (the architect's selection lifecycle). ``approval_status``
+    # stays the owner/architect's decision (pending/approved/rejected); these two
+    # stamps add the *route* on top so the read side can derive a single state:
+    # draft → out-for-approval (sent_at) → approved → released (released_at), with
+    # rejected surfacing as "returned — revise". Both nullable; never break the
+    # plain approval flow the owner's Specs schedule already uses.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

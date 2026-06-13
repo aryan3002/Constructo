@@ -1,65 +1,73 @@
 /**
  * Designer Home (the studio). The 3-second answer for the architect: how many
- * selections need a call, how many are cleared. Then the selections waiting on a
- * decision, and a shortcut into the homeowner brief to build new selections from.
+ * selections + site changes need a call, how many are out for approval. Then the
+ * NEEDS YOU feed — site changes to fold in, approved selections to release, and
+ * returned ones to revise — plus what's out for approval and a brief shortcut.
  *
- * Wired to /api/v1/specs (the real spec states: pending / approved / rejected).
- * The prototype's richer You→Owner→Client routing has no backend, so we present
- * the real states honestly rather than fabricate intermediate steps.
+ * Wired to /api/v1/specs (derived routing_status) + /api/v1/site-changes.
  */
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { useCallback } from 'react'
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { specsApi, type Spec } from '../../../src/api/specs'
+import { siteChangesApi, type SiteChange } from '../../../src/api/siteChanges'
 import { supervisorApi } from '../../../src/api/supervisor'
-import { Body, Card, Display, Eyebrow, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, StatTile, SectionLabel } from './_components'
-
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+import { Body, Button, Card, Display, Eyebrow, Small, StatusPill, Title } from '../../../src/ui'
+import { ErrorBlock, LoadingBlock, SectionLabel, StatTile, timeAgo } from './_components'
 
 export default function DesignerHome() {
   const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+  const qc = useQueryClient()
 
-  const q = useQuery({
+  const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
+  const siteName = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of sitesQ.data?.items ?? []) m.set(s.id, s.name)
+    return m
+  }, [sitesQ.data])
+
+  const specsQ = useQuery({
     queryKey: ['architect', 'specs'],
+    enabled: (sitesQ.data?.items.length ?? 0) > 0,
     queryFn: async () => {
-      const sites = (await supervisorApi.sites()).items
-      const perSite = await Promise.all(
-        sites.map(async (s) => {
-          const specs = await specsApi.list(s.id)
-          return specs.map((sp) => ({ spec: sp, siteName: s.name }))
-        }),
-      )
-      return perSite.flat()
+      const sites = sitesQ.data?.items ?? []
+      const lists = await Promise.all(sites.map((s) => specsApi.list(s.id)))
+      return lists.flat()
     },
   })
+  const changesQ = useQuery({ queryKey: ['architect', 'changes'], queryFn: () => siteChangesApi.list() })
 
   useFocusEffect(
     useCallback(() => {
-      void q.refetch()
+      void specsQ.refetch()
+      void changesQ.refetch()
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   )
 
-  const rows = q.data ?? []
-  const counts = useMemo(() => {
-    const c = { pending: 0, approved: 0, rejected: 0 }
-    for (const r of rows) c[r.spec.approval_status] += 1
-    return c
-  }, [rows])
-  const needsCall = rows.filter((r) => r.spec.approval_status === 'pending')
+  const release = useMutation({
+    mutationFn: (id: string) => specsApi.release(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['architect', 'specs'] }),
+  })
 
-  const now = new Date()
+  const specs = specsQ.data ?? []
+  const returned = specs.filter((s) => s.routing_status === 'returned')
+  const readyToRelease = specs.filter((s) => s.routing_status === 'approved')
+  const outForApproval = specs.filter((s) => s.routing_status === 'out_for_approval')
+  const released = specs.filter((s) => s.routing_status === 'released')
+  const newChanges = (changesQ.data ?? []).filter((c) => c.status === 'new')
+  const needsYou = returned.length + readyToRelease.length + newChanges.length
+
+  const loading = sitesQ.isLoading || specsQ.isLoading || changesQ.isLoading
+  const error = sitesQ.error || specsQ.error || changesQ.error
   const firstName = me?.name?.split(' ')[0] ?? 'there'
 
   return (
@@ -68,80 +76,177 @@ export default function DesignerHome() {
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <View style={{ gap: SPACE.xs }}>
-        <Eyebrow>{`STUDIO · ${WEEKDAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`}</Eyebrow>
-        <Display style={{ fontSize: 30, lineHeight: 38 }}>{`Good day, ${firstName}.`}</Display>
+        <Eyebrow>STUDIO · {firstName.toUpperCase()}’S DESK</Eyebrow>
+        <Display style={{ fontSize: 30, lineHeight: 38 }}>
+          {needsYou} need you, {outForApproval.length} out for approval.
+        </Display>
         <Body muted>
-          {counts.pending} selection{counts.pending === 1 ? '' : 's'} need your call · {counts.approved} cleared.
+          {newChanges.length} site change{newChanges.length === 1 ? '' : 's'} to fold in ·{' '}
+          {readyToRelease.length} ready to release.
         </Body>
       </View>
 
       <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-        <StatTile value={counts.pending} label="Needs call" tone={counts.pending > 0 ? 'warn' : 'quiet'} />
-        <StatTile value={counts.rejected} label="On hold" tone={counts.rejected > 0 ? 'risk' : 'quiet'} />
-        <StatTile value={counts.approved} label="Approved" tone="ok" />
+        <StatTile value={needsYou} label="Needs you" tone={needsYou > 0 ? 'warn' : 'quiet'} />
+        <StatTile value={outForApproval.length} label="Out for approval" />
+        <StatTile value={released.length} label="Released" tone="ok" />
       </View>
 
-      {/* Brief shortcut */}
-      <Pressable accessibilityRole="button" onPress={() => router.push('/(contractor)/architect/brief')}>
-        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: theme.colors.secondaryContainer }}>
-          <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="sparkles" size={18} color={theme.colors.secondary} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Title style={{ fontSize: 14.5, color: theme.colors.secondary }}>Work from the homeowner brief</Title>
-            <Small muted>Taste, themes &amp; room directions</Small>
-          </View>
-          <Ionicons name="arrow-forward" size={18} color={theme.colors.secondary} />
-        </Card>
-      </Pressable>
-
-      {q.isLoading ? (
+      {loading ? (
         <LoadingBlock />
-      ) : q.error ? (
-        <ErrorBlock message="We could not load your studio." retryLabel="Try again" onRetry={() => void q.refetch()} />
+      ) : error ? (
+        <ErrorBlock
+          message="We could not load your studio."
+          retryLabel="Try again"
+          onRetry={() => {
+            void specsQ.refetch()
+            void changesQ.refetch()
+          }}
+        />
       ) : (
         <>
-          <SectionLabel trailing={<Small style={{ color: theme.colors.accentDeep }} onPress={() => router.push('/(contractor)/architect/selections')}>All selections</Small>}>
-            Needs your call
-          </SectionLabel>
-          {needsCall.length === 0 ? (
-            <Card variant="quiet">
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-                <Ionicons name="checkmark-circle" size={18} color={theme.colors.ok} />
-                <Small muted>Nothing waiting on a decision — all selections are routed.</Small>
+          {needsYou > 0 ? (
+            <>
+              <SectionLabel>Needs you</SectionLabel>
+              <View style={{ gap: SPACE.md }}>
+                {newChanges.map((c) => (
+                  <SiteChangeCard
+                    key={c.id}
+                    c={c}
+                    site={siteName.get(c.site_id) ?? 'Site'}
+                    onPress={() => router.push(`/(contractor)/architect/change/${c.id}`)}
+                  />
+                ))}
+                {readyToRelease.map((s) => (
+                  <ReleaseCard
+                    key={s.id}
+                    s={s}
+                    site={siteName.get(s.site_id) ?? 'Site'}
+                    pending={release.isPending}
+                    onRelease={() => release.mutate(s.id)}
+                    onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                  />
+                ))}
+                {returned.map((s) => (
+                  <ReturnedCard
+                    key={s.id}
+                    s={s}
+                    site={siteName.get(s.site_id) ?? 'Site'}
+                    onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                  />
+                ))}
               </View>
-            </Card>
-          ) : (
-            <View style={{ gap: SPACE.sm }}>
-              {needsCall.slice(0, 5).map(({ spec, siteName }) => (
-                <NeedsCallRow
-                  key={spec.id}
-                  spec={spec}
-                  siteName={siteName}
-                  onPress={() => router.push(`/(contractor)/architect/selection/${spec.id}`)}
-                />
-              ))}
+            </>
+          ) : null}
+
+          {/* Out for approval */}
+          <Card style={{ gap: SPACE.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <Ionicons name="time-outline" size={18} color={theme.colors.textMute} />
+              <Title style={{ fontSize: 16, flex: 1 }}>Out for approval</Title>
+              <Pressable onPress={() => router.push('/(contractor)/architect/selections')} hitSlop={8}>
+                <Small style={{ color: theme.colors.accentDeep }}>All selections</Small>
+              </Pressable>
             </View>
-          )}
+            {outForApproval.length === 0 ? (
+              <Small muted>Nothing waiting on owners right now.</Small>
+            ) : (
+              outForApproval.map((s) => (
+                <Pressable
+                  key={s.id}
+                  onPress={() => router.push(`/(contractor)/architect/selection/${s.id}`)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACE.sm,
+                    paddingTop: SPACE.sm,
+                    borderTopWidth: 1,
+                    borderTopColor: theme.colors.line,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Body numberOfLines={1}>{s.label}</Body>
+                    <Small muted numberOfLines={1}>{siteName.get(s.site_id) ?? 'Site'}</Small>
+                  </View>
+                  <StatusPill status="warn" size="sm" label="Awaiting" />
+                </Pressable>
+              ))
+            )}
+          </Card>
+
+          {/* Brief shortcut */}
+          <Pressable accessibilityRole="button" onPress={() => router.push('/(contractor)/architect/brief')}>
+            <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: theme.colors.secondaryContainer }}>
+              <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="sparkles" size={18} color={theme.colors.secondary} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Title style={{ fontSize: 14.5, color: theme.colors.secondary }}>Work from the homeowner brief</Title>
+                <Small muted>Taste, themes &amp; room directions</Small>
+              </View>
+              <Ionicons name="arrow-forward" size={18} color={theme.colors.secondary} />
+            </Card>
+          </Pressable>
         </>
       )}
     </ScrollView>
   )
 }
 
-function NeedsCallRow({ spec, siteName, onPress }: { spec: Spec; siteName: string; onPress: () => void }) {
+function SiteChangeCard({ c, site, onPress }: { c: SiteChange; site: string; onPress: () => void }) {
   const { theme } = useTheme()
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <Card flag="warn" style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-        <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: theme.colors.secondaryContainer, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="color-palette-outline" size={18} color={theme.colors.secondary} />
+      <Card flag="warn" style={{ gap: SPACE.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="warning-outline" size={14} color={theme.colors.warn} />
+          <Small style={{ color: theme.colors.warn, letterSpacing: 0.5, fontSize: 12 }}>SITE CHANGE</Small>
+          <Small muted style={{ marginLeft: 'auto' }}>{timeAgo(c.created_at)}</Small>
         </View>
+        <Title style={{ fontSize: 15 }}>{c.title}</Title>
+        <Small muted>{site}{c.room ? ` · ${c.room}` : ''}</Small>
+      </Card>
+    </Pressable>
+  )
+}
+
+function ReleaseCard({
+  s,
+  site,
+  pending,
+  onRelease,
+  onPress,
+}: {
+  s: Spec
+  site: string
+  pending: boolean
+  onRelease: () => void
+  onPress: () => void
+}) {
+  const { theme } = useTheme()
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      <Card flag="ok" style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+        <Ionicons name="checkmark-circle" size={22} color={theme.colors.ok} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Title style={{ fontSize: 14.5 }} numberOfLines={1}>{spec.label}</Title>
-          <Small muted numberOfLines={1}>{siteName}</Small>
+          <Title style={{ fontSize: 14.5 }} numberOfLines={1}>Release {s.label}</Title>
+          <Small muted numberOfLines={1}>{site} · approved</Small>
         </View>
-        <StatusPill status="warn" size="sm" label="Decide" />
+        <Button title="Release" size="md" disabled={pending} onPress={onRelease} />
+      </Card>
+    </Pressable>
+  )
+}
+
+function ReturnedCard({ s, site, onPress }: { s: Spec; site: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      <Card flag="risk" style={{ gap: SPACE.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+          <Title style={{ fontSize: 14.5, flex: 1 }} numberOfLines={1}>{s.label}</Title>
+          <StatusPill status="risk" size="sm" label="Returned — revise" />
+        </View>
+        <Small muted numberOfLines={1}>{site}</Small>
       </Card>
     </Pressable>
   )

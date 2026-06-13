@@ -23,8 +23,11 @@ so the Labs profiler tables exist even on a diverged dev-DB Alembic head.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
+
+from sqlalchemy import text
 
 import app.models as models  # noqa: F401  register every table on Base.metadata
 from app.db import Base, SessionLocal, engine
@@ -33,6 +36,8 @@ from app.models import (
     Component,
     ComponentStatus,
     Site,
+    SiteChange,
+    SiteChangeStatus,
     Space,
     SpaceKind,
     Spec,
@@ -83,7 +88,15 @@ SITES = [
 async def seed() -> dict[str, int]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # The diverged dev DB already has a `specs` table that create_all won't
+        # ALTER — add the new designer-routing columns idempotently so the demo
+        # works there too. (Clean DBs get them via migration d4f1a2b7c8e9.)
+        await conn.execute(text("ALTER TABLE specs ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ"))
+        await conn.execute(
+            text("ALTER TABLE specs ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ")
+        )
 
+    now = datetime.now(UTC)
     counts: dict[str, int] = {}
     async with SessionLocal() as session:
         company = await _upsert(session, Company, _id("co"), name="CivilArch (Studio Demo)")
@@ -99,8 +112,13 @@ async def seed() -> dict[str, int]:
             phone="+919810000021", role=UserRole.owner,
             name="Saurabh Tripathi (Owner)", language="en",
         )
+        lokesh = await _upsert(
+            session, User, _id("u", "lokesh"), company_id=company.id,
+            phone="+919810000022", role=UserRole.supervisor,
+            name="Lokesh Verma (Site Engineer)", language="en",
+        )
         await session.flush()
-        counts["users"] = 2
+        counts["users"] = 3
 
         sites = {}
         comps = {}
@@ -122,32 +140,61 @@ async def seed() -> dict[str, int]:
         await session.flush()
         counts["sites"] = len(sites)
 
-        # --- Selections (specs) across the projects, in varied states ---
-        def spec(key, skey, label, status, code, qty=None, unit=None):
+        # --- Selections (specs) across the projects, in varied ROUTING states.
+        # routing_status derives from approval_status + sent_at + released_at:
+        #   rejected            → "returned — revise"      (needs you)
+        #   approved + released → "released to site"
+        #   approved            → "approved" / ready to release (needs you)
+        #   pending + sent      → "out for approval"
+        #   pending             → "draft"
+        def spec(key, skey, label, status, code, qty=None, unit=None, sent=False, released=False):
+            sent_at = (now - timedelta(days=1)) if (sent or released) else None
+            released_at = (now - timedelta(hours=3)) if released else None
             return _upsert(
                 session, Spec, _id("spec", key), company_id=company.id,
                 site_id=sites[skey].id, component_id=comps[skey].id, material_id=None,
                 label=label, qty=Decimal(qty) if qty else None, unit=unit,
                 approval_status=status, client_final_code=code, assignee_id=designer.id,
+                sent_at=sent_at, released_at=released_at,
             )
 
         await spec("s1", "kutumb", "Master bath floor — imported tile", SpecApprovalStatus.rejected,
-                   "Allmarble", "220", "sft")
+                   "Allmarble", "220", "sft", sent=True)  # returned — revise
         await spec("s2", "kutumb", "Kitchen counter — quartz slab", SpecApprovalStatus.pending,
-                   "5141 Frosty Carrina", "18", "sft")
+                   "5141 Frosty Carrina", "18", "sft", sent=True)  # out for approval
         await spec("s3", "kutumb", "Pooja back wall — marble cladding", SpecApprovalStatus.approved,
-                   "Makrana White", "60", "sft")
+                   "Makrana White", "60", "sft", released=True)  # released
         await spec("s4", "kutumb", "Living TV unit — veneer", SpecApprovalStatus.pending,
-                   "Smoked Oak")
+                   "Smoked Oak")  # draft
         await spec("s5", "sharma", "Wardrobe shutters — laminate", SpecApprovalStatus.pending,
-                   "MR-2241 Walnut Ribbon", "24", "nos")
+                   "MR-2241 Walnut Ribbon", "24", "nos", sent=True)  # out for approval
         await spec("s6", "sharma", "Living floor — vitrified tile", SpecApprovalStatus.approved,
-                   "Eternity Statuario", "480", "sft")
+                   "Eternity Statuario", "480", "sft", released=True)  # released
         await spec("s7", "agarwal", "Master bed feature wall — wallpaper",
-                   SpecApprovalStatus.pending, "Nilaya AB-09", "3", "rolls")
+                   SpecApprovalStatus.approved, "Nilaya AB-09", "3", "rolls")  # ready to release
         await spec("s8", "agarwal", "Foyer floor — marble", SpecApprovalStatus.approved,
-                   "Italian Botticino", "140", "sft")
+                   "Italian Botticino", "140", "sft")  # ready to release
         counts["selections"] = 8
+
+        # --- Site changes (reported from site by Lokesh, routed to the designer) ---
+        def change(key, skey, room, title, note, impact, status=SiteChangeStatus.new):
+            return _upsert(
+                session, SiteChange, _id("chg", key), company_id=company.id,
+                site_id=sites[skey].id, room=room, title=title, note=note, impact=impact,
+                reported_by=lokesh.id, status=status,
+                resolved_at=(now if status is SiteChangeStatus.resolved else None),
+            )
+
+        await change("c1", "kutumb", "2nd-floor slab", "Slab cover blocks missing — 2 bays",
+                     "Cover blocks not placed in bays 3 & 4 before pour-prep.",
+                     "Affects durability — may need a localised fix detail.")
+        await change("c2", "sharma", "Daughter bedroom", "Wardrobe wall 15 mm out of plumb",
+                     "West wall leans 15 mm over 2.4 m. Wardrobe depth affected.",
+                     "Revise wardrobe carcass depth or pack out the wall.")
+        await change("c3", "kutumb", "Kitchen", "Window opening 50 mm narrower",
+                     "As-built opening is 50 mm narrower than the drawing.",
+                     "Folded into the Kitchen revision.", status=SiteChangeStatus.linked)
+        counts["site_changes"] = 3
 
         # --- Design profile (the homeowner brief) on Kutumb ---
         profile = await _upsert(

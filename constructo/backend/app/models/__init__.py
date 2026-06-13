@@ -102,6 +102,7 @@ from app.models.push_token import PushToken
 from app.models.raw_message import RawMessageModel
 from app.models.site import Site
 from app.models.site_baseline import SiteBaseline
+from app.models.site_change import SiteChange, SiteChangeStatus
 from app.models.site_event import SiteEventModel
 from app.models.site_financials import SiteFinancials
 from app.models.spec import Spec, SpecApprovalStatus
@@ -212,6 +213,8 @@ __all__ = [
     "Update",
     "UpdateType",
     "Material",
+    "SiteChange",
+    "SiteChangeStatus",
     "Spec",
     "SpecApprovalStatus",
     "Survey",

@@ -4,17 +4,25 @@
  */
 import { ScrollView } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
-import { Card, ListRow, Small } from '../../../src/ui'
+import { siteChangesApi } from '../../../src/api/siteChanges'
+import { Card, ListRow, Small, StatusPill } from '../../../src/ui'
 import { SubHeader } from './_components'
 
 export default function DesignerMore() {
   const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+
+  const newChangesQ = useQuery({
+    queryKey: ['architect', 'changes', 'new'],
+    queryFn: () => siteChangesApi.list({ status: 'new' }),
+  })
+  const newChanges = newChangesQ.data?.length ?? 0
 
   return (
     <ScrollView
@@ -36,6 +44,13 @@ export default function DesignerMore() {
           title="All selections"
           subtitle="Materials & finishes"
           onPress={() => router.push('/(contractor)/architect/selections')}
+        />
+        <ListRow
+          icon="alert-triangle"
+          title="Site changes"
+          subtitle="Conditions reported from the field"
+          right={newChanges > 0 ? <StatusPill status="warn" size="sm" label={`${newChanges} new`} /> : undefined}
+          onPress={() => router.push('/(contractor)/architect/changes')}
         />
       </Card>
 

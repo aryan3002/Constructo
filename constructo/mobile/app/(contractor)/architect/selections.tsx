@@ -1,29 +1,30 @@
 /**
- * Selections — the designer's material/finish spec schedule. Aggregates
- * /api/v1/specs across the architect's sites with a status filter; tapping a line
- * opens its detail to route (approve / put on hold). Pending = "needs your
- * decision" (amber), approved = cleared (sage), rejected = on hold (red).
+ * Selections — the designer's material/finish schedule. Aggregates /api/v1/specs
+ * across the architect's projects with a ROUTING filter (Needs you / Out for
+ * approval / Released); tapping a line opens its approval route to act on.
  */
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, type Status } from '../../../src/theme/tokens'
-import { specsApi, type Spec, type SpecApprovalStatus } from '../../../src/api/specs'
+import { SPACE } from '../../../src/theme/tokens'
+import { specsApi, type RoutingStatus, type Spec } from '../../../src/api/specs'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Card, Chip, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SubHeader } from './_components'
+import { ErrorBlock, LoadingBlock, ROUTING_META, SubHeader } from './_components'
 
-const STATUS_META: Record<SpecApprovalStatus, { status: Status; label: string }> = {
-  pending: { status: 'warn', label: 'Needs decision' },
-  approved: { status: 'ok', label: 'Approved' },
-  rejected: { status: 'risk', label: 'On hold' },
+type Filter = 'all' | 'needs' | 'out' | 'released'
+
+const NEEDS: RoutingStatus[] = ['returned', 'approved', 'draft']
+
+function inFilter(f: Filter, r: RoutingStatus): boolean {
+  if (f === 'all') return true
+  if (f === 'needs') return NEEDS.includes(r)
+  if (f === 'out') return r === 'out_for_approval'
+  return r === 'released'
 }
-
-type Filter = 'all' | 'pending' | 'approved' | 'rejected'
 
 export default function Selections() {
   const { theme } = useTheme()
@@ -53,17 +54,26 @@ export default function Selections() {
 
   const rows = q.data ?? []
   const counts = useMemo(() => {
-    const c = { all: rows.length, pending: 0, approved: 0, rejected: 0 }
-    for (const r of rows) c[r.spec.approval_status] += 1
+    const c = { all: rows.length, needs: 0, out: 0, released: 0 }
+    for (const r of rows) {
+      if (NEEDS.includes(r.spec.routing_status)) c.needs += 1
+      if (r.spec.routing_status === 'out_for_approval') c.out += 1
+      if (r.spec.routing_status === 'released') c.released += 1
+    }
     return c
   }, [rows])
-  const filtered = filter === 'all' ? rows : rows.filter((r) => r.spec.approval_status === filter)
+  const ORDER: Record<RoutingStatus, number> = {
+    returned: 0, approved: 1, draft: 2, out_for_approval: 3, released: 4,
+  }
+  const filtered = rows
+    .filter((r) => inFilter(filter, r.spec.routing_status))
+    .sort((a, b) => ORDER[a.spec.routing_status] - ORDER[b.spec.routing_status])
 
   const TABS: { id: Filter; label: string; n: number }[] = [
     { id: 'all', label: 'All', n: counts.all },
-    { id: 'pending', label: 'Needs decision', n: counts.pending },
-    { id: 'approved', label: 'Approved', n: counts.approved },
-    { id: 'rejected', label: 'On hold', n: counts.rejected },
+    { id: 'needs', label: 'Needs you', n: counts.needs },
+    { id: 'out', label: 'Out for approval', n: counts.out },
+    { id: 'released', label: 'Released', n: counts.released },
   ]
 
   return (
@@ -109,10 +119,10 @@ export default function Selections() {
 }
 
 function SpecRow({ spec, siteName, onPress }: { spec: Spec; siteName: string; onPress: () => void }) {
-  const meta = STATUS_META[spec.approval_status]
+  const meta = ROUTING_META[spec.routing_status]
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <Card>
+      <Card flag={spec.routing_status === 'returned' ? 'risk' : undefined}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
           <Title style={{ fontSize: 15, flex: 1 }} numberOfLines={1}>{spec.label}</Title>
           <StatusPill status={meta.status} size="sm" label={meta.label} />

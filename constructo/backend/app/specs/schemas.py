@@ -2,9 +2,25 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models import SpecApprovalStatus
+
+# The designer's selection routing — DERIVED from approval_status + sent_at +
+# released_at, so the owner's plain approval flow is never disturbed.
+RoutingStatus = str  # "draft" | "out_for_approval" | "approved" | "returned" | "released"
+
+
+def _routing_status(approval: SpecApprovalStatus, sent_at, released_at) -> RoutingStatus:
+    if released_at is not None:
+        return "released"
+    if approval == SpecApprovalStatus.rejected:
+        return "returned"
+    if approval == SpecApprovalStatus.approved:
+        return "approved"
+    if sent_at is not None:
+        return "out_for_approval"
+    return "draft"
 
 
 class SpecCreate(BaseModel):
@@ -55,7 +71,15 @@ class SpecOut(BaseModel):
     client_final_code: str | None
     assignee_id: UUID | None
     notes: str | None
+    sent_at: datetime | None
+    released_at: datetime | None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def routing_status(self) -> RoutingStatus:
+        """The designer selection state, derived from approval + route stamps."""
+        return _routing_status(self.approval_status, self.sent_at, self.released_at)
 
 
 class RoomRollup(BaseModel):
