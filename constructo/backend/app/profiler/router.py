@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
@@ -12,8 +12,15 @@ from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.models import User, UserRole
 from app.models.profiler import (
+    BriefAction,
+    BriefAudience,
+    BriefState,
     ConflictStatus,
     ProfilerArea,
+    ProfilerBrief,
+    ProfilerBriefApproval,
+    ProfilerBriefRendering,
+    ProfilerClarification,
     ProfilerConflict,
     ProfilerContributor,
     ProfilerProfile,
@@ -25,8 +32,16 @@ from app.models.profiler import (
     ThemeStatus,
 )
 from app.profiler.extraction import extract_reference_attributes, get_llm
+from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
 from app.profiler.schemas import (
     AreaOut,
+    BriefApprovalIn,
+    BriefApprovalOut,
+    BriefDetailOut,
+    BriefOut,
+    BriefRenderingOut,
+    ClarificationAnswerIn,
+    ClarificationOut,
     ConflictOut,
     ConflictResolveIn,
     ContributorIn,
@@ -49,6 +64,16 @@ router = APIRouter(prefix="/api/v1/design", tags=["design-profiler"])
 
 # Who may create/edit a profile on the contractor side (homeowner-side gating is added in Plan 3).
 _EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+
+# (action, from_state) -> to_state. Any pair not present is an illegal transition.
+_BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
+    (BriefAction.request_changes, BriefState.homeowner_review): BriefState.revision_requested,
+    (BriefAction.request_changes, BriefState.architect_review): BriefState.revision_requested,
+    (BriefAction.send_to_architect, BriefState.homeowner_review): BriefState.architect_review,
+    (BriefAction.architect_sign_off, BriefState.architect_review): BriefState.contractor_brief_ready,
+    (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
+    (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
+}
 
 
 async def _load_owned_profile(
@@ -130,6 +155,76 @@ async def _sync_conflicts(
                 contributor_b_id=UUID(cf["contributor_b"]),
             )
         )
+
+
+async def _brief_payload(session: AsyncSession, profile: ProfilerProfile) -> dict:
+    """Deterministically gather the whole-profile structured brief payload.
+
+    For each area: the reducer's taste model + APPROVED/adjusted themes + RESOLVED
+    conflicts. No LLM here — every number/material is computed."""
+    areas = (
+        await session.execute(
+            select(ProfilerArea).where(ProfilerArea.profile_id == profile.id)
+        )
+    ).scalars().all()
+    area_payloads: list[dict] = []
+    for area in areas:
+        rankings, attrs = await _area_signals(session, area.id)
+        model = build_taste_model(rankings, attrs, area.recommended_count)
+        themes = (
+            await session.execute(
+                select(ProfilerTheme).where(ProfilerTheme.area_id == area.id)
+            )
+        ).scalars().all()
+        conflicts = (
+            await session.execute(
+                select(ProfilerConflict).where(ProfilerConflict.area_id == area.id)
+            )
+        ).scalars().all()
+        area_payloads.append(
+            build_area_brief_payload(
+                area.area_key,
+                model,
+                [
+                    {
+                        "name": t.name,
+                        "palette": t.palette,
+                        "materials": t.materials,
+                        "status": t.status.value if hasattr(t.status, "value") else t.status,
+                    }
+                    for t in themes
+                ],
+                [
+                    {
+                        "dimension": c.dimension,
+                        "value": c.value,
+                        "decision_note": c.decision_note,
+                        "resolution_status": (
+                            c.resolution_status.value
+                            if hasattr(c.resolution_status, "value")
+                            else c.resolution_status
+                        ),
+                    }
+                    for c in conflicts
+                ],
+            )
+        )
+    return {
+        "scope_type": (
+            profile.scope_type.value
+            if hasattr(profile.scope_type, "value")
+            else profile.scope_type
+        ),
+        "areas": area_payloads,
+    }
+
+
+def _brief_detail(
+    brief: ProfilerBrief, renderings: list[ProfilerBriefRendering]
+) -> BriefDetailOut:
+    out = BriefDetailOut.model_validate(brief)
+    out.renderings = [BriefRenderingOut.model_validate(r) for r in renderings]
+    return out
 
 
 @router.post("/profiles", response_model=ProfileOut, status_code=201)
@@ -467,3 +562,196 @@ async def resolve_conflict(
     await session.commit()
     await session.refresh(conflict)
     return ConflictOut.model_validate(conflict)
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Brief generation
+# ---------------------------------------------------------------------------
+
+
+@router.post("/profiles/{profile_id}/brief", response_model=BriefDetailOut, status_code=201)
+async def generate_brief(
+    profile_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> BriefDetailOut:
+    profile = await _load_owned_profile(session, profile_id, user)
+    payload = await _brief_payload(session, profile)
+
+    next_version = (
+        await session.scalar(
+            select(func.coalesce(func.max(ProfilerBrief.version), 0)).where(
+                ProfilerBrief.profile_id == profile_id
+            )
+        )
+    ) + 1
+    brief = ProfilerBrief(
+        profile_id=profile_id,
+        version=next_version,
+        state=BriefState.homeowner_review,
+        summary_json=payload,
+        created_by=user.id,
+    )
+    session.add(brief)
+    await session.flush()
+
+    renderings: list[ProfilerBriefRendering] = []
+    for audience in (
+        BriefAudience.homeowner,
+        BriefAudience.architect,
+        BriefAudience.contractor,
+    ):
+        try:
+            prose = await narrate_brief(llm, audience.value, payload)
+        except Exception:  # narration must never 500 the request
+            logger.exception(
+                "profiler: brief narration failed for %s/%s", profile_id, audience
+            )
+            prose = {"headline": "", "summary": "", "sections": []}
+        # content = deterministic payload (numbers/materials) + LLM prose (phrasing only)
+        content = {
+            "areas": payload["areas"],
+            "scope_type": payload["scope_type"],
+            "narrative": prose,
+        }
+        rendering = ProfilerBriefRendering(
+            brief_id=brief.id,
+            audience=audience,
+            scope="whole_house",
+            content_json=content,
+        )
+        session.add(rendering)
+        renderings.append(rendering)
+
+    await session.commit()
+    await session.refresh(brief)
+    for r in renderings:
+        await session.refresh(r)
+    return _brief_detail(brief, renderings)
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Brief approval state-machine
+# ---------------------------------------------------------------------------
+
+
+@router.post("/briefs/{brief_id}/approval", response_model=BriefOut)
+async def act_on_brief(
+    brief_id: UUID,
+    body: BriefApprovalIn,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> BriefOut:
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    await _load_owned_profile(session, brief.profile_id, user)
+
+    action = BriefAction(body.action)
+    target = _BRIEF_TRANSITIONS.get((action, brief.state))
+    if target is None:
+        raise AppError(
+            409,
+            "invalid_transition",
+            f"Cannot {action.value} a brief in state {brief.state.value}",
+        )
+    brief.state = target
+    session.add(
+        ProfilerBriefApproval(
+            brief_id=brief.id,
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            action=action,
+            note=body.note,
+        )
+    )
+    await session.commit()
+    await session.refresh(brief)
+    return BriefOut.model_validate(brief)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Clarifications — generate / list / answer
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/profiles/{profile_id}/areas/{area_id}/clarifications",
+    response_model=list[ClarificationOut],
+    status_code=201,
+)
+async def generate_clarifications_endpoint(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> list[ClarificationOut]:
+    await _load_owned_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+
+    rankings, attrs = await _area_signals(session, area_id)
+    model = build_taste_model(rankings, attrs, area.recommended_count)
+    try:
+        questions = await generate_clarifications(llm, area.area_key, model)
+    except Exception:  # never 500 on narration
+        logger.exception(
+            "profiler: clarification generation failed for area %s", area_id
+        )
+        questions = []
+
+    created: list[ProfilerClarification] = []
+    for q in questions:
+        row = ProfilerClarification(
+            profile_id=profile_id,
+            area_id=area_id,
+            question=q,
+            source_attribution={
+                "confidence": model["confidence"],
+                "has_conflict": model["has_conflict"],
+            },
+        )
+        session.add(row)
+        created.append(row)
+    await session.commit()
+    for row in created:
+        await session.refresh(row)
+    return [ClarificationOut.model_validate(c) for c in created]
+
+
+@router.get("/profiles/{profile_id}/clarifications", response_model=list[ClarificationOut])
+async def list_clarifications(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ClarificationOut]:
+    await _load_owned_profile(session, profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerClarification)
+            .where(ProfilerClarification.profile_id == profile_id)
+            .order_by(ProfilerClarification.asked_at)
+        )
+    ).scalars().all()
+    return [ClarificationOut.model_validate(c) for c in rows]
+
+
+@router.post("/clarifications/{clarification_id}/answer", response_model=ClarificationOut)
+async def answer_clarification(
+    clarification_id: UUID,
+    body: ClarificationAnswerIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ClarificationOut:
+    row = await session.get(ProfilerClarification, clarification_id)
+    if row is None:
+        raise AppError(404, "not_found", "Clarification not found")
+    await _load_owned_profile(session, row.profile_id, user)
+    row.answer = body.answer
+    row.answered_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(row)
+    return ClarificationOut.model_validate(row)
