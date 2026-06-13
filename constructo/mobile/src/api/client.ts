@@ -46,10 +46,13 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
-  headers.set('Content-Type', 'application/json')
+  const existingHeaders =
+    init.headers instanceof Headers
+      ? Object.fromEntries((init.headers as Headers).entries())
+      : (init.headers as Record<string, string> | undefined) ?? {}
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...existingHeaders }
   const token = await getToken()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
@@ -279,4 +282,134 @@ export const homeowner = {
    *  GET /api/v1/homeowner/finishes. */
   finishes: (siteId?: string) =>
     request<FinishesResponse>(`/api/v1/homeowner/finishes${qs({ site_id: siteId })}`),
+}
+
+// ---- Design Profiler engine (/api/v1/design) ----------------------------
+export interface ProfilerArea {
+  id: string
+  area_kind: string
+  area_key: string
+  recommended_count: number
+  status: string
+  confidence: number
+  has_conflict: boolean
+}
+export interface ProfilerContributor {
+  id: string
+  role: string
+  is_decision_owner: boolean
+}
+export interface ProfilerProfileDetail {
+  id: string
+  company_id: string
+  site_id: string
+  scope_type: string
+  status: string
+  created_at: string
+  areas: ProfilerArea[]
+  contributors: ProfilerContributor[]
+}
+export interface ProfilerTheme {
+  id: string
+  area_id: string | null
+  name: string
+  confidence: number
+  palette: string[]
+  materials: string[]
+  rationale: string | null
+  evidence_reference_ids: string[]
+  status: string
+  created_at: string
+}
+export interface ProfilerConflict {
+  id: string
+  area_id: string
+  dimension: string
+  value: string
+  resolution_status: string
+  decision_note: string | null
+}
+export interface ProfilerReference {
+  id: string
+  area_id: string
+  source_type: string
+  consistency_status: string | null
+  created_at: string
+}
+export interface ProfilerBriefRendering {
+  id: string
+  brief_id: string
+  audience: string
+  scope: string
+  area_id: string | null
+  content_json: Record<string, unknown>
+  created_at: string
+}
+export interface ProfilerClarification {
+  id: string
+  area_id: string | null
+  question: string
+  answer: string | null
+  asked_at: string
+  answered_at: string | null
+}
+export interface ProfilerBriefApproval {
+  id: string
+  brief_id: string
+  actor_role: string
+  action: string
+  note: string | null
+  created_at: string
+}
+
+export const design = {
+  profileBySite: (siteId: string) =>
+    request<ProfilerProfileDetail>(`/api/v1/design/profiles/by-site/${siteId}`),
+  profile: (id: string) => request<ProfilerProfileDetail>(`/api/v1/design/profiles/${id}`),
+  references: (profileId: string, areaId: string) =>
+    request<ProfilerReference[]>(
+      `/api/v1/design/profiles/${profileId}/areas/${areaId}/references`,
+    ),
+  addReference: (body: {
+    area_id: string
+    contributor_id?: string
+    source_type?: string
+    image_r2_key?: string
+    source_url?: string
+    preset_id?: string
+  }) =>
+    request<ProfilerReference>(`/api/v1/design/references`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  rankReference: (
+    refId: string,
+    body: { contributor_id: string; stars: number; tags?: Record<string, string[]>; note?: string },
+  ) =>
+    request<{ ok: boolean }>(`/api/v1/design/references/${refId}/rankings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  themes: (profileId: string, areaId: string) =>
+    request<ProfilerTheme[]>(`/api/v1/design/profiles/${profileId}/areas/${areaId}/themes`),
+  conflicts: (profileId: string) =>
+    request<ProfilerConflict[]>(`/api/v1/design/profiles/${profileId}/conflicts`),
+  brief: (profileId: string, audience: 'homeowner' | 'architect' | 'contractor' = 'homeowner') =>
+    request<ProfilerBriefRendering>(
+      `/api/v1/design/profiles/${profileId}/brief?audience=${audience}`,
+    ),
+  clarifications: (profileId: string) =>
+    request<ProfilerClarification[]>(`/api/v1/design/profiles/${profileId}/clarifications`),
+  answerClarification: (id: string, answer: string) =>
+    request<ProfilerClarification>(`/api/v1/design/clarifications/${id}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ answer }),
+    }),
+  actOnBrief: (briefId: string, body: { action: string; note?: string }) =>
+    request<{ id: string; state: string }>(`/api/v1/design/briefs/${briefId}/approval`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  approvals: (briefId: string) =>
+    request<ProfilerBriefApproval[]>(`/api/v1/design/briefs/${briefId}/approvals`),
 }
