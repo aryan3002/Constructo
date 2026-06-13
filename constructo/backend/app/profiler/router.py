@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone  # noqa: F401 – used in Task 5 decide/resolve endpoints
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -11,17 +12,23 @@ from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.models import User, UserRole
 from app.models.profiler import (
+    ConflictStatus,
     ProfilerArea,
+    ProfilerConflict,
     ProfilerContributor,
     ProfilerProfile,
     ProfilerRanking,
     ProfilerReference,
     ProfilerReferenceAttributes,
+    ProfilerTheme,
     ProfileStatus,
+    ThemeStatus,
 )
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
+    ConflictOut,
+    ConflictResolveIn,  # noqa: F401 – used in Task 5 decide/resolve endpoints
     ContributorIn,
     ContributorOut,
     ProfileCreate,
@@ -30,8 +37,11 @@ from app.profiler.schemas import (
     RankingIn,
     ReferenceIn,
     ReferenceOut,
+    ThemeDecisionIn,  # noqa: F401 – used in Task 5 decide/resolve endpoints
+    ThemeOut,
 )
 from app.profiler.taste import build_taste_model, check_consistency
+from app.profiler.themes import narrate_themes, top_reference_ids
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +58,78 @@ async def _load_owned_profile(
     if profile is None or profile.company_id != user.company_id:
         raise AppError(404, "not_found", "Profile not found")
     return profile
+
+
+async def _area_signals(
+    session: AsyncSession, area_id: UUID
+) -> tuple[list[dict], list[dict]]:
+    """The (rankings, attributes) dict-lists the reducer expects, for one area."""
+    ref_ids = (
+        (
+            await session.execute(
+                select(ProfilerReference.id).where(ProfilerReference.area_id == area_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not ref_ids:
+        return [], []
+    rank_rows = (
+        await session.execute(
+            select(ProfilerRanking).where(ProfilerRanking.reference_id.in_(ref_ids))
+        )
+    ).scalars().all()
+    attr_rows = (
+        await session.execute(
+            select(ProfilerReferenceAttributes).where(
+                ProfilerReferenceAttributes.reference_id.in_(ref_ids)
+            )
+        )
+    ).scalars().all()
+    rankings = [
+        {
+            "reference_id": str(r.reference_id),
+            "contributor_id": str(r.contributor_id),
+            "stars": r.stars,
+            "tags": r.tags,
+        }
+        for r in rank_rows
+    ]
+    attrs = [
+        {"reference_id": str(a.reference_id), "attributes": a.attributes} for a in attr_rows
+    ]
+    return rankings, attrs
+
+
+async def _sync_conflicts(
+    session: AsyncSession, profile_id: UUID, area_id: UUID, conflicts: list[dict]
+) -> None:
+    """Replace this area's OPEN conflicts with the freshly-detected set.
+
+    Resolved conflicts are preserved; only OPEN ones are replaced.
+    """
+    existing = (
+        await session.execute(
+            select(ProfilerConflict).where(
+                ProfilerConflict.area_id == area_id,
+                ProfilerConflict.resolution_status == ConflictStatus.open,
+            )
+        )
+    ).scalars().all()
+    for c in existing:
+        await session.delete(c)
+    for cf in conflicts:
+        session.add(
+            ProfilerConflict(
+                profile_id=profile_id,
+                area_id=area_id,
+                dimension=cf["dimension"],
+                value=cf["value"],
+                contributor_a_id=UUID(cf["contributor_a"]),
+                contributor_b_id=UUID(cf["contributor_b"]),
+            )
+        )
 
 
 @router.post("/profiles", response_model=ProfileOut, status_code=201)
@@ -233,43 +315,7 @@ async def get_area_taste(
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
 
-    ref_ids = (
-        (
-            await session.execute(
-                select(ProfilerReference.id).where(ProfilerReference.area_id == area_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    rankings, attrs = [], []
-    if ref_ids:
-        rank_rows = (
-            await session.execute(
-                select(ProfilerRanking).where(ProfilerRanking.reference_id.in_(ref_ids))
-            )
-        ).scalars().all()
-        attr_rows = (
-            await session.execute(
-                select(ProfilerReferenceAttributes).where(
-                    ProfilerReferenceAttributes.reference_id.in_(ref_ids)
-                )
-            )
-        ).scalars().all()
-        rankings = [
-            {
-                "reference_id": str(r.reference_id),
-                "contributor_id": str(r.contributor_id),
-                "stars": r.stars,
-                "tags": r.tags,
-            }
-            for r in rank_rows
-        ]
-        attrs = [
-            {"reference_id": str(a.reference_id), "attributes": a.attributes}
-            for a in attr_rows
-        ]
-
+    rankings, attrs = await _area_signals(session, area_id)
     model = build_taste_model(rankings, attrs, area.recommended_count)
     # Persist the deterministic summary back onto the area (no LLM involved here).
     area.taste_model = model["dimensions"]
@@ -277,3 +323,97 @@ async def get_area_taste(
     area.has_conflict = model["has_conflict"]
     await session.commit()
     return model
+
+
+@router.post(
+    "/profiles/{profile_id}/areas/{area_id}/themes",
+    response_model=list[ThemeOut],
+    status_code=201,
+)
+async def generate_themes(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> list[ThemeOut]:
+    await _load_owned_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+
+    rankings, attrs = await _area_signals(session, area_id)
+    model = build_taste_model(rankings, attrs, area.recommended_count)
+    evidence = top_reference_ids(rankings)
+
+    try:
+        proposals = await narrate_themes(llm, area.area_key, model)
+    except Exception:  # narration must never 500 the request
+        logger.exception("profiler: theme narration failed for area %s", area_id)
+        proposals = []
+
+    # Replace prior SUGGESTED themes for this area (keep approved/adjusted/rejected).
+    prior = (
+        await session.execute(
+            select(ProfilerTheme).where(
+                ProfilerTheme.area_id == area_id, ProfilerTheme.status == ThemeStatus.suggested
+            )
+        )
+    ).scalars().all()
+    for t in prior:
+        await session.delete(t)
+
+    created: list[ProfilerTheme] = []
+    for p in proposals:
+        theme = ProfilerTheme(
+            profile_id=profile_id, area_id=area_id,
+            name=(p.get("name") or "Untitled"),
+            palette=(p.get("palette") or []),
+            materials=(p.get("materials") or []),
+            rationale=p.get("rationale"),
+            evidence_reference_ids=evidence,
+            confidence=model["confidence"],  # reducer math, never the LLM
+        )
+        session.add(theme)
+        created.append(theme)
+
+    await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
+    await session.commit()
+    for t in created:
+        await session.refresh(t)
+    return [ThemeOut.model_validate(t) for t in created]
+
+
+@router.get("/profiles/{profile_id}/areas/{area_id}/themes", response_model=list[ThemeOut])
+async def list_themes(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ThemeOut]:
+    await _load_owned_profile(session, profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerTheme)
+            .where(ProfilerTheme.area_id == area_id)
+            .order_by(ProfilerTheme.created_at)
+        )
+    ).scalars().all()
+    return [ThemeOut.model_validate(t) for t in rows]
+
+
+@router.get("/profiles/{profile_id}/conflicts", response_model=list[ConflictOut])
+async def list_conflicts(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ConflictOut]:
+    await _load_owned_profile(session, profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerConflict)
+            .where(ProfilerConflict.profile_id == profile_id)
+            .order_by(ProfilerConflict.created_at)
+        )
+    ).scalars().all()
+    return [ConflictOut.model_validate(c) for c in rows]
