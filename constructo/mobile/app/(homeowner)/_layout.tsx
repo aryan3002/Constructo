@@ -52,6 +52,9 @@ function HomeownerTabs() {
         {/* Design write sub-routes — pushed from the Design tab, no tab bar entry */}
         <Tabs.Screen name="design/select" options={{ href: null }} />
         <Tabs.Screen name="design/profile" options={{ href: null }} />
+        {/* Wave 2b — per-room references + drawing detail */}
+        <Tabs.Screen name="design/references/[room]" options={{ href: null }} />
+        <Tabs.Screen name="drawings/[id]" options={{ href: null }} />
         {/* Her To-dos — pushed from the chat thread, no tab bar entry */}
         <Tabs.Screen name="todos" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null, title: t('nav.settings') }} />
