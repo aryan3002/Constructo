@@ -38,6 +38,7 @@ from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.schemas import (
     AreaOut,
     BriefApprovalIn,
+    BriefApprovalOut,
     BriefDetailOut,
     BriefOut,
     BriefRenderingOut,
@@ -788,6 +789,30 @@ async def get_brief_rendering(
     if rendering is None:
         raise AppError(404, "not_found", "Rendering not found")
     return BriefRenderingOut.model_validate(rendering)
+
+
+@router.get("/briefs/{brief_id}/approvals", response_model=list[BriefApprovalOut])
+async def list_brief_approvals(
+    brief_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BriefApprovalOut]:
+    """The attributed approval timeline (§8): every action with actor name + role.
+
+    Membrane-scoped — only someone who can access the profile sees its timeline.
+    """
+    brief = await session.get(ProfilerBrief, brief_id)
+    if brief is None:
+        raise AppError(404, "not_found", "Brief not found")
+    await _load_accessible_profile(session, brief.profile_id, user)
+    rows = (
+        await session.execute(
+            select(ProfilerBriefApproval)
+            .where(ProfilerBriefApproval.brief_id == brief_id)
+            .order_by(ProfilerBriefApproval.created_at)
+        )
+    ).scalars().all()
+    return [BriefApprovalOut.model_validate(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------

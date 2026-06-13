@@ -232,3 +232,29 @@ async def test_answer_clarification_is_membrane_scoped(client, factory, db_sessi
         assert ok.status_code == 200 and ok.json()["answer"] == "Matte."
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_approval_timeline_attributes_actor_scoped(client, factory, db_session):
+    """The approval timeline records each action with the actor's role, and is only
+    visible to someone who can access the profile."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        bid = w["bid"]
+        await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(w["owner"]))
+        await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "architect_sign_off"}, headers=auth(w["architect"]))
+        timeline = (await client.get(
+            f"/api/v1/design/briefs/{bid}/approvals", headers=auth(w["owner"]))).json()
+        assert [(a["action"], a["actor_role"]) for a in timeline] == [
+            ("send_to_architect", "primary_owner"), ("architect_sign_off", "architect")]
+        # cross-site stranger cannot read the timeline
+        other_site = await factory.site(w["company"], name="Other")
+        stranger = await factory.user(company=w["company"], role=UserRole.homeowner)
+        await _member(db_session, other_site.id, stranger.id, HomeownerSubRole.primary_owner)
+        blocked = await client.get(
+            f"/api/v1/design/briefs/{bid}/approvals", headers=auth(stranger))
+        assert blocked.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
