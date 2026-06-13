@@ -71,6 +71,30 @@ export interface RunBriefResponse {
 }
 
 // ============================================================================
+// Dashboard home (the command-center per-site cards) — GET /dashboard/home.
+// Exceptions-first per-site cards with a status spine + counts.
+// ============================================================================
+
+export interface SiteCard {
+  site_id: string
+  name: string
+  status: string // ok | warn | risk
+  expected_headcount: number | null
+  top_risks: Risk[]
+  risk_overflow: number
+  counts: Record<string, number>
+}
+
+export interface DashboardHome {
+  brief_date: string
+  needs_attention_count: number
+  sites_total: number
+  sites_needing_attention: number
+  cold_start: boolean
+  sites: SiteCard[]
+}
+
+// ============================================================================
 // Approvals (the decisions inbox) — GET /approvals, POST /approvals/{id}/*
 // Ported from web/src/api/approvals.ts.
 // ============================================================================
@@ -390,6 +414,9 @@ export const owner = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // --- Dashboard home (per-site command cards) ---
+  home: () => request<DashboardHome>('/api/v1/dashboard/home'),
 
   // --- Approvals (decisions inbox) ---
   approvals: (state: DecisionState = 'pending') =>

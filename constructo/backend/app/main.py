@@ -19,6 +19,7 @@ from app.admin.router import router as admin_router
 from app.agent.router import router as ask_router
 from app.approvals.router import router as approvals_router
 from app.attendance.router import router as attendance_router
+from app.audit.router import router as audit_router
 from app.auth.router import me_router, users_router
 from app.auth.router import router as auth_router
 from app.billing.router import router as billing_router
@@ -51,6 +52,7 @@ from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
 from app.sites.router import router as sites_router
 from app.specs.router import router as specs_router
+from app.survey.router import router as survey_router
 from app.vendor_confirm.router import router as vendor_confirm_router
 from app.vendors.router import router as vendors_router
 
@@ -138,3 +140,5 @@ app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
 if settings.enable_labs:
     app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
     app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop
+    app.include_router(audit_router)  # Labs: AI-assisted site quality audit
+    app.include_router(survey_router)  # Labs: SiteSync first-visit intake

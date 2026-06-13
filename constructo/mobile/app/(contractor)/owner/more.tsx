@@ -128,8 +128,14 @@ export default function AccountHub() {
           icon="file-text"
           title={t('account.permits')}
           subtitle={t('account.permitsSub')}
-          last
           onPress={() => router.push(ROUTES.permits)}
+        />
+        <SettingsRow
+          icon="shield"
+          title={lang === 'hi' ? 'साइट ऑडिट' : 'Site audit'}
+          subtitle={lang === 'hi' ? 'AI गुणवत्ता निरीक्षण' : 'AI quality inspections'}
+          last
+          onPress={() => router.push(ROUTES.audit)}
         />
       </SettingsGroup>
 

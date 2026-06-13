@@ -1,102 +1,71 @@
 /**
- * Brief (Tab 1 — THE HERO). The 7am cross-site command screen.
+ * Brief (Tab 1 — the command-center home), Calm-Cockpit prototype composition.
  *
- * One screen, two altitudes (Owner.md §6.1):
- *   - Decide:   ≤3 highest-severity risks across all sites, each a NeedsYouCard
- *               (proof on tap) with inline Approve / Hold / Assign actions that
- *               create a logged decision (optimistic collapse + refetch).
- *   - Scan:     a 2×2 Cash / Labor / Material / Progress pulse derived from the
- *               brief counts (calm, hide-empty).
- *   - Roll-up:  a worst-first per-site list.
- * Empty/first-run = a calm "connect a group" card. If today's brief is missing,
- * we POST /briefs/run as a fallback before showing empty.
+ *   - Clay "TODAY FOR OWNERS · <date>" eyebrow + the big "<N> decisions need your
+ *     call." headline (the 3-second answer).
+ *   - Up to 3 decision cards from the pending approvals inbox — red-edged when
+ *     overdue, amber otherwise — each with a proof chip + Approve / Review.
+ *   - "Sites at a glance" horizontal strip (status + "N for you").
+ *   - Material spec summary (pending / approved / on-hold) + a recent decision log.
  *
- * Slice B adds:
- *   - Sticky header with SiteSwitcher (All sites ▾) + bell + avatar initials.
- *   - Client-side site scope: selecting a site filters risk list + roll-up strip.
- *   - Risk cards are NeedsYouCard (with Hold wired as secondaryLabel + Assign button).
- *   - Premium EmptyState for first-run.
+ * Everything is real: decisions = /approvals, sites = /dashboard/home,
+ * specs = /specs across sites, log = recently-resolved approvals.
  */
-import React, { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, severityToStatus } from '../../../src/theme/tokens'
-import { owner, type BriefSite, type OwnerBrief, type Risk } from '../../../src/api/owner'
-import { Button, Display, EmptyState, Micro, Mono, NeedsYouCard, Small, StatusPill } from '../../../src/ui'
-import {
-  ErrorBlock,
-  LoadingBlock,
-  PulseCard,
-  SectionLabel,
-  SiteRollupRow,
-  SiteSwitcher,
-  type SiteSwitcherItem,
-  formatWhen,
-  idsToEvidence,
-} from './_components'
-import { buildRanked, scopeRanked, scopeSites, siteWorstStatus } from './_brief.util'
+import { AP, SPACE, type Status } from '../../../src/theme/tokens'
+import { request } from '../../../src/api/client'
+import { owner, type Decision, type SiteCard } from '../../../src/api/owner'
+import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
+import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from './_components'
+
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function shortDate(d: Date): string {
+  return `${WD[d.getDay()]}, ${d.getDate()} ${MO[d.getMonth()]}`
+}
 
 const STR = {
   en: {
-    greeting: 'Good morning',
-    needToday: (n: number, s: number) => `${n} thing${n === 1 ? '' : 's'} need you today across ${s} site${s === 1 ? '' : 's'}.`,
-    needTodaySite: (n: number) => `${n} thing${n === 1 ? '' : 's'} need you today at this site.`,
-    calmTitle: 'All sites are calm.',
-    calmBody: 'Nothing needs you today. Numbers below are still confirmable.',
-    moreInApprovals: (n: number) => `+${n} more in Approvals`,
-    sites: 'Sites',
-    seeAll: 'See all',
-    pulse: 'Yesterday, at a glance',
-    cash: 'Cash', labor: 'Labor', material: 'Material', progress: 'Progress',
-    approve: 'Approve', hold: 'Hold', assign: 'Assign → PM',
-    proof: 'Proof',
-    heldBy: 'Held · team notified',
-    approvedBy: 'Approved · logged',
-    assignedBy: 'Assigned → PM · logged',
-    risks: (n: number) => `${n} risk${n === 1 ? '' : 's'}`,
-    ok: 'ok',
-    connectTitle: 'Your brief lights up as your sites get going.',
-    connectBody: 'Open a site chat and capture the day — deliveries, attendance and decisions land here as one source of truth.',
-    connect: 'Open a site chat',
-    errorLine: 'We could not load your brief just now.',
-    tryAgain: 'Try again',
-    deliveries: 'deliveries', issues: 'issues', present: 'present',
-    // Site switcher
-    allSites: 'All sites',
+    eyebrow: 'TODAY FOR OWNERS', needCall: (n: number) => `${n} decision${n === 1 ? '' : 's'} need your call.`,
+    calm: 'No owner action needed today.', calmSub: 'Everything waiting on you is cleared.',
+    moreApprovals: (n: number) => `${n} more in Approvals`,
+    sitesGlance: 'Sites at a glance', seeAll: 'See all', forYou: 'for you', clear: 'Clear',
+    specs: 'Material spec schedule', open: 'Open', pending: 'Pending', approved: 'Cleared', hold: 'On hold',
+    log: 'Recent decisions', fullLog: 'All approvals',
+    approve: 'Approve', review: 'Review & decide', proof: (n: number) => `${n} proof`,
+    overdue: 'Overdue', dueToday: 'Due today',
+    error: 'We could not load your brief just now.', tryAgain: 'Try again',
   },
   hi: {
-    greeting: 'सुप्रभात',
-    needToday: (n: number, s: number) => `आज ${s} साइट पर ${n} चीज़ों को आपकी ज़रूरत है।`,
-    needTodaySite: (n: number) => `इस साइट पर आज ${n} चीज़ों को आपकी ज़रूरत है।`,
-    calmTitle: 'सभी साइट शांत हैं।',
-    calmBody: 'आज कुछ भी आपकी ज़रूरत नहीं। नीचे के आँकड़े फिर भी जाँचे जा सकते हैं।',
-    moreInApprovals: (n: number) => `+${n} और मंज़ूरी में`,
-    sites: 'साइट',
-    seeAll: 'सभी देखें',
-    pulse: 'कल, एक नज़र में',
-    cash: 'नक़दी', labor: 'मज़दूर', material: 'सामग्री', progress: 'प्रगति',
-    approve: 'मंज़ूर', hold: 'रोकें', assign: 'सौंपें → PM',
-    proof: 'प्रमाण',
-    heldBy: 'रोका गया · टीम को सूचित',
-    approvedBy: 'मंज़ूर · दर्ज',
-    assignedBy: 'सौंपा गया → PM · दर्ज',
-    risks: (n: number) => `${n} जोखिम`,
-    ok: 'ठीक',
-    connectTitle: 'जैसे-जैसे आपकी साइटें चलती हैं, आपका ब्रीफ़ यहाँ रोशन होगा।',
-    connectBody: 'एक साइट चैट खोलें और दिन दर्ज करें — डिलीवरी, हाज़िरी और फ़ैसले यहाँ एक भरोसेमंद सत्य के रूप में आते हैं।',
-    connect: 'साइट चैट खोलें',
-    errorLine: 'अभी आपका ब्रीफ़ लोड नहो सका।',
-    tryAgain: 'फिर कोशिश करें',
-    deliveries: 'डिलीवरी', issues: 'मुद्दे', present: 'उपस्थित',
-    // Site switcher
-    allSites: 'सभी साइट',
+    eyebrow: 'आज मालिक के लिए', needCall: (n: number) => `${n} फ़ैसलों को आपकी मंज़ूरी चाहिए।`,
+    calm: 'आज मालिक की कोई कार्रवाई नहीं।', calmSub: 'आप पर निर्भर सब कुछ साफ़ है।',
+    moreApprovals: (n: number) => `${n} और मंज़ूरी में`,
+    sitesGlance: 'साइट एक नज़र में', seeAll: 'सभी देखें', forYou: 'आपके लिए', clear: 'साफ़',
+    specs: 'सामग्री स्पेक सूची', open: 'खोलें', pending: 'लंबित', approved: 'मंज़ूर', hold: 'रोकी',
+    log: 'हाल के फ़ैसले', fullLog: 'सभी मंज़ूरी',
+    approve: 'मंज़ूर', review: 'देखें व तय करें', proof: (n: number) => `${n} प्रमाण`,
+    overdue: 'बकाया', dueToday: 'आज देय',
+    error: 'अभी आपका ब्रीफ़ लोड नहीं हो सका।', tryAgain: 'फिर कोशिश करें',
   },
 } as const
+
+type Txt = (typeof STR)['en'] | (typeof STR)['hi']
+
+const KIND_EYEBROW: Record<string, string> = {
+  approval: 'Material spec', hold_payment: 'Payment hold', homeowner_question: 'Client question', generic: 'Decision',
+}
+
+interface Row {
+  spec: { id: string; site_id: string; approval_status: 'pending' | 'approved' | 'rejected' }
+}
 
 export default function Brief() {
   const { lang } = useT()
@@ -106,322 +75,252 @@ export default function Brief() {
   const qc = useQueryClient()
   const t = STR[lang]
 
-  // resolved decisions (local optimistic state keyed by risk index).
-  const [resolved, setResolved] = useState<Record<string, string>>({})
-
-  // Site switcher — client-side scope filter (null = All sites).
-  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
-
-  const briefQ = useQuery<OwnerBrief | null>({
-    queryKey: ['owner', 'brief'],
+  const pendingQ = useQuery({ queryKey: ['owner', 'approvals', 'pending'], queryFn: () => owner.approvals('pending') })
+  const homeQ = useQuery({ queryKey: ['owner', 'home'], queryFn: () => owner.home() })
+  const logQ = useQuery({ queryKey: ['owner', 'approvals', 'resolved'], queryFn: () => owner.approvals('resolved') })
+  const specsQ = useQuery({
+    queryKey: ['owner', 'specs', 'all'],
     queryFn: async () => {
-      // The morning brief recaps the PREVIOUS day, so "today" is often empty.
-      // Pick the most recent brief that actually carries risks (else the most
-      // recent by date) — robust to timezone + an empty same-day brief. The
-      // /briefs list isn't date-ordered, so we sort client-side.
-      const byDateDesc = (a: OwnerBrief, b: OwnerBrief) =>
-        (b.brief_date ?? '').localeCompare(a.brief_date ?? '')
-      const hasRisk = (b: OwnerBrief) =>
-        (b.payload?.sites ?? []).some((s) => (s.top_risks?.length ?? 0) > 0)
-      const briefs = (await owner.briefs()).items
-      if (briefs.length > 0) {
-        const withRisks = briefs.filter(hasRisk).sort(byDateDesc)
-        const chosen = withRisks[0] ?? [...briefs].sort(byDateDesc)[0]
-        if (chosen) return chosen
-      }
-      // Nothing yet — ask the backend to generate the brief (defaults to yesterday).
-      try {
-        const run = await owner.runBrief({})
-        return {
-          id: run.brief_id,
-          company_id: '',
-          brief_date: run.payload.brief_date,
-          payload: run.payload,
-          text: run.text,
-          sent_at: null,
-        }
-      } catch {
-        return null
-      }
+      const sites = (await owner.sites()).items
+      const per = await Promise.all(
+        sites.map((s) => request<Row['spec'][]>(`/api/v1/specs?site_id=${s.id}`).catch(() => [])),
+      )
+      return per.flat()
     },
   })
 
   const decide = useMutation({
-    mutationFn: ({ risk, site, action }: { risk: Risk; site: BriefSite; action: 'approve' | 'hold' | 'assign' }) =>
-      owner.createDecision({
-        site_id: risk.site_id || site.site_id || null,
-        action,
-        title: risk.message,
-        detail: `${site.name} · ${risk.kind}`,
-        evidence_event_ids: risk.evidence_event_ids,
-      }),
+    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'reject' }) =>
+      action === 'approve' ? owner.approve(id) : owner.reject(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['owner', 'approvals', 'pending'] })
+      void qc.invalidateQueries({ queryKey: ['owner', 'approvals', 'resolved'] })
+      void qc.invalidateQueries({ queryKey: ['owner', 'home'] })
+    },
   })
 
-  const { sites, ranked } = useMemo(() => {
-    const sites = briefQ.data?.payload.sites ?? []
-    return { sites, ranked: buildRanked(sites) }
-  }, [briefQ.data])
-
-  // --- Client-side site scope (no new backend call) ---
-  const scopedRanked = useMemo(() => scopeRanked(ranked, selectedSiteId), [ranked, selectedSiteId])
-  const scopedSites = useMemo(() => scopeSites(sites, selectedSiteId), [sites, selectedSiteId])
-
-  // SiteSwitcher items — one entry per site with worst status dot.
-  const switcherItems: SiteSwitcherItem[] = useMemo(
-    () => sites.map((s) => ({ id: s.site_id, name: s.name, status: siteWorstStatus(s) })),
-    [sites],
+  const now = Date.now()
+  const decisions = pendingQ.data?.items ?? []
+  const isOverdue = (d: Decision) => !!d.sla_due_at && new Date(d.sla_due_at).getTime() < now
+  const ranked = useMemo(
+    () => [...decisions].sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a))),
+    [decisions],
   )
+  const top = ranked.slice(0, 3)
+  const overflow = Math.max(0, ranked.length - 3)
 
-  if (briefQ.isLoading) {
-    return <Wrap><LoadingBlock /></Wrap>
-  }
-  if (briefQ.error) {
-    return (
-      <Wrap>
-        <ErrorBlock message={t.errorLine} retryLabel={t.tryAgain} onRetry={() => void briefQ.refetch()} />
-      </Wrap>
-    )
-  }
+  const specCounts = useMemo(() => {
+    const c = { pending: 0, approved: 0, rejected: 0 }
+    for (const s of specsQ.data ?? []) c[s.approval_status] += 1
+    return c
+  }, [specsQ.data])
 
-  // First-run / no data → calm connect empty state.
-  if (!briefQ.data || sites.length === 0) {
-    return (
-      <Wrap>
-        <EmptyState
-          variant="empty"
-          icon="message-circle"
-          title={t.connectTitle}
-          body={t.connectBody}
-          action={
-            <Button
-              title={t.connect}
-              size="lg"
-              onPress={() => router.push('/(contractor)/owner/chat')}
-            />
-          }
-        />
-      </Wrap>
-    )
+  const loading = pendingQ.isLoading || homeQ.isLoading
+  if (loading) return <Wrap><LoadingBlock /></Wrap>
+  if (pendingQ.error || homeQ.error) {
+    return <Wrap><ErrorBlock message={t.error} retryLabel={t.tryAgain} onRetry={() => { void pendingQ.refetch(); void homeQ.refetch() }} /></Wrap>
   }
 
-  const top = scopedRanked.slice(0, 3)
-  const overflow = Math.max(0, scopedRanked.length - 3)
-  const allCalm = scopedRanked.length === 0
-
-  // --- pulse (scoped, derived from counts) ---
-  const totals = scopedSites.reduce(
-    (acc, s) => {
-      acc.attendance += s.counts.attendance
-      acc.deliveries += s.counts.deliveries
-      acc.issues += s.counts.issues
-      return acc
-    },
-    { attendance: 0, deliveries: 0, issues: 0 },
-  )
-  const cashRisks = scopedRanked.filter((r) => /cash|payment|invoice|bill|money/i.test(r.risk.kind)).length
-  const laborRisks = scopedRanked.filter((r) => /labor|labour|attendance|crew/i.test(r.risk.kind)).length
-  const materialRisks = scopedRanked.filter((r) => /material|cement|steel|delivery|stock/i.test(r.risk.kind)).length
-  const onTrack = scopedSites.filter((s) => siteWorstStatus(s) === 'ok').length
-
-  const greetName = me?.name ?? null
+  const refreshing = pendingQ.isRefetching || homeQ.isRefetching
+  const greetName = me?.name ?? 'Owner'
 
   return (
-    <Wrap onRefresh={() => qc.invalidateQueries({ queryKey: ['owner', 'brief'] })} refreshing={briefQ.isRefetching}>
-      {/* ── Sticky header row: site switcher pill + avatar ─────────────────── */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <SiteSwitcher
-          sites={switcherItems}
-          selectedId={selectedSiteId}
-          onSelect={setSelectedSiteId}
-          allLabel={t.allSites}
-          totalCount={sites.length}
-        />
-        {/* Owner avatar — initials pill */}
+    <Wrap onRefresh={() => qc.invalidateQueries({ queryKey: ['owner'] })} refreshing={refreshing}>
+      {/* Top bar — scope context + search + more + avatar */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.text, borderRadius: theme.radii.pill, paddingVertical: 7, paddingHorizontal: 12 }}>
+          <Ionicons name="layers-outline" size={14} color={theme.colors.onAccent} />
+          <Micro style={{ color: theme.colors.onAccent }}>All sites</Micro>
+        </View>
+        <View style={{ flex: 1 }} />
+        <HeaderIcon icon="search" onPress={() => router.push('/(contractor)/owner/search')} />
+        <HeaderIcon icon="grid-outline" onPress={() => router.push('/(contractor)/owner/more')} />
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={greetName ?? 'Account'}
-          onPress={() => router.push('/(contractor)/owner/more')}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: theme.colors.accentWarm,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          accessibilityLabel="Account" onPress={() => router.push('/(contractor)/owner/more')}
+          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.accentWarm, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Micro color={theme.colors.accentDeep} style={{ fontWeight: '700' }}>
-            {(greetName ?? 'O').slice(0, 2).toUpperCase()}
-          </Micro>
+          <Micro style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>{greetName.slice(0, 2).toUpperCase()}</Micro>
         </Pressable>
       </View>
 
-      {/* ── Title row ───────────────────────────────────────────────────────── */}
-      <View style={{ gap: SPACE.xs }}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <Small muted>{greetName ? `${t.greeting}, ${greetName}` : t.greeting}</Small>
-          <Mono muted style={{ fontSize: 12 }}>{formatWhen(briefQ.data.sent_at ?? new Date().toISOString())}</Mono>
-        </View>
-        <Display style={{ fontSize: 22, lineHeight: 28 }}>
-          {allCalm
-            ? t.calmTitle
-            : selectedSiteId != null
-              ? t.needTodaySite(scopedRanked.length)
-              : t.needToday(ranked.length, sites.length)}
-        </Display>
+      {/* Hero */}
+      <View style={{ gap: SPACE.xs, marginTop: SPACE.xs }}>
+        <Eyebrow style={{ color: AP.clay }}>{`${t.eyebrow} · ${shortDate(new Date())}`}</Eyebrow>
+        <H1 style={{ fontSize: 30, lineHeight: 38 }}>{ranked.length === 0 ? t.calm : t.needCall(ranked.length)}</H1>
       </View>
 
-      {/* ── Exceptions (risk cards) ─────────────────────────────────────────── */}
-      {allCalm ? (
-        <EmptyState variant="clear" title={t.calmTitle} body={t.calmBody} />
+      {ranked.length === 0 ? (
+        <Card variant="quiet">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Ionicons name="checkmark-circle" size={20} color={theme.colors.ok} />
+            <Small muted style={{ flex: 1 }}>{t.calmSub}</Small>
+          </View>
+        </Card>
       ) : (
         <View style={{ gap: SPACE.md }}>
-          {top.map(({ risk, site, key }, idx) => {
-            const status = severityToStatus(risk.severity)
-            const domain = risk.kind.replace(/_/g, ' ')
-            const evidenceChips = idsToEvidence(risk.evidence_event_ids, t.proof).map(
-              (item) => ({ kind: 'message' as const, label: item.label ?? t.proof }),
-            )
-
-            // Resolved → collapsed confirmation pill
-            if (resolved[key]) {
-              return (
-                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm }}>
-                  <StatusPill status="ok" size="sm" label={resolved[key]} />
-                </View>
-              )
-            }
-
-            return (
-              <View key={key} style={{ gap: SPACE.sm }}>
-                <NeedsYouCard
-                  rank={idx + 1}
-                  status={status}
-                  statusLabel={domain}
-                  title={risk.message}
-                  detail={site.name}
-                  evidence={evidenceChips}
-                  primaryLabel={t.approve}
-                  secondaryLabel={t.hold}
-                  tone={status === 'risk' ? 'cautionary' : 'affirmative'}
-                  canApprove={true}
-                  onPrimary={decide.isPending ? undefined : () => {
-                    setResolved((m) => ({ ...m, [key]: t.approvedBy }))
-                    decide.mutate(
-                      { risk, site, action: 'approve' },
-                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
-                    )
-                  }}
-                  onSecondary={decide.isPending ? undefined : () => {
-                    setResolved((m) => ({ ...m, [key]: t.heldBy }))
-                    decide.mutate(
-                      { risk, site, action: 'hold' },
-                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
-                    )
-                  }}
-                />
-                {/* Assign — tertiary action below the card (owner-assigns-to-PM) */}
-                <Button
-                  title={t.assign}
-                  variant="secondary"
-                  size="md"
-                  disabled={decide.isPending}
-                  onPress={() => {
-                    setResolved((m) => ({ ...m, [key]: t.assignedBy }))
-                    decide.mutate(
-                      { risk, site, action: 'assign' },
-                      { onError: () => setResolved((m) => { const n = { ...m }; delete n[key]; return n }) },
-                    )
-                  }}
-                />
-              </View>
-            )
-          })}
+          {top.map((d) => (
+            <OwnerDecisionCard
+              key={d.id}
+              d={d}
+              overdue={isOverdue(d)}
+              t={t}
+              pending={decide.isPending}
+              onApprove={() => decide.mutate({ id: d.id, action: 'approve' })}
+              onReview={() => router.push('/(contractor)/owner/approvals')}
+            />
+          ))}
           {overflow > 0 ? (
-            <Button title={t.moreInApprovals(overflow)} variant="ghost" onPress={() => router.push('/(contractor)/owner/approvals')} />
+            <Button title={t.moreApprovals(overflow)} variant="ghost" onPress={() => router.push('/(contractor)/owner/approvals')} />
           ) : null}
         </View>
       )}
 
-      {/* ── Sites roll-up ──────────────────────────────────────────────────── */}
+      {/* Sites at a glance */}
       <SectionLabel trailing={<Small color={theme.colors.accentDeep} onPress={() => router.push('/(contractor)/owner/sites')}>{t.seeAll}</Small>}>
-        {t.sites}
+        {t.sitesGlance}
       </SectionLabel>
-      <View style={{ gap: SPACE.sm }}>
-        {[...scopedSites]
-          .sort((a, b) => b.top_risks.length - a.top_risks.length)
-          .map((s) => {
-            const st = siteWorstStatus(s)
-            return (
-              <SiteRollupRow
-                key={s.site_id}
-                name={s.name}
-                status={st}
-                riskLine={s.top_risks.length > 0 ? t.risks(s.top_risks.length) : t.ok}
-                meta={`${s.counts.attendance} ${t.present} · ${s.counts.deliveries} ${t.deliveries} · ${s.counts.issues} ${t.issues}`}
-                onPress={() => router.push(`/(contractor)/owner/site/${s.site_id}`)}
-              />
-            )
-          })}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACE.sm, paddingRight: SPACE.lg }}>
+        {(homeQ.data?.sites ?? []).map((s) => (
+          <SiteGlance key={s.site_id} s={s} t={t} onPress={() => router.push(`/(contractor)/owner/site/${s.site_id}`)} />
+        ))}
+      </ScrollView>
 
-      {/* ── Pulse 2×2 ────────────────────────────────────────────────────── */}
-      <SectionLabel>{t.pulse}</SectionLabel>
-      <View style={{ gap: SPACE.sm }}>
-        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-          <PulseCard
-            glyph="₹"
-            label={t.cash}
-            status={cashRisks > 0 ? 'risk' : 'ok'}
-            headline={cashRisks > 0 ? t.risks(cashRisks) : t.ok}
-          />
-          <PulseCard
-            glyph="◷"
-            label={t.labor}
-            status={laborRisks > 0 ? 'warn' : 'ok'}
-            headline={String(totals.attendance)}
-            supporting={`${totals.attendance} ${t.present}`}
-          />
+      {/* Spec summary */}
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.md }}>
+          <Ionicons name="color-palette-outline" size={18} color={theme.colors.text} />
+          <Title style={{ fontSize: 15, flex: 1 }}>{t.specs}</Title>
+          <Small color={theme.colors.accentDeep} onPress={() => router.push('/(contractor)/owner/specs')}>{t.open}</Small>
         </View>
         <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-          <PulseCard
-            glyph="▢"
-            label={t.material}
-            status={materialRisks > 0 ? 'warn' : 'ok'}
-            headline={materialRisks > 0 ? t.risks(materialRisks) : String(totals.deliveries)}
-            supporting={`${totals.deliveries} ${t.deliveries}`}
-          />
-          <PulseCard
-            glyph="↗"
-            label={t.progress}
-            status={onTrack === scopedSites.length ? 'ok' : 'info'}
-            headline={`${onTrack}/${scopedSites.length}`}
-            supporting={totals.issues > 0 ? `${totals.issues} ${t.issues}` : undefined}
-          />
+          <SpecTile label={t.pending} value={specCounts.pending} tone="warn" />
+          <SpecTile label={t.hold} value={specCounts.rejected} tone="risk" />
+          <SpecTile label={t.approved} value={specCounts.approved} tone="ok" />
         </View>
-      </View>
+      </Card>
+
+      {/* Recent decision log */}
+      <SectionLabel trailing={<Small color={theme.colors.accentDeep} onPress={() => router.push('/(contractor)/owner/approvals')}>{t.fullLog}</Small>}>
+        {t.log}
+      </SectionLabel>
+      <Card padded={false}>
+        {(logQ.data?.items ?? []).slice(0, 4).map((d, i, arr) => (
+          <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, padding: SPACE.lg, borderTopWidth: i ? 1 : 0, borderTopColor: theme.colors.line }}>
+            <Ionicons
+              name={d.state === 'resolved' ? 'checkmark-circle' : 'close-circle'}
+              size={18}
+              color={d.state === 'resolved' ? theme.colors.ok : theme.colors.risk}
+            />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Small numberOfLines={1}>{d.title}</Small>
+              <Micro muted>{formatWhen(d.resolved_at ?? d.updated_at)}</Micro>
+            </View>
+          </View>
+        ))}
+        {(logQ.data?.items ?? []).length === 0 ? (
+          <View style={{ padding: SPACE.lg }}><Small muted>No decisions logged yet.</Small></View>
+        ) : null}
+      </Card>
     </Wrap>
   )
 }
 
-// ---- small wrapper to keep the scroll/refresh consistent -------------------
-function Wrap({
-  children,
-  onRefresh,
-  refreshing,
+function OwnerDecisionCard({
+  d, overdue, t, pending, onApprove, onReview,
 }: {
-  children: React.ReactNode
-  onRefresh?: () => void
-  refreshing?: boolean
+  d: Decision
+  overdue: boolean
+  t: Txt
+  pending: boolean
+  onApprove: () => void
+  onReview: () => void
 }) {
+  const { theme } = useTheme()
+  const tone: Status = overdue ? 'risk' : 'warn'
+  const dueToday = !overdue && !!d.sla_due_at && new Date(d.sla_due_at).toDateString() === new Date().toDateString()
+  const proofN = d.evidence_event_ids?.length ?? 0
+  return (
+    <Card flag={tone}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <StatusPill status={tone} size="sm" label={KIND_EYEBROW[d.kind] ?? 'Decision'} uppercase />
+        {overdue ? (
+          <Micro style={{ color: theme.colors.risk, marginLeft: 'auto' }}>{t.overdue}</Micro>
+        ) : dueToday ? (
+          <Micro style={{ color: theme.colors.warn, marginLeft: 'auto' }}>{t.dueToday}</Micro>
+        ) : null}
+      </View>
+      <Title style={{ marginTop: SPACE.sm }}>{d.title}</Title>
+      {d.detail ? <Body muted style={{ marginTop: 2 }}>{d.detail}</Body> : null}
+      {proofN > 0 ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: SPACE.sm }}>
+          <Ionicons name="image-outline" size={14} color={theme.colors.textMute} />
+          <Micro muted>{t.proof(proofN)}</Micro>
+        </View>
+      ) : null}
+      <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md }}>
+        <Button title={t.approve} size="md" disabled={pending} onPress={onApprove} style={{ flex: 1 }} />
+        <Button title={t.review} variant="secondary" size="md" onPress={onReview} style={{ flex: 1 }} />
+      </View>
+    </Card>
+  )
+}
+
+function SiteGlance({ s, t, onPress }: { s: SiteCard; t: Txt; onPress: () => void }) {
+  const { theme } = useTheme()
+  const forYou = (s.top_risks?.length ?? 0) + (s.risk_overflow ?? 0)
+  const st: Status = s.status === 'ok' || s.status === 'warn' || s.status === 'risk' ? s.status : 'info'
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={{ width: 168 }}>
+      <Card style={{ gap: 6 }}>
+        <Title style={{ fontSize: 14.5 }} numberOfLines={1}>{s.name}</Title>
+        <StatusPill status={st} size="sm" />
+        {forYou > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="flash" size={12} color={theme.colors.warn} />
+            <Micro style={{ color: theme.colors.warn }}>{`${forYou} ${t.forYou}`}</Micro>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="checkmark" size={12} color={theme.colors.ok} />
+            <Micro style={{ color: theme.colors.ok }}>{t.clear}</Micro>
+          </View>
+        )}
+      </Card>
+    </Pressable>
+  )
+}
+
+function SpecTile({ label, value, tone }: { label: string; value: number; tone: Status }) {
+  const { theme } = useTheme()
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.paper, borderRadius: theme.radii.chip, padding: SPACE.md, gap: 2 }}>
+      <Mono style={{ fontSize: 18, color: theme.colors[tone] }}>{value}</Mono>
+      <Micro muted>{label}</Micro>
+    </View>
+  )
+}
+
+function HeaderIcon({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+  const { theme } = useTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      hitSlop={8}
+      style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.line, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Ionicons name={icon} size={18} color={theme.colors.text} />
+    </Pressable>
+  )
+}
+
+function Wrap({ children, onRefresh, refreshing }: { children: React.ReactNode; onRefresh?: () => void; refreshing?: boolean }) {
   const { theme } = useTheme()
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.lg, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
-      refreshControl={
-        onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} /> : undefined
-      }
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} /> : undefined}
     >
       {children}
     </ScrollView>
