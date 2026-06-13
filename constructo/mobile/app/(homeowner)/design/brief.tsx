@@ -78,6 +78,16 @@ export default function BriefScreen() {
     },
   })
 
+  // Upstream failures — property or profile fetch failed
+  if (propQ.isError || profileQ.isError) {
+    return (
+      <Screen scroll padded floatingNav>
+        <SubHeader title={S.briefTitle} onBack={() => router.back()} />
+        <CalmCard status="quiet" title={S.noBriefYet} />
+      </Screen>
+    )
+  }
+
   // Honest error states for the brief
   if (briefQ.isError) {
     const err = briefQ.error

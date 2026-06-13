@@ -50,7 +50,7 @@ export default function ProfilerHubScreen() {
       />
       {(propQ.isLoading || q.isLoading) && <Body>Loading…</Body>}
       {(q.isError || propQ.isError) && (
-        <CalmCard status="quiet" title={S.noBriefYet} />
+        <CalmCard status="quiet" title={S.intakeError} />
       )}
       {q.data && groupAreasByKind(q.data.areas).map((group) => (
         <View key={group.kind} style={{ gap: 8 }}>

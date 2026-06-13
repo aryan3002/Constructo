@@ -67,8 +67,9 @@ export const PROFILER_STR = {
     requestChanges: 'Request changes',
     sendToArchitect: 'Send to designer',
     onlyOwnerCanApprove: 'Only a property owner can approve. You can add a comment.',
-    noBriefYet: "Your brief is being prepared. We’ll tell you when it’s ready.",
+    noBriefYet: "Your brief is being prepared. We'll tell you when it's ready.",
     notSharedYet: 'Not shared with you yet.',
+    intakeError: 'Could not load your design profile.',
   },
   hi: {
     intakeTitle: 'आपकी डिज़ाइन प्रोफ़ाइल',
@@ -81,5 +82,6 @@ export const PROFILER_STR = {
     onlyOwnerCanApprove: 'सिर्फ़ मालिक मंज़ूरी दे सकते हैं। आप टिप्पणी जोड़ सकते हैं।',
     noBriefYet: 'आपका ब्रीफ़ तैयार हो रहा है। तैयार होते ही हम बताएँगे।',
     notSharedYet: 'अभी आपके साथ साझा नहीं किया गया।',
+    intakeError: 'आपकी डिज़ाइन प्रोफ़ाइल लोड नहीं हो सकी।',
   },
 } as const

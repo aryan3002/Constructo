@@ -2,6 +2,9 @@
  * Design Profiler — per-area ranking screen. Fetches references for the area
  * and the profile detail for the caller's contributor id. Allows 1–5 star
  * rating + quick-tag chips per reference. Calm Cockpit kit, href:null route.
+ *
+ * Each reference renders in its own <RefRankRow> so stars/tags state is
+ * isolated — picking stars on ref A cannot bleed into a save on ref B.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,6 +12,7 @@ import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 
 import { design } from '../../../../src/api/client'
+import type { ProfilerReference } from '../../../../src/api/client'
 import {
   Screen,
   SubHeader,
@@ -22,9 +26,98 @@ import {
   PROFILER_STR,
 } from '../../../../src/homeowner/design_profiler.util'
 
+// ---------------------------------------------------------------------------
+// Per-reference row — owns its own stars/tags state and mutation
+// ---------------------------------------------------------------------------
+
+interface RefRankRowProps {
+  reference: ProfilerReference
+  contributorId: string
+  canRank: boolean
+  onSaved: () => void
+}
+
+function RefRankRow({ reference, contributorId, canRank, onSaved }: RefRankRowProps) {
+  const toast = useToast()
+  const [stars, setStars] = useState(0)
+  const [tags, setTags] = useState<string[]>([])
+
+  const mut = useMutation({
+    mutationFn: () =>
+      design.rankReference(reference.id, {
+        contributor_id: contributorId,
+        stars,
+        tags: {
+          positive: tags.filter(
+            (t) => !t.startsWith('Too') && t !== 'Hard to maintain',
+          ),
+          negative: tags.filter(
+            (t) => t.startsWith('Too') || t === 'Hard to maintain',
+          ),
+        },
+      }),
+    onSuccess: () => {
+      toast('Saved', 'check')
+      setStars(0)
+      setTags([])
+      onSaved()
+    },
+    onError: (e: Error) => toast(e.message),
+  })
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Body>{reference.source_type}</Body>
+
+      {/* Star picker — ≥48px touch target via hitSlop */}
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Pressable
+            key={n}
+            onPress={() => setStars(n)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${n} stars`}
+          >
+            <Body>{n <= stars ? '★' : '☆'}</Body>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Quick tags */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {RANKING_TAGS.map((tg) => (
+          <Chip
+            key={tg}
+            label={tg}
+            active={tags.includes(tg)}
+            onPress={() =>
+              setTags((cur) =>
+                cur.includes(tg) ? cur.filter((x) => x !== tg) : [...cur, tg],
+              )
+            }
+          />
+        ))}
+      </View>
+
+      {/* Save — disabled unless canRank and at least 1 star chosen */}
+      <Chip
+        label="Save ranking"
+        active={canRank && stars > 0}
+        onPress={() => {
+          if (canRank && stars > 0) mut.mutate()
+        }}
+      />
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
+
 export default function AreaRankScreen() {
   const router = useRouter()
-  const toast = useToast()
   const qc = useQueryClient()
   const { area, pid, key } = useLocalSearchParams<{
     area: string
@@ -32,9 +125,6 @@ export default function AreaRankScreen() {
     key: string
   }>()
   const S = PROFILER_STR.en
-
-  const [stars, setStars] = useState(0)
-  const [tags, setTags] = useState<string[]>([])
 
   const refsQ = useQuery({
     queryKey: ['design', 'profiler', 'refs', pid, area],
@@ -49,27 +139,11 @@ export default function AreaRankScreen() {
   })
 
   const myContributorId = profileQ.data?.my_contributor_id ?? null
+  const canRank = !!myContributorId
 
-  const rankMut = useMutation({
-    mutationFn: (refId: string) =>
-      design.rankReference(refId, {
-        contributor_id: myContributorId as string,
-        stars,
-        tags: {
-          positive: tags.filter(
-            (t) => !t.startsWith('Too') && t !== 'Hard to maintain',
-          ),
-          negative: tags.filter(
-            (t) => t.startsWith('Too') || t === 'Hard to maintain',
-          ),
-        },
-      }),
-    onSuccess: () => {
-      toast('Saved', 'check')
-      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
-    },
-    onError: (e: Error) => toast(e.message),
-  })
+  const handleSaved = () => {
+    void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+  }
 
   return (
     <Screen scroll padded floatingNav>
@@ -79,62 +153,28 @@ export default function AreaRankScreen() {
         onBack={() => router.back()}
       />
 
-      {!myContributorId && (
+      {!canRank && (
         <CalmCard status="quiet" title="Only members of this home can rank." />
       )}
 
       {refsQ.isLoading && <Body>Loading…</Body>}
+
+      {refsQ.isError && (
+        <CalmCard status="quiet" title="Couldn't load references." />
+      )}
 
       {refsQ.data?.length === 0 && (
         <CalmCard status="quiet" title="No references yet" />
       )}
 
       {refsQ.data?.map((r) => (
-        <View key={r.id} style={{ gap: 8 }}>
-          <Body>{r.source_type}</Body>
-
-          {/* Star picker */}
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => setStars(n)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`${n} stars`}
-              >
-                <Body>{n <= stars ? '★' : '☆'}</Body>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Quick tags */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {RANKING_TAGS.map((tg) => (
-              <Chip
-                key={tg}
-                label={tg}
-                active={tags.includes(tg)}
-                onPress={() =>
-                  setTags((cur) =>
-                    cur.includes(tg)
-                      ? cur.filter((x) => x !== tg)
-                      : [...cur, tg],
-                  )
-                }
-              />
-            ))}
-          </View>
-
-          {/* Save */}
-          <Chip
-            label="Save ranking"
-            active
-            onPress={() => {
-              if (myContributorId && stars > 0) rankMut.mutate(r.id)
-            }}
-          />
-        </View>
+        <RefRankRow
+          key={r.id}
+          reference={r}
+          contributorId={myContributorId ?? ''}
+          canRank={canRank}
+          onSaved={handleSaved}
+        />
       ))}
     </Screen>
   )
