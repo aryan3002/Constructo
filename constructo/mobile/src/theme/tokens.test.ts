@@ -22,8 +22,8 @@ describe('design tokens', () => {
     expect(THEMES.daylight.colors.info).not.toBe(STATUS.info)
   })
 
-  it('uses the residential Daylight radius and the bolder Neev radius', () => {
-    expect(THEMES.daylight.radii.card).toBe(22)
+  it('uses the sharpened Daylight radius and the bolder Neev radius', () => {
+    expect(THEMES.daylight.radii.card).toBe(16)
     expect(THEMES.neev.radii.card).toBe(14)
   })
 
