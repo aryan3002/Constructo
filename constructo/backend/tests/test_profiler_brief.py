@@ -13,12 +13,15 @@ from app.profiler.brief import (
 def test_build_area_brief_payload_keeps_reducer_numbers_and_approved_only():
     taste = {"dimensions": {"style": {"minimal": 2.0}}, "confidence": 1.0, "has_conflict": False}
     themes = [
-        {"name": "Soft Minimal", "palette": ["oak"], "materials": ["light oak"], "status": "approved"},
+        {"name": "Soft Minimal", "palette": ["oak"], "materials": ["light oak"],
+         "status": "approved"},
         {"name": "Rejected One", "palette": [], "materials": ["chrome"], "status": "rejected"},
     ]
     conflicts = [
-        {"dimension": "colors", "value": "dark", "decision_note": "go light", "resolution_status": "resolved"},
-        {"dimension": "style", "value": "ornate", "decision_note": None, "resolution_status": "open"},
+        {"dimension": "colors", "value": "dark", "decision_note": "go light",
+         "resolution_status": "resolved"},
+        {"dimension": "style", "value": "ornate", "decision_note": None,
+         "resolution_status": "open"},
     ]
     payload = build_area_brief_payload("kitchen", taste, themes, conflicts)
     assert payload["area_key"] == "kitchen"
@@ -40,7 +43,8 @@ async def test_narrate_brief_calls_complete_per_audience_and_returns_prose():
     out = await narrate_brief(llm, "contractor", payload)
     assert out["headline"] == "A calm, warm kitchen"
     # the audience is named in the prompt; it used complete() (not vision):
-    assert "contractor" in llm.calls[-1]["user"].lower() or "contractor" in llm.calls[-1]["system"].lower()
+    last = llm.calls[-1]
+    assert "contractor" in last["user"].lower() or "contractor" in last["system"].lower()
     assert "image_url" not in llm.calls[-1]
     assert PROFILER_BRIEF_SYSTEM  # system prompt exists
 
