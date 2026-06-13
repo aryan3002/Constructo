@@ -54,6 +54,10 @@ function HomeownerTabs() {
         <Tabs.Screen name="design/profile" options={{ href: null }} />
         {/* Wave 2b — per-room references + drawing detail */}
         <Tabs.Screen name="design/references/[room]" options={{ href: null }} />
+        {/* Design Profiler — intake hub, per-area ranking, brief review */}
+        <Tabs.Screen name="design/profiler" options={{ href: null }} />
+        <Tabs.Screen name="design/profiler/[area]" options={{ href: null }} />
+        <Tabs.Screen name="design/brief" options={{ href: null }} />
         <Tabs.Screen name="drawings/[id]" options={{ href: null }} />
         {/* Her To-dos — pushed from the chat thread, no tab bar entry */}
         <Tabs.Screen name="todos" options={{ href: null }} />

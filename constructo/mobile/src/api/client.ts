@@ -306,6 +306,7 @@ export interface ProfilerProfileDetail {
   scope_type: string
   status: string
   created_at: string
+  my_contributor_id: string | null
   areas: ProfilerArea[]
   contributors: ProfilerContributor[]
 }
