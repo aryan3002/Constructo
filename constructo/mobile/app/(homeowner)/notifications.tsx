@@ -40,6 +40,7 @@ import {
   SettingsGroup,
   Small,
   StatusPill,
+  Toggle,
 } from '../../src/ui'
 import {
   CADENCE_LABEL,
@@ -50,6 +51,56 @@ import {
   type Cadence,
   type Lang,
 } from './_settings.util'
+
+// ---- Delivery method helpers -----------------------------------------------
+
+type DeliveryKey = 'push' | 'whatsapp' | 'email'
+
+const DELIVERY_CHANNELS: {
+  key: DeliveryKey
+  icon: React.ComponentProps<typeof import('@expo/vector-icons').Feather>['name']
+  label: Record<Lang, string>
+  desc: Record<Lang, string>
+  wired: boolean
+}[] = [
+  {
+    key: 'push',
+    icon: 'bell',
+    label: { en: 'Push notifications', hi: 'पुश सूचनाएँ' },
+    desc: { en: 'In-app and phone notifications.', hi: 'ऐप और फ़ोन पर सूचनाएँ।' },
+    wired: true,
+  },
+  {
+    key: 'whatsapp',
+    icon: 'message-circle',
+    label: { en: 'WhatsApp', hi: 'व्हाट्सएप' },
+    desc: { en: 'Alerts sent to your WhatsApp number.', hi: 'आपके व्हाट्सएप नंबर पर सूचनाएँ।' },
+    wired: false,
+  },
+  {
+    key: 'email',
+    icon: 'mail',
+    label: { en: 'Email', hi: 'ईमेल' },
+    desc: { en: 'Digest emails to your inbox.', hi: 'आपके इनबॉक्स में डाइजेस्ट ईमेल।' },
+    wired: false,
+  },
+]
+
+function readDelivery(prefs: Record<string, unknown> | undefined, key: DeliveryKey): boolean {
+  const map = (prefs?.delivery ?? {}) as Record<string, unknown>
+  // Default push=true, others=false when not yet stored.
+  if (map[key] === undefined) return key === 'push'
+  return map[key] === true
+}
+
+function withDelivery(
+  prefs: Record<string, unknown> | undefined,
+  key: DeliveryKey,
+  value: boolean,
+): Record<string, unknown> {
+  const existing = (prefs?.delivery ?? {}) as Record<string, unknown>
+  return { ...(prefs ?? {}), delivery: { ...existing, [key]: value } }
+}
 
 /** A Feather glyph + one-line meaning per cadence — turns the bare label into a
  *  reassuring, self-explaining choice (the live subtitle each row carries). */
@@ -100,6 +151,8 @@ const STR = {
     saveError: 'Couldn’t save that. Please try again.',
     noMemberTitle: 'Settings unavailable',
     noMember: 'We couldn’t load your notification settings just now.',
+    delivery: 'Delivery channels',
+    deliverySub: 'Where Constructo reaches you.',
   },
   hi: {
     title: 'सूचनाएँ',
@@ -113,6 +166,8 @@ const STR = {
     saveError: 'सहेज नहीं पाए। कृपया फिर कोशिश करें।',
     noMemberTitle: 'सेटिंग उपलब्ध नहीं',
     noMember: 'अभी आपकी सूचना सेटिंग लोड नहीं हो सकीं।',
+    delivery: 'डिलीवरी चैनल',
+    deliverySub: 'Constructo आपसे कहाँ संपर्क करे।',
   },
 } as const
 
@@ -154,6 +209,12 @@ export default function Notifications() {
   function setCadence(key: string, cadence: Cadence) {
     if (!self) return
     const next = withCadence(prefs, key, cadence)
+    mut.mutate({ id: self.id, next })
+  }
+
+  function setDelivery(key: DeliveryKey, value: boolean) {
+    if (!self) return
+    const next = withDelivery(prefs, key, value)
     mut.mutate({ id: self.id, next })
   }
 
@@ -203,7 +264,83 @@ export default function Notifications() {
           message={tx.noMember}
         />
       ) : (
-        NOTIF_CATEGORIES.map((cat) => {
+        <>
+          {/* ---- Delivery channels — Push / WhatsApp / Email toggles. ---- */}
+          <View style={{ gap: SPACE.sm }}>
+            <View style={{ gap: SPACE.xs, paddingHorizontal: SPACE.xs }}>
+              <Eyebrow>{tx.delivery}</Eyebrow>
+              <Small muted>{tx.deliverySub}</Small>
+            </View>
+            <SettingsGroup>
+              {DELIVERY_CHANNELS.map((ch, i) => {
+                const enabled = readDelivery(prefs, ch.key)
+                return (
+                  <View
+                    key={ch.key}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: SPACE.md,
+                      paddingHorizontal: SPACE.lg,
+                      paddingVertical: SPACE.md,
+                      borderBottomWidth: i < DELIVERY_CHANNELS.length - 1 ? 1 : 0,
+                      borderBottomColor: theme.colors.line,
+                      minHeight: TAP + 8,
+                    }}
+                  >
+                    {/* Icon chip */}
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: theme.radii.chip,
+                        backgroundColor: enabled ? AP.chip : AP.surfaceLow,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Feather
+                        name={ch.icon}
+                        size={18}
+                        color={enabled ? AP.onChip : theme.colors.textMute}
+                      />
+                    </View>
+
+                    {/* Label + desc + coming-soon badge */}
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+                        <Body numberOfLines={1} style={{ flexShrink: 1 }}>
+                          {ch.label[L]}
+                        </Body>
+                        {!ch.wired ? (
+                          <View
+                            style={{
+                              backgroundColor: AP.surfaceLow,
+                              borderRadius: theme.radii.pill,
+                              paddingHorizontal: SPACE.sm,
+                              paddingVertical: 2,
+                            }}
+                          >
+                            <Micro muted>{tx.comingSoon}</Micro>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Small muted numberOfLines={1}>{ch.desc[L]}</Small>
+                    </View>
+
+                    {/* Kit Toggle — persists into notif_prefs.delivery.{key}. */}
+                    <Toggle
+                      value={enabled}
+                      onValueChange={(v) => setDelivery(ch.key, v)}
+                    />
+                  </View>
+                )
+              })}
+            </SettingsGroup>
+          </View>
+
+          {/* ---- Cadence chooser per category. ---- */}
+          {NOTIF_CATEGORIES.map((cat) => {
           const current = readCadence(prefs, cat.key)
           return (
             <View key={cat.key} style={{ gap: SPACE.sm }}>
@@ -251,7 +388,8 @@ export default function Notifications() {
               ) : null}
             </View>
           )
-        })
+        })}
+        </>
       )}
     </Screen>
   )

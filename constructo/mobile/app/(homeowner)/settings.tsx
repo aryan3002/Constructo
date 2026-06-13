@@ -49,6 +49,8 @@ const STR = {
     storage: 'Storage settings',
     storageSub: (days: number | 'all') =>
       days === 'all' ? 'Keep everything' : `Keep last ${days} days`,
+    designTaste: 'Design taste',
+    designTasteSub: 'Tell Constructo what you love',
     profile: 'Account',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'Phone & profile',
@@ -71,6 +73,8 @@ const STR = {
     storage: 'स्टोरेज सेटिंग्स',
     storageSub: (days: number | 'all') =>
       days === 'all' ? 'सब कुछ रखें' : `पिछले ${days} दिन रखें`,
+    designTaste: 'डिज़ाइन पसंद',
+    designTasteSub: 'Constructo को बताएं आपको क्या पसंद है',
     profile: 'खाता',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'फ़ोन और प्रोफ़ाइल',
@@ -167,6 +171,12 @@ export default function Settings() {
             title={tx.storage}
             subtitle={tx.storageSub(retentionDays)}
             onPress={() => router.push('/(homeowner)/storage')}
+          />
+          <SettingsRow
+            icon="heart"
+            title={tx.designTaste}
+            subtitle={tx.designTasteSub}
+            onPress={() => router.push('/(homeowner)/design/profile')}
           />
           <SettingsRow
             icon="globe"
