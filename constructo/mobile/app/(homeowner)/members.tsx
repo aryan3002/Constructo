@@ -26,7 +26,7 @@ import type { Capabilities, HomeownerMember } from '../../src/api/types'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE } from '../../src/theme/tokens'
+import { SPACE } from '../../src/theme/tokens'
 import {
   Avatar,
   Body,
@@ -34,10 +34,10 @@ import {
   BodyStrong,
   Button,
   Card,
+  Chip,
   Display,
   Eyebrow,
   FadeInUp,
-  Micro,
   QuietState,
   Screen,
   StatusPill,
@@ -193,17 +193,13 @@ function MemberCard({
           <BodyStrong numberOfLines={1} style={{ flexShrink: 1 }}>
             {name}
           </BodyStrong>
+          {/* Kit Chip replaces the hand-rolled "you" pill — accent-filled,
+              static label (no onPress) so screen readers skip the dead-end). */}
           {isYou ? (
-            <View
-              style={{
-                backgroundColor: AP.chip,
-                borderRadius: theme.radii.pill,
-                paddingHorizontal: SPACE.sm,
-                paddingVertical: 2,
-              }}
-            >
-              <Micro style={{ color: AP.onChip, fontWeight: '600' }}>{tx.you}</Micro>
-            </View>
+            <Chip
+              label={tx.you}
+              active
+            />
           ) : null}
         </View>
 

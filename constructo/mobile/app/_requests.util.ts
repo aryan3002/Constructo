@@ -42,20 +42,21 @@ interface BuildDetailInput {
   detail: string
   roomKey: string | null
   urgency: Urgency
-  hasPhoto: boolean
+  /** Number of photos uploaded (0 = none). Pass `photoUri ? 1 : 0` for single-photo pickers. */
+  photoCount: number
   lang: 'en' | 'hi'
 }
 
 /**
  * Fold the form fields into a single `detail` string (the API only accepts
- * `{title, detail}`). Room + urgency are tagged; a captured photo is noted as a
- * TODO since there is no attachment endpoint yet.
+ * `{title, detail}`). Room + urgency are tagged; uploaded photos are noted with
+ * their count (e.g. "[2 photos attached]").
  */
 export function buildRequestDetail({
   detail,
   roomKey,
   urgency,
-  hasPhoto,
+  photoCount,
   lang,
 }: BuildDetailInput): string | undefined {
   const room = roomKey ? ROOM_PRESETS.find((r) => r.key === roomKey) : null
@@ -67,8 +68,10 @@ export function buildRequestDetail({
   if (body) parts.push(body)
   if (room) parts.push(`${L('Room', 'कमरा')}: ${lang === 'hi' ? room.hi : room.en}`)
   if (urg) parts.push(`${L('Urgency', 'अत्यावश्यकता')}: ${lang === 'hi' ? urg.hi : urg.en}`)
-  // TODO: real photo attachment once an upload endpoint exists.
-  if (hasPhoto) parts.push(L('[Photo attached]', '[फ़ोटो संलग्न]'))
+  if (photoCount > 0) {
+    const note = `[${photoCount} photo${photoCount > 1 ? 's' : ''} attached]`
+    parts.push(L(note, `[${photoCount} फ़ोटो संलग्न]`))
+  }
 
   const joined = parts.join('\n')
   return joined.length ? joined : undefined
