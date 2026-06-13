@@ -29,6 +29,7 @@ from app.approvals.service import apply_action
 from app.approvals.state_machine import DecisionAction
 from app.auth.deps import get_current_user
 from app.auth.jwt import create_access_token
+from app.auth.otp import assert_otp_valid
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
@@ -128,8 +129,6 @@ from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/homeowner", tags=["homeowner"])
 
-# Dev OTP, mirroring app.auth.router (no SMS provider wired yet).
-STUB_OTP = "000000"
 DEFAULT_REQUEST_SLA_DAYS = 3
 # Max active+invited members per site (founder decision). Counted on the
 # (site_id, status) index; a hard gate on the owner-mint invite path.
@@ -344,8 +343,7 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
     Returns onboarding-friendly names (property display name + company name) so
     the app can greet the homeowner with their build, not a bare token.
     """
-    if body.otp != STUB_OTP:
-        raise AppError(401, "invalid_otp", "Invalid OTP")
+    assert_otp_valid(body.phone, body.otp)
 
     member = (
         await session.execute(

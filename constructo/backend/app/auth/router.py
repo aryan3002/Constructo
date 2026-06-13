@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user, require_role
 from app.auth.jwt import create_access_token, create_step_up_token
 from app.auth.landing import landing_for
+from app.auth.otp import assert_otp_valid, dev_otp_hint
 from app.auth.phone import normalize_phone, phone_candidates
 from app.common.errors import AppError
 from app.config import settings
@@ -24,8 +25,6 @@ from app.models import Company, PushToken, User, UserRole
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-# Placeholder OTP accepted during Wave 0 (no SMS provider wired yet).
-STUB_OTP = "000000"
 DEFAULT_COMPANY_NAME = "Default Company"
 SUPPORTED_LANGUAGES = ("en", "hi")
 
@@ -36,8 +35,9 @@ class RequestOtpIn(BaseModel):
 
 class RequestOtpOut(BaseModel):
     sent: bool = True
-    # In dev there is no SMS provider; surface the stub so the UI can hint it.
-    dev_otp: str | None = STUB_OTP
+    # The dev OTP, surfaced ONLY while the dev bypass is enabled (never leaked
+    # once closed in prod). Set per-response via `dev_otp_hint()`.
+    dev_otp: str | None = None
 
 
 class LoginIn(BaseModel):
@@ -109,15 +109,14 @@ async def _get_or_create_default_company(session: AsyncSession) -> Company:
 @router.post("/request-otp", response_model=RequestOtpOut)
 async def request_otp(body: RequestOtpIn) -> RequestOtpOut:
     """Request a login code. No-op until an SMS provider is wired (dev OTP
-    stays 000000). Always returns sent=true so the UI flow is identical in dev
-    and prod, and powers re-OTP ("resend code") recovery."""
-    return RequestOtpOut()
+    stays 000000 while DEV_OTP_ENABLED). Always returns sent=true so the UI flow
+    is identical in dev and prod, and powers re-OTP ("resend code") recovery."""
+    return RequestOtpOut(dev_otp=dev_otp_hint())
 
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
-    if body.otp != STUB_OTP:
-        raise AppError(401, "invalid_otp", "Invalid OTP")
+    assert_otp_valid(body.phone, body.otp)
 
     # Tolerant lookup: match the existing user across equivalent phone forms
     # (+919800000001 / 919800000001 / 9800000001 / 0…), so a returning owner who
@@ -163,7 +162,7 @@ class StepUpTokenOut(BaseModel):
 async def step_up_request_otp(user: User = Depends(get_current_user)) -> RequestOtpOut:
     """Send a re-verification code to the current user (no-op in dev; OTP stays
     000000). Mirrors login's request-otp so the web step-up flow is identical."""
-    return RequestOtpOut()
+    return RequestOtpOut(dev_otp=dev_otp_hint())
 
 
 @router.post("/step-up/verify", response_model=StepUpTokenOut)
@@ -172,8 +171,7 @@ async def step_up_verify(
 ) -> StepUpTokenOut:
     """Exchange a fresh OTP for a short-lived step-up token (for the current
     user) that unlocks one sensitive-action window (e.g. a Tally export)."""
-    if body.otp != STUB_OTP:
-        raise AppError(401, "invalid_otp", "Invalid OTP")
+    assert_otp_valid(user.phone, body.otp)
     return StepUpTokenOut(
         step_up_token=create_step_up_token(str(user.id)),
         expires_in=settings.step_up_expire_minutes * 60,
