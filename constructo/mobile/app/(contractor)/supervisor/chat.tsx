@@ -1,18 +1,23 @@
 /**
- * Crew chat (`/chat`) — the site's in-app thread (Phase 1). Every message also
- * flows into extraction server-side, so this is "capture with a conversation
- * around it". Neev theme: warm paper, amber for own messages + Send,
- * ≥48px tap targets, Hindi-first copy.
+ * Crew chat (`/chat`) — the site's in-app thread. Every message also flows into
+ * extraction server-side, so this is "capture with a conversation around it".
+ * Neev theme: warm paper, amber for own messages + Send, ≥48px tap targets,
+ * Hindi-first copy.
  *
- * v1: the supervisor's assigned site(s); messages poll every ~8s; sends are
- * optimistic (a local "sending" bubble) and idempotent on client_msg_id.
+ * Migrated onto the shared `src/chat` kit (useChatThread + MessageView): the
+ * offline-first durable outbox (queued→sending→sent, survives app-kill), live
+ * socket, incremental after_seq sync, delivery ticks (✓/✓✓/read), tap-to-retry,
+ * system notices, and server-driven Nivaan rows/proposals — all the spine the
+ * owner thread already runs on. The supervisor-only surfaces (the @ask grounded
+ * one-liner, slash + smart-suggest capture, camera/voice, the long-press card
+ * menu with dispute/to-do/vendor-confirm, the pinned brief, recap + radar) are
+ * layered on top of the hook.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -20,13 +25,12 @@ import {
   Share,
   TextInput,
   View,
-  type ViewStyle,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -36,7 +40,6 @@ import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
 import {
   chatApi,
-  newClientMsgId,
   type AskResult,
   type ChatEvent,
   type ChatMessage,
@@ -48,11 +51,17 @@ import { WEB_BASE } from '../../../src/api/config'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
-import { CalmEmpty, CaptureCard, ErrorState, Loading } from './_components'
+import { useChatThread } from '../../../src/chat'
+import {
+  CaptureCard,
+  MessageBubble,
+  NivaanProposalCard,
+  SystemNotice,
+} from '../../../src/chat/MessageView'
+import { nivaanProposal, isNivaanAnswer } from '../../../src/chat/nivaanProposal'
+import { systemNotice } from '../../../src/chat/systemNotice'
+import { CalmEmpty, ErrorState, Loading } from './_components'
 import { DisputeSheet } from './_dispute'
-
-/** A structured capture to ride the `capture_type`/`fields` fast path. */
-type Capture = { capture_type: string; fields: Record<string, unknown> }
 
 const STR = {
   en: {
@@ -141,13 +150,8 @@ const STR = {
   },
 } as const
 
-type Outgoing = {
-  clientMsgId: string
-  body: string
-  status: 'sending' | 'failed'
-  /** A structured-capture send (slash / chip) — shows a "booked ✓" receipt. */
-  captured?: boolean
-}
+/** A local @ask answer (grounded, not a persisted message). */
+type LocalAnswer = { id: string; question: string; result: AskResult }
 
 function fmtTime(iso: string): string {
   const d = new Date(iso)
@@ -171,27 +175,20 @@ export default function CrewChat() {
   const { me, role } = useAuth()
   const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList>(null)
-  const qc = useQueryClient()
   const router = useRouter()
   const canResolve = role === 'owner' || role === 'pm'
 
   const [text, setText] = useState('')
-  const [pending, setPending] = useState<Outgoing[]>([])
-  // Local @ask answers from Nivaan (2.2) — grounded, not persisted messages.
-  const [answers, setAnswers] = useState<{ id: string; question: string; result: AskResult }[]>([])
-  // The message being quote-replied to (1.5 threading), or null.
-  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
-  // Long-press action menu over a card (Reply / Dispute / Resolve) — 1.7.
+  // Local @ask answers from Nivaan — grounded, rendered in the footer.
+  const [answers, setAnswers] = useState<LocalAnswer[]>([])
+  // Long-press action menu over a card (Reply / Dispute / Resolve).
   const [cardMenu, setCardMenu] = useState<{ msg: ChatMessage; event: ChatEvent } | null>(null)
-  // The open contested-truth sheet (raise/resolve), or null.
   const [disputeSheet, setDisputeSheet] = useState<{
     mode: 'raise' | 'resolve'
     event: ChatEvent
     summary: string
   } | null>(null)
-  // The "Catch me up" recap sheet (2.6).
   const [recapOpen, setRecapOpen] = useState(false)
-  // The Standing-Sentinel "Radar" sheet (3.1).
   const [radarOpen, setRadarOpen] = useState(false)
 
   // The supervisor's assigned site(s); v1 chats the first one.
@@ -199,107 +196,46 @@ export default function CrewChat() {
   const sites = sitesQ.data?.items ?? []
   const site = sites[0]
 
-  const msgsQ = useQuery({
-    queryKey: ['chat', site?.id],
-    queryFn: () => chatApi.messages({ siteId: site!.id }),
-    enabled: !!site,
-    refetchInterval: 8000,
-  })
+  // The offline-first thread spine (durable outbox, live socket, ticks). Called
+  // unconditionally (hooks rules); disabled until a site resolves (empty addr).
+  const thread = useChatThread({ siteId: site?.id ?? '' }, { myUserId: me?.id })
 
-  // The pinned owner brief (1.8) — exceptions-first; hidden when all clear.
+  // The pinned owner brief — exceptions-first; hidden when all clear.
   const briefQ = useQuery({
     queryKey: ['chat', 'brief', site?.id],
     queryFn: () => chatApi.brief(site!.id),
     enabled: !!site,
     refetchInterval: 30000,
   })
-
-  // Catch-me-up recap (2.6) — fetched only when the sheet is opened.
   const recapQ = useQuery({
     queryKey: ['chat', 'recap', site?.id],
     queryFn: () => chatApi.recap(site!.id, 1),
     enabled: !!site && recapOpen,
   })
-
-  // Standing-Sentinel radar (3.1) — fetched only when the sheet is opened.
   const radarQ = useQuery({
     queryKey: ['chat', 'sentinel', site?.id],
     queryFn: () => chatApi.sentinel(site!.id),
     enabled: !!site && radarOpen,
   })
 
-  // Lookup for rendering a quoted parent above a reply (1.5 threading).
+  // Lookup for rendering a quoted parent above a reply.
   const byId = useMemo(() => {
     const m = new Map<string, ChatMessage>()
-    for (const x of msgsQ.data ?? []) m.set(x.id, x)
+    for (const x of thread.messages) m.set(x.id, x)
     return m
-  }, [msgsQ.data])
-
-  // Mark-read: advance the cursor to the newest seq so the inbox unread badge
-  // clears (Task 13c — the supervisor crew chat previously never reported read,
-  // so its badge never cleared). Invalidate the owner inbox which surfaces every
-  // thread's unread count.
-  const msgs = msgsQ.data
-  const newestSeq = msgs && msgs.length > 0 ? msgs[msgs.length - 1].seq : 0
-  useEffect(() => {
-    if (!site || newestSeq <= 0) return
-    chatApi
-      .read({ siteId: site.id, lastSeq: newestSeq })
-      .then(() => qc.invalidateQueries({ queryKey: ['owner', 'conversations'] }))
-      .catch(() => undefined)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [site?.id, newestSeq, qc])
+  }, [thread.messages])
 
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
   }, [])
 
-  const doSend = useCallback(
-    async (clientMsgId: string, bodyText: string, capture?: Capture, replyToId?: string) => {
-      if (!site) return
-      try {
-        await chatApi.send({
-          site_id: site.id,
-          client_msg_id: clientMsgId,
-          body: bodyText,
-          ...(replyToId ? { reply_to_id: replyToId } : {}),
-          ...(capture ?? {}),
-        })
-        // Confirmed — drop the optimistic bubble and pull the server copy.
-        setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
-        await msgsQ.refetch()
-        scrollToEnd()
-      } catch {
-        setPending((p) =>
-          p.map((m) => (m.clientMsgId === clientMsgId ? { ...m, status: 'failed' } : m)),
-        )
-      }
-    },
-    [site, msgsQ, scrollToEnd],
-  )
-
-  // Optimistically enqueue a send (plain text or a structured capture) and clear
-  // the composer. Shared by the Send button, slash-commands, and the chip.
-  const dispatch = useCallback(
-    (bodyText: string, capture?: Capture) => {
-      if (!bodyText || !site) return
-      const clientMsgId = newClientMsgId()
-      const replyToId = replyTo?.id
-      setPending((p) => [...p, { clientMsgId, body: bodyText, status: 'sending', captured: !!capture }])
-      setText('')
-      setReplyTo(null)
-      scrollToEnd()
-      void doSend(clientMsgId, bodyText, capture, replyToId)
-    },
-    [site, doSend, scrollToEnd, replyTo],
-  )
-
-  // @ask Nivaan (2.2): a grounded one-line answer, scoped, computed server-side.
+  // @ask Nivaan: a grounded one-line answer, scoped, computed server-side. Kept
+  // local (the deterministic @ask path); @nivaan goes through the live thread so
+  // the server agent replies with a real Nivaan row/proposal (rendered by the kit).
   const onAsk = useCallback(
     async (question: string) => {
       if (!site || !question) return
-      const id = newClientMsgId()
-      setText('')
+      const id = `ask-${question}-${answers.length}`
       scrollToEnd()
       try {
         const result = await chatApi.ask(site.id, question)
@@ -307,24 +243,39 @@ export default function CrewChat() {
       } catch {
         setAnswers((a) => [
           ...a,
-          { id, question, result: { answerable: false, answer: str.askFailed, total: null, unit: null, breakdown: {}, evidence_event_ids: [], contributors: 0, unconfirmed: 0 } },
+          {
+            id,
+            question,
+            result: {
+              answerable: false, answer: str.askFailed, total: null, unit: null,
+              breakdown: {}, evidence_event_ids: [], contributors: 0, unconfirmed: 0,
+            },
+          },
         ])
       }
       scrollToEnd()
     },
-    [site, scrollToEnd, str],
+    [site, scrollToEnd, str, answers.length],
   )
 
   const onSend = useCallback(() => {
     const bodyText = text.trim()
     if (!bodyText || !site) return
-    // "@ ..." asks Nivaan a grounded question instead of posting a message.
-    if (bodyText.startsWith('@')) {
-      void onAsk(bodyText.replace(/^@\s*(ask|nivaan)?\s*/i, '').trim())
+    setText('')
+    // @nivaan → the live thread: the server summons the agent and posts a real
+    // Nivaan row/proposal, which the kit renders (no local one-liner).
+    if (/^@\s*nivaan\b/i.test(bodyText)) {
+      void thread.send(bodyText)
+      scrollToEnd()
       return
     }
-    // Slash-commands book a card client-side (offline, no model) via the fast
-    // path; a malformed one shows its usage instead of sending noise.
+    // @ / @ask → the deterministic grounded one-liner (local answer row).
+    if (bodyText.startsWith('@')) {
+      void onAsk(bodyText.replace(/^@\s*(ask)?\s*/i, '').trim())
+      return
+    }
+    // Slash-commands book a card client-side via the fast path; a malformed one
+    // shows its usage instead of sending noise.
     if (isSlash(bodyText)) {
       const parsed = parseSlash(bodyText)
       if (parsed && 'error' in parsed) {
@@ -332,12 +283,14 @@ export default function CrewChat() {
         return
       }
       if (parsed) {
-        dispatch(bodyText, { capture_type: parsed.capture_type, fields: parsed.fields })
+        void thread.sendProposal(parsed.capture_type, parsed.fields)
+        scrollToEnd()
         return
       }
     }
-    dispatch(bodyText)
-  }, [text, site, dispatch, str, onAsk])
+    void thread.send(bodyText)
+    scrollToEnd()
+  }, [text, site, thread, str, onAsk, scrollToEnd])
 
   // A single live smart-suggest chip (never while typing a slash-command).
   const suggestion = useMemo(
@@ -345,8 +298,8 @@ export default function CrewChat() {
     [text, lang],
   )
 
-  // Camera-as-Sensor (1.2): snap a challan → presign → direct-upload to R2 →
-  // send as a document message; the worker OCRs it into a card.
+  // Camera-as-Sensor: snap a challan → upload → send as a document; the worker
+  // OCRs it into a card. Eager upload (the kit's sendMedia takes a resolved key).
   const onCamera = useCallback(async () => {
     if (!site) return
     const cam = await ImagePicker.requestCameraPermissionsAsync()
@@ -361,80 +314,42 @@ export default function CrewChat() {
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
     const mime = asset.mimeType ?? 'image/jpeg'
-    const clientMsgId = newClientMsgId()
-    setPending((p) => [...p, { clientMsgId, body: str.photo, status: 'sending', captured: true }])
-    scrollToEnd()
     try {
       const uploaded = await chatApi.uploadMedia(
         { siteId: site.id },
         { uri: asset.uri, name: asset.fileName ?? 'challan.jpg', type: mime },
         'document',
       )
-      await chatApi.send({
-        site_id: site.id,
-        client_msg_id: clientMsgId,
-        media_type: 'document',
-        attachment_key: uploaded.key,
-        attachment_mime: mime,
-        attachment_sha256: uploaded.sha256,
+      await thread.sendMedia({
+        attachmentKey: uploaded.key, mime, sha256: uploaded.sha256, mediaType: 'document',
       })
-      setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
-      await msgsQ.refetch()
       scrollToEnd()
     } catch {
-      setPending((p) =>
-        p.map((m) => (m.clientMsgId === clientMsgId ? { ...m, status: 'failed' } : m)),
-      )
+      Alert.alert(str.scanBill, str.uploadFailed)
     }
-  }, [site, msgsQ, scrollToEnd, str])
+  }, [site, thread, str, scrollToEnd])
 
-  // Voice-to-Card (1.3): hold-to-talk → upload the .m4a as voice media → send;
-  // the worker runs STT + numeral-repair into a card (the mukadam's primary input).
+  // Voice-to-Card: hold-to-talk → upload the .m4a as voice media → send; the
+  // worker runs STT + numeral-repair into a card.
   const onVoice = useCallback(
     async (audio: RecordedAudio) => {
       if (!site) return
-      const clientMsgId = newClientMsgId()
-      setPending((p) => [...p, { clientMsgId, body: '🎙', status: 'sending', captured: true }])
-      scrollToEnd()
       try {
         const uploaded = await chatApi.uploadMedia(
           { siteId: site.id },
           { uri: audio.uri, name: audio.name, type: audio.mime },
           'voice',
         )
-        await chatApi.send({
-          site_id: site.id,
-          client_msg_id: clientMsgId,
-          media_type: 'voice',
-          attachment_key: uploaded.key,
-          attachment_mime: audio.mime,
-          attachment_sha256: uploaded.sha256,
+        await thread.sendMedia({
+          attachmentKey: uploaded.key, mime: audio.mime, sha256: uploaded.sha256, mediaType: 'voice',
         })
-        setPending((p) => p.filter((m) => m.clientMsgId !== clientMsgId))
-        await msgsQ.refetch()
         scrollToEnd()
       } catch {
-        setPending((p) =>
-          p.map((m) => (m.clientMsgId === clientMsgId ? { ...m, status: 'failed' } : m)),
-        )
+        Alert.alert(str.title, str.askFailed)
       }
     },
-    [site, msgsQ, scrollToEnd],
+    [site, thread, str, scrollToEnd],
   )
-
-  type Row =
-    | { kind: 'server'; key: string; msg: ChatMessage }
-    | { kind: 'pending'; key: string; out: Outgoing }
-    | { kind: 'nivaan'; key: string; question: string; result: AskResult }
-
-  const rows: Row[] = useMemo(() => {
-    const server: Row[] = (msgsQ.data ?? []).map((m) => ({ kind: 'server', key: m.id, msg: m }))
-    const out: Row[] = pending.map((o) => ({ kind: 'pending', key: o.clientMsgId, out: o }))
-    const ans: Row[] = answers.map((a) => ({
-      kind: 'nivaan', key: a.id, question: a.question, result: a.result,
-    }))
-    return [...server, ...out, ...ans]
-  }, [msgsQ.data, pending, answers])
 
   // --- guard states -------------------------------------------------------
   if (sitesQ.isLoading) return <Loading />
@@ -452,24 +367,10 @@ export default function CrewChat() {
     )
   }
 
-  const ownBubble: ViewStyle = {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(242,161,0,0.16)',
-    borderColor: 'rgba(242,161,0,0.45)',
-    borderWidth: 1,
-  }
-  const otherBubble: ViewStyle = {
-    alignSelf: 'flex-start',
-    backgroundColor: c.card,
-    borderColor: c.line,
-    borderWidth: 1,
-  }
-
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       {/* Header */}
       <View
@@ -489,8 +390,6 @@ export default function CrewChat() {
           <BodyStrong>{str.title}</BodyStrong>
           <Small style={{ color: c.textMute }}>{site.name}</Small>
         </View>
-        {/* Compact tool buttons (secondary nav) — each keeps an a11y label;
-            the panels they open are clearly titled. */}
         {(
           [
             { key: 'radar', icon: 'radio' as const, label: str.radar, onPress: () => setRadarOpen(true) },
@@ -528,7 +427,7 @@ export default function CrewChat() {
         ))}
       </View>
 
-      {/* Pinned brief (1.8) — exceptions-first; shown only when something needs
+      {/* Pinned brief — exceptions-first; shown only when something needs
           attention (empty = calm = good). */}
       {briefQ.data && briefQ.data.risk_count > 0 ? (
         <Pressable
@@ -573,23 +472,38 @@ export default function CrewChat() {
       {/* Messages */}
       <FlatList
         ref={listRef}
-        data={rows}
-        keyExtractor={(r) => r.key}
+        data={thread.messages}
+        keyExtractor={(m) => m.id}
         contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
         onContentSizeChange={scrollToEnd}
         ListEmptyComponent={
-          msgsQ.isLoading ? null : (
+          thread.isLoading ? null : (
             <View style={{ flex: 1, justifyContent: 'center' }}>
               <CalmEmpty title={str.emptyTitle} body={str.emptyBody} />
             </View>
           )
         }
-        renderItem={({ item }) => {
-          // A Nivaan @ask answer — info-toned, grounded, with an evidence count.
-          if (item.kind === 'nivaan') {
-            const r = item.result
-            return (
+        ListFooterComponent={
+          <View style={{ gap: SPACE.sm }}>
+            {/* Durable-outbox pending bubbles (failed → tap to retry). */}
+            {thread.pending.map((p) =>
+              p.state === 'failed_permanent' ? (
+                <Pressable key={p.clientMsgId} onPress={() => void thread.retry(p.clientMsgId)}>
+                  <MessageBubble body={p.body || str.photo} mine timestamp={str.failed} />
+                </Pressable>
+              ) : (
+                <MessageBubble
+                  key={p.clientMsgId}
+                  body={p.body || str.photo}
+                  mine
+                  timestamp={p.captured ? str.booked : str.sending}
+                />
+              ),
+            )}
+            {/* Local @ask answer rows (info-toned, grounded, evidence count). */}
+            {answers.map((a) => (
               <View
+                key={a.id}
                 style={{
                   alignSelf: 'flex-start',
                   maxWidth: '92%',
@@ -607,34 +521,45 @@ export default function CrewChat() {
                   <Feather name="zap" size={13} color={c.info} />
                   <Small style={{ color: c.info, fontWeight: '600' }}>{str.nivaan}</Small>
                 </View>
-                <Small muted numberOfLines={1}>{item.question}</Small>
-                <BodyStrong style={{ color: c.text }}>{r.answer}</BodyStrong>
-                {r.evidence_event_ids.length > 0 ? (
+                <Small muted numberOfLines={1}>{a.question}</Small>
+                <BodyStrong style={{ color: c.text }}>{a.result.answer}</BodyStrong>
+                {a.result.evidence_event_ids.length > 0 ? (
                   <Mono muted style={{ fontSize: 11 }}>
-                    {r.evidence_event_ids.length} {str.evidence}
+                    {a.result.evidence_event_ids.length} {str.evidence}
                   </Mono>
                 ) : null}
               </View>
+            ))}
+          </View>
+        }
+        renderItem={({ item }) => {
+          // A centered system row (member added, dispute resolved, blocked).
+          const notice = systemNotice(item)
+          if (notice !== null) return <SystemNotice text={notice} />
+
+          // A server-driven Nivaan proposal card (Confirm books the capture).
+          const proposal = nivaanProposal(item)
+          if (proposal) {
+            return (
+              <View style={{ marginBottom: SPACE.xs }}>
+                <NivaanProposalCard
+                  view={proposal}
+                  onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
+                  onDismiss={() => {}}
+                />
+              </View>
             )
           }
+          // A Nivaan grounded answer row.
+          if (isNivaanAnswer(item)) {
+            return <MessageBubble body={item.body} mine={false} nivaan timestamp={fmtTime(item.created_at)} />
+          }
 
-          const mine =
-            item.kind === 'pending' || (!!me && item.msg.sender_id === me.id)
-
-          // A message that became structured capture renders as Card(s), not a
-          // bubble — the thread is "capture with a conversation around it". An
-          // `unknown` event isn't a confident capture (a greeting, a sticker),
-          // so it stays a bubble rather than cluttering the feed with a Note.
+          const mine = !!me && item.sender_id === me.id
           const cardEvents =
-            item.kind === 'server'
-              ? item.msg.events.filter((e: ChatEvent) => e.event_type !== 'unknown')
-              : []
+            item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
 
-          // A quoted-parent strip shown above a reply (server messages only).
-          const parentSnippet =
-            item.kind === 'server' && item.msg.reply_to_id
-              ? msgSnippet(byId.get(item.msg.reply_to_id))
-              : ''
+          const parentSnippet = item.reply_to_id ? msgSnippet(byId.get(item.reply_to_id)) : ''
           const quoted = parentSnippet ? (
             <View
               style={{
@@ -651,13 +576,14 @@ export default function CrewChat() {
             </View>
           ) : null
 
-          if (item.kind === 'server' && cardEvents.length > 0) {
-            const msg = item.msg
+          // A message that became structured capture renders as Card(s) — the
+          // long-press opens the action menu (reply / dispute / to-do / vendor).
+          if (cardEvents.length > 0) {
             return (
               <View style={{ gap: 2 }}>
                 {quoted}
                 <Pressable
-                  onLongPress={() => setCardMenu({ msg, event: cardEvents[0] })}
+                  onLongPress={() => setCardMenu({ msg: item, event: cardEvents[0] })}
                   delayLongPress={250}
                   style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
                 >
@@ -669,9 +595,9 @@ export default function CrewChat() {
                       key={ev.id}
                       event={ev}
                       lang={lang}
-                      sourceText={i === 0 ? msg.body : undefined}
-                      attachmentUrl={i === 0 ? msg.attachment_url : undefined}
-                      time={i === 0 ? fmtTime(msg.created_at) : ''}
+                      sourceText={i === 0 ? item.body : undefined}
+                      attachmentUrl={i === 0 ? item.attachment_url : undefined}
+                      time={i === 0 ? fmtTime(item.created_at) : ''}
                     />
                   ))}
                 </Pressable>
@@ -679,49 +605,26 @@ export default function CrewChat() {
             )
           }
 
-          const body = item.kind === 'pending' ? item.out.body : (item.msg.body ?? '')
-          const serverMsg = item.kind === 'server' ? item.msg : null
+          // A plain bubble — long-press to quote-reply; own messages show ticks.
           return (
             <View style={{ gap: 2 }}>
               {quoted}
-              <Pressable
-                onLongPress={serverMsg ? () => setReplyTo(serverMsg) : undefined}
-                delayLongPress={250}
-                style={[
-                  {
-                    maxWidth: '82%',
-                    borderRadius: theme.radii.card,
-                    paddingVertical: SPACE.sm,
-                    paddingHorizontal: SPACE.md,
-                    gap: 2,
-                  },
-                  mine ? ownBubble : otherBubble,
-                ]}
-              >
-                {serverMsg?.attachment_url ? (
-                  <Image
-                    source={{ uri: serverMsg.attachment_url }}
-                    style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4 }}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
-                <Mono style={{ color: c.textMute, fontSize: 11 }}>
-                  {item.kind === 'pending'
-                    ? item.out.status === 'failed'
-                      ? str.failed
-                      : item.out.captured
-                        ? str.booked
-                        : str.sending
-                    : fmtTime(item.msg.created_at)}
-                </Mono>
-              </Pressable>
+              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%' }}>
+                <MessageBubble
+                  body={item.body}
+                  mine={mine}
+                  attachmentUrl={item.attachment_url}
+                  timestamp={fmtTime(item.created_at)}
+                  deliveryState={thread.deliveryState(item)}
+                  onLongPress={() => thread.setReply(item)}
+                />
+              </View>
             </View>
           )
         }}
       />
 
-      {/* Long-press card menu — Reply / Dispute / Resolve (1.7 contested-truth). */}
+      {/* Long-press card menu — Reply / To-do / Vendor confirm / Dispute / Resolve. */}
       <Modal
         visible={!!cardMenu}
         transparent
@@ -772,16 +675,18 @@ export default function CrewChat() {
                     setCardMenu(null)
                     if (!cm) return
                     if (o.key === 'reply') {
-                      setReplyTo(cm.msg)
+                      thread.setReply(cm.msg)
                     } else if (o.key === 'todo') {
                       const title = cm.event.summary || msgSnippet(cm.msg)
                       if (site && title) {
                         actionItemsApi
                           .create({ site_id: site.id, title, source_message_id: cm.msg.id })
-                          .then(() => router.push({
-                            pathname: '/(contractor)/supervisor/action-items',
-                            params: { site_id: site.id },
-                          }))
+                          .then(() =>
+                            router.push({
+                              pathname: '/(contractor)/supervisor/action-items',
+                              params: { site_id: site.id },
+                            }),
+                          )
                           .catch(() => Alert.alert(str.makeTodo, str.askFailed))
                       }
                     } else if (o.key === 'vendorConfirm') {
@@ -836,7 +741,7 @@ export default function CrewChat() {
         </Pressable>
       </Modal>
 
-      {/* Catch-me-up recap sheet (2.6) — deterministic totals, never a guess. */}
+      {/* Catch-me-up recap sheet — deterministic totals, never a guess. */}
       <Modal visible={recapOpen} transparent animationType="slide" onRequestClose={() => setRecapOpen(false)}>
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
@@ -867,9 +772,7 @@ export default function CrewChat() {
               </View>
             ) : recapQ.data ? (
               <View style={{ gap: SPACE.sm }}>
-                <Body style={{ color: c.text }}>
-                  {recapQ.data.summary || str.recapNothing}
-                </Body>
+                <Body style={{ color: c.text }}>{recapQ.data.summary || str.recapNothing}</Body>
                 {Object.entries(recapQ.data.event_counts).map(([type, n]) => (
                   <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Small style={{ color: c.textMute, textTransform: 'capitalize' }}>
@@ -894,7 +797,7 @@ export default function CrewChat() {
         </Pressable>
       </Modal>
 
-      {/* Standing-Sentinel radar (3.1) — what's slipping, deterministic. */}
+      {/* Standing-Sentinel radar — what's slipping, deterministic. */}
       <Modal visible={radarOpen} transparent animationType="slide" onRequestClose={() => setRadarOpen(false)}>
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
@@ -956,12 +859,14 @@ export default function CrewChat() {
         onClose={() => setDisputeSheet(null)}
         onDone={() => {
           setDisputeSheet(null)
-          void qc.invalidateQueries({ queryKey: ['chat', site?.id] })
+          // Refresh the thread so the card's contested/resolved state updates
+          // (the kit owns the ['chat','thread',addrKey] query).
+          thread.refetch()
         }}
       />
 
       {/* Quote-reply banner — the parent being replied to, with a cancel. */}
-      {replyTo ? (
+      {thread.reply ? (
         <View
           style={{
             flexDirection: 'row',
@@ -980,13 +885,13 @@ export default function CrewChat() {
           <View style={{ flex: 1 }}>
             <Small style={{ color: c.textMute, fontWeight: '600' }}>{str.replyingTo}</Small>
             <Small numberOfLines={1} style={{ color: c.text }}>
-              {msgSnippet(replyTo)}
+              {msgSnippet(thread.reply)}
             </Small>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={str.cancel}
-            onPress={() => setReplyTo(null)}
+            onPress={() => thread.setReply(null)}
             hitSlop={8}
             style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
           >
@@ -995,13 +900,16 @@ export default function CrewChat() {
         </View>
       ) : null}
 
-      {/* Smart-suggest chip — one tap turns the free text into a typed Card.
-          Ignore it and the text sends as a plain bubble (90% stays fast). */}
+      {/* Smart-suggest chip — one tap turns the free text into a typed Card. */}
       {suggestion ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={suggestion.label}
-          onPress={() => dispatch(text.trim(), { capture_type: suggestion.capture_type, fields: suggestion.fields })}
+          onPress={() => {
+            void thread.sendProposal(suggestion.capture_type, suggestion.fields)
+            setText('')
+            scrollToEnd()
+          }}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -1022,7 +930,7 @@ export default function CrewChat() {
         </Pressable>
       ) : null}
 
-      {/* Voice-to-Card (1.3): hold-to-talk — the mukadam's primary input. */}
+      {/* Voice-to-Card: hold-to-talk — the mukadam's primary input. */}
       <View style={{ marginHorizontal: SPACE.lg, marginBottom: SPACE.xs }}>
         <HoldToTalk
           label={str.holdToTalk}
