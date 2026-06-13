@@ -22,10 +22,11 @@ import { RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
+import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
 import { Body, Display, Eyebrow, FLOATING_NAV_CLEARANCE, QuietState, Small, StatusPill } from '../../src/ui'
 import { useAuth } from '../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../src/api/chat'
@@ -154,9 +155,31 @@ export default function HomeownerMessagesInbox() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
       }
     >
-      <View style={{ gap: SPACE.xs }}>
+      <View style={{ gap: SPACE.sm }}>
         <Display>{t.title}</Display>
         <Body muted>{t.subtitle}</Body>
+        {/* Participant summary bar — a calm warm-tinted strip showing who's
+            in the conversation, matching the prototype's header feel.
+            Only shown when there's a live builder channel. */}
+        {builder ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACE.sm,
+              paddingHorizontal: SPACE.md,
+              paddingVertical: SPACE.sm,
+              backgroundColor: AP.chip,
+              borderRadius: theme.radii.chip,
+            }}
+          >
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent }} />
+            <Small style={{ color: AP.onChip, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+              {lang === 'hi' ? 'साइट टीम · आप · सह-मालिक' : 'Site team · You · Co-owner'}
+            </Small>
+            <Feather name="chevron-right" size={14} color={AP.onChip} />
+          </View>
+        ) : null}
       </View>
 
       {showSpinner ? (
