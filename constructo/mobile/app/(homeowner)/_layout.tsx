@@ -16,7 +16,7 @@ import { Redirect, Tabs, usePathname } from 'expo-router'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
-import { AskPill, FloatingTabBar } from '../../src/ui'
+import { AskPill, FloatingTabBar, ToastProvider } from '../../src/ui'
 
 function HomeownerTabs() {
   const { t } = useT()
@@ -88,7 +88,9 @@ export default function HomeownerLayout() {
 
   return (
     <ThemeProvider initial="daylight">
-      <HomeownerTabs />
+      <ToastProvider>
+        <HomeownerTabs />
+      </ToastProvider>
     </ThemeProvider>
   )
 }
