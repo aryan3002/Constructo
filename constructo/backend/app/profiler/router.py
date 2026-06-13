@@ -521,6 +521,31 @@ async def add_reference(
     return ReferenceOut.model_validate(ref)
 
 
+@router.get(
+    "/profiles/{profile_id}/areas/{area_id}/references", response_model=list[ReferenceOut]
+)
+async def list_references(
+    profile_id: UUID,
+    area_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ReferenceOut]:
+    """The references for one area (membrane-scoped read). The homeowner intake
+    ranking screen lists these to rank."""
+    await _load_accessible_profile(session, profile_id, user)
+    area = await session.get(ProfilerArea, area_id)
+    if area is None or area.profile_id != profile_id:
+        raise AppError(404, "not_found", "Area not found")
+    rows = (
+        await session.execute(
+            select(ProfilerReference)
+            .where(ProfilerReference.area_id == area_id)
+            .order_by(ProfilerReference.created_at)
+        )
+    ).scalars().all()
+    return [ReferenceOut.model_validate(r) for r in rows]
+
+
 @router.post("/references/{reference_id}/rankings", status_code=201)
 async def rank_reference(
     reference_id: UUID,
@@ -659,31 +684,6 @@ async def list_themes(
         )
     ).scalars().all()
     return [ThemeOut.model_validate(t) for t in rows]
-
-
-@router.get(
-    "/profiles/{profile_id}/areas/{area_id}/references", response_model=list[ReferenceOut]
-)
-async def list_references(
-    profile_id: UUID,
-    area_id: UUID,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> list[ReferenceOut]:
-    """The references for one area (membrane-scoped read). The homeowner intake
-    ranking screen lists these to rank."""
-    await _load_accessible_profile(session, profile_id, user)
-    area = await session.get(ProfilerArea, area_id)
-    if area is None or area.profile_id != profile_id:
-        raise AppError(404, "not_found", "Area not found")
-    rows = (
-        await session.execute(
-            select(ProfilerReference)
-            .where(ProfilerReference.area_id == area_id)
-            .order_by(ProfilerReference.created_at)
-        )
-    ).scalars().all()
-    return [ReferenceOut.model_validate(r) for r in rows]
 
 
 @router.get("/profiles/{profile_id}/conflicts", response_model=list[ConflictOut])
