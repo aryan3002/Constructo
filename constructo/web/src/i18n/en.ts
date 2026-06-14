@@ -28,6 +28,7 @@ export const en = {
   'nav.payments': 'Payments',
   'nav.permits': 'Permits',
   'nav.groups': 'WhatsApp Groups',
+  'nav.reports': 'Reports',
   'nav.settings': 'Settings',
   'nav.more': 'More',
 
@@ -774,6 +775,21 @@ export const en = {
   'admin.billing.save_failed': 'Could not save. Please try again.',
   'admin.billing.unsaved': 'Unsaved changes',
   'admin.billing.read_only': 'Only the owner can change billing.',
+  // === reports (W5 Slice 1) ===
+  'reports.title': 'Reports & exports',
+  'reports.tpl.progress': 'Site progress',
+  'reports.tpl.dpr': 'DPR pack',
+  'reports.tpl.tally': 'Tally export',
+  'reports.tpl.payroll': 'Payroll',
+  'reports.scope.all': 'All sites',
+  'reports.range.label': 'Range',
+  'reports.generate': 'Generate',
+  'reports.download': 'Download',
+  'reports.preview': 'Preview',
+  'reports.payroll_soon': 'Coming soon',
+  'reports.empty': 'No data in range.',
+  'reports.generating': 'Generating…',
+  'reports.otp_required': 'Enter OTP to export',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

@@ -24,6 +24,7 @@ export const hi: Record<TranslationKey, string> = {
   'nav.payments': 'भुगतान',
   'nav.permits': 'परमिट',
   'nav.groups': 'व्हाट्सऐप ग्रुप',
+  'nav.reports': 'रिपोर्ट',
   'nav.settings': 'सेटिंग्स',
   'nav.more': 'और',
 
@@ -748,4 +749,20 @@ export const hi: Record<TranslationKey, string> = {
   'admin.billing.save_failed': 'सहेजा नहीं जा सका। फिर कोशिश करें।',
   'admin.billing.unsaved': 'असहेजे बदलाव',
   'admin.billing.read_only': 'केवल मालिक बिलिंग बदल सकता है।',
+
+  // === reports (W5 Slice 1) ===
+  'reports.title': 'रिपोर्ट और निर्यात',
+  'reports.tpl.progress': 'साइट प्रगति',
+  'reports.tpl.dpr': 'DPR पैक',
+  'reports.tpl.tally': 'Tally निर्यात',
+  'reports.tpl.payroll': 'पेरोल',
+  'reports.scope.all': 'सभी साइट',
+  'reports.range.label': 'अवधि',
+  'reports.generate': 'बनाएँ',
+  'reports.download': 'डाउनलोड',
+  'reports.preview': 'पूर्वावलोकन',
+  'reports.payroll_soon': 'जल्द आ रहा है',
+  'reports.empty': 'इस अवधि में कोई डेटा नहीं।',
+  'reports.generating': 'बन रहा है…',
+  'reports.otp_required': 'निर्यात के लिए OTP डालें',
 }

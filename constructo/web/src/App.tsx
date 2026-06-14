@@ -50,6 +50,10 @@ import { Search } from './pages/search/Search'
 const SpecDesk = lazy(() =>
   import('./pages/specs/SpecDesk').then((m) => ({ default: m.SpecDesk })),
 )
+// === reports (W5 Slice 1) === lazy: PDF workers + preview surface kept out of entry chunk
+const ReportsPage = lazy(() =>
+  import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+)
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -136,6 +140,9 @@ export function App() {
 
       {/* WhatsApp group mapping. */}
       <Route path="/groups" element={<Guarded><Groups /></Guarded>} />
+
+      {/* Reports & exports (W5 Slice 1). */}
+      <Route path="/reports" element={<Guarded><ReportsPage /></Guarded>} />
 
       {/* Per-role overflow hub. */}
       <Route path="/more" element={<Guarded><More /></Guarded>} />
