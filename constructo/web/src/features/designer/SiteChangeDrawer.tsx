@@ -14,7 +14,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Drawer } from '../../ui/Drawer'
 import { ConfirmDialog } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
@@ -24,6 +24,7 @@ import { Small, H2 } from '../../ui'
 import { useT } from '../../i18n'
 import { useMeRole } from '../../auth/useCan'
 import { siteChangesApi } from '../../api/siteChanges'
+import { drawingsApi } from '../../api/drawings'
 import { qk } from '../../api/queryKeys'
 import { DrawingLinkPicker } from './DrawingLinkPicker'
 import { changeStatusToSpine } from './SiteChangeCard'
@@ -59,27 +60,32 @@ export function SiteChangeDrawer({ change, open, onClose }: SiteChangeDrawerProp
   const [resolveBusy, setResolveBusy] = useState(false)
   const [resolveOpen, setResolveOpen] = useState(false)
 
-  // Sync draft when change loads (open new drawer)
-  const handleDrawerOpen = useCallback(() => {
-    setImpactDraft(change?.impact ?? '')
-  }, [change?.impact])
-
-  // Effect-less approach: derive from open prop and change.id
+  // Effect-less approach: sync draft when a new change is opened.
   // (avoid useEffect complexity in a tightly scoped component)
   const [lastChangeId, setLastChangeId] = useState<string | null>(null)
   if (open && change && change.id !== lastChangeId) {
     setLastChangeId(change.id)
     setImpactDraft(change.impact ?? '')
     setResolveOpen(false)
-    void handleDrawerOpen()
   }
 
   const isReviewer = Boolean(role && REVIEWER_ROLES.has(role))
   const isResolved = change?.status === 'resolved'
 
+  // Load the drawings register so we can show the linked drawing title for resolved changes.
+  // Only fetch when the drawer is open and the change has a linked drawing.
+  const { data: drawings } = useQuery({
+    queryKey: qk.drawings(change?.site_id),
+    queryFn: () => drawingsApi.listRegister(change!.site_id),
+    enabled: Boolean(open && change?.linked_drawing_id),
+  })
+  const linkedDrawing = change?.linked_drawing_id
+    ? drawings?.find((d) => d.id === change.linked_drawing_id)
+    : undefined
+
   const invalidate = useCallback(() => {
     if (!change) return
-    qc.invalidateQueries({ queryKey: ['site_changes'] })
+    qc.invalidateQueries({ queryKey: qk.siteChanges() })
     qc.invalidateQueries({ queryKey: qk.siteChange(change.id) })
   }, [qc, change])
 
@@ -340,15 +346,27 @@ export function SiteChangeDrawer({ change, open, onClose }: SiteChangeDrawerProp
           </div>
         )}
 
-        {/* Linked drawing (read-only, resolved state) */}
+        {/* Linked drawing (read-only, resolved state) — shows title+version, never raw UUID */}
         {isResolved && change.linked_drawing_id && (
           <div className="mb-2">
             <Small className="mb-1 uppercase tracking-wide font-semibold">
               {t('sitechanges.drawer.linked_drawing')}
             </Small>
-            <p className="font-body text-small text-info">
-              {t('sitechanges.drawer.linked_drawing')}: {change.linked_drawing_id}
-            </p>
+            <div
+              data-testid="resolved-linked-drawing"
+              className="rounded-card border border-info/30 bg-info/10 px-3 py-2"
+            >
+              {linkedDrawing ? (
+                <p className="font-body text-small font-semibold text-info">
+                  {linkedDrawing.title}
+                  <span className="ml-1.5 font-normal text-text-mute">{linkedDrawing.version}</span>
+                </p>
+              ) : (
+                <p className="font-body text-small text-text-mute">
+                  {t('sitechanges.drawer.linked_drawing')}
+                </p>
+              )}
+            </div>
           </div>
         )}
       </Drawer>

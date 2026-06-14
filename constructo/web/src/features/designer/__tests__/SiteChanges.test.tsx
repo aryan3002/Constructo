@@ -448,7 +448,34 @@ describe('SiteChanges surface (D3)', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 9. Empty state when no changes
+  // 9. Resolved change with linked_drawing_id shows drawing title, not raw UUID
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('resolved change with linked_drawing_id shows the drawing title+version, not the raw UUID', async () => {
+    renderSiteChanges()
+
+    // Wait for the feed to load
+    await screen.findByText('False ceiling dropped — column clash')
+
+    // sc-3 is resolved with linked_drawing_id: 'drw-2' (North Elevation v1 in MOCK_DRAWINGS)
+    await userEvent.click(screen.getByTestId('sc-card-sc-3'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+
+    // The resolved-linked-drawing widget should show the drawing title, not the raw id
+    const linkedDrawingWidget = await screen.findByTestId('resolved-linked-drawing')
+    expect(linkedDrawingWidget).toBeInTheDocument()
+
+    // Title is visible
+    expect(within(linkedDrawingWidget).getByText('North Elevation')).toBeInTheDocument()
+
+    // Raw UUID is NOT visible anywhere in the drawer
+    expect(within(dialog).queryByText('drw-2')).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 10. Empty state when no changes
   // ─────────────────────────────────────────────────────────────────────────
 
   it('shows an honest empty state when there are no changes', async () => {

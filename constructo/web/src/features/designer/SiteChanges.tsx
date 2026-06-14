@@ -69,7 +69,7 @@ function FilterTabs({ active, onChange, newCount }: FilterTabsProps) {
             onClick={() => onChange(tab.value)}
             className={[
               'inline-flex items-center gap-1.5 rounded-control px-3 py-1.5',
-              'font-body text-small font-semibold transition min-h-[36px]',
+              'font-body text-small font-semibold transition min-h-[44px]',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               'cstk-animate',
               isActive

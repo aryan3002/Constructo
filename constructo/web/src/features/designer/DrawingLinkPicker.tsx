@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { drawingsApi } from '../../api/drawings'
 import { qk } from '../../api/queryKeys'
 import { useT } from '../../i18n'
@@ -34,7 +34,6 @@ export function DrawingLinkPicker({
   busy,
 }: DrawingLinkPickerProps) {
   const t = useT()
-  const qc = useQueryClient()
   const [relinking, setRelinking] = useState(false)
   const [selected, setSelected] = useState<string>('')
 
@@ -56,8 +55,7 @@ export function DrawingLinkPicker({
     onLink(selected, drawing?.title, drawing?.version)
     setRelinking(false)
     setSelected('')
-    // The parent's onLink handles cache invalidation
-    void qc.invalidateQueries({ queryKey: qk.drawings(siteId) })
+    // Note: cache invalidation is handled by the parent's onLink (SiteChangeDrawer.handleLinkDrawing)
   }
 
   if (isLoading) {
