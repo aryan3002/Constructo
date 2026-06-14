@@ -1,18 +1,15 @@
 /**
- * DocumentsPage (W5 Slice 2a — S2a-E3).
+ * DocumentsPage (W5 Slice 2a+2b — S2a-E3 / S2b-E3).
  *
  * Route: /settings/documents
  * Gate: owner | pm | architect (manage_settings)
  *
- * Renders the append-only drawings register:
- *   - Groups rows into "current drawings" (one row per is_current=true entry).
- *   - Each current drawing shows its version chain via a "Show versions" toggle,
- *     walking the supersedes_id chain newest → oldest.
- *   - Per-drawing upload form: file + version → presign → PUT → publish.
- *   - Top-level "New drawing" button: site + title + version + file → presign → PUT → publish.
- *   - Client-side search over title + site_name + version.
+ * Two tabs:
+ *   Drawings — the append-only drawings register (S2a).
+ *   Documents — company documents with expiry pills (S2b).
  *
- * No delete / edit-in-place — append-only by design.
+ * The Drawings tab is unchanged from S2a; it renders the existing content.
+ * The Documents tab renders DocumentsTab.
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -24,6 +21,7 @@ import { useT } from '../../i18n'
 import { AppShell, Body, Button, H1, H2, Small, StatusPill, useRoleTabs, type Role as ShellRole } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { formatDate } from '../../lib/format'
+import { DocumentsTab } from './DocumentsTab'
 
 // ---------------------------------------------------------------------------
 // Upload phase state
@@ -503,6 +501,8 @@ function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
 // DocumentsPage — main export
 // ---------------------------------------------------------------------------
 
+type PageTab = 'drawings' | 'documents'
+
 export function DocumentsPage() {
   const t = useT()
   const role = useMeRole() ?? 'owner'
@@ -510,6 +510,7 @@ export function DocumentsPage() {
   const canManage = useCan('manage_settings')
   const qc = useQueryClient()
 
+  const [activeTab, setActiveTab] = useState<PageTab>('drawings')
   const [search, setSearch] = useState('')
   const [showNewDrawing, setShowNewDrawing] = useState(false)
 
@@ -583,6 +584,43 @@ export function DocumentsPage() {
         </section>
       ) : (
         <>
+          {/* Tab switcher: Drawings | Documents */}
+          <div
+            role="tablist"
+            aria-label="Document sections"
+            className="mb-6 flex gap-1 rounded-control border border-line bg-paper p-1"
+            style={{ width: 'fit-content' }}
+          >
+            {(
+              [
+                { id: 'drawings' as PageTab, label: t('documents.tab_drawings') },
+                { id: 'documents' as PageTab, label: t('documents.tab_documents') },
+              ] as const
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={activeTab === id}
+                onClick={() => setActiveTab(id)}
+                className={[
+                  'min-h-tap rounded-control px-4 font-body text-body font-semibold transition cstk-animate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  activeTab === id
+                    ? 'bg-primary text-on-primary shadow-card'
+                    : 'text-text-mute hover:text-text',
+                ].join(' ')}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Documents tab ── */}
+          {activeTab === 'documents' && <DocumentsTab canManage={canManage} />}
+
+          {/* ── Drawings tab ── */}
+          {activeTab === 'drawings' && (
+          <>
           {/* Search bar + New drawing action */}
           <div className="mb-5 flex items-center gap-3">
             <label htmlFor="docs-search" className="sr-only">
@@ -652,6 +690,8 @@ export function DocumentsPage() {
                 </p>
               )}
             </section>
+          )}
+          </>
           )}
         </>
       )}

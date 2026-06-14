@@ -828,6 +828,29 @@ export const en = {
   'documents.save': 'Save',
   'documents.cancel': 'Cancel',
   'documents.open': 'Open',
+
+  // === documents register — company docs tab (W5 Slice 2b) ===
+  'documents.tab_drawings': 'Drawings',
+  'documents.tab_documents': 'Documents',
+  'documents.doc_type.contract': 'Contract',
+  'documents.doc_type.boq': 'BOQ',
+  'documents.doc_type.noc': 'NOC',
+  'documents.doc_type.insurance': 'Insurance',
+  'documents.doc_type.license': 'License',
+  'documents.doc_type.other': 'Other',
+  'documents.add_document': 'Add document',
+  'documents.expiry': 'Expiry',
+  'documents.no_expiry': 'No expiry',
+  'documents.expired_ago': 'Expired {days} days ago',
+  'documents.expires_in': 'Expires in {days} days',
+  'documents.company_wide': 'Company-wide',
+  'documents.archive': 'Archive',
+  'documents.restore': 'Restore',
+  'documents.show_archived': 'Show archived',
+  'documents.no_documents': 'No documents yet',
+  'documents.notes': 'Notes',
+  'documents.doc_title': 'Document title',
+  'documents.upload_unavailable_doc': 'File storage is not configured — contact your administrator.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.
