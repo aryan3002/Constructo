@@ -20,7 +20,6 @@
 import type * as React from 'react'
 import { useState } from 'react'
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   TextInput,
@@ -48,6 +47,7 @@ import {
   H2,
   Small,
   Screen,
+  ScreenLoader,
   StatusPill,
 } from '../src/ui'
 import {
@@ -206,7 +206,7 @@ function RequestsScreen({ authLoading }: { authLoading: boolean }) {
   if (authLoading) {
     return (
       <Screen>
-        <ActivityIndicator color={theme.colors.accent} />
+        <ScreenLoader fill={false} />
       </Screen>
     )
   }
@@ -586,7 +586,7 @@ function RequestsTab({ t, lang }: { t: Strings; lang: Lang }) {
 
       {/* List — split into Open / Resolved */}
       {list.isLoading ? (
-        <ActivityIndicator color={theme.colors.accent} />
+        <ScreenLoader fill={false} />
       ) : list.isError ? (
         <ErrorRetry message={t.loadError} retryLabel={t.retry} onRetry={() => list.refetch()} />
       ) : !list.data || list.data.length === 0 ? (
@@ -687,7 +687,7 @@ function DecisionsTab({ t, lang }: { t: Strings; lang: Lang }) {
   const canApprove = capQ.data?.can_approve ?? false
   const canComment = capQ.data?.can_comment ?? true
 
-  if (list.isLoading) return <ActivityIndicator color={theme.colors.accent} />
+  if (list.isLoading) return <ScreenLoader fill={false} />
   if (list.isError)
     return <ErrorRetry message={t.loadError} retryLabel={t.retry} onRetry={() => list.refetch()} />
 

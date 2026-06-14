@@ -19,7 +19,7 @@
  * no emoji, no %. Strings stay in the per-screen en/hi pattern.
  */
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, TextInput, View } from 'react-native'
+import { Image, Pressable, TextInput, View } from 'react-native'
 import { Redirect, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
@@ -34,11 +34,13 @@ import { AP, SPACE, TAP } from '../src/theme/tokens'
 import {
   Body,
   BodyStrong,
+  BreathingDots,
   Button,
   Card,
   Display,
   Micro,
   Screen,
+  ScreenLoader,
   Small,
 } from '../src/ui'
 import {
@@ -674,7 +676,7 @@ function StepProfile({
       {loading ? (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-            <ActivityIndicator color={theme.colors.accent} />
+            <BreathingDots color={theme.colors.accent} />
             <Body muted>{tx.drafting}</Body>
           </View>
         </Card>
@@ -898,7 +900,7 @@ function StepDesignSay({
   if (loading) {
     return (
       <View style={{ gap: SPACE.lg, paddingVertical: SPACE.xl, alignItems: 'center' }}>
-        <ActivityIndicator color={theme.colors.accent} />
+        <ScreenLoader fill={false} />
       </View>
     )
   }

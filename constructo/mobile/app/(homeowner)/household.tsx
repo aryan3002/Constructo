@@ -18,7 +18,7 @@
  * warm paper, graceful authority. Strings stay in the per-screen en/hi pattern.
  */
 import { useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, Share, TextInput, View } from 'react-native'
+import { Modal, Pressable, Share, TextInput, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,6 +39,7 @@ import {
   Eyebrow,
   FadeInUp,
   Screen,
+  Skeleton,
   Small,
   StatusPill,
   useInputStyle,
@@ -351,7 +352,10 @@ export default function Household() {
         <Eyebrow>{tx.roster}</Eyebrow>
 
         {rosterQ.isLoading ? (
-          <ActivityIndicator color={theme.colors.accent} />
+          <View style={{ gap: SPACE.sm }}>
+            <Skeleton height={56} radius={12} />
+            <Skeleton height={56} radius={12} />
+          </View>
         ) : members.length === 0 ? (
           <Small muted>{tx.rosterEmpty}</Small>
         ) : (

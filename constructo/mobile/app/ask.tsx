@@ -36,7 +36,7 @@ import { useAuth } from '../src/auth/AuthContext'
 import { useT } from '../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP, type Status } from '../src/theme/tokens'
-import { Body, BodyStrong, Mono, Small } from '../src/ui'
+import { Body, BodyStrong, BreathingDots, Mono, ScreenLoader, Small } from '../src/ui'
 import { isMoneyOrStructural } from './_requests.util'
 
 const STR = {
@@ -259,9 +259,7 @@ function AskInner() {
           keyboardShouldPersistTaps="handled"
         >
           {q.isLoading ? (
-            <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center' }}>
-              <ActivityIndicator color={c.accent} />
-            </View>
+            <ScreenLoader fill={false} />
           ) : isEmpty ? (
             <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center', gap: SPACE.md }}>
               <View
@@ -403,8 +401,8 @@ function AskInner() {
                     ]}
                   >
                     {e.status === 'pending' ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-                        <ActivityIndicator color={c.accent} />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                        <BreathingDots color={c.accent} />
                         <Body muted>{t.thinking}</Body>
                       </View>
                     ) : e.status === 'error' ? (

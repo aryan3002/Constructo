@@ -17,7 +17,6 @@
  * Keeps the file's existing STR en/hi table, data hooks, and loading/error handling.
  */
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   View,
@@ -43,6 +42,7 @@ import {
   ListRow,
   MilestoneStrip,
   Screen,
+  ScreenLoader,
   Small,
   StatusPill,
   TimeBar,
@@ -239,9 +239,7 @@ export default function Home() {
   if (homeQ.isLoading) {
     return (
       <Screen>
-        <View style={{ paddingVertical: SPACE.xxl, alignItems: 'center' }}>
-          <ActivityIndicator color={c.accent} />
-        </View>
+        <ScreenLoader fill={false} />
       </Screen>
     )
   }

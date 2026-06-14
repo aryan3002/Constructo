@@ -11,7 +11,7 @@
  *
  * String table follows the en/hi pattern used across every homeowner screen.
  */
-import { ActivityIndicator, View } from 'react-native'
+import { View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -29,6 +29,7 @@ import {
   Display,
   FadeInUp,
   Screen,
+  ScreenLoader,
   Small,
   StatusPill,
   FLOATING_NAV_CLEARANCE,
@@ -74,12 +75,7 @@ function finishQty(item: FinishItem): string | null {
 // ---- sub-components ----
 
 function Loading() {
-  const { theme } = useTheme()
-  return (
-    <View style={{ paddingVertical: SPACE.xl, alignItems: 'center' }}>
-      <ActivityIndicator color={theme.colors.accent} />
-    </View>
-  )
+  return <ScreenLoader fill={false} />
 }
 
 function Empty({ message }: { message: string }) {

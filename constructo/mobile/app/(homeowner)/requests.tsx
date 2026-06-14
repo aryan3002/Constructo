@@ -10,7 +10,7 @@
  * Route: (homeowner)/requests — registered `href: null` so the tab bar is
  * hidden (this is a pushed screen, not a tab).
  */
-import { ActivityIndicator, View } from 'react-native'
+import { View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -24,8 +24,10 @@ import {
   Button,
   CalmCard,
   Card,
+  FadeInUp,
   QuietState,
   Screen,
+  ScreenLoader,
   Small,
   StatusPill,
   SubHeader,
@@ -125,7 +127,7 @@ export default function RequestsScreen() {
       <View style={{ marginTop: SPACE.md }}>{addButton}</View>
 
       {listQ.isLoading ? (
-        <ActivityIndicator color={c.accent} style={{ marginTop: SPACE.xl }} />
+        <ScreenLoader fill={false} />
       ) : listQ.isError ? (
         <CalmCard title={t.loadError} status="risk">
           <Button
@@ -160,8 +162,9 @@ export default function RequestsScreen() {
                   {t.sectionOpen.toUpperCase()}
                 </Small>
               </View>
-              <Card>
-                {open.map((req, idx) => {
+              <FadeInUp>
+                <Card>
+                  {open.map((req, idx) => {
                   const sla = slaPromise(req, lang as Lang)
                   const subtitle = sla || `${t.raised} · ${formatDate(req.created_at, lang as Lang)}`
                   return (
@@ -184,8 +187,9 @@ export default function RequestsScreen() {
                       }
                     />
                   )
-                })}
-              </Card>
+                  })}
+                </Card>
+              </FadeInUp>
             </View>
           ) : null}
 
@@ -204,8 +208,9 @@ export default function RequestsScreen() {
                   {t.sectionResolved.toUpperCase()}
                 </Small>
               </View>
-              <Card>
-                {resolved.map((req, idx) => (
+              <FadeInUp delay={80}>
+                <Card>
+                  {resolved.map((req, idx) => (
                   <ListRow
                     key={req.id}
                     icon="check"
@@ -224,8 +229,9 @@ export default function RequestsScreen() {
                       />
                     }
                   />
-                ))}
-              </Card>
+                  ))}
+                </Card>
+              </FadeInUp>
             </View>
           ) : null}
         </View>

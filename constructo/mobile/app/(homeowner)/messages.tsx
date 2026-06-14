@@ -152,7 +152,12 @@ export default function HomeownerMessagesInbox() {
         gap: SPACE.xl,
       }}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={c.accent}
+          colors={[c.accent]}
+        />
       }
     >
       <View style={{ gap: SPACE.sm }}>
