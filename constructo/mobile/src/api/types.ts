@@ -401,6 +401,22 @@ export interface VoiceNoteOut {
   voice_url: string | null
 }
 
+/** An in-app notification (the bell/inbox feed). */
+export interface AppNotification {
+  id: string
+  type: string | null
+  title: string
+  body: string
+  data: Record<string, unknown> | null
+  created_at: string
+  is_unread: boolean
+}
+
+export interface NotificationsResult {
+  items: AppNotification[]
+  unread_count: number
+}
+
 /** A comment in a photo's thread. `is_mine` aligns the bubble in the UI. */
 export interface PhotoComment {
   id: string

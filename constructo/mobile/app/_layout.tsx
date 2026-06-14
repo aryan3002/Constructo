@@ -40,11 +40,12 @@ export default function RootLayout() {
 }
 
 /**
- * Push deep-link (Task 13d): tapping a chat notification (data carries
- * `{conversation_id, seq}` — see backend `_push_offline_members`) opens that
- * thread. Routes by role — the homeowner thread lives under (homeowner)/messages,
- * the contractor thread under (contractor)/owner/chat. Best-effort: a malformed
- * payload is ignored. Mounted inside AuthProvider so `role` + router are ready.
+ * Push deep-link: tapping a notification opens the right place.
+ *   - chat (`{conversation_id}` — see backend `_push_offline_members`) → the thread
+ *   - homeowner content (`{type: photo|request|update|weekly_summary}` — see
+ *     `app.push.sender` callers) → the matching tab/screen
+ * Routes by role. Best-effort: a malformed/unknown payload is ignored. Mounted
+ * inside AuthProvider so `role` + router are ready.
  */
 function ChatPushDeepLink() {
   const router = useRouter()
@@ -53,22 +54,39 @@ function ChatPushDeepLink() {
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as
-        | { conversation_id?: string }
+        | { conversation_id?: string; type?: string }
         | undefined
-      const convId = data?.conversation_id
-      if (!convId) return
-      if (role === 'homeowner') {
-        router.push({
-          pathname: '/(homeowner)/messages/[id]',
-          params: { id: convId, kind: 'homeowner' },
-        })
-      } else {
-        // Contractor (owner/pm/supervisor) threads address by conversation id;
-        // an undefined `kind` falls back to addressing by conv id in the screen.
-        router.push({
-          pathname: '/(contractor)/owner/chat/[id]',
-          params: { id: convId },
-        })
+      if (!data) return
+
+      // Chat notification → open the thread.
+      const convId = data.conversation_id
+      if (convId) {
+        if (role === 'homeowner') {
+          router.push({
+            pathname: '/(homeowner)/messages/[id]',
+            params: { id: convId, kind: 'homeowner' },
+          })
+        } else {
+          // Contractor threads address by conversation id; an undefined `kind`
+          // falls back to addressing by conv id in the screen.
+          router.push({ pathname: '/(contractor)/owner/chat/[id]', params: { id: convId } })
+        }
+        return
+      }
+
+      // Homeowner content notification → the matching surface.
+      if (role !== 'homeowner') return
+      switch (data.type) {
+        case 'photo':
+          router.push('/(homeowner)/photos')
+          break
+        case 'request':
+          router.push('/(homeowner)/requests')
+          break
+        case 'update':
+        case 'weekly_summary':
+          router.push('/(homeowner)/updates')
+          break
       }
     })
     return () => sub.remove()

@@ -40,6 +40,7 @@ from app.models.homeowner_design import (
 from app.models.homeowner_drawings import DrawingKind, PublishedDrawing
 from app.models.homeowner_feed import (
     Change,
+    HomeownerNotification,
     Milestone,
     MilestoneStatus,
     PhotoComment,
@@ -172,6 +173,7 @@ __all__ = [
     "PermitStatus",
     "Property",
     "PublishedDrawing",
+    "HomeownerNotification",
     "PhotoComment",
     "PublishedPhoto",
     "HomeownerVisitPhoto",

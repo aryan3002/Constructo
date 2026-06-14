@@ -78,6 +78,8 @@ from app.homeowner.schemas import (
     MemberOut,
     MemberPrefsIn,
     MilestoneOut,
+    NotificationOut,
+    NotificationsOut,
     PhotoOut,
     PropertyOut,
     QuietPeriodOut,
@@ -108,6 +110,7 @@ from app.models import (
     DesignReference,
     DesignSelection,
     HomeownerMember,
+    HomeownerNotification,
     HomeownerRequest,
     HomeownerSubRole,
     HomeownerVisitPhoto,
@@ -1372,6 +1375,71 @@ async def add_photo_comment(
     await session.commit()
     await session.refresh(row)
     return _comment_out(row, mid)
+
+
+# ── In-app notification inbox (bell feed) ────────────────────────────────────
+
+def _parse_last_seen(prefs: dict | None) -> datetime | None:
+    raw = (prefs or {}).get("last_seen_at")
+    if not isinstance(raw, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+@router.get("/notifications", response_model=NotificationsOut)
+async def list_notifications(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> NotificationsOut:
+    """The in-app notification feed (newest first) + this member's unread count."""
+    sid = await resolve_site(session, user, site_id)
+    mid = await _caller_member_id(session, user, sid)
+    member = await session.get(HomeownerMember, mid) if mid else None
+    last_seen = _parse_last_seen(member.notif_prefs if member else None)
+    rows = (
+        await session.execute(
+            select(HomeownerNotification)
+            .where(HomeownerNotification.site_id == sid)
+            .order_by(HomeownerNotification.created_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    items = [
+        NotificationOut(
+            id=n.id,
+            type=n.type,
+            title=n.title,
+            body=n.body,
+            data=n.data,
+            created_at=n.created_at,
+            is_unread=last_seen is None or n.created_at > last_seen,
+        )
+        for n in rows
+    ]
+    unread = sum(1 for it in items if it.is_unread)
+    return NotificationsOut(items=items, unread_count=unread)
+
+
+@router.post("/notifications/seen", status_code=204)
+async def mark_notifications_seen(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> None:
+    """Mark the feed read for the caller (stamps ``last_seen_at`` in notif_prefs)."""
+    sid = await resolve_site(session, user, site_id)
+    mid = await _caller_member_id(session, user, sid)
+    member = await session.get(HomeownerMember, mid) if mid else None
+    if member is not None:
+        prefs = dict(member.notif_prefs or {})
+        prefs["last_seen_at"] = datetime.now(UTC).isoformat()
+        member.notif_prefs = prefs
+        await session.commit()
 
 
 @router.get("/updates", response_model=Page[UpdateOut])

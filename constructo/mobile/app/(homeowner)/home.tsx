@@ -41,6 +41,7 @@ import {
   LinkRow,
   ListRow,
   MilestoneStrip,
+  MonoSm,
   Screen,
   ScreenLoader,
   Small,
@@ -234,6 +235,9 @@ export default function Home() {
     queryFn: () => homeowner.requests(),
     enabled: homeQ.isSuccess,
   })
+  // Notification bell badge — the unread count for the in-app inbox.
+  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: () => homeowner.notifications() })
+  const unreadCount = notifQ.data?.unread_count ?? 0
 
   // ── Loading / error states ───────────────────────────────────────────────────
   if (homeQ.isLoading) {
@@ -334,26 +338,71 @@ export default function Home() {
               : new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Small>
         </View>
-        <Link href="/(homeowner)/settings" asChild>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.settings}
-            hitSlop={8}
-            style={({ pressed }) => ({
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: c.card,
-              borderWidth: 1,
-              borderColor: c.line,
-              opacity: pressed ? 0.85 : 1,
-            })}
-          >
-            <Feather name="settings" size={20} color={c.text} />
-          </Pressable>
-        </Link>
+        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+          {/* Notification bell + unread badge → the in-app inbox */}
+          <Link href="/(homeowner)/inbox" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'
+              }
+              hitSlop={8}
+              style={({ pressed }) => ({
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: c.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Feather name="bell" size={20} color={c.text} />
+              {unreadCount > 0 ? (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    paddingHorizontal: 4,
+                    backgroundColor: c.secondary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MonoSm style={{ color: '#fff', fontSize: 10 }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </MonoSm>
+                </View>
+              ) : null}
+            </Pressable>
+          </Link>
+          <Link href="/(homeowner)/settings" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.settings}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: c.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Feather name="settings" size={20} color={c.text} />
+            </Pressable>
+          </Link>
+        </View>
       </View>
 
       {/* ══════════════════════════════════════════════════════════════════

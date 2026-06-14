@@ -438,6 +438,22 @@ class CommentOut(BaseModel):
     is_mine: bool
 
 
+class NotificationOut(BaseModel):
+    id: UUID
+    type: str | None
+    title: str
+    body: str
+    # Deep-link payload (e.g. {"type": "request", "request_id": "..."}).
+    data: dict | None
+    created_at: datetime
+    is_unread: bool
+
+
+class NotificationsOut(BaseModel):
+    items: list[NotificationOut]
+    unread_count: int
+
+
 class RequestOut(BaseModel):
     id: UUID
     site_id: UUID

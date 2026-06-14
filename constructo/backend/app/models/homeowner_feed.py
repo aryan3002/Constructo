@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -182,4 +183,27 @@ class PhotoComment(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class HomeownerNotification(Base):
+    """An in-app notification record (the inbox/bell feed). Created alongside the
+    push in ``app.push.sender.notify_site_homeowners`` — one per site event,
+    shown to every member. Per-member read state is tracked by a ``last_seen_at``
+    timestamp in the member's ``notif_prefs`` (no per-row join needed)."""
+
+    __tablename__ = "homeowner_notifications"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    site_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 'photo' | 'request' | 'update' | 'weekly_summary' | None.
+    type: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # The push `data` blob (carries ids for deep-linking), stored verbatim.
+    data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

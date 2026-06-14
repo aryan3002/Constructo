@@ -23,7 +23,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import HomeownerMember, MemberStatus, PushToken
+from app.models import HomeownerMember, HomeownerNotification, MemberStatus, PushToken
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,22 @@ async def notify_site_homeowners(
     events. Best-effort: returns the tokens targeted (empty if none / on error).
     Never raises — callers wire this after their own commit and ignore failures.
     """
+    # Persist the in-app notification (the inbox/bell record) — ALWAYS, regardless
+    # of push cadence. Cadence only suppresses the immediate push, not the feed.
+    try:
+        session.add(
+            HomeownerNotification(
+                site_id=site_id,
+                type=(data or {}).get("type"),
+                title=title,
+                body=body,
+                data=data,
+            )
+        )
+        await session.commit()
+    except Exception:
+        logger.exception("persist notification failed for site %s", site_id)
+
     try:
         tokens = await _push_tokens_for_site(
             session, site_id, category=category, spike=spike

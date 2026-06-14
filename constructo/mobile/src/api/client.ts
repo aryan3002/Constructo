@@ -27,6 +27,7 @@ import type {
   Me,
   Milestone,
   Paginated,
+  NotificationsResult,
   Photo,
   PhotoComment,
   Property,
@@ -140,6 +141,12 @@ export const homeowner = {
       method: 'PATCH',
       body: JSON.stringify({ room_tag: roomTag }),
     }),
+
+  /** The in-app notification feed (newest first) + this member's unread count. */
+  notifications: () => request<NotificationsResult>('/api/v1/homeowner/notifications'),
+  /** Mark the feed read for the caller (clears the unread badge). */
+  markNotificationsSeen: () =>
+    request<void>('/api/v1/homeowner/notifications/seen', { method: 'POST' }),
 
   /** The comment thread on a published feed photo (oldest → newest). */
   photoComments: (photoId: string) =>
