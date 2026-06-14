@@ -9,6 +9,7 @@
  *   - Each current drawing shows its version chain via a "Show versions" toggle,
  *     walking the supersedes_id chain newest → oldest.
  *   - Per-drawing upload form: file + version → presign → PUT → publish.
+ *   - Top-level "New drawing" button: site + title + version + file → presign → PUT → publish.
  *   - Client-side search over title + site_name + version.
  *
  * No delete / edit-in-place — append-only by design.
@@ -18,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { drawingsApi, type DrawingRegisterRow } from '../../api/drawings'
 import { qk } from '../../api/queryKeys'
 import { useCan, useMeRole } from '../../auth/useCan'
+import { useSites } from '../../api/hooks'
 import { useT } from '../../i18n'
 import { AppShell, Body, Button, H1, H2, Small, StatusPill, useRoleTabs, type Role as ShellRole } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
@@ -30,7 +32,7 @@ import { formatDate } from '../../lib/format'
 type UploadPhase = 'idle' | 'uploading' | 'unavailable' | 'error'
 
 // ---------------------------------------------------------------------------
-// UploadRevision — inline per-drawing upload form
+// UploadRevision — inline per-drawing upload form (revision of existing drawing)
 // ---------------------------------------------------------------------------
 
 interface UploadRevisionProps {
@@ -172,6 +174,197 @@ function UploadRevision({ current, onDone, onCancel }: UploadRevisionProps) {
 }
 
 // ---------------------------------------------------------------------------
+// NewDrawing — top-level form for uploading a brand-new drawing
+// ---------------------------------------------------------------------------
+
+interface NewDrawingProps {
+  onDone: () => void
+  onCancel: () => void
+}
+
+function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
+  const t = useT()
+  const { data: sitesData } = useSites()
+  const sites = sitesData?.items ?? []
+
+  const [siteId, setSiteId] = useState(sites[0]?.id ?? '')
+  const [title, setTitle] = useState('')
+  const [version, setVersion] = useState('')
+  const [changeNote, setChangeNote] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [phase, setPhase] = useState<UploadPhase>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  async function handleSave() {
+    if (!file || !siteId || !title.trim() || !version.trim()) return
+
+    setPhase('uploading')
+    setErrorMsg(null)
+
+    try {
+      const ticket = await drawingsApi.presign(siteId, file.name, file.type)
+
+      if (ticket.mode === 'unavailable') {
+        setPhase('unavailable')
+        return
+      }
+
+      // mode === 'presigned'
+      await drawingsApi.putToR2(ticket.put_url!, file)
+      await drawingsApi.publish({
+        site_id: siteId,
+        title: title.trim(),
+        version: version.trim(),
+        file_url: ticket.key,
+        kind: 'other',
+        change_note: changeNote.trim() || null,
+        // No supersedes_id — this is a brand-new drawing.
+      })
+
+      setPhase('idle')
+      onDone()
+    } catch {
+      setPhase('error')
+      setErrorMsg(t('common.error'))
+    }
+  }
+
+  const canSave =
+    Boolean(file) &&
+    siteId.length > 0 &&
+    title.trim().length > 0 &&
+    version.trim().length > 0 &&
+    phase !== 'uploading'
+
+  return (
+    <div className="mb-5 rounded-card border border-line bg-paper p-4">
+      <div className="flex flex-col gap-3">
+        {/* Site selector */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-site"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.site_label')}
+          </label>
+          <select
+            id="new-drawing-site"
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Drawing title */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-title"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.title_label')}
+          </label>
+          <input
+            id="new-drawing-title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Ground Floor Plan"
+            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        </div>
+
+        {/* Version input */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-version"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.version_label')}
+          </label>
+          <input
+            id="new-drawing-version"
+            type="text"
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="e.g. v1"
+            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        </div>
+
+        {/* Change note (optional) */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-note"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.change_note')}
+          </label>
+          <input
+            id="new-drawing-note"
+            type="text"
+            value={changeNote}
+            onChange={(e) => setChangeNote(e.target.value)}
+            placeholder="Optional"
+            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        </div>
+
+        {/* File input */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-file"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.file_label')}
+          </label>
+          <input
+            id="new-drawing-file"
+            type="file"
+            accept=".pdf,.dwg,.dxf,.png,.jpg"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="font-body text-small text-text"
+          />
+        </div>
+
+        {/* Upload unavailable note */}
+        {phase === 'unavailable' && (
+          <p role="alert" className="font-body text-small text-text-mute">
+            {t('documents.upload_unavailable')}
+          </p>
+        )}
+
+        {/* Generic error */}
+        {phase === 'error' && errorMsg && (
+          <p role="alert" className="font-body text-small text-risk">
+            {errorMsg}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            disabled={!canSave}
+            onClick={() => void handleSave()}
+          >
+            {phase === 'uploading' ? t('documents.uploading') : t('documents.save')}
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            {t('documents.cancel')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // VersionHistory — the collapsed chain of versions for a drawing
 // ---------------------------------------------------------------------------
 
@@ -240,11 +433,8 @@ function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
       {/* Primary row */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3
-            role="heading"
-            aria-level={3}
-            className="font-body text-body font-semibold text-text"
-          >
+          {/* Fix 4: <h3> already conveys role=heading + level 3; redundant attributes removed */}
+          <h3 className="font-body text-body font-semibold text-text">
             {current.title}
           </h3>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -279,7 +469,7 @@ function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
         </div>
       </div>
 
-      {/* Version history toggle */}
+      {/* Version history toggle — Fix 3: glyphs are aria-hidden */}
       {hasHistory && (
         <div className="mt-1">
           <button
@@ -287,7 +477,8 @@ function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
             onClick={() => setExpanded((p) => !p)}
             className="font-body text-small font-semibold text-primary-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            {expanded ? t('documents.hide_versions') : t('documents.show_versions')} {expanded ? '▲' : '▾'}
+            {expanded ? t('documents.hide_versions') : t('documents.show_versions')}{' '}
+            <span aria-hidden="true">{expanded ? '▲' : '▾'}</span>
           </button>
           {expanded && <VersionHistory chain={chain} />}
         </div>
@@ -320,6 +511,7 @@ export function DocumentsPage() {
   const qc = useQueryClient()
 
   const [search, setSearch] = useState('')
+  const [showNewDrawing, setShowNewDrawing] = useState(false)
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: qk.drawings(),
@@ -338,15 +530,27 @@ export function DocumentsPage() {
   // Current drawings = rows where is_current is true.
   const currentRows = rows.filter((r) => r.is_current)
 
-  // For each current row, build its version chain by walking supersedes_id.
+  /**
+   * Walk supersedes_id chain from `current` → oldest version.
+   * Fix 1: `seen` Set guards against cyclic supersedes_id so we never loop forever.
+   * Output order: newest → oldest.
+   */
   function buildChain(current: DrawingRegisterRow): DrawingRegisterRow[] {
     const chain: DrawingRegisterRow[] = []
+    const seen = new Set<string>()
     let v: DrawingRegisterRow | undefined = current
     while (v) {
+      if (seen.has(v.id)) break
+      seen.add(v.id)
       chain.push(v)
       v = v.supersedes_id ? byId.get(v.supersedes_id) : undefined
     }
     return chain // newest → oldest
+  }
+
+  /** Shared invalidation using the qk factory — Fix 2. */
+  function invalidateDrawings() {
+    void qc.invalidateQueries({ queryKey: qk.drawings() })
   }
 
   // Apply client-side search filter.
@@ -379,8 +583,8 @@ export function DocumentsPage() {
         </section>
       ) : (
         <>
-          {/* Search bar */}
-          <div className="mb-5">
+          {/* Search bar + New drawing action */}
+          <div className="mb-5 flex items-center gap-3">
             <label htmlFor="docs-search" className="sr-only">
               {t('documents.search_placeholder')}
             </label>
@@ -392,7 +596,23 @@ export function DocumentsPage() {
               placeholder={t('documents.search_placeholder')}
               className="w-full rounded-control border border-line bg-paper px-3 py-2 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
+            {!showNewDrawing && (
+              <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
+                {t('documents.new_drawing')}
+              </Button>
+            )}
           </div>
+
+          {/* New drawing form (Fix 5) */}
+          {showNewDrawing && (
+            <NewDrawing
+              onDone={() => {
+                setShowNewDrawing(false)
+                invalidateDrawings()
+              }}
+              onCancel={() => setShowNewDrawing(false)}
+            />
+          )}
 
           {/* Four states */}
           {isLoading && <Spinner label={t('common.loading')} />}
@@ -421,9 +641,7 @@ export function DocumentsPage() {
                     current={current}
                     chain={buildChain(current)}
                     canManage={canManage}
-                    onRefresh={() =>
-                      qc.invalidateQueries({ queryKey: ['drawings'] })
-                    }
+                    onRefresh={invalidateDrawings}
                   />
                 ))}
               </ul>

@@ -798,6 +798,8 @@ export const hi: Record<TranslationKey, string> = {
   'documents.search_placeholder': 'शीर्षक, साइट या संस्करण से खोजें…',
   'documents.file_label': 'फ़ाइल',
   'documents.version_label': 'संस्करण',
+  'documents.site_label': 'साइट',
+  'documents.title_label': 'ड्रॉइंग शीर्षक',
   'documents.save': 'सहेजें',
   'documents.cancel': 'रद्द करें',
   'documents.open': 'खोलें',

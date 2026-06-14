@@ -314,4 +314,87 @@ describe('DocumentsPage', () => {
     expect(mockPutToR2).not.toHaveBeenCalled()
     expect(mockPublish).not.toHaveBeenCalled()
   })
+
+  // -------------------------------------------------------------------------
+  // Fix 5: New drawing upload — no supersedes_id
+  // -------------------------------------------------------------------------
+
+  it('new drawing: presign → putToR2 → publish called WITHOUT supersedes_id', async () => {
+    // Start with an empty register so the "New drawing" button is visible regardless.
+    mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
+    mockPresign.mockResolvedValue({
+      key: 'new-key/roof-plan-v1.pdf',
+      put_url: 'https://r2/put-new',
+      mode: 'presigned',
+    })
+    mockPutToR2.mockResolvedValue(undefined)
+    mockPublish.mockResolvedValue({
+      id: 'drw-new-1',
+      site_id: 'site-1',
+      title: 'Roof Plan',
+      version: 'v1',
+      kind: 'other',
+      change_note: null,
+      published_at: new Date().toISOString(),
+      supersedes_id: null,
+      site_name: 'Tripathi Residence',
+      is_current: true,
+      file_url: 'new-key/roof-plan-v1.pdf',
+    })
+
+    renderPage()
+
+    // Wait for the register to load.
+    await screen.findByRole('heading', { name: /Ground Floor Plan/i })
+
+    // Click "New drawing" button.
+    await userEvent.click(screen.getByRole('button', { name: /new drawing/i }))
+
+    // The new drawing form should appear. Fill site (first option, site-1, is pre-selected).
+    // Fill in drawing title.
+    const titleInput = await screen.findByLabelText(/drawing title/i)
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'Roof Plan')
+
+    // Fill in version.
+    const versionInput = screen.getByLabelText(/^version$/i)
+    await userEvent.clear(versionInput)
+    await userEvent.type(versionInput, 'v1')
+
+    // Attach a file.
+    const fileInput = screen.getByLabelText(/^file$/i)
+    const fakeFile = new File(['pdf-content'], 'roof-plan-v1.pdf', { type: 'application/pdf' })
+    await userEvent.upload(fileInput, fakeFile)
+
+    // Click Save.
+    const saveButton = screen.getByRole('button', { name: /^save$/i })
+    await userEvent.click(saveButton)
+
+    // presign called with the selected site and file info.
+    await waitFor(() => {
+      expect(mockPresign).toHaveBeenCalledWith('site-1', 'roof-plan-v1.pdf', 'application/pdf')
+    })
+
+    // putToR2 called with the presigned URL and the file.
+    await waitFor(() => {
+      expect(mockPutToR2).toHaveBeenCalledWith('https://r2/put-new', fakeFile)
+    })
+
+    // publish called with the correct body and NO supersedes_id key (or undefined).
+    await waitFor(() => {
+      expect(mockPublish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          site_id: 'site-1',
+          title: 'Roof Plan',
+          version: 'v1',
+          file_url: 'new-key/roof-plan-v1.pdf',
+          kind: 'other',
+        }),
+      )
+    })
+
+    // Critical: supersedes_id must not be present (or must be undefined/absent).
+    const publishCall = mockPublish.mock.calls[0][0] as Record<string, unknown>
+    expect(publishCall.supersedes_id).toBeUndefined()
+  })
 })

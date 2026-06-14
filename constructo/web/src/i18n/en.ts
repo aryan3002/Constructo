@@ -823,6 +823,8 @@ export const en = {
   'documents.search_placeholder': 'Search by title, site or version…',
   'documents.file_label': 'File',
   'documents.version_label': 'Version',
+  'documents.site_label': 'Site',
+  'documents.title_label': 'Drawing title',
   'documents.save': 'Save',
   'documents.cancel': 'Cancel',
   'documents.open': 'Open',
