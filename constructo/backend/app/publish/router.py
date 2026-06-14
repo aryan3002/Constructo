@@ -151,6 +151,15 @@ async def publish_photo(
     session.add(photo)
     await session.commit()
     await session.refresh(photo)
+    # Best-effort push — a new photo is a "site_updates" event (honours cadence).
+    await notify_site_homeowners(
+        session,
+        body.site_id,
+        "New photo from your site",
+        caption or "Your builder shared a new photo.",
+        category="site_updates",
+        data={"type": "photo", "photo_id": str(photo.id)},
+    )
     out = _photo_out(photo)
     return out.model_copy(update={"draft_caption": draft})
 
@@ -172,8 +181,12 @@ async def publish_update(
     await session.commit()
     await session.refresh(update)
     # Best-effort push to the homeowner(s) on this site (never fails the publish).
+    # A genuine delay is an urgent SPIKE — it punches through any cadence.
+    is_delay = str(update.type) == "delay" or update.revised_date is not None
     await notify_site_homeowners(
         session, body.site_id, "New project update", update.title,
+        category="site_updates",
+        spike=is_delay,
         data={"type": "update", "update_type": str(update.type)},
     )
     return _update_out(update)
@@ -209,6 +222,15 @@ async def publish_weekly_summary(
     session.add(summary)
     await session.commit()
     await session.refresh(summary)
+    # Best-effort push — the "weekly_summary" category (its own cadence).
+    await notify_site_homeowners(
+        session,
+        body.site_id,
+        "Your weekly summary is ready",
+        "This week on your build — what got done and what's next.",
+        category="weekly_summary",
+        data={"type": "weekly_summary", "summary_id": str(summary.id)},
+    )
     return WeeklySummaryOut(
         id=summary.id, site_id=summary.site_id, week_start=summary.week_start,
         text=summary.text, published_at=summary.published_at,

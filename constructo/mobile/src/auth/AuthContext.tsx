@@ -18,7 +18,11 @@ import {
 
 import { authApi } from '../api/auth'
 import { ApiError, homeowner } from '../api/client'
-import { registerDevicePushToken } from '../push/register'
+import {
+  persistPushToken,
+  registerDevicePushToken,
+  registerForPushNotificationsAsync,
+} from '../push/register'
 import type { Capabilities, HomeownerSubRole, Me, Role } from '../api/types'
 import { clearToken, getToken } from '../store/secure'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -85,9 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setMe(profile)
     setStatus('authed')
-    // Register this device's push token (contractor's only token path). Fire-
-    // and-forget; fully insulated, never affects the session.
-    if (profile.role !== 'homeowner') void registerDevicePushToken()
+    // Register this device's push token. Fire-and-forget; fully insulated, never
+    // affects the session. A homeowner also stashes the token in their member
+    // notif_prefs (the path notify_site_homeowners reads); a contractor only has
+    // the users-row path.
+    if (profile.role !== 'homeowner') {
+      void registerDevicePushToken()
+    } else {
+      void (async () => {
+        const tok = await registerForPushNotificationsAsync()
+        if (tok) {
+          void persistPushToken(tok)
+          void registerDevicePushToken(tok)
+        }
+      })()
+    }
 
     // Best-effort restore of persisted sub_role / site_id / onboarded. This MUST
     // NOT be able to demote an already-authenticated session: a flaky

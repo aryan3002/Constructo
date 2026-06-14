@@ -74,7 +74,28 @@ async def send_expo_push(messages: list[dict]) -> dict:
     return {"sent": len(messages), "mode": "dry_run"}
 
 
-async def _push_tokens_for_site(session: AsyncSession, site_id: UUID) -> list[str]:
+# Cadences that suppress an immediate ("as it happens") push. The default when a
+# member has no stored preference is to push (DEFAULT = "as_it_happens"). An
+# urgent SPIKE (genuine delay / money risk) always punches through any of these.
+_SUPPRESS_IMMEDIATE = {"daily", "weekly", "pause"}
+
+
+async def _push_tokens_for_site(
+    session: AsyncSession,
+    site_id: UUID,
+    *,
+    category: str | None = None,
+    spike: bool = False,
+) -> list[str]:
+    """Push tokens for a site's active members, honouring each member's cadence.
+
+    ``category`` (e.g. ``"site_updates"``, ``"weekly_summary"``) gates by the
+    member's ``notif_prefs.cadence[category]``: a member who set that category to
+    Daily / Weekly / Paused gets no immediate push (it would arrive in a future
+    digest), UNLESS ``spike`` is set — an urgent event always reaches everyone.
+    With no ``category`` the cadence is ignored (every member with a token is
+    targeted) — used for direct replies (e.g. a status change on their request).
+    """
     rows = (
         await session.execute(
             select(HomeownerMember).where(
@@ -85,9 +106,15 @@ async def _push_tokens_for_site(session: AsyncSession, site_id: UUID) -> list[st
     ).scalars().all()
     tokens: list[str] = []
     for m in rows:
-        token = (m.notif_prefs or {}).get("push_token")
-        if isinstance(token, str) and token:
-            tokens.append(token)
+        prefs = m.notif_prefs or {}
+        token = prefs.get("push_token")
+        if not (isinstance(token, str) and token):
+            continue
+        if category is not None and not spike:
+            cadence = (prefs.get("cadence") or {}).get(category, "as_it_happens")
+            if cadence in _SUPPRESS_IMMEDIATE:
+                continue
+        tokens.append(token)
     return tokens
 
 
@@ -146,15 +173,21 @@ async def notify_site_homeowners(
     title: str,
     body: str,
     *,
+    category: str | None = None,
+    spike: bool = False,
     data: dict | None = None,
 ) -> list[str]:
-    """Push ``title``/``body`` to every active member of ``site_id`` with a token.
+    """Push ``title``/``body`` to a site's active members, honouring their cadence.
 
-    Best-effort: returns the tokens targeted (empty if none / on error). Never
-    raises — callers wire this after their own commit and ignore failures.
+    ``category`` gates by each member's ``notif_prefs.cadence`` (Daily/Weekly/
+    Paused suppress an immediate push); ``spike`` forces delivery for urgent
+    events. Best-effort: returns the tokens targeted (empty if none / on error).
+    Never raises — callers wire this after their own commit and ignore failures.
     """
     try:
-        tokens = await _push_tokens_for_site(session, site_id)
+        tokens = await _push_tokens_for_site(
+            session, site_id, category=category, spike=spike
+        )
         if not tokens:
             return []
         messages = [
