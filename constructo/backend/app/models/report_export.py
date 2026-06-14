@@ -31,5 +31,5 @@ class ReportExport(Base):
     scope: Mapped[str] = mapped_column(String(200), nullable=False)
     date_range: Mapped[str] = mapped_column(String(60), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
