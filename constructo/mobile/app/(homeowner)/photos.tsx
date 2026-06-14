@@ -76,6 +76,7 @@ import {
   useToast,
   FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
+import { ROOM_PRESETS } from '../_requests.util'
 
 /** Either language's string table — union of both branches. */
 type Strings = typeof STR[keyof typeof STR]
@@ -768,6 +769,19 @@ export default function Photos() {
   // Grouping mode for the curated tabs ("My visits" + "feed" have no grouping).
   const view: ViewMode = tab === 'mine' || tab === 'feed' ? 'all' : tab
 
+  // Re-tag one of the homeowner's OWN visit photos with a room/area (My-visits
+  // only — published contractor photos aren't the homeowner's to re-tag).
+  async function tagActiveRoom(label: string | null) {
+    if (!active) return
+    try {
+      const updated = await homeowner.tagVisitPhoto(active.id, label)
+      setActive(updated)
+      void queryClient.invalidateQueries({ queryKey: ['photos', 'mine'] })
+    } catch {
+      /* best-effort — the chip simply won't change */
+    }
+  }
+
   // Load the storage policy written by storage.tsx so the retention label
   // shown below "Manage" stays in sync with what the user last set.
   useEffect(() => {
@@ -1316,6 +1330,50 @@ export default function Photos() {
                     </View>
                   ) : null}
                 </View>
+
+                {/* Room tagging — homeowner's OWN visit photos only. Lets them
+                    segregate their uploads By Room (and feed structured metadata). */}
+                {tab === 'mine' ? (
+                  <View style={{ gap: SPACE.sm }}>
+                    <Small color={AP.onDarkMuted}>
+                      {lang === 'hi' ? 'कमरा टैग करें' : 'Tag a room'}
+                    </Small>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                      {ROOM_PRESETS.filter((r) => r.key !== 'other').map((r) => {
+                        const selected = active.room_tag === r.en
+                        return (
+                          <Pressable
+                            key={r.key}
+                            accessibilityRole="button"
+                            accessibilityLabel={lang === 'hi' ? r.hi : r.en}
+                            onPress={() => void tagActiveRoom(selected ? null : r.en)}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                              paddingVertical: 6,
+                              paddingHorizontal: 12,
+                              borderRadius: 9999,
+                              backgroundColor: selected ? '#ffffff' : 'rgba(255,255,255,0.15)',
+                            }}
+                          >
+                            <Feather
+                              name="map-pin"
+                              size={12}
+                              color={selected ? AP.onChip : '#ffffff'}
+                            />
+                            <Small
+                              color={selected ? AP.onChip : '#ffffff'}
+                              style={{ fontWeight: '600' }}
+                            >
+                              {lang === 'hi' ? r.hi : r.en}
+                            </Small>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  </View>
+                ) : null}
 
                 {/* Save / Share / Hide */}
                 <View style={{ flexDirection: 'row', gap: SPACE.sm }}>

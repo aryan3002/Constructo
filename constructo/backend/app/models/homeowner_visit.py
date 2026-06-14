@@ -30,6 +30,9 @@ class HomeownerVisitPhoto(Base):
     )
     storage_key: Mapped[str] = mapped_column(String, nullable=False)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional room/area tag (e.g. "Kitchen", "Master Bedroom") — structured
+    # metadata for the By-Room view, search, and AI grounding.
+    room_tag: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

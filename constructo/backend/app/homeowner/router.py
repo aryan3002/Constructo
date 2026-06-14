@@ -90,6 +90,7 @@ from app.homeowner.schemas import (
     SpaceOut,
     SpendSummary,
     UpdateOut,
+    VisitPhotoPatchIn,
     WeeklySummaryOut,
 )
 from app.homeowner.scoping import homeowner_site_ids, member_sub_role, resolve_site
@@ -974,7 +975,7 @@ def _visit_photo_out(p: HomeownerVisitPhoto) -> PhotoOut:
         site_id=p.site_id,
         image_url=get_storage().url_for(p.storage_key) or "",
         caption=p.caption,
-        room_tag=None,
+        room_tag=p.room_tag,
         milestone_id=None,
         is_starred=False,
         published_at=p.created_at,
@@ -1160,6 +1161,7 @@ def _photo_ext(content_type: str | None, filename: str | None) -> str:
 async def upload_visit_photo(
     media: UploadFile = File(...),
     caption: str | None = Form(default=None),
+    room_tag: str | None = Form(default=None),
     site_id: UUID | None = Form(default=None),
     user: User = Depends(require_homeowner),
     session: AsyncSession = Depends(get_session),
@@ -1187,6 +1189,7 @@ async def upload_visit_photo(
         member_id=member_id,
         storage_key=key,
         caption=(caption.strip() if caption and caption.strip() else None),
+        room_tag=(room_tag.strip() if room_tag and room_tag.strip() else None),
     )
     session.add(row)
     await session.commit()
@@ -1252,6 +1255,26 @@ async def upload_voice_note(
             # STT is best-effort — never fail the upload over a transcription error.
             transcript = ""
     return {"voice_key": key, "transcript": transcript, "voice_url": url}
+
+
+@router.patch("/photos/{photo_id}", response_model=PhotoOut)
+async def update_visit_photo(
+    photo_id: UUID,
+    body: VisitPhotoPatchIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> PhotoOut:
+    """Re-tag one of the caller's OWN visit photos with a room/area."""
+    sid = await resolve_site(session, user, site_id)
+    member_id = await _caller_member_id(session, user, sid)
+    row = await session.get(HomeownerVisitPhoto, photo_id)
+    if row is None or row.site_id != sid or row.member_id != member_id:
+        raise AppError(404, "not_found", "Photo not found")
+    row.room_tag = body.room_tag.strip() if body.room_tag and body.room_tag.strip() else None
+    await session.commit()
+    await session.refresh(row)
+    return _visit_photo_out(row)
 
 
 @router.delete("/photos/{photo_id}", status_code=204)

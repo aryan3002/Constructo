@@ -117,3 +117,35 @@ async def test_voice_note_rejects_non_audio(client, ctx, tmp_path, monkeypatch):
         headers=auth(ctx.homeowner),
     )
     assert resp.status_code == 415, resp.text
+
+
+async def test_visit_photo_room_tag_upload_and_retag(
+    client, ctx, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("app.config.settings.media_dir", str(tmp_path))
+
+    # Upload tagged with a room — comes back with the tag.
+    up = await client.post(
+        "/api/v1/homeowner/photos",
+        data={"room_tag": "Kitchen"},
+        files={"media": ("v.jpg", JPEG, "image/jpeg")},
+        headers=auth(ctx.homeowner),
+    )
+    assert up.status_code == 201, up.text
+    pid = up.json()["id"]
+    assert up.json()["room_tag"] == "Kitchen"
+
+    # Re-tag it (PATCH).
+    pat = await client.patch(
+        f"/api/v1/homeowner/photos/{pid}",
+        json={"room_tag": "Master Bedroom"},
+        headers=auth(ctx.homeowner),
+    )
+    assert pat.status_code == 200, pat.text
+    assert pat.json()["room_tag"] == "Master Bedroom"
+
+    # The My-visits view reflects the tag.
+    listed = await client.get(
+        "/api/v1/homeowner/photos?view=mine", headers=auth(ctx.homeowner)
+    )
+    assert listed.json()["items"][0]["room_tag"] == "Master Bedroom"

@@ -121,15 +121,24 @@ export const homeowner = {
   home: (siteId?: string) => request<Home>(`/api/v1/homeowner/home${qs({ site_id: siteId })}`),
   photos: (siteId?: string, view: 'all' | 'room' | 'milestone' | 'mine' = 'all') =>
     request<Paginated<Photo>>(`/api/v1/homeowner/photos${qs({ site_id: siteId, view })}`),
-  /** Upload a homeowner "site visit" photo (R1). Server streams it to R2. */
-  uploadVisitPhoto: (file: UploadFile, caption?: string, siteId?: string) => {
+  /** Upload a homeowner "site visit" photo (R1). Server streams it to R2.
+   *  `roomTag` segregates the photo by room/area (By-Room view + AI metadata). */
+  uploadVisitPhoto: (file: UploadFile, caption?: string, roomTag?: string, siteId?: string) => {
     const form = new FormData()
     // RN FormData accepts the {uri,name,type} file shape directly.
     form.append('media', file as unknown as Blob)
     if (caption) form.append('caption', caption)
+    if (roomTag) form.append('room_tag', roomTag)
     if (siteId) form.append('site_id', siteId)
     return uploadMultipart<Photo>('/api/v1/homeowner/photos', form)
   },
+
+  /** Re-tag one of the caller's own visit photos with a room/area (null clears). */
+  tagVisitPhoto: (id: string, roomTag: string | null) =>
+    request<Photo>(`/api/v1/homeowner/photos/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ room_tag: roomTag }),
+    }),
 
   /** Upload a voice note (audio) for an issue/request. The server stores the
    *  audio (private R2) and best-effort transcribes it; returns the key + a

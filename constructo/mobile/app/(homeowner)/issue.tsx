@@ -290,6 +290,11 @@ export default function IssueScreen() {
   const submitMut = useMutation({
     mutationFn: async () => {
       // Step 1: upload photos (best-effort — issue sent regardless of failure).
+      // Tag each with the chosen room so they segregate By Room (skip "Other").
+      const roomTag =
+        roomKey && roomKey !== 'other'
+          ? ROOM_PRESETS.find((r) => r.key === roomKey)?.en
+          : undefined
       let uploadedCount = 0
       if (photos.length > 0) {
         try {
@@ -298,7 +303,7 @@ export default function IssueScreen() {
               homeowner.uploadVisitPhoto(
                 { uri: p.uri, name: p.name, type: p.type } satisfies UploadFile,
                 undefined,
-                undefined,
+                roomTag,
               ),
             ),
           )

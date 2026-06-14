@@ -417,6 +417,12 @@ class RequestStatusPatchIn(BaseModel):
     status: HomeownerRequestStatus
 
 
+class VisitPhotoPatchIn(BaseModel):
+    """Re-tag a homeowner visit photo with a room/area (null clears it)."""
+
+    room_tag: str | None = None
+
+
 class RequestOut(BaseModel):
     id: UUID
     site_id: UUID
