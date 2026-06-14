@@ -21,7 +21,6 @@ import pytest_asyncio
 from app.auth.jwt import create_access_token
 from app.models import UserRole
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

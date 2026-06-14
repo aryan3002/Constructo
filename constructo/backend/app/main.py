@@ -34,6 +34,7 @@ from app.config import settings
 from app.dashboard.router import router as dashboard_router  # phaseB brief/owner
 from app.dispute_pack.router import router as dispute_pack_router
 from app.disputes.router import router as disputes_router
+from app.documents.router import router as documents_router
 from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
 from app.forecast.router import router as forecast_router
 from app.homeowner.router import router as homeowner_router
@@ -57,7 +58,6 @@ from app.sites.router import router as sites_router
 from app.specs.router import router as specs_router
 from app.survey.router import router as survey_router
 from app.vendor_confirm.router import router as vendor_confirm_router
-from app.documents.router import router as documents_router
 from app.vendors.router import router as vendors_router
 
 
