@@ -8,7 +8,8 @@ the loop.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -183,7 +184,7 @@ class DrawingRegisterOut(BaseModel):
     version: str
     kind: DrawingKind
     change_note: str | None = None
-    published_at: object  # datetime — kept as object to accept tz-aware dt
+    published_at: datetime
     supersedes_id: UUID | None = None
     is_current: bool
     file_url: str
@@ -207,4 +208,4 @@ class DrawingPresignOut(BaseModel):
 
     key: str
     put_url: str | None
-    mode: str  # Literal["presigned", "unavailable"]
+    mode: Literal["presigned", "unavailable"]
