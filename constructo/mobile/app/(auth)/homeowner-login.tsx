@@ -6,7 +6,7 @@
  * role is "homeowner" — if the number has no homeowner account we sign back
  * out immediately and prompt them to use the join-code flow instead.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Link, Redirect, useRouter } from 'expo-router'
@@ -17,7 +17,17 @@ import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import { Body, Button, Display, Screen, Small, useInputStyle, Logo } from '../../src/ui'
+import {
+  Body,
+  Button,
+  CalmVerify,
+  Display,
+  Screen,
+  Small,
+  useInputStyle,
+  Logo,
+  type VerifyPhase,
+} from '../../src/ui'
 
 export default function HomeownerLogin() {
   const { t } = useT()
@@ -30,6 +40,11 @@ export default function HomeownerLogin() {
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The calm-verify settle: null = entering the code; 'checking' = breathing
+  // dots; 'verified' = the drawn check. `settled` flips once the check has
+  // settled, releasing the redirect home (so we never route mid-animation).
+  const [verifyPhase, setVerifyPhase] = useState<VerifyPhase | null>(null)
+  const [settled, setSettled] = useState(false)
 
   const inputStyle = useInputStyle()
 
@@ -47,32 +62,50 @@ export default function HomeownerLogin() {
   }
 
   async function verify() {
-    setBusy(true)
+    setVerifyPhase('checking')
     setError(null)
     try {
       await authApi.login(phone, otp)
       const me = await refresh()
       if (!me) {
+        setVerifyPhase(null)
+        setOtp('')
         setError(t('common.somethingWrong'))
         return
       }
       if (me.role !== 'homeowner') {
         // This phone belongs to a contractor account — sign back out and warn.
         await signOut()
+        setVerifyPhase(null)
         setStep('phone')
         setOtp('')
         setError(t('auth.notHomeowner'))
+        return
       }
-      // If homeowner, the Redirect below handles navigation declaratively.
+      // Homeowner confirmed — let CalmVerify draw the check and settle, then the
+      // gated Redirect below leaves the auth group.
+      setVerifyPhase('verified')
     } catch (e) {
+      setVerifyPhase(null)
+      setOtp('')
       setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
-    } finally {
-      setBusy(false)
     }
   }
 
-  // Once authed as homeowner, leave the auth group.
-  if (status === 'authed' && role === 'homeowner') {
+  // Auto-verify the moment the 6th digit lands — the code settles, no button tap.
+  useEffect(() => {
+    if (step === 'otp' && otp.length === 6 && verifyPhase === null) {
+      void verify()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step, verifyPhase])
+
+  // Leave the auth group once authed as homeowner — but NOT mid-settle: during
+  // our own verify we hold until the check has drawn (`settled`). A returning
+  // session that is already authed on mount (verifyPhase === null) redirects at
+  // once.
+  const authedHomeowner = status === 'authed' && role === 'homeowner'
+  if (authedHomeowner && (verifyPhase === null || settled)) {
     return <Redirect href="/(homeowner)/home" />
   }
 
@@ -119,6 +152,15 @@ export default function HomeownerLogin() {
               onPress={() => void sendCode()}
             />
           </>
+        ) : verifyPhase ? (
+          // The settle — breathing dots → drawn sage check. No spinner.
+          <CalmVerify
+            phase={verifyPhase}
+            checkingLabel={t('auth.checking')}
+            verifiedLabel={t('auth.verified')}
+            color={theme.colors.accent}
+            onSettled={() => setSettled(true)}
+          />
         ) : (
           <>
             <Small muted>{t('auth.otpLabel')}</Small>
@@ -135,12 +177,6 @@ export default function HomeownerLogin() {
               placeholderTextColor={theme.colors.textMute}
             />
             {__DEV__ && <Small muted>{t('auth.devOtpHint')}</Small>}
-            <Button
-              title={t('auth.verify')}
-              block
-              loading={busy}
-              onPress={() => void verify()}
-            />
           </>
         )}
         {error ? <Small color={theme.colors.risk}>{error}</Small> : null}

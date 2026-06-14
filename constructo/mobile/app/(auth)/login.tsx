@@ -8,7 +8,7 @@
  * this screen. The themed body lives in `LoginInner` so its `useTheme()` reads
  * the nested Neev provider.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Link, Redirect, useRouter } from 'expo-router'
@@ -20,7 +20,17 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
 import type { Role } from '../../src/api/types'
-import { Body, Button, Display, Screen, Small, useInputStyle, Logo } from '../../src/ui'
+import {
+  Body,
+  Button,
+  CalmVerify,
+  Display,
+  Screen,
+  Small,
+  useInputStyle,
+  Logo,
+  type VerifyPhase,
+} from '../../src/ui'
 
 /**
  * Role → home route. Mirrors the map in app/index.tsx. We navigate to the
@@ -70,6 +80,9 @@ function LoginInner() {
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Calm-verify settle (see homeowner-login for the gating rationale).
+  const [verifyPhase, setVerifyPhase] = useState<VerifyPhase | null>(null)
+  const [settled, setSettled] = useState(false)
 
   const inputStyle = useInputStyle()
 
@@ -87,27 +100,41 @@ function LoginInner() {
   }
 
   async function verify() {
-    setBusy(true)
+    setVerifyPhase('checking')
     setError(null)
     try {
       await authApi.login(phone, otp)
       const me = await refresh()
-      // On success, navigation is handled declaratively by the `status==='authed'`
-      // redirect in the render body below — no imperative router.replace here.
-      if (!me) setError(t('common.somethingWrong'))
+      if (!me) {
+        setVerifyPhase(null)
+        setOtp('')
+        setError(t('common.somethingWrong'))
+        return
+      }
+      // Verified — let CalmVerify settle, then the gated Redirect routes home.
+      setVerifyPhase('verified')
     } catch (e) {
+      setVerifyPhase(null)
+      setOtp('')
       setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
-    } finally {
-      setBusy(false)
     }
   }
 
-  // Once the session is authed (after verify() resolves, or if a valid token
-  // already exists when this screen mounts), redirect to the role's real home.
-  // Declarative <Redirect> is resolved by the ROOT navigator, so it correctly
-  // leaves the (auth) group — unlike router.replace('/'), which resolved to the
-  // chooser inside this group and caused the login bounce.
-  if (status === 'authed') return <Redirect href={homeFor(role) as never} />
+  // Auto-verify when the 6th digit lands.
+  useEffect(() => {
+    if (step === 'otp' && otp.length === 6 && verifyPhase === null) {
+      void verify()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step, verifyPhase])
+
+  // Once authed, redirect to the role's real home — but hold through our own
+  // verify settle (a returning, already-authed session has verifyPhase === null
+  // and redirects at once). Declarative <Redirect> is resolved by the ROOT
+  // navigator, so it correctly leaves the (auth) group.
+  if (status === 'authed' && (verifyPhase === null || settled)) {
+    return <Redirect href={homeFor(role) as never} />
+  }
 
   return (
     <Screen>
@@ -142,6 +169,15 @@ function LoginInner() {
             />
             <Button title={t('auth.sendCode')} block loading={busy} onPress={sendCode} />
           </>
+        ) : verifyPhase ? (
+          // The settle — breathing dots → drawn check (Neev ok-green). No spinner.
+          <CalmVerify
+            phase={verifyPhase}
+            checkingLabel={t('auth.checking')}
+            verifiedLabel={t('auth.verified')}
+            color={theme.colors.ok}
+            onSettled={() => setSettled(true)}
+          />
         ) : (
           <>
             <Small muted>{t('auth.otpLabel')}</Small>
@@ -156,7 +192,6 @@ function LoginInner() {
               placeholderTextColor={theme.colors.textMute}
             />
             {__DEV__ && <Small muted>{t('auth.devOtpHint')}</Small>}
-            <Button title={t('auth.verify')} block loading={busy} onPress={verify} />
           </>
         )}
         {error ? <Small color={theme.colors.risk}>{error}</Small> : null}
