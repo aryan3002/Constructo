@@ -44,4 +44,8 @@ export const qk = {
   drawings: (siteId?: string) => (siteId ? (['drawings', siteId] as const) : (['drawings'] as const)),
   /** Company-wide documents register (W5 Slice 2b). */
   companyDocuments: (includeArchived?: boolean) => ['company_documents', !!includeArchived] as const,
+  /** Flat spec list for a site (SpecOut[]). */
+  specs: (siteId: string) => ['specs', siteId] as const,
+  /** Room-grouped spec desk (DeskOut). */
+  specDesk: (siteId: string) => ['spec_desk', siteId] as const,
 } as const
