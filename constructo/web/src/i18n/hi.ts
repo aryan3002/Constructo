@@ -992,6 +992,16 @@ export const hi: Record<TranslationKey, string> = {
   'sitechanges.no_sites.title': 'अभी कोई साइट नहीं',
   'sitechanges.no_sites.hint': 'फ़ील्ड परिवर्तन ट्रैक करने के लिए एक साइट बनाएँ।',
 
+  // === designer workspace (D4) ===
+  'designer.title': 'डिज़ाइनर',
+  'designer.tab.selections': 'चयन',
+  'designer.tab.site_changes': 'साइट परिवर्तन',
+  'designer.tab.intake': 'इनटेक',
+  'designer.intake_coming': 'डिज़ाइन इनटेक — इस वर्कस्पेस में आ रहा है',
+  'designer.intake_coming_hint': 'पूरी इनटेक ब्रीफ़ सतह (D5) यहाँ आएगी। जल्द आ रहा है।',
+  // nav key for the architect's primary tab
+  'nav.designer': 'डिज़ाइनर',
+
   // === settings appearance (Settings.tsx) ===
   'settings.appearance.title': 'दिखावट',
   'settings.appearance.subtitle': 'कंसोल कैसा दिखे यह चुनें। सिस्टम आपके डिवाइस का अनुसरण करता है।',

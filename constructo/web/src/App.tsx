@@ -46,9 +46,12 @@ const DprPage = lazy(() =>
 )
 // === search ===
 import { Search } from './pages/search/Search'
-// === spec-desk (Architect's Material Specification schedule) === lazy: a dense desk grid
-const SpecDesk = lazy(() =>
-  import('./pages/specs/SpecDesk').then((m) => ({ default: m.SpecDesk })),
+// === designer workspace shell (D4) === lazy: keeps the D2+D3 surface out of
+// the entry chunk — only the architect who opens /designer pays for it
+const DesignerWorkspace = lazy(() =>
+  import('./features/designer/DesignerWorkspace').then((m) => ({
+    default: m.DesignerWorkspace,
+  })),
 )
 // === reports (W5 Slice 1) === lazy: PDF workers + preview surface kept out of entry chunk
 const ReportsPage = lazy(() =>
@@ -121,8 +124,11 @@ export function App() {
       {/* Accountant / Procurement. */}
       <Route path="/reconcile" element={<Guarded><ReconcilePage /></Guarded>} />
 
-      {/* Spec schedule — the Architect's Material Specification desk. */}
-      <Route path="/spec-desk" element={<Guarded><SpecDesk /></Guarded>} />
+      {/* Designer workspace shell (D4) — the architect's unified cockpit. */}
+      <Route path="/designer" element={<Guarded><DesignerWorkspace /></Guarded>} />
+
+      {/* Spec schedule — legacy route; redirect to the /designer?tab=selections cockpit. */}
+      <Route path="/spec-desk" element={<Navigate to="/designer?tab=selections" replace />} />
 
       {/* Approval Inbox (Site-themed full screen). */}
       <Route path="/approvals" element={<Guarded><ApprovalInbox /></Guarded>} />

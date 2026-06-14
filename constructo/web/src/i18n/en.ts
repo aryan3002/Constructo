@@ -1017,6 +1017,16 @@ export const en = {
   'sitechanges.no_sites.title': 'No sites yet',
   'sitechanges.no_sites.hint': 'Create a site to track field changes.',
 
+  // === designer workspace (D4) ===
+  'designer.title': 'Designer',
+  'designer.tab.selections': 'Selections',
+  'designer.tab.site_changes': 'Site changes',
+  'designer.tab.intake': 'Intake',
+  'designer.intake_coming': 'Design intake — coming in this workspace',
+  'designer.intake_coming_hint': 'The full intake brief surface (D5) will appear here. Coming soon.',
+  // nav key for the architect's primary tab
+  'nav.designer': 'Designer',
+
   // === settings appearance (Settings.tsx) ===
   'settings.appearance.title': 'Appearance',
   'settings.appearance.subtitle': 'Choose how the console looks. System follows your device.',

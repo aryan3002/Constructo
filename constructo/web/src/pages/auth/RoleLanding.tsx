@@ -21,14 +21,16 @@ const LANDING_ROUTE: Record<string, string> = {
   orders: '/reconcile',
   approvals: '/approvals',
   search: '/search',
-  spec_desk: '/spec-desk',
+  // spec_desk landing key now maps to the unified /designer workspace (D4)
+  spec_desk: '/designer',
 }
 
 /** Fallback landing derived purely from the role, used if /me/landing fails. */
 const ROLE_FALLBACK: Record<Role, string> = {
   owner: '/owner',
   pm: '/pm',
-  architect: '/spec-desk',
+  // Architect lands on the unified /designer workspace (D4)
+  architect: '/designer',
   supervisor: '/supervisor/capture',
   accountant: '/reconcile',
   procurement: '/reconcile',

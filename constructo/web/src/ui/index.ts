@@ -49,6 +49,9 @@ export type { AppShellProps, Role, TabDef } from './AppShell'
 
 export * as Icons from './icons'
 
+export { TabBar } from './TabBar'
+export type { TabBarProps, TabItem } from './TabBar'
+
 export { Drawer } from './Drawer'
 export type { DrawerProps } from './Drawer'
 

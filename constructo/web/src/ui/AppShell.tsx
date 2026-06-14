@@ -70,9 +70,9 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
-  // Architect (interior fit-out) — owns the Material Specification schedule.
+  // Architect (interior fit-out) — primary cockpit is the /designer workspace (D4).
   architect: [
-    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon />, end: true },
+    { to: '/designer', labelKey: 'nav.designer', label: 'Designer', icon: <ListIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
