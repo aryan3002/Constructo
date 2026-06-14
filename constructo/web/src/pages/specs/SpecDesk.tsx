@@ -2,7 +2,8 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
-import { authApi, type Role } from '../../api/auth'
+import { type Role } from '../../api/auth'
+import { useMeRole } from '../../auth/useCan'
 import { specsApi, type DeskLine, type DeskOut } from '../../api/specs'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import {
@@ -50,8 +51,7 @@ function useDesk(siteId: string | null) {
  */
 export function SpecDesk() {
   const sites = useSites()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = (me.data?.role as Role) ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
 
   const [params, setParams] = useSearchParams()

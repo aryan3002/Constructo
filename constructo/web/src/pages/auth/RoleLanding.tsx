@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
 import { authApi, type Role } from '../../api/auth'
+import { useMe } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import { Spinner } from '../../components/states'
 import { ThemeProvider } from '../../ui'
@@ -72,7 +73,7 @@ export function RoleLanding() {
 /** Fallback path: resolve the home from GET /me when /me/landing is unavailable. */
 function LandingFromRole() {
   const t = useT()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
+  const me = useMe()
 
   if (me.isLoading) {
     return (

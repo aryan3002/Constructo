@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useCreateGroup, useGroups, useSites } from '../api/hooks'
-import { authApi, type Role } from '../api/auth'
+import { type Role } from '../api/auth'
+import { useMeRole } from '../auth/useCan'
 import { EmptyState, ErrorState, Spinner } from '../components/states'
 import { useT } from '../i18n'
 import {
@@ -27,8 +27,7 @@ export function Groups() {
   const groups = useGroups()
   const sites = useSites()
   const createGroup = useCreateGroup()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = me.data?.role ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
 
   const [externalGroupId, setExternalGroupId] = useState('')

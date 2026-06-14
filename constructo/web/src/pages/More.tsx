@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, clearToken, type Role } from '../api/auth'
+import { clearToken, type Role } from '../api/auth'
+import { useMeRole } from '../auth/useCan'
 import { useT, type TranslationKey } from '../i18n'
 import { AppShell, Display, H2, Small, useRoleTabs, type Role as ShellRole } from '../ui'
 
@@ -52,9 +52,7 @@ const ROLE_MORE: Record<Role, MoreLink[]> = {
 export function More() {
   const t = useT()
   const navigate = useNavigate()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-
-  const role: Role = me.data?.role ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
   const workLinks = ROLE_MORE[role] ?? []
 
