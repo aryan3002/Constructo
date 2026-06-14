@@ -12,9 +12,7 @@
  *   idle → working → (StepUpRequiredError) → otp → working → done.
  */
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { authApi } from '../../api/auth'
-import { qk } from '../../api/queryKeys'
 import { reportsApi } from '../../api/reports'
 import { reconcileApi } from '../../api/reconcile'
 import { StepUpRequiredError } from '../../api/errors'
@@ -395,15 +393,16 @@ interface TemplateListProps {
 function TemplateList({ templates, selected, onSelect }: TemplateListProps) {
   const t = useT()
   return (
-    <ul className="flex flex-col gap-1" role="listbox" aria-label={t('reports.title')}>
+    <ul className="flex flex-col gap-1" aria-label={t('reports.title')}>
       {templates.map((tpl) => {
         const isSelected = tpl.id === selected
         const isDisabled = !tpl.enabled
         return (
-          <li key={tpl.id} role="option" aria-selected={isSelected}>
+          <li key={tpl.id}>
             <button
               type="button"
               disabled={isDisabled}
+              aria-pressed={isSelected}
               onClick={() => !isDisabled && onSelect(tpl.id)}
               className={[
                 'flex w-full items-center justify-between rounded-control border px-4 py-3 text-left font-body text-body cstk-animate',
@@ -442,14 +441,6 @@ export function ReportsPage() {
 
   // Sites query — reuse the same hook as Sites.tsx / ReconcilePage.
   const { data, isLoading, isError, error, refetch } = useSites()
-
-  // Auth me query for AppShell (follows the same pattern as Sites.tsx).
-  const me = useQuery({
-    queryKey: qk.me(),
-    queryFn: () => authApi.me(),
-    staleTime: Infinity,
-    retry: 1,
-  })
 
   const sites = (data?.items ?? []).map((s) => ({ id: s.id, name: s.name }))
   const selectedTpl = templates.find((t) => t.id === selectedId) ?? null
@@ -499,8 +490,6 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* Suppress unused me query warning — AppShell uses it. */}
-      {me.data ? null : null}
     </AppShell>
   )
 }
