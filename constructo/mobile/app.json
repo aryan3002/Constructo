@@ -59,7 +59,12 @@
           "isAccessMediaLocationEnabled": true
         }
       ],
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Neev needs the microphone so you can record a voice note for your site team."
+        }
+      ]
     ],
     "extra": {
       "router": {},

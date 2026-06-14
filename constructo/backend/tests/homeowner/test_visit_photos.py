@@ -72,3 +72,48 @@ async def test_delete_own_photo(client, db_session, ctx, tmp_path, monkeypatch):
         await db_session.execute(select(HomeownerVisitPhoto))
     ).scalars().all()
     assert remaining == []
+
+
+M4A = b"\x00\x00\x00\x18ftypM4A fake-audio-bytes"
+
+
+async def test_voice_note_upload_then_attach_to_request(
+    client, ctx, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("app.config.settings.media_dir", str(tmp_path))
+
+    # Upload the voice note (no STT provider in tests → empty transcript, audio kept).
+    up = await client.post(
+        "/api/v1/homeowner/voice-notes",
+        files={"media": ("note.m4a", M4A, "audio/m4a")},
+        headers=auth(ctx.homeowner),
+    )
+    assert up.status_code == 201, up.text
+    body = up.json()
+    key = body["voice_key"]
+    assert key.startswith(f"homeowner/{ctx.site.id}/voice/")
+    assert "transcript" in body  # present (may be empty without STT creds)
+    assert (tmp_path / key).read_bytes() == M4A  # bytes landed (local backend)
+
+    # Attach to a request; it comes back (and lists) with a resolvable voice_url.
+    cr = await client.post(
+        "/api/v1/homeowner/requests",
+        json={"title": "Leaking tap in kitchen", "voice_key": key},
+        headers=auth(ctx.homeowner),
+    )
+    assert cr.status_code == 201, cr.text
+    assert cr.json()["voice_url"]
+
+    lst = await client.get("/api/v1/homeowner/requests", headers=auth(ctx.homeowner))
+    assert lst.status_code == 200
+    assert lst.json()[0]["voice_url"]
+
+
+async def test_voice_note_rejects_non_audio(client, ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.config.settings.media_dir", str(tmp_path))
+    resp = await client.post(
+        "/api/v1/homeowner/voice-notes",
+        files={"media": ("x.jpg", JPEG, "image/jpeg")},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 415, resp.text

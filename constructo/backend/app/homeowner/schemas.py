@@ -409,6 +409,8 @@ class RequestCreateIn(BaseModel):
     site_id: UUID | None = None
     title: str = Field(min_length=1)
     detail: str | None = None
+    # R2 key of a voice note uploaded via POST /homeowner/voice-notes.
+    voice_key: str | None = None
 
 
 class RequestStatusPatchIn(BaseModel):
@@ -425,6 +427,8 @@ class RequestOut(BaseModel):
     sla_due_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # Presigned GET URL for the attached voice note (None when there is none).
+    voice_url: str | None = None
 
 
 class DecisionRespondIn(BaseModel):

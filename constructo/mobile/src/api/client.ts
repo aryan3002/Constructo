@@ -31,6 +31,7 @@ import type {
   Property,
   QuietPeriod,
   Update,
+  VoiceNoteOut,
   WeeklySummary,
 } from './types'
 
@@ -129,6 +130,16 @@ export const homeowner = {
     if (siteId) form.append('site_id', siteId)
     return uploadMultipart<Photo>('/api/v1/homeowner/photos', form)
   },
+
+  /** Upload a voice note (audio) for an issue/request. The server stores the
+   *  audio (private R2) and best-effort transcribes it; returns the key + a
+   *  playback URL + transcript. Pass the returned `voice_key` to createRequest. */
+  uploadVoiceNote: (file: UploadFile, siteId?: string) => {
+    const form = new FormData()
+    form.append('media', file as unknown as Blob)
+    if (siteId) form.append('site_id', siteId)
+    return uploadMultipart<VoiceNoteOut>('/api/v1/homeowner/voice-notes', form)
+  },
   /** Delete one of the caller's own visit photos. */
   deleteVisitPhoto: (id: string) =>
     request<void>(`/api/v1/homeowner/photos/${id}`, { method: 'DELETE' }),
@@ -221,7 +232,12 @@ export const homeowner = {
     }),
   requests: (siteId?: string) =>
     request<HomeownerRequest[]>(`/api/v1/homeowner/requests${qs({ site_id: siteId })}`),
-  createRequest: (body: { title: string; detail?: string; site_id?: string }) =>
+  createRequest: (body: {
+    title: string
+    detail?: string
+    site_id?: string
+    voice_key?: string
+  }) =>
     request<HomeownerRequest>('/api/v1/homeowner/requests', {
       method: 'POST',
       body: JSON.stringify(body),

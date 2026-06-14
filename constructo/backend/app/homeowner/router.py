@@ -34,6 +34,7 @@ from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
 from app.extraction.llm import LLMClient
+from app.extraction.stt import transcribe
 from app.homeowner.ai import consistency_check, generate_design_profile_v2, get_llm
 from app.homeowner.authority import (
     can_approve,
@@ -1193,6 +1194,66 @@ async def upload_visit_photo(
     return _visit_photo_out(row)
 
 
+HOMEOWNER_MAX_VOICE_BYTES = 20 * 1024 * 1024  # 20 MB — generous for a short note
+
+
+def _voice_ext(content_type: str | None, filename: str | None) -> str:
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext:
+        return ext
+    return {
+        "audio/mp4": ".m4a",
+        "audio/m4a": ".m4a",
+        "audio/x-m4a": ".m4a",
+        "audio/aac": ".aac",
+        "audio/mpeg": ".mp3",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/webm": ".webm",
+        "audio/ogg": ".ogg",
+    }.get((content_type or "").lower(), ".m4a")
+
+
+@router.post("/voice-notes", status_code=201)
+async def upload_voice_note(
+    media: UploadFile = File(...),
+    site_id: UUID | None = Form(default=None),
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str | None]:
+    """Upload a voice note for an issue/request and (best-effort) transcribe it.
+
+    The audio streams to the PRIVATE media bucket under
+    ``homeowner/<site>/voice/<uuid>.<ext>``; only the key is persisted. We then
+    presign a short-lived GET and run STT — if no STT provider is configured the
+    transcript comes back empty and the caller simply keeps the audio (graceful
+    degradation). The returned ``voice_key`` is passed to POST /requests to
+    attach the note; ``voice_url`` lets the caller play it back immediately.
+    """
+    sid = await resolve_site(session, user, site_id)
+    ct = (media.content_type or "").lower()
+    if not (ct.startswith("audio/") or ct == "application/octet-stream"):
+        raise AppError(415, "unsupported_media", "Only audio uploads are allowed")
+    data = await media.read()
+    if len(data) > HOMEOWNER_MAX_VOICE_BYTES:
+        raise AppError(413, "media_too_large", "Voice note exceeds 20 MB")
+
+    key = f"homeowner/{sid}/voice/{uuid4().hex}{_voice_ext(media.content_type, media.filename)}"
+    storage = get_storage()
+    storage.put_bytes(key, data, media.content_type or "audio/mp4")
+
+    url = storage.url_for(key)
+    transcript = ""
+    if url:
+        lang_hint = "hi" if (user.language or "").lower().startswith("hi") else "en"
+        try:
+            transcript = (await transcribe(url, lang_hint=lang_hint)).strip()
+        except Exception:
+            # STT is best-effort — never fail the upload over a transcription error.
+            transcript = ""
+    return {"voice_key": key, "transcript": transcript, "voice_url": url}
+
+
 @router.delete("/photos/{photo_id}", status_code=204)
 async def delete_visit_photo(
     photo_id: UUID,
@@ -1867,6 +1928,8 @@ def _request_out(r: HomeownerRequest) -> RequestOut:
     return RequestOut(
         id=r.id, site_id=r.site_id, raised_by=r.raised_by, title=r.title, detail=r.detail,
         status=r.status, sla_due_at=r.sla_due_at, created_at=r.created_at, updated_at=r.updated_at,
+        # Resolve the bare R2 key to a short-lived presigned GET (mirrors photos).
+        voice_url=get_storage().url_for(r.voice_key) if r.voice_key else None,
     )
 
 
@@ -1883,6 +1946,7 @@ async def create_request(
         raised_by=user.id,
         title=body.title,
         detail=body.detail,
+        voice_key=body.voice_key,
         sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
     )
     session.add(req)

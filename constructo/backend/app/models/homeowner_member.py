@@ -114,6 +114,8 @@ class HomeownerRequest(Base):
     raised_by: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional voice note — the R2 object key (audio); served as a presigned URL.
+    voice_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[HomeownerRequestStatus] = mapped_column(
         SAEnum(HomeownerRequestStatus, name="homeowner_request_status"),
         nullable=False,

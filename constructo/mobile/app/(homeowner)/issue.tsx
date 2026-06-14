@@ -13,7 +13,15 @@
  *
  * Route: (homeowner)/issue — registered `href: null` in _layout.tsx.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  createAudioPlayer,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  type AudioPlayer,
+} from 'expo-audio'
 import {
   Image,
   Pressable,
@@ -34,6 +42,7 @@ import { SPACE, TAP } from '../../src/theme/tokens'
 import {
   Body,
   BodyStrong,
+  BreathingDots,
   Button,
   Chip,
   Screen,
@@ -58,7 +67,15 @@ interface Strings {
   photosHint: string
   addPhoto: string
   photoLimit: string
-  voiceSoon: string
+  recordVoice: string
+  recording: string
+  transcribing: string
+  voiceAttached: string
+  voiceTranscribed: string
+  voicePlay: string
+  voiceRemove: string
+  micDenied: string
+  voiceError: string
   next: string
   back: string
   fieldTitle: string
@@ -84,7 +101,15 @@ const STR: Record<Lang, Strings> = {
     photosHint: 'Photos help your team spot the issue faster. Up to 5.',
     addPhoto: 'Add photo',
     photoLimit: 'Up to 5 photos',
-    voiceSoon: 'Voice note — coming soon',
+    recordVoice: 'Record a voice note',
+    recording: 'Recording… tap to stop',
+    transcribing: 'Saving your note…',
+    voiceAttached: 'Voice note attached',
+    voiceTranscribed: 'Voice note attached · typed up below',
+    voicePlay: 'Play',
+    voiceRemove: 'Remove',
+    micDenied: 'Microphone access is needed to record. Enable it in Settings.',
+    voiceError: 'Could not save the voice note. Please try again.',
     next: 'Next →',
     back: '← Back',
     fieldTitle: 'What is the issue?',
@@ -108,7 +133,15 @@ const STR: Record<Lang, Strings> = {
     photosHint: 'फ़ोटो आपकी टीम को समस्या जल्दी समझने में मदद करती है। अधिकतम 5।',
     addPhoto: 'फ़ोटो जोड़ें',
     photoLimit: 'अधिकतम 5 फ़ोटो',
-    voiceSoon: 'आवाज़ नोट — जल्द आ रहा है',
+    recordVoice: 'आवाज़ नोट रिकॉर्ड करें',
+    recording: 'रिकॉर्ड हो रहा है… रोकने के लिए टैप करें',
+    transcribing: 'आपका नोट सहेजा जा रहा है…',
+    voiceAttached: 'आवाज़ नोट जुड़ा',
+    voiceTranscribed: 'आवाज़ नोट जुड़ा · नीचे लिखा गया',
+    voicePlay: 'चलाएँ',
+    voiceRemove: 'हटाएँ',
+    micDenied: 'रिकॉर्ड करने के लिए माइक्रोफ़ोन की अनुमति चाहिए। सेटिंग्स में चालू करें।',
+    voiceError: 'आवाज़ नोट सहेजा नहीं जा सका। कृपया पुनः प्रयास करें।',
     next: 'आगे →',
     back: '← वापस',
     fieldTitle: 'क्या समस्या है?',
@@ -166,6 +199,93 @@ export default function IssueScreen() {
   const [urgency, setUrgency] = useState<Urgency>('normal')
   const [formError, setFormError] = useState<string | null>(null)
 
+  // ---- voice note ----
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const [recording, setRecording] = useState(false)
+  const [voiceBusy, setVoiceBusy] = useState(false) // uploading + transcribing
+  const [voiceKey, setVoiceKey] = useState<string | null>(null)
+  const [voiceUrl, setVoiceUrl] = useState<string | null>(null)
+  const [voiceTranscribed, setVoiceTranscribed] = useState(false)
+  const playerRef = useRef<AudioPlayer | null>(null)
+
+  useEffect(
+    () => () => {
+      // Stop a dangling recording + release the player when leaving the screen.
+      if (recorder.isRecording) recorder.stop().catch(() => undefined)
+      playerRef.current?.remove()
+    },
+    [recorder],
+  )
+
+  async function startRecording() {
+    try {
+      const perm = await requestRecordingPermissionsAsync()
+      if (!perm.granted) {
+        toast(t.micDenied, 'alert-circle')
+        return
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
+      await recorder.prepareToRecordAsync()
+      recorder.record()
+      setRecording(true)
+    } catch {
+      toast(t.voiceError, 'alert-circle')
+    }
+  }
+
+  async function stopRecordingAndUpload() {
+    setRecording(false)
+    try {
+      await recorder.stop()
+    } catch {
+      /* already stopped */
+    }
+    const uri = recorder.uri
+    if (!uri) return
+    const ext = uri.split('.').pop()?.toLowerCase() || 'm4a'
+    setVoiceBusy(true)
+    try {
+      const res = await homeowner.uploadVoiceNote({
+        uri,
+        name: `voice_${Date.now()}.${ext}`,
+        type: ext === 'm4a' || ext === 'caf' ? 'audio/m4a' : `audio/${ext}`,
+      })
+      setVoiceKey(res.voice_key)
+      setVoiceUrl(res.voice_url)
+      const transcript = res.transcript?.trim()
+      if (transcript) {
+        setVoiceTranscribed(true)
+        // Only auto-fill if the homeowner hasn't typed their own detail.
+        setDetailText((cur) => (cur.trim() ? cur : transcript))
+      }
+      toast(transcript ? t.voiceTranscribed : t.voiceAttached, 'check-circle')
+    } catch {
+      toast(t.voiceError, 'alert-circle')
+    } finally {
+      setVoiceBusy(false)
+    }
+  }
+
+  function playVoiceNote() {
+    if (!voiceUrl) return
+    try {
+      playerRef.current?.remove()
+      const p = createAudioPlayer(voiceUrl)
+      playerRef.current = p
+      p.play()
+    } catch {
+      /* playback best-effort */
+    }
+  }
+
+  function removeVoiceNote() {
+    setVoiceKey(null)
+    setVoiceUrl(null)
+    setVoiceTranscribed(false)
+    playerRef.current?.remove()
+    playerRef.current = null
+  }
+
   // ---- mutations ----
   const submitMut = useMutation({
     mutationFn: async () => {
@@ -198,7 +318,11 @@ export default function IssueScreen() {
         lang: lang as 'en' | 'hi',
       })
 
-      return homeowner.createRequest({ title: titleText.trim(), detail })
+      return homeowner.createRequest({
+        title: titleText.trim(),
+        detail,
+        voice_key: voiceKey ?? undefined,
+      })
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
@@ -325,24 +449,79 @@ export default function IssueScreen() {
             <Small muted>{t.photoLimit}</Small>
           )}
 
-          {/* Voice note — honest stub, non-interactive */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: SPACE.sm,
-              paddingHorizontal: SPACE.md,
-              paddingVertical: SPACE.sm + 2,
-              borderRadius: theme.radii.pill,
-              borderWidth: 1,
-              borderColor: c.line,
-              opacity: 0.55,
-              alignSelf: 'flex-start',
-            }}
-          >
-            <Feather name="mic" size={14} color={c.textMute} />
-            <Small muted>{t.voiceSoon}</Small>
-          </View>
+          {/* Voice note — record → upload → (best-effort) transcribe → attach */}
+          {voiceBusy ? (
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm }}
+            >
+              <BreathingDots color={c.accent} />
+              <Small muted>{t.transcribing}</Small>
+            </View>
+          ) : voiceKey ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.sm,
+                alignSelf: 'stretch',
+                backgroundColor: c.accentWarm,
+                borderRadius: theme.radii.chip,
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm + 2,
+              }}
+            >
+              <Feather name="check-circle" size={16} color={c.accentDeep} />
+              <Small style={{ flex: 1, color: c.accentDeep }}>
+                {voiceTranscribed ? t.voiceTranscribed : t.voiceAttached}
+              </Small>
+              {voiceUrl ? (
+                <Pressable
+                  onPress={playVoiceNote}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.voicePlay}
+                >
+                  <Feather name="play" size={18} color={c.accentDeep} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={removeVoiceNote}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t.voiceRemove}
+              >
+                <Feather name="x" size={16} color={c.textMute} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={recording ? stopRecordingAndUpload : startRecording}
+              accessibilityRole="button"
+              accessibilityLabel={recording ? t.recording : t.recordVoice}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.sm,
+                alignSelf: 'flex-start',
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm + 2,
+                borderRadius: theme.radii.pill,
+                borderWidth: 1,
+                borderColor: recording ? c.risk : c.line,
+                backgroundColor: recording ? `${c.risk}14` : 'transparent',
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              })}
+            >
+              <Feather
+                name={recording ? 'square' : 'mic'}
+                size={14}
+                color={recording ? c.risk : c.accentDeep}
+              />
+              <Small style={{ color: recording ? c.risk : c.accentDeep }}>
+                {recording ? t.recording : t.recordVoice}
+              </Small>
+            </Pressable>
+          )}
 
           <Button
             title={t.next}

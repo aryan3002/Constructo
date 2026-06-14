@@ -389,6 +389,16 @@ export interface HomeownerRequest {
   sla_due_at: string | null
   created_at: string
   updated_at: string
+  /** Presigned GET URL for an attached voice note (null when there is none). */
+  voice_url: string | null
+}
+
+/** Result of POST /homeowner/voice-notes — the stored key, a playback URL, and
+ *  a best-effort transcript (empty when no STT provider is configured). */
+export interface VoiceNoteOut {
+  voice_key: string
+  transcript: string
+  voice_url: string | null
 }
 
 export interface HomeownerDecision {
