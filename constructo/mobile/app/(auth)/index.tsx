@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE } from '../../src/theme/tokens'
-import { Body, Display, Screen, Small, Title, Logo } from '../../src/ui'
+import { Body, Display, FadeInUp, Screen, Small, Title, Logo } from '../../src/ui'
 
 function RoleCard({
   icon,
@@ -43,7 +43,7 @@ function RoleCard({
           borderWidth: 1,
           borderColor: c.line,
           padding: SPACE.lg,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
+          transform: [{ scale: pressed ? 0.97 : 1 }],
         },
         theme.shadowCard,
       ]}
@@ -76,27 +76,32 @@ export default function ChooseRole() {
 
   return (
     <Screen>
-      <View style={{ marginTop: SPACE.xxl, gap: SPACE.sm }}>
+      <FadeInUp style={{ marginTop: SPACE.xxl, gap: SPACE.sm }} duration={360}>
         <Logo size={48} />
         <Display>{t('auth.chooseTitle')}</Display>
         <Body muted>{t('auth.chooseSubtitle')}</Body>
-      </View>
+      </FadeInUp>
 
+      {/* Role cards rise in on the calm ease with a soft 60ms stagger. */}
       <View style={{ gap: SPACE.md, marginTop: SPACE.xl }}>
-        <RoleCard
-          icon="home"
-          title={t('auth.homeownerCard')}
-          subtitle={t('auth.homeownerCardSub')}
-          accent={theme.colors.accent}
-          onPress={() => router.push('/(auth)/homeowner-login')}
-        />
-        <RoleCard
-          icon="briefcase"
-          title={t('auth.staffCard')}
-          subtitle={t('auth.staffCardSub')}
-          accent={theme.colors.accentDeep}
-          onPress={() => router.push('/(auth)/login')}
-        />
+        <FadeInUp delay={80} duration={360}>
+          <RoleCard
+            icon="home"
+            title={t('auth.homeownerCard')}
+            subtitle={t('auth.homeownerCardSub')}
+            accent={theme.colors.accent}
+            onPress={() => router.push('/(auth)/homeowner-login')}
+          />
+        </FadeInUp>
+        <FadeInUp delay={140} duration={360}>
+          <RoleCard
+            icon="briefcase"
+            title={t('auth.staffCard')}
+            subtitle={t('auth.staffCardSub')}
+            accent={theme.colors.accentDeep}
+            onPress={() => router.push('/(auth)/login')}
+          />
+        </FadeInUp>
       </View>
     </Screen>
   )

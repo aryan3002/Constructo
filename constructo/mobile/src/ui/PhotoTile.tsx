@@ -18,11 +18,12 @@
  *   - `variant="hero"`: a wide 16:9 "Latest" hero with a larger caption block.
  */
 import type * as React from 'react'
-import { Image, Pressable, View, type ViewStyle } from 'react-native'
+import { Pressable, View, type ViewStyle } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../theme/ThemeProvider'
 import { AP, SPACE } from '../theme/tokens'
+import { BlurUpImage } from './BlurUpImage'
 import { MonoSm, Small } from './Typography'
 
 export interface PhotoTileData {
@@ -136,14 +137,15 @@ export function PhotoTile({
         onPress={onPress ? () => onPress(photo) : undefined}
         style={({ pressed }) => [dims, { transform: [{ scale: pressed && onPress ? 0.98 : 1 }] }]}
       >
-        <Image
-          source={{ uri: photo.imageUri }}
-          resizeMode="cover"
+        {/* Real photo settles in (blur-up: scale 1.06→1 + fade) over a warm
+            placeholder — never a pop. */}
+        <BlurUpImage
+          uri={photo.imageUri}
           accessibilityIgnoresInvertColors
           // The Pressable above is the labelled imagebutton (caption = alt text);
           // don't let the raw image announce a second, unlabelled node.
           importantForAccessibility="no"
-          style={{ width: '100%', height: '100%', backgroundColor: AP.surfaceLow }}
+          style={{ width: '100%', height: '100%' }}
         />
 
         {/* Top-right markers: video / starred. */}

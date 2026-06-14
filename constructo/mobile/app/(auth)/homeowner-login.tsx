@@ -123,7 +123,9 @@ export default function HomeownerLogin() {
       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
         <Logo size={48} />
         <Display>{t('auth.homeownerLoginTitle')}</Display>
+        {/* Reassure before asking: what we'll do, then a quiet relief line. */}
         <Small muted>{t('auth.homeownerLoginSubtitle')}</Small>
+        <Small color={theme.colors.quiet}>{t('auth.noPassword')}</Small>
       </View>
 
       <View style={{ gap: SPACE.md, marginTop: SPACE.xl }}>

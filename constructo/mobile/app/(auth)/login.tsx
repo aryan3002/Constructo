@@ -150,7 +150,12 @@ function LoginInner() {
 
       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
         <Logo size={48} />
-        <Display>{t('auth.welcome')}</Display>
+        {/* One onboarding type voice: Eczar headline even on the builder screen
+            (the ink+marigold "build" theme stays). lineHeight is generous so the
+            tall serif ascenders never clip. */}
+        <Display style={{ fontFamily: 'Eczar-SemiBold', lineHeight: 44 }}>
+          {t('auth.welcome')}
+        </Display>
         <Small muted>{t('auth.staffLogin')}</Small>
       </View>
 
