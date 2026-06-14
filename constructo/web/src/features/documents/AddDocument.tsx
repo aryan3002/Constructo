@@ -7,7 +7,7 @@
  *
  * Gate: passed in via `canManage` prop — DocumentsTab handles the gate.
  */
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { documentsApi, putToR2, type DocType } from '../../api/documents'
 import { qk } from '../../api/queryKeys'
@@ -50,6 +50,8 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
   const [file, setFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleSave() {
     if (!file || !title.trim()) return
@@ -87,10 +89,25 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
     }
   }
 
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragging(false)
+    const dropped = e.dataTransfer.files[0]
+    if (dropped) setFile(dropped)
+  }
+
   const canSave = Boolean(file) && title.trim().length > 0 && phase !== 'saving'
 
   return (
-    <div className="mb-5 rounded-card border border-line bg-paper p-4">
+    <div
+      className={[
+        'mb-5 rounded-card border-2 bg-paper p-4 transition cstk-animate',
+        dragging ? 'border-primary bg-primary/5' : 'border-dashed border-line',
+      ].join(' ')}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+    >
       <div className="flex flex-col gap-3">
 
         {/* Document type */}
@@ -193,7 +210,7 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
           />
         </div>
 
-        {/* File */}
+        {/* File — drag-drop zone + file input fallback */}
         <div className="flex flex-col gap-1">
           <label
             htmlFor="add-doc-file"
@@ -203,11 +220,19 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
           </label>
           <input
             id="add-doc-file"
+            ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.xlsx,.png,.jpg"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="font-body text-small text-text"
           />
+          {dragging ? (
+            <Small className="font-semibold text-primary">{t('documents.drop.dragging')}</Small>
+          ) : !file ? (
+            <Small className="text-text-mute">{t('documents.drop.hint')}</Small>
+          ) : (
+            <Small className="font-semibold text-text">{file.name}</Small>
+          )}
         </div>
 
         {/* Upload unavailable note */}

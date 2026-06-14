@@ -9,7 +9,7 @@
  *   - Upload new revision action (with supersede-confirm guard)
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DrawingRegisterRow } from '../../api/drawings'
 import { drawingsApi } from '../../api/drawings'
@@ -37,7 +37,7 @@ const KIND_CLASS: Record<string, string> = {
   section: 'bg-warn/10 text-warn border-warn/20',
   structural: 'bg-risk/10 text-risk border-risk/20',
   electrical: 'bg-info/10 text-info border-info/20',
-  plumbing: 'bg-[color-mix(in_srgb,var(--info)_20%,transparent)] text-info border-info/20',
+  plumbing: 'bg-info/10 text-info border-info/20',
   other: 'bg-paper text-text-mute border-line',
 }
 
@@ -66,6 +66,8 @@ interface RevisionUploadPanelProps {
   current: DrawingRegisterRow
   onDone: () => void
   onCancel: () => void
+  /** When true the panel starts with the file input focused (autoUpload keyboard shortcut). */
+  autoUpload?: boolean
 }
 
 function RevisionUploadPanel({ current, onDone, onCancel }: RevisionUploadPanelProps) {
@@ -249,6 +251,8 @@ export interface DrawingDetailDrawerProps {
   chain: DrawingRegisterRow[]  // newest → oldest (includes current)
   canManage: boolean
   siteId?: string
+  /** When true the revision-upload panel is shown immediately (keyboard shortcut `u`). */
+  autoUpload?: boolean
 }
 
 export function DrawingDetailDrawer({
@@ -258,19 +262,31 @@ export function DrawingDetailDrawer({
   chain,
   canManage,
   siteId,
+  autoUpload = false,
 }: DrawingDetailDrawerProps) {
   const t = useT()
   const qc = useQueryClient()
   const [showUpload, setShowUpload] = useState(false)
 
+  // When the drawer opens, honour the autoUpload prop.
+  // Reset on close so re-opening without the flag starts collapsed.
+  useEffect(() => {
+    if (open) {
+      setShowUpload(autoUpload)
+    } else {
+      setShowUpload(false)
+    }
+  }, [open, autoUpload])
+
   // Collect all version IDs in this drawing's chain for linked-change matching.
   const chainIds = new Set(chain.map((v) => v.id))
 
   // Query site changes and filter to ones linked to any version in this chain.
+  // Guard: do not fire when siteId is undefined.
   const { data: allChanges } = useQuery({
     queryKey: qk.siteChanges({ siteId }),
     queryFn: () => siteChangesApi.list({ siteId }),
-    enabled: open,
+    enabled: open && !!siteId,
   })
 
   const linkedChanges = (allChanges ?? []).filter(

@@ -827,6 +827,17 @@ export const hi: Record<TranslationKey, string> = {
   'documents.notes': 'टिप्पणियाँ',
   'documents.doc_title': 'दस्तावेज़ शीर्षक',
   'documents.doc_type_label': 'दस्तावेज़ प्रकार',
+  // D6b — expiry dashboard
+  'documents.dashboard.expired': '{n} समाप्त',
+  'documents.dashboard.expiring': '{n} ≤30 दिनों में समाप्त',
+  'documents.dashboard.all_current': 'सभी दस्तावेज़ अद्यतन हैं',
+  // D6b — empty state
+  'documents.empty.title': 'अभी कोई दस्तावेज़ नहीं',
+  'documents.empty.hint': 'पहला कंपनी दस्तावेज़ जोड़ें — अनुबंध, NOC, बीमा और अन्य।',
+  'documents.empty.cta': 'दस्तावेज़ जोड़ें',
+  // D6b — drag-drop
+  'documents.drop.hint': 'यहाँ फ़ाइल छोड़ें, या चुनने के लिए क्लिक करें',
+  'documents.drop.dragging': 'अटैच करने के लिए छोड़ें',
 
   // === drawings register elevation (D6) ===
   // Kind filter + badge

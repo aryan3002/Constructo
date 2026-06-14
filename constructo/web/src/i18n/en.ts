@@ -852,6 +852,17 @@ export const en = {
   'documents.notes': 'Notes',
   'documents.doc_title': 'Document title',
   'documents.doc_type_label': 'Document type',
+  // D6b — expiry dashboard
+  'documents.dashboard.expired': '{n} expired',
+  'documents.dashboard.expiring': '{n} expiring ≤30 days',
+  'documents.dashboard.all_current': 'All documents current',
+  // D6b — empty state
+  'documents.empty.title': 'No documents yet',
+  'documents.empty.hint': 'Add your first company document — contracts, NOCs, insurance, and more.',
+  'documents.empty.cta': 'Add a document',
+  // D6b — drag-drop
+  'documents.drop.hint': 'Drop a file here, or click to select',
+  'documents.drop.dragging': 'Drop to attach',
 
   // === drawings register elevation (D6) ===
   // Kind filter + badge

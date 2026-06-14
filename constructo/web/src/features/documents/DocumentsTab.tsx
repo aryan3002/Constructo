@@ -1,14 +1,16 @@
 /**
- * DocumentsTab — the "Documents" pane inside DocumentsPage.
+ * DocumentsTab — D6b elevation.
  *
  * Lists company documents (contracts, BOQs, NOCs, insurance, etc.) with:
- *   - Four-states: Spinner / ErrorState retry / EmptyState / data list.
- *   - Expiry pills: risk ("Expired N days ago") / warn ("Expires in N days") / none.
+ *   - Four-states: Spinner / ErrorState retry / EmptyState (with CTA) / data list.
+ *   - Expiry dashboard strip (D6b): expired pill + expiring-≤30d pill + click-to-filter.
+ *   - Doc-type filter: pills for present types (contract/boq/noc/insurance/license/other).
+ *   - Expiry pills per row: risk / warn as before.
  *   - Site-name mapping: null site_id → "Company-wide"; else the site name.
  *   - Client-side search over title + doc_type + site.
  *   - Show-archived toggle.
  *   - Archive / Restore per row (optimistic update).
- *   - Add-document form via AddDocument component.
+ *   - Add-document form (with drag-drop) via AddDocument component.
  */
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +21,7 @@ import { useT, type TranslationKey } from '../../i18n'
 import { Button, Small, StatusPill, type Status } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { AddDocument } from './AddDocument'
+import { ExpiryDashboard, filterByExpiry, type ExpiryFilter } from './ExpiryDashboard'
 
 // ---------------------------------------------------------------------------
 // Expiry pill helpers (mirrors Permits.tsx daysBetween logic exactly).
@@ -147,6 +150,63 @@ function DocumentRow({ doc, siteName, canManage, today }: DocumentRowProps) {
 }
 
 // ---------------------------------------------------------------------------
+// DocTypeFilterBar — pill bar for filtering by document type
+// ---------------------------------------------------------------------------
+
+const ALL_DOC_TYPES: DocType[] = ['contract', 'boq', 'noc', 'insurance', 'license', 'other']
+
+interface DocTypeFilterBarProps {
+  presentTypes: DocType[]
+  activeType: DocType | 'all'
+  onChange: (t: DocType | 'all') => void
+}
+
+function DocTypeFilterBar({ presentTypes, activeType, onChange }: DocTypeFilterBarProps) {
+  const t = useT()
+  if (presentTypes.length < 2) return null
+
+  return (
+    <div
+      role="group"
+      aria-label="Filter by category"
+      className="mb-3 flex flex-wrap gap-1"
+    >
+      <button
+        type="button"
+        aria-pressed={activeType === 'all'}
+        onClick={() => onChange('all')}
+        className={[
+          'inline-flex min-h-tap items-center rounded-pill border px-3 py-0.5 font-body text-small font-semibold transition cstk-animate',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          activeType === 'all'
+            ? 'border-primary/60 bg-primary/10 text-primary-deep'
+            : 'border-line bg-paper text-text-mute hover:text-text hover:border-primary/40',
+        ].join(' ')}
+      >
+        {t('drawings.kind.all')}
+      </button>
+      {presentTypes.map((dt) => (
+        <button
+          key={dt}
+          type="button"
+          aria-pressed={activeType === dt}
+          onClick={() => onChange(dt)}
+          className={[
+            'inline-flex min-h-tap items-center rounded-pill border px-3 py-0.5 font-body text-small font-semibold transition cstk-animate',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            activeType === dt
+              ? 'border-primary/60 bg-primary/10 text-primary-deep'
+              : 'border-line bg-paper text-text-mute hover:text-text hover:border-primary/40',
+          ].join(' ')}
+        >
+          {t(docTypeKey(dt))}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // DocumentsTab — main export
 // ---------------------------------------------------------------------------
 
@@ -163,6 +223,8 @@ export function DocumentsTab({ canManage }: DocumentsTabProps) {
   const [showArchived, setShowArchived] = useState(false)
   const [search, setSearch] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>(null)
+  const [typeFilter, setTypeFilter] = useState<DocType | 'all'>('all')
 
   // Fixed "today" for the entire render so pills are consistent.
   // useMemo ensures we don't recreate the Date on every render and avoids
@@ -180,18 +242,34 @@ export function DocumentsTab({ canManage }: DocumentsTabProps) {
     return sites.find((s) => s.id === siteId)?.name ?? t('documents.company_wide')
   }
 
-  // Client-side search.
   const docs = data ?? []
-  const filtered = docs.filter((d) => {
-    if (!search.trim()) return true
-    const q = search.trim().toLowerCase()
-    const siteName = resolveSiteName(d.site_id).toLowerCase()
-    return (
-      d.title.toLowerCase().includes(q) ||
-      d.doc_type.toLowerCase().includes(q) ||
-      siteName.includes(q)
-    )
-  })
+
+  // Present doc types (from unfiltered data) — used for the type filter bar.
+  const presentTypes = useMemo(
+    () => ALL_DOC_TYPES.filter((dt) => docs.some((d) => d.doc_type === dt)),
+    [docs],
+  )
+
+  // Multi-layer filtering: expiry → type → search.
+  const filtered = useMemo(() => {
+    let result = filterByExpiry(docs, expiryFilter, today)
+    if (typeFilter !== 'all') {
+      result = result.filter((d) => d.doc_type === typeFilter)
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter((d) => {
+        const siteName = resolveSiteName(d.site_id).toLowerCase()
+        return (
+          d.title.toLowerCase().includes(q) ||
+          d.doc_type.toLowerCase().includes(q) ||
+          siteName.includes(q)
+        )
+      })
+    }
+    return result
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, expiryFilter, typeFilter, search, today, sites])
 
   function invalidateDocs() {
     void qc.invalidateQueries({ queryKey: qk.companyDocuments() })
@@ -255,25 +333,55 @@ export function DocumentsTab({ canManage }: DocumentsTabProps) {
       )}
 
       {!isLoading && !isError && docs.length === 0 && (
-        <EmptyState title={t('documents.no_documents')} />
+        <EmptyState
+          title={t('documents.empty.title')}
+          hint={t('documents.empty.hint')}
+          action={
+            canManage ? (
+              <Button variant="primary" onClick={() => setShowAddForm(true)}>
+                {t('documents.empty.cta')}
+              </Button>
+            ) : undefined
+          }
+        />
       )}
 
       {!isLoading && !isError && docs.length > 0 && (
-        <ul className="flex flex-col gap-3">
-          {filtered.map((doc) => (
-            <DocumentRow
-              key={doc.id}
-              doc={doc}
-              siteName={resolveSiteName(doc.site_id)}
-              canManage={canManage}
-              today={today}
-            />
-          ))}
-        </ul>
-      )}
+        <>
+          {/* Expiry dashboard strip */}
+          <ExpiryDashboard
+            docs={docs}
+            today={today}
+            activeFilter={expiryFilter}
+            onFilterChange={setExpiryFilter}
+          />
 
-      {!isLoading && !isError && docs.length > 0 && filtered.length === 0 && search.trim() && (
-        <p className="mt-4 font-body text-small text-text-mute">{t('documents.no_documents')}</p>
+          {/* Doc-type filter bar */}
+          <DocTypeFilterBar
+            presentTypes={presentTypes}
+            activeType={typeFilter}
+            onChange={(t) => { setTypeFilter(t); setExpiryFilter(null) }}
+          />
+
+          {/* Document list */}
+          <ul className="flex flex-col gap-3">
+            {filtered.map((doc) => (
+              <DocumentRow
+                key={doc.id}
+                doc={doc}
+                siteName={resolveSiteName(doc.site_id)}
+                canManage={canManage}
+                today={today}
+              />
+            ))}
+          </ul>
+
+          {filtered.length === 0 && (
+            <p className="mt-4 font-body text-small text-text-mute">
+              {t('documents.no_documents')}
+            </p>
+          )}
+        </>
       )}
     </div>
   )

@@ -358,6 +358,7 @@ export function DocumentsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerRow, setDrawerRow] = useState<DrawingRegisterRow | null>(null)
   const [drawerChain, setDrawerChain] = useState<DrawingRegisterRow[]>([])
+  const [drawerAutoUpload, setDrawerAutoUpload] = useState(false)
 
   const listRef = useRef<HTMLUListElement>(null)
   const rowRefs = useRef<(HTMLLIElement | null)[]>([])
@@ -446,18 +447,18 @@ export function DocumentsPage() {
         e.preventDefault()
         const row = filtered[selectedIdx]
         if (row) {
-          openDrawer(row)
-          // Signal the drawer to open with the upload panel open.
-          // The drawer itself handles this via the footer button.
+          // Open drawer with the revision-upload panel already expanded.
+          openDrawer(row, true)
         }
       }
     },
     [filtered, selectedIdx, isDialogOpen],
   )
 
-  function openDrawer(row: DrawingRegisterRow) {
+  function openDrawer(row: DrawingRegisterRow, autoUpload = false) {
     setDrawerRow(row)
     setDrawerChain(buildChain(row))
+    setDrawerAutoUpload(autoUpload)
     setDrawerOpen(true)
   }
 
@@ -655,6 +656,7 @@ export function DocumentsPage() {
           chain={drawerChain}
           canManage={canManage}
           siteId={drawerRow.site_id}
+          autoUpload={drawerAutoUpload}
         />
       )}
     </AppShell>
