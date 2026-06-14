@@ -48,6 +48,7 @@ from app.portfolio.router import router as portfolio_router
 from app.profiler.router import router as profiler_router
 from app.publish.router import router as publish_router
 from app.reconcile.router import router as reconcile_router
+from app.reports.router import router as reports_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
@@ -140,6 +141,7 @@ app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
 app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
+app.include_router(reports_router)  # W5 Slice 1 PDF reports
 if settings.enable_labs:
     app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
     app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop
