@@ -15,7 +15,8 @@
  * Root route, self-themed Daylight, self-guarded.
  */
 import type * as React from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -105,7 +106,12 @@ const REPLY_ICON: Record<RequestStatus, React.ComponentProps<typeof Feather>['na
 }
 
 function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(iso)
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // Show a short date for anything that isn't today, so an older message never
+  // reads as if it was sent just now.
+  if (d.toDateString() === new Date().toDateString()) return time
+  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} · ${time}`
 }
 
 /** One live grounded exchange (this app-open). Not persisted — a grounded answer
@@ -135,6 +141,39 @@ function AskInner() {
 
   // The durable team thread (handed-off questions + the team's status replies).
   const q = useQuery({ queryKey: ['ask', 'requests'], queryFn: () => homeowner.requests() })
+
+  // Persist the live session so the conversation survives leaving the screen (and
+  // app restarts), keyed per home. Without this, the just-asked exchanges lived in
+  // component state only and vanished on back-navigation — leaving just the older
+  // durable thread, which read as "the chat reverted to a previous conversation".
+  const propQ = useQuery({ queryKey: ['homeowner', 'property'], queryFn: () => homeowner.property() })
+  const siteId = propQ.data?.site_id
+  const hydrated = useRef(false)
+  const sessionKey = siteId ? `constructo.ask.session.${siteId}` : null
+
+  useEffect(() => {
+    if (!sessionKey) return
+    AsyncStorage.getItem(sessionKey)
+      .then((raw) => {
+        // Drop never-finished 'pending' exchanges (an ask interrupted by a close)
+        // so nothing is stuck "thinking" forever.
+        const saved = raw ? (JSON.parse(raw) as Exchange[]).filter((e) => e.status !== 'pending') : []
+        setSession((cur) => {
+          if (cur.length === 0) return saved
+          const ids = new Set(cur.map((e) => e.id))
+          return [...saved.filter((e) => !ids.has(e.id)), ...cur]
+        })
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        hydrated.current = true
+      })
+  }, [sessionKey])
+
+  useEffect(() => {
+    if (!sessionKey || !hydrated.current) return
+    AsyncStorage.setItem(sessionKey, JSON.stringify(session)).catch(() => undefined)
+  }, [session, sessionKey])
   const requests: HomeownerRequest[] = [...(q.data ?? [])].sort((a, b) =>
     a.created_at.localeCompare(b.created_at),
   )
