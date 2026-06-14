@@ -41,4 +41,5 @@ export const qk = {
   notificationSettings: () => ['notifications', 'settings'] as const,
   search: (query: string) => ['search', query] as const,
   reports: () => ['reports'] as const,
+  drawings: (siteId?: string) => (siteId ? (['drawings', siteId] as const) : (['drawings'] as const)),
 } as const
