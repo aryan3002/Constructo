@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -71,6 +71,13 @@ vi.mock('../../../api/hooks', () => ({
 // Mock approvals (AppShell side-effect).
 vi.mock('../../../api/approvals', () => ({
   approvalsApi: { unreadCount: () => Promise.resolve(0) },
+}))
+
+// Mock siteChangesApi — used by DrawingDetailDrawer.
+vi.mock('../../../api/siteChanges', () => ({
+  siteChangesApi: {
+    list: () => Promise.resolve([]),
+  },
 }))
 
 // Stub URL.createObjectURL (not present in jsdom).
@@ -178,51 +185,46 @@ describe('DocumentsPage', () => {
     expect(screen.getAllByText(/v2/i).length).toBeGreaterThan(0)
   })
 
-  it('shows "Show versions" toggle on Ground Floor Plan but not on North Elevation', async () => {
-    mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
-
-    renderPage()
-
-    // Wait for data to load.
-    await screen.findByRole('heading', { name: /Ground Floor Plan/i })
-
-    // Ground Floor Plan has a chain of 2, so toggle should appear.
-    expect(screen.getByRole('button', { name: /show versions/i })).toBeInTheDocument()
-
-    // North Elevation has only 1 version (no supersedes_id), so no toggle.
-    // There should be exactly ONE "Show versions" button total.
-    const toggles = screen.getAllByRole('button', { name: /show versions/i })
-    expect(toggles).toHaveLength(1)
-  })
-
-  it('expanding "Show versions" reveals both v2 (current) and v1 (superseded)', async () => {
+  // D6: "Show versions" toggle is replaced by clicking the row to open the Drawer.
+  // Version history is now inside the DrawingDetailDrawer.
+  it('clicking a drawing row opens the detail drawer showing the version timeline', async () => {
     mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
 
     renderPage()
 
     await screen.findByRole('heading', { name: /Ground Floor Plan/i })
 
-    // Click "Show versions".
-    await userEvent.click(screen.getByRole('button', { name: /show versions/i }))
+    // Click the Ground Floor Plan row heading — opens the drawer.
+    await userEvent.click(screen.getByRole('heading', { name: /Ground Floor Plan/i }))
 
-    // Both v2 and v1 should now be visible in the version history.
+    // Drawer opens with a dialog containing the version history section.
+    const dialog = await screen.findByRole('dialog')
     await waitFor(() => {
-      expect(screen.getAllByText(/v2/i).length).toBeGreaterThan(0)
-      expect(screen.getAllByText(/v1/i).length).toBeGreaterThan(0)
+      // Both v2 and v1 should appear in the drawer's timeline.
+      const versionTexts = within(dialog).getAllByText(/v[12]/i)
+      const hasV2 = versionTexts.some((el) => el.textContent?.includes('v2'))
+      const hasV1 = versionTexts.some((el) => el.textContent?.includes('v1'))
+      expect(hasV2).toBe(true)
+      expect(hasV1).toBe(true)
     })
+  })
 
-    // v1 should be labelled "Superseded".
-    expect(screen.getByText(/superseded/i)).toBeInTheDocument()
+  it('drawing rows have no inline "Show versions" toggle — D6 moves this to the drawer', async () => {
+    mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
 
-    // Toggle should now read "Hide versions".
-    expect(screen.getByRole('button', { name: /hide versions/i })).toBeInTheDocument()
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Ground Floor Plan/i })
+
+    // The old "Show versions" toggle is gone from the list.
+    expect(screen.queryByRole('button', { name: /show versions/i })).not.toBeInTheDocument()
   })
 
   // -------------------------------------------------------------------------
-  // Revision upload — presigned mode
+  // Revision upload — via drawer (D6)
   // -------------------------------------------------------------------------
 
-  it('revision upload: presign → putToR2 → publish called with supersedes_id of current row', async () => {
+  it('revision upload via drawer: presign → putToR2 → publish called with supersedes_id', async () => {
     mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
     mockPresign.mockResolvedValue({ key: 'new-key/ground-v3.pdf', put_url: 'https://r2/put', mode: 'presigned' })
     mockPutToR2.mockResolvedValue(undefined)
@@ -232,23 +234,29 @@ describe('DocumentsPage', () => {
 
     await screen.findByRole('heading', { name: /Ground Floor Plan/i })
 
-    // Find and click the "Upload new revision" button for Ground Floor Plan.
-    const uploadButtons = screen.getAllByRole('button', { name: /upload new revision/i })
-    await userEvent.click(uploadButtons[0])
+    // Open the drawer by clicking the row.
+    await userEvent.click(screen.getByRole('heading', { name: /Ground Floor Plan/i }))
+    await screen.findByRole('dialog')
 
-    // Wait for the upload form to render, then fill in version.
+    // Click "Upload new revision" in drawer footer.
+    await userEvent.click(screen.getByRole('button', { name: /Upload new revision/i }))
+
+    // Fill in version.
     const versionInput = await screen.findByLabelText(/^version$/i)
     await userEvent.clear(versionInput)
     await userEvent.type(versionInput, 'v3')
 
-    // Attach a fake file via the labelled file input.
+    // Attach a fake file.
     const fileInput = await screen.findByLabelText(/^file$/i)
     const fakeFile = new File(['pdf-content'], 'ground-floor-v3.pdf', { type: 'application/pdf' })
     await userEvent.upload(fileInput, fakeFile)
 
-    // Click Save.
-    const saveButton = screen.getByRole('button', { name: /^save$/i })
-    await userEvent.click(saveButton)
+    // Click Save — opens ConfirmDialog.
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    // Confirm in the supersede dialog.
+    await screen.findByText(/Supersede v2\?/i)
+    await userEvent.click(screen.getByRole('button', { name: /Publish revision/i }))
 
     // Verify call chain.
     await waitFor(() => {
@@ -265,17 +273,17 @@ describe('DocumentsPage', () => {
           version: 'v3',
           file_url: 'new-key/ground-v3.pdf',
           kind: 'plan',
-          supersedes_id: 'drw-mock-2', // the current row's id
+          supersedes_id: 'drw-mock-2',
         }),
       )
     })
   })
 
   // -------------------------------------------------------------------------
-  // Upload unavailable
+  // Upload unavailable (via drawer)
   // -------------------------------------------------------------------------
 
-  it('upload unavailable: shows note, does NOT call putToR2 or publish', async () => {
+  it('upload unavailable via drawer: shows note, does NOT call putToR2 or publish', async () => {
     mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
     mockPresign.mockResolvedValue({ key: 'key', put_url: null, mode: 'unavailable' })
 
@@ -283,11 +291,13 @@ describe('DocumentsPage', () => {
 
     await screen.findByRole('heading', { name: /Ground Floor Plan/i })
 
-    // Open the upload form.
-    const uploadButtons = screen.getAllByRole('button', { name: /upload new revision/i })
-    await userEvent.click(uploadButtons[0])
+    // Open drawer.
+    await userEvent.click(screen.getByRole('heading', { name: /Ground Floor Plan/i }))
+    await screen.findByRole('dialog')
 
-    // Wait for the upload form, fill version + attach file.
+    // Open upload panel.
+    await userEvent.click(screen.getByRole('button', { name: /Upload new revision/i }))
+
     const versionInput = await screen.findByLabelText(/^version$/i)
     await userEvent.clear(versionInput)
     await userEvent.type(versionInput, 'v3')
@@ -296,9 +306,10 @@ describe('DocumentsPage', () => {
     const fakeFile = new File(['pdf'], 'ground-v3.pdf', { type: 'application/pdf' })
     await userEvent.upload(fileInput, fakeFile)
 
-    // Click Save.
-    const saveButton = screen.getByRole('button', { name: /^save$/i })
-    await userEvent.click(saveButton)
+    // Click Save → ConfirmDialog → Confirm.
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    await screen.findByText(/Supersede v2\?/i)
+    await userEvent.click(screen.getByRole('button', { name: /Publish revision/i }))
 
     // Presign called.
     await waitFor(() => expect(mockPresign).toHaveBeenCalled())

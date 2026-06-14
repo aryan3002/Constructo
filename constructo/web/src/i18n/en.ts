@@ -853,6 +853,43 @@ export const en = {
   'documents.doc_title': 'Document title',
   'documents.doc_type_label': 'Document type',
 
+  // === drawings register elevation (D6) ===
+  // Kind filter + badge
+  'drawings.kind.all': 'All',
+  'drawings.kind.plan': 'Plan',
+  'drawings.kind.elevation': 'Elevation',
+  'drawings.kind.section': 'Section',
+  'drawings.kind.structural': 'Structural',
+  'drawings.kind.electrical': 'Electrical',
+  'drawings.kind.plumbing': 'Plumbing',
+  'drawings.kind.other': 'Other',
+  // Drawing detail drawer
+  'drawings.detail_drawer.title': 'Drawing details',
+  'drawings.detail_drawer.version_history': 'Version history',
+  'drawings.detail_drawer.linked_changes': 'Linked site changes',
+  'drawings.detail_drawer.no_linked_changes': 'No linked site changes',
+  'drawings.detail_drawer.open_file': 'Open file',
+  'drawings.detail_drawer.open_pdf': 'Open PDF',
+  'drawings.detail_drawer.upload_revision': 'Upload new revision',
+  'drawings.detail_drawer.view': 'View',
+  // Supersede confirm
+  'drawings.supersede.title': 'Supersede {version}?',
+  'drawings.supersede.message': 'This publishes a new revision. The current version stays reachable in the history — it is never deleted (append-only). Continue?',
+  'drawings.supersede.confirm': 'Publish revision',
+  'drawings.supersede.cancel': 'Cancel',
+  // Sort
+  'drawings.sort.label': 'Sort',
+  'drawings.sort.newest': 'Newest first',
+  'drawings.sort.oldest': 'Oldest first',
+  'drawings.sort.title_az': 'Title A–Z',
+  'drawings.sort.site': 'Site',
+  // Empty state
+  'drawings.empty.title': 'No drawings yet',
+  'drawings.empty.hint': 'Upload your first drawing to start the register.',
+  'drawings.empty.cta': 'Upload your first drawing',
+  // Drop zone
+  'drawings.drop.hint': 'Drop a file here, or click to select',
+
   // === spec desk (SpecDesk.tsx) ===
   'specdesk.title': 'Spec schedule',
   'specdesk.subtitle': 'Materials by room — proposed by AI, confirmed by you.',

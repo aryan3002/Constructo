@@ -1,27 +1,35 @@
 /**
- * DocumentsPage (W5 Slice 2a+2b — S2a-E3 / S2b-E3).
+ * DocumentsPage — D6 elevation (drawings register flagship upgrade).
  *
  * Route: /settings/documents
  * Gate: owner | pm | architect (manage_settings)
  *
  * Two tabs:
- *   Drawings — the append-only drawings register (S2a).
- *   Documents — company documents with expiry pills (S2b).
- *
- * The Drawings tab is unchanged from S2a; it renders the existing content.
- * The Documents tab renders DocumentsTab.
+ *   Drawings — append-only register with:
+ *     • DrawingDetailDrawer (click → detail, version timeline, linked changes)
+ *     • KindFilter pill bar
+ *     • Kind badge on each DrawingRow
+ *     • Sort control (newest/oldest/title/site)
+ *     • Keyboard nav (↑/↓/Enter/u)
+ *     • EmptyState with CTA action slot
+ *     • Drag-drop on New drawing file input
+ *     • Supersede-confirm guard in the drawer
+ *   Documents — company documents with expiry pills (D6b scope — unchanged).
  */
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { drawingsApi, type DrawingRegisterRow } from '../../api/drawings'
+import { drawingsApi, type DrawingRegisterRow, type DrawingKind } from '../../api/drawings'
 import { qk } from '../../api/queryKeys'
 import { useCan, useMeRole } from '../../auth/useCan'
 import { useSites } from '../../api/hooks'
 import { useT } from '../../i18n'
-import { AppShell, Body, Button, H1, H2, Small, StatusPill, useRoleTabs, type Role as ShellRole } from '../../ui'
+import { AppShell, Body, Button, H1, H2, Small, useRoleTabs, type Role as ShellRole } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { formatDate } from '../../lib/format'
 import { DocumentsTab } from './DocumentsTab'
+import { DrawingDetailDrawer } from './DrawingDetailDrawer'
+import { KindFilter, type FilterKind } from './KindFilter'
+import { KindBadge } from './DrawingDetailDrawer'
 
 // ---------------------------------------------------------------------------
 // Upload phase state
@@ -30,149 +38,30 @@ import { DocumentsTab } from './DocumentsTab'
 type UploadPhase = 'idle' | 'uploading' | 'unavailable' | 'error'
 
 // ---------------------------------------------------------------------------
-// UploadRevision — inline per-drawing upload form (revision of existing drawing)
+// Sort options
 // ---------------------------------------------------------------------------
 
-interface UploadRevisionProps {
-  current: DrawingRegisterRow
-  onDone: () => void
-  onCancel: () => void
-}
+type SortKey = 'newest' | 'oldest' | 'title_az' | 'site'
 
-function UploadRevision({ current, onDone, onCancel }: UploadRevisionProps) {
-  const t = useT()
-  const [file, setFile] = useState<File | null>(null)
-  const [version, setVersion] = useState('')
-  const [changeNote, setChangeNote] = useState('')
-  const [phase, setPhase] = useState<UploadPhase>('idle')
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-
-  async function handleSave() {
-    if (!file || !version.trim()) return
-
-    setPhase('uploading')
-    setErrorMsg(null)
-
-    try {
-      const ticket = await drawingsApi.presign(current.site_id, file.name, file.type)
-
-      if (ticket.mode === 'unavailable') {
-        setPhase('unavailable')
-        return
-      }
-
-      // mode === 'presigned'
-      await drawingsApi.putToR2(ticket.put_url!, file)
-      await drawingsApi.publish({
-        site_id: current.site_id,
-        title: current.title,
-        version: version.trim(),
-        file_url: ticket.key,
-        kind: current.kind,
-        change_note: changeNote.trim() || null,
-        supersedes_id: current.id,
-      })
-
-      setPhase('idle')
-      onDone()
-    } catch {
-      setPhase('error')
-      setErrorMsg(t('common.error'))
+function sortRows(rows: DrawingRegisterRow[], sort: SortKey): DrawingRegisterRow[] {
+  return [...rows].sort((a, b) => {
+    switch (sort) {
+      case 'newest':
+        return b.published_at.localeCompare(a.published_at)
+      case 'oldest':
+        return a.published_at.localeCompare(b.published_at)
+      case 'title_az':
+        return a.title.localeCompare(b.title)
+      case 'site':
+        return a.site_name.localeCompare(b.site_name) || a.title.localeCompare(b.title)
+      default:
+        return 0
     }
-  }
-
-  const canSave = Boolean(file) && version.trim().length > 0 && phase !== 'uploading'
-
-  return (
-    <div className="mt-3 rounded-card border border-line bg-paper p-4">
-      <div className="flex flex-col gap-3">
-        {/* File input */}
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`upload-file-${current.id}`}
-            className="font-body text-small font-semibold text-text-mute"
-          >
-            {t('documents.file_label')}
-          </label>
-          <input
-            id={`upload-file-${current.id}`}
-            type="file"
-            accept=".pdf,.dwg,.dxf,.png,.jpg"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="font-body text-small text-text"
-          />
-        </div>
-
-        {/* Version input */}
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`upload-version-${current.id}`}
-            className="font-body text-small font-semibold text-text-mute"
-          >
-            {t('documents.version_label')}
-          </label>
-          <input
-            id={`upload-version-${current.id}`}
-            type="text"
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-            placeholder="e.g. v3"
-            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
-        </div>
-
-        {/* Change note (optional) */}
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`upload-note-${current.id}`}
-            className="font-body text-small font-semibold text-text-mute"
-          >
-            {t('documents.change_note')}
-          </label>
-          <input
-            id={`upload-note-${current.id}`}
-            type="text"
-            value={changeNote}
-            onChange={(e) => setChangeNote(e.target.value)}
-            placeholder="Optional"
-            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
-        </div>
-
-        {/* Upload unavailable note */}
-        {phase === 'unavailable' && (
-          <p role="alert" className="font-body text-small text-text-mute">
-            {t('documents.upload_unavailable')}
-          </p>
-        )}
-
-        {/* Generic error */}
-        {phase === 'error' && errorMsg && (
-          <p role="alert" className="font-body text-small text-risk">
-            {errorMsg}
-          </p>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="primary"
-            disabled={!canSave}
-            onClick={() => void handleSave()}
-          >
-            {phase === 'uploading' ? t('documents.uploading') : t('documents.save')}
-          </Button>
-          <Button variant="ghost" onClick={onCancel}>
-            {t('documents.cancel')}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
+  })
 }
 
 // ---------------------------------------------------------------------------
-// NewDrawing — top-level form for uploading a brand-new drawing
+// NewDrawing — top-level form for uploading a brand-new drawing (drag-drop)
 // ---------------------------------------------------------------------------
 
 interface NewDrawingProps {
@@ -192,6 +81,7 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
   const [file, setFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<UploadPhase>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   async function handleSave() {
     if (!file || !siteId || !title.trim() || !version.trim()) return
@@ -207,7 +97,6 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
         return
       }
 
-      // mode === 'presigned'
       await drawingsApi.putToR2(ticket.put_url!, file)
       await drawingsApi.publish({
         site_id: siteId,
@@ -216,7 +105,7 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
         file_url: ticket.key,
         kind: 'other',
         change_note: changeNote.trim() || null,
-        // No supersedes_id — this is a brand-new drawing.
+        // No supersedes_id — brand-new drawing.
       })
 
       setPhase('idle')
@@ -227,6 +116,13 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
     }
   }
 
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragging(false)
+    const dropped = e.dataTransfer.files[0]
+    if (dropped) setFile(dropped)
+  }
+
   const canSave =
     Boolean(file) &&
     siteId.length > 0 &&
@@ -235,7 +131,15 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
     phase !== 'uploading'
 
   return (
-    <div className="mb-5 rounded-card border border-line bg-paper p-4">
+    <div
+      className={[
+        'mb-5 rounded-card border-2 bg-paper p-4 transition cstk-animate',
+        dragging ? 'border-primary bg-primary/5' : 'border-dashed border-line',
+      ].join(' ')}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+    >
       <div className="flex flex-col gap-3">
         {/* Site selector */}
         <div className="flex flex-col gap-1">
@@ -277,7 +181,7 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
           />
         </div>
 
-        {/* Version input */}
+        {/* Version */}
         <div className="flex flex-col gap-1">
           <label
             htmlFor="new-drawing-version"
@@ -313,7 +217,7 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
           />
         </div>
 
-        {/* File input */}
+        {/* File input + drop hint */}
         <div className="flex flex-col gap-1">
           <label
             htmlFor="new-drawing-file"
@@ -328,23 +232,25 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="font-body text-small text-text"
           />
+          {!file && (
+            <Small className="text-text-mute">{t('drawings.drop.hint')}</Small>
+          )}
+          {file && (
+            <Small className="font-semibold text-text">{file.name}</Small>
+          )}
         </div>
 
-        {/* Upload unavailable note */}
         {phase === 'unavailable' && (
           <p role="alert" className="font-body text-small text-text-mute">
             {t('documents.upload_unavailable')}
           </p>
         )}
-
-        {/* Generic error */}
         {phase === 'error' && errorMsg && (
           <p role="alert" className="font-body text-small text-risk">
             {errorMsg}
           </p>
         )}
 
-        {/* Actions */}
         <div className="flex items-center gap-2">
           <Button
             variant="primary"
@@ -363,79 +269,46 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
 }
 
 // ---------------------------------------------------------------------------
-// VersionHistory — the collapsed chain of versions for a drawing
-// ---------------------------------------------------------------------------
-
-interface VersionHistoryProps {
-  chain: DrawingRegisterRow[] // newest → oldest
-}
-
-function VersionHistory({ chain }: VersionHistoryProps) {
-  const t = useT()
-  return (
-    <ul className="mt-2 flex flex-col gap-2 border-l-2 border-line pl-4">
-      {chain.map((v) => (
-        <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Small className="font-semibold text-text">
-            {t('documents.version')} {v.version}
-          </Small>
-          {!v.is_current && (
-            <StatusPill status="info" label={t('documents.superseded')} size="sm" />
-          )}
-          {v.is_current && (
-            <StatusPill status="ok" label={t('documents.current')} size="sm" />
-          )}
-          <Small className="text-text-mute">
-            {t('documents.published')}: {formatDate(v.published_at.slice(0, 10))}
-          </Small>
-          {v.change_note && (
-            <Small className="text-text-mute">{v.change_note}</Small>
-          )}
-          <a
-            href={v.file_url}
-            target="_blank"
-            rel="noreferrer"
-            className="font-body text-small font-semibold text-primary-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {t('documents.open')}
-          </a>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// DrawingRow — one current drawing + its version chain + upload form
+// DrawingRow — one current drawing (click opens the detail drawer)
 // ---------------------------------------------------------------------------
 
 interface DrawingRowProps {
   current: DrawingRegisterRow
-  chain: DrawingRegisterRow[] // newest → oldest, includes current
-  canManage: boolean
-  onRefresh: () => void
+  isSelected: boolean
+  onClick: () => void
+  kindLabel: string
+  rowRef?: React.Ref<HTMLLIElement>
 }
 
-function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
+function DrawingRow({ current, isSelected, onClick, kindLabel, rowRef }: DrawingRowProps) {
   const t = useT()
-  const [expanded, setExpanded] = useState(false)
-  const [uploading, setUploading] = useState(false)
-
-  const hasHistory = chain.length > 1
 
   return (
     <li
+      ref={rowRef}
       data-drawing={current.id}
-      className="flex flex-col gap-1 rounded-card border border-line bg-card px-4 py-3"
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={isSelected ? 0 : -1}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onClick()
+      }}
+      className={[
+        'flex flex-col gap-1 rounded-card border bg-card px-4 py-3 cursor-pointer transition cstk-animate',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        isSelected
+          ? 'border-primary/60 bg-primary/5 shadow-card'
+          : 'border-line hover:border-primary/40 hover:shadow-card',
+      ].join(' ')}
     >
-      {/* Primary row */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          {/* Fix 4: <h3> already conveys role=heading + level 3; redundant attributes removed */}
           <h3 className="font-body text-body font-semibold text-text">
             {current.title}
           </h3>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <KindBadge kind={current.kind} label={kindLabel} />
             <Small className="text-text-mute">{current.site_name}</Small>
             <Small className="font-semibold text-text">
               {t('documents.version')} {current.version}
@@ -448,51 +321,17 @@ function DrawingRow({ current, chain, canManage, onRefresh }: DrawingRowProps) {
             )}
           </div>
         </div>
-
-        {/* Actions */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <a
-            href={current.file_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-tap items-center rounded-control border border-line bg-paper px-3 font-body text-small font-semibold text-text cstk-animate hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {t('documents.open')}
-          </a>
-          {canManage && !uploading && (
-            <Button variant="ghost" onClick={() => setUploading(true)}>
-              {t('documents.upload_revision')}
-            </Button>
-          )}
-        </div>
+        {/* Open link (doesn't propagate to drawer) */}
+        <a
+          href={current.file_url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex min-h-tap shrink-0 items-center rounded-control border border-line bg-paper px-3 font-body text-small font-semibold text-text cstk-animate hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          {t('documents.open')}
+        </a>
       </div>
-
-      {/* Version history toggle — Fix 3: glyphs are aria-hidden */}
-      {hasHistory && (
-        <div className="mt-1">
-          <button
-            type="button"
-            onClick={() => setExpanded((p) => !p)}
-            className="font-body text-small font-semibold text-primary-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {expanded ? t('documents.hide_versions') : t('documents.show_versions')}{' '}
-            <span aria-hidden="true">{expanded ? '▲' : '▾'}</span>
-          </button>
-          {expanded && <VersionHistory chain={chain} />}
-        </div>
-      )}
-
-      {/* Upload form */}
-      {uploading && (
-        <UploadRevision
-          current={current}
-          onDone={() => {
-            setUploading(false)
-            onRefresh()
-          }}
-          onCancel={() => setUploading(false)}
-        />
-      )}
     </li>
   )
 }
@@ -513,6 +352,15 @@ export function DocumentsPage() {
   const [activeTab, setActiveTab] = useState<PageTab>('drawings')
   const [search, setSearch] = useState('')
   const [showNewDrawing, setShowNewDrawing] = useState(false)
+  const [activeKind, setActiveKind] = useState<FilterKind>('all')
+  const [sort, setSort] = useState<SortKey>('newest')
+  const [selectedIdx, setSelectedIdx] = useState<number>(-1)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerRow, setDrawerRow] = useState<DrawingRegisterRow | null>(null)
+  const [drawerChain, setDrawerChain] = useState<DrawingRegisterRow[]>([])
+
+  const listRef = useRef<HTMLUListElement>(null)
+  const rowRefs = useRef<(HTMLLIElement | null)[]>([])
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: qk.drawings(),
@@ -524,18 +372,9 @@ export function DocumentsPage() {
   // -------------------------------------------------------------------------
 
   const rows = data ?? []
-
-  // Build lookup of all rows by id (for chain walking).
   const byId = new Map(rows.map((r) => [r.id, r]))
-
-  // Current drawings = rows where is_current is true.
   const currentRows = rows.filter((r) => r.is_current)
 
-  /**
-   * Walk supersedes_id chain from `current` → oldest version.
-   * Fix 1: `seen` Set guards against cyclic supersedes_id so we never loop forever.
-   * Output order: newest → oldest.
-   */
   function buildChain(current: DrawingRegisterRow): DrawingRegisterRow[] {
     const chain: DrawingRegisterRow[] = []
     const seen = new Set<string>()
@@ -546,27 +385,97 @@ export function DocumentsPage() {
       chain.push(v)
       v = v.supersedes_id ? byId.get(v.supersedes_id) : undefined
     }
-    return chain // newest → oldest
+    return chain
   }
 
-  /** Shared invalidation using the qk factory — Fix 2. */
   function invalidateDrawings() {
     void qc.invalidateQueries({ queryKey: qk.drawings() })
   }
 
-  // Apply client-side search filter.
-  const filtered = currentRows.filter((r) => {
-    if (!search.trim()) return true
-    const q = search.trim().toLowerCase()
-    return (
-      r.title.toLowerCase().includes(q) ||
-      r.site_name.toLowerCase().includes(q) ||
-      r.version.toLowerCase().includes(q)
-    )
-  })
+  // -------------------------------------------------------------------------
+  // Kind filter + search + sort
+  // -------------------------------------------------------------------------
+
+  const presentKinds = [...new Set(currentRows.map((r) => r.kind))] as DrawingKind[]
+
+  const filtered = sortRows(
+    currentRows.filter((r) => {
+      const matchesKind = activeKind === 'all' || r.kind === activeKind
+      if (!matchesKind) return false
+      if (!search.trim()) return true
+      const q = search.trim().toLowerCase()
+      return (
+        r.title.toLowerCase().includes(q) ||
+        r.site_name.toLowerCase().includes(q) ||
+        r.version.toLowerCase().includes(q)
+      )
+    }),
+    sort,
+  )
 
   // -------------------------------------------------------------------------
-  // Gate: owner/pm/architect only
+  // Keyboard navigation
+  // -------------------------------------------------------------------------
+
+  const isDialogOpen = drawerOpen || showNewDrawing
+
+  const handleListKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLUListElement>) => {
+      if (isDialogOpen) return
+      if (filtered.length === 0) return
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIdx((prev) => {
+          const next = Math.min(prev + 1, filtered.length - 1)
+          rowRefs.current[next]?.focus()
+          return next
+        })
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIdx((prev) => {
+          const next = Math.max(prev - 1, 0)
+          rowRefs.current[next]?.focus()
+          return next
+        })
+      } else if (e.key === 'Enter' && selectedIdx >= 0) {
+        e.preventDefault()
+        const row = filtered[selectedIdx]
+        if (row) openDrawer(row)
+      } else if (e.key === 'u' && selectedIdx >= 0) {
+        e.preventDefault()
+        const row = filtered[selectedIdx]
+        if (row) {
+          openDrawer(row)
+          // Signal the drawer to open with the upload panel open.
+          // The drawer itself handles this via the footer button.
+        }
+      }
+    },
+    [filtered, selectedIdx, isDialogOpen],
+  )
+
+  function openDrawer(row: DrawingRegisterRow) {
+    setDrawerRow(row)
+    setDrawerChain(buildChain(row))
+    setDrawerOpen(true)
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false)
+    // Return focus to the selected row.
+    if (selectedIdx >= 0) {
+      rowRefs.current[selectedIdx]?.focus()
+    }
+  }
+
+  // Reset rowRefs on filtered length change.
+  useEffect(() => {
+    rowRefs.current = rowRefs.current.slice(0, filtered.length)
+  }, [filtered.length])
+
+  // -------------------------------------------------------------------------
+  // Render
   // -------------------------------------------------------------------------
 
   return (
@@ -584,7 +493,7 @@ export function DocumentsPage() {
         </section>
       ) : (
         <>
-          {/* Tab switcher: Drawings | Documents */}
+          {/* Tab switcher */}
           <div
             role="tablist"
             aria-label="Document sections"
@@ -620,80 +529,133 @@ export function DocumentsPage() {
 
           {/* ── Drawings tab ── */}
           {activeTab === 'drawings' && (
-          <>
-          {/* Search bar + New drawing action */}
-          <div className="mb-5 flex items-center gap-3">
-            <label htmlFor="docs-search" className="sr-only">
-              {t('documents.search_placeholder')}
-            </label>
-            <input
-              id="docs-search"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('documents.search_placeholder')}
-              className="w-full rounded-control border border-line bg-paper px-3 py-2 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-            {!showNewDrawing && (
-              <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
-                {t('documents.new_drawing')}
-              </Button>
-            )}
-          </div>
+            <>
+              {/* Search bar + sort + New drawing action */}
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <label htmlFor="docs-search" className="sr-only">
+                  {t('documents.search_placeholder')}
+                </label>
+                <input
+                  id="docs-search"
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('documents.search_placeholder')}
+                  className="min-w-0 flex-1 rounded-control border border-line bg-paper px-3 py-2 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+                {/* Sort control */}
+                <label className="sr-only" htmlFor="drawings-sort">
+                  {t('drawings.sort.label')}
+                </label>
+                <select
+                  id="drawings-sort"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-small text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <option value="newest">{t('drawings.sort.newest')}</option>
+                  <option value="oldest">{t('drawings.sort.oldest')}</option>
+                  <option value="title_az">{t('drawings.sort.title_az')}</option>
+                  <option value="site">{t('drawings.sort.site')}</option>
+                </select>
+                {!showNewDrawing && (
+                  <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
+                    {t('documents.new_drawing')}
+                  </Button>
+                )}
+              </div>
 
-          {/* New drawing form (Fix 5) */}
-          {showNewDrawing && (
-            <NewDrawing
-              onDone={() => {
-                setShowNewDrawing(false)
-                invalidateDrawings()
-              }}
-              onCancel={() => setShowNewDrawing(false)}
-            />
-          )}
-
-          {/* Four states */}
-          {isLoading && <Spinner label={t('common.loading')} />}
-
-          {isError && (
-            <ErrorState
-              message={(error as Error)?.message ?? t('common.error')}
-              onRetry={() => refetch()}
-              retryLabel={t('action.retry')}
-            />
-          )}
-
-          {!isLoading && !isError && currentRows.length === 0 && (
-            <EmptyState title={t('documents.no_drawings')} />
-          )}
-
-          {!isLoading && !isError && currentRows.length > 0 && (
-            <section aria-label={t('documents.drawings_heading')}>
-              <Small className="mb-3 block font-semibold uppercase tracking-wide text-text-mute">
-                {t('documents.drawings_heading')}
-              </Small>
-              <ul className="flex flex-col gap-3">
-                {filtered.map((current) => (
-                  <DrawingRow
-                    key={current.id}
-                    current={current}
-                    chain={buildChain(current)}
-                    canManage={canManage}
-                    onRefresh={invalidateDrawings}
-                  />
-                ))}
-              </ul>
-
-              {filtered.length === 0 && search.trim() && (
-                <p className="mt-4 font-body text-small text-text-mute">
-                  {t('documents.no_drawings')}
-                </p>
+              {/* Kind filter */}
+              {currentRows.length > 0 && (
+                <KindFilter
+                  presentKinds={presentKinds}
+                  activeKind={activeKind}
+                  onChange={(k) => { setActiveKind(k); setSelectedIdx(-1) }}
+                />
               )}
-            </section>
-          )}
-          </>
+
+              {/* New drawing form */}
+              {showNewDrawing && (
+                <NewDrawing
+                  onDone={() => {
+                    setShowNewDrawing(false)
+                    invalidateDrawings()
+                  }}
+                  onCancel={() => setShowNewDrawing(false)}
+                />
+              )}
+
+              {/* Four states */}
+              {isLoading && <Spinner label={t('common.loading')} />}
+
+              {isError && (
+                <ErrorState
+                  message={(error as Error)?.message ?? t('common.error')}
+                  onRetry={() => refetch()}
+                  retryLabel={t('action.retry')}
+                />
+              )}
+
+              {!isLoading && !isError && currentRows.length === 0 && (
+                <EmptyState
+                  title={t('drawings.empty.title')}
+                  hint={t('drawings.empty.hint')}
+                  action={
+                    canManage ? (
+                      <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
+                        {t('drawings.empty.cta')}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              )}
+
+              {!isLoading && !isError && currentRows.length > 0 && (
+                <section aria-label={t('documents.drawings_heading')}>
+                  <Small className="mb-3 block font-semibold uppercase tracking-wide text-text-mute">
+                    {t('documents.drawings_heading')}
+                  </Small>
+                  <ul
+                    ref={listRef}
+                    role="listbox"
+                    aria-label={t('documents.drawings_heading')}
+                    className="flex flex-col gap-3"
+                    onKeyDown={handleListKeyDown}
+                  >
+                    {filtered.map((current, idx) => (
+                      <DrawingRow
+                        key={current.id}
+                        current={current}
+                        isSelected={selectedIdx === idx}
+                        onClick={() => { setSelectedIdx(idx); openDrawer(current) }}
+                        kindLabel={t(`drawings.kind.${current.kind}` as Parameters<typeof t>[0])}
+                        rowRef={(el) => { rowRefs.current[idx] = el }}
+                      />
+                    ))}
+                  </ul>
+
+                  {filtered.length === 0 && (search.trim() || activeKind !== 'all') && (
+                    <p className="mt-4 font-body text-small text-text-mute">
+                      {t('documents.no_drawings')}
+                    </p>
+                  )}
+                </section>
+              )}
+            </>
           )}
         </>
+      )}
+
+      {/* Drawing detail drawer */}
+      {drawerRow && (
+        <DrawingDetailDrawer
+          open={drawerOpen}
+          onClose={closeDrawer}
+          current={drawerRow}
+          chain={drawerChain}
+          canManage={canManage}
+          siteId={drawerRow.site_id}
+        />
       )}
     </AppShell>
   )

@@ -828,6 +828,43 @@ export const hi: Record<TranslationKey, string> = {
   'documents.doc_title': 'दस्तावेज़ शीर्षक',
   'documents.doc_type_label': 'दस्तावेज़ प्रकार',
 
+  // === drawings register elevation (D6) ===
+  // Kind filter + badge
+  'drawings.kind.all': 'सभी',
+  'drawings.kind.plan': 'प्लान',
+  'drawings.kind.elevation': 'एलिवेशन',
+  'drawings.kind.section': 'सेक्शन',
+  'drawings.kind.structural': 'संरचनात्मक',
+  'drawings.kind.electrical': 'विद्युत',
+  'drawings.kind.plumbing': 'प्लम्बिंग',
+  'drawings.kind.other': 'अन्य',
+  // Drawing detail drawer
+  'drawings.detail_drawer.title': 'ड्रॉइंग विवरण',
+  'drawings.detail_drawer.version_history': 'संस्करण इतिहास',
+  'drawings.detail_drawer.linked_changes': 'जुड़े साइट परिवर्तन',
+  'drawings.detail_drawer.no_linked_changes': 'कोई जुड़े साइट परिवर्तन नहीं',
+  'drawings.detail_drawer.open_file': 'फ़ाइल खोलें',
+  'drawings.detail_drawer.open_pdf': 'PDF खोलें',
+  'drawings.detail_drawer.upload_revision': 'नया संस्करण अपलोड करें',
+  'drawings.detail_drawer.view': 'देखें',
+  // Supersede confirm
+  'drawings.supersede.title': '{version} को अधिक्रमित करें?',
+  'drawings.supersede.message': 'यह एक नया संस्करण प्रकाशित करेगा। वर्तमान संस्करण इतिहास में उपलब्ध रहेगा — इसे कभी नहीं हटाया जाता (केवल जोड़ने की प्रक्रिया)। जारी रखें?',
+  'drawings.supersede.confirm': 'संस्करण प्रकाशित करें',
+  'drawings.supersede.cancel': 'रद्द करें',
+  // Sort
+  'drawings.sort.label': 'क्रम',
+  'drawings.sort.newest': 'नए पहले',
+  'drawings.sort.oldest': 'पुराने पहले',
+  'drawings.sort.title_az': 'शीर्षक A–Z',
+  'drawings.sort.site': 'साइट',
+  // Empty state
+  'drawings.empty.title': 'अभी कोई ड्रॉइंग नहीं',
+  'drawings.empty.hint': 'रजिस्टर शुरू करने के लिए पहली ड्रॉइंग अपलोड करें।',
+  'drawings.empty.cta': 'पहली ड्रॉइंग अपलोड करें',
+  // Drop zone
+  'drawings.drop.hint': 'फ़ाइल यहाँ छोड़ें, या चुनने के लिए क्लिक करें',
+
   // === spec desk (SpecDesk.tsx) ===
   'specdesk.title': 'स्पेक शेड्यूल',
   'specdesk.subtitle': 'कमरे के अनुसार सामग्री — AI का सुझाव, आपकी पुष्टि।',
