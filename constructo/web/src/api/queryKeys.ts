@@ -48,4 +48,9 @@ export const qk = {
   specs: (siteId: string) => ['specs', siteId] as const,
   /** Room-grouped spec desk (DeskOut). */
   specDesk: (siteId: string) => ['spec_desk', siteId] as const,
+  /** Site changes feed (D3). Keyed by siteId + optional status filter. */
+  siteChanges: (opts?: { siteId?: string; status?: string }) =>
+    ['site_changes', opts?.siteId ?? null, opts?.status ?? null] as const,
+  /** Single site change detail (D3). */
+  siteChange: (id: string) => ['site_change', id] as const,
 } as const
