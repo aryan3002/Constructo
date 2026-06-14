@@ -337,6 +337,7 @@ function ActionBar({ photoId, imageUrl, caption, pinned, onTogglePin, onDismiss,
   const { theme } = useTheme()
   const c = theme.colors
   const toast = useToast()
+  const router = useRouter()
 
   const onShare = useCallback(async () => {
     await Share.share({ message: caption ?? s.caption, url: imageUrl })
@@ -387,16 +388,18 @@ function ActionBar({ photoId, imageUrl, caption, pinned, onTogglePin, onDismiss,
         </Small>
       </Pressable>
 
-      {/* Mark up — honest stub */}
+      {/* Mark up — annotate the photo, then send it as a tracked issue */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={s.markUp}
-        onPress={() => toast(s.markUpSoon, 'edit-2')}
+        onPress={() =>
+          router.push({ pathname: '/(homeowner)/markup', params: { uri: imageUrl } })
+        }
         hitSlop={4}
         style={({ pressed }) => [buttonStyle, { opacity: pressed ? 0.6 : 1, flex: 1 }]}
       >
-        <Feather name="edit-2" size={15} color={c.textMute} />
-        <Small muted>{s.markUp}</Small>
+        <Feather name="edit-2" size={15} color={c.accentDeep} />
+        <Small color={c.accentDeep}>{s.markUp}</Small>
       </Pressable>
 
       {/* Comment — honest stub */}
@@ -1374,6 +1377,18 @@ export default function Photos() {
                     </View>
                   </View>
                 ) : null}
+
+                {/* Mark up — annotate this photo, then send it to the team */}
+                <Button
+                  title={s.markUp}
+                  variant="secondary"
+                  block
+                  onPress={() => {
+                    const url = active.image_url
+                    setActive(null)
+                    router.push({ pathname: '/(homeowner)/markup', params: { uri: url } })
+                  }}
+                />
 
                 {/* Save / Share / Hide */}
                 <View style={{ flexDirection: 'row', gap: SPACE.sm }}>

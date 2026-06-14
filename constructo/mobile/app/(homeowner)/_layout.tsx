@@ -71,6 +71,7 @@ function HomeownerTabs() {
         {/* Wave 1a — requests, issue-report, decision detail */}
         <Tabs.Screen name="requests" options={{ href: null }} />
         <Tabs.Screen name="issue" options={{ href: null }} />
+        <Tabs.Screen name="markup" options={{ href: null }} />
         <Tabs.Screen name="decisions/[id]" options={{ href: null }} />
         {/* Wave 1b — dedicated storage-management screen */}
         <Tabs.Screen name="storage" options={{ href: null }} />

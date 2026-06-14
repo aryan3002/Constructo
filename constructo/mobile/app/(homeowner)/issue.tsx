@@ -30,7 +30,7 @@ import {
   View,
   type TextStyle,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -198,6 +198,19 @@ export default function IssueScreen() {
   const [roomKey, setRoomKey] = useState<string | null>(null)
   const [urgency, setUrgency] = useState<Urgency>('normal')
   const [formError, setFormError] = useState<string | null>(null)
+
+  // A marked-up photo can open this composer with its image pre-attached.
+  const params = useLocalSearchParams<{ photo?: string }>()
+  useEffect(() => {
+    if (params.photo) {
+      setPhotos((prev) =>
+        prev.length
+          ? prev
+          : [{ uri: params.photo as string, name: `markup_${Date.now()}.jpg`, type: 'image/jpeg' }],
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ---- voice note ----
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
