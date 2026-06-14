@@ -155,12 +155,12 @@ export function ConfirmDialog({
         type="button"
         data-variant={variant}
         aria-busy={busy ? 'true' : undefined}
-        aria-label={confirmLabel}
       >
         {busy ? (
           <>
+            {/* Fix 4 — motion-reduce:animate-none respects prefers-reduced-motion */}
             <span
-              className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+              className="inline-block h-4 w-4 animate-spin motion-reduce:animate-none rounded-full border-2 border-white/30 border-t-white"
               aria-hidden="true"
             />
             {confirmLabel}

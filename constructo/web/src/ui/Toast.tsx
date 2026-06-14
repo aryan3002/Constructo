@@ -168,20 +168,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ show }}>
       {children}
 
-      {/* Fixed toast stack — bottom-right */}
-      {toasts.length > 0 && (
-        <div
-          aria-label="Notifications"
-          className={[
-            'fixed bottom-4 right-4 z-[9999]',
-            'flex flex-col gap-2 items-end',
-          ].join(' ')}
-        >
-          {toasts.map((t) => (
-            <ToastCard key={t.id} toast={t} onDismiss={dismiss} />
-          ))}
-        </div>
-      )}
+      {/*
+        Fix 3 — persistent live-region.
+        The outer container is ALWAYS in the DOM (even with zero toasts) so that
+        screen readers (JAWS / NVDA / VoiceOver) reliably track the region and
+        announce text changes.  Inserting a NEW element with aria-live is not
+        reliable — the assistive technology must observe the region before content
+        is added.
+        aria-atomic="false" lets each child toast announce independently.
+      */}
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="Notifications"
+        className={[
+          'fixed bottom-4 right-4 z-[9999]',
+          'flex flex-col gap-2 items-end',
+        ].join(' ')}
+      >
+        {toasts.map((t) => (
+          <ToastCard key={t.id} toast={t} onDismiss={dismiss} />
+        ))}
+      </div>
     </ToastContext.Provider>
   )
 }

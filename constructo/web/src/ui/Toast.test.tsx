@@ -44,6 +44,37 @@ function renderWithProvider(props: TriggerProps = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fix 3 — persistent live-region (must exist BEFORE any toast is shown)
+// ---------------------------------------------------------------------------
+
+describe('Toast — persistent live-region', () => {
+  it('renders the aria-live="polite" container even when no toasts are visible', () => {
+    // Nothing has been shown yet — the provider just mounted.
+    renderWithProvider()
+
+    // The live region must already be in the DOM so assistive technologies
+    // have registered it before content is inserted.
+    const liveRegion = document.querySelector('[aria-live="polite"]')
+    expect(liveRegion).toBeInTheDocument()
+    // No toasts yet — the region should be empty.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('the persistent live-region contains toast cards after show() is called', async () => {
+    const user = userEvent.setup()
+    renderWithProvider({ message: 'Live region test', ttlMs: 60_000 })
+
+    const liveRegion = document.querySelector('[aria-live="polite"]')!
+    expect(liveRegion).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show toast' }))
+
+    // The toast card should now be inside the persistent live region.
+    expect(liveRegion.contains(screen.getByRole('status'))).toBe(true)
+  })
+})
+
 describe('Toast — appearance', () => {
   it('shows the toast message after calling show()', async () => {
     const user = userEvent.setup()

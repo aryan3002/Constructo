@@ -5,6 +5,7 @@
  * the same. ConfirmDialog tests focus on the action wiring and variant styling.
  */
 
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -196,5 +197,156 @@ describe('ConfirmDialog', () => {
     const confirmBtn = screen.getByRole('button', { name: 'Submit' })
     expect(confirmBtn).toBeDisabled()
     expect(confirmBtn).toHaveAttribute('aria-busy', 'true')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 6b — return-focus
+// ---------------------------------------------------------------------------
+
+describe('Modal — return-focus on close', () => {
+  it('returns focus to the original opener button when the modal is closed', async () => {
+    const user = userEvent.setup()
+
+    function Wrapper() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button type="button" id="opener" onClick={() => setOpen(true)}>
+            Open modal
+          </button>
+          <Modal open={open} onClose={() => setOpen(false)} title="Return focus test">
+            <p>Modal body</p>
+          </Modal>
+        </>
+      )
+    }
+
+    render(<Wrapper />)
+
+    const opener = screen.getByRole('button', { name: 'Open modal' })
+    await user.click(opener)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Close via Esc.
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // Wait for the setTimeout(0) inside useDialog to resolve.
+    await new Promise((r) => setTimeout(r, 10))
+    expect(document.activeElement).toBe(opener)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 1 — stacked-dialog Esc closes only the topmost
+// ---------------------------------------------------------------------------
+
+describe('useDialog — stacked-dialog Esc', () => {
+  it('pressing Esc once closes only the topmost dialog; the lower one stays open', async () => {
+    const user = userEvent.setup()
+
+    const onCloseBottom = vi.fn()
+    const onCloseTop = vi.fn()
+
+    /**
+     * Renders two stacked dialogs: a "drawer" (bottom) and a "confirm" (top).
+     * Both are simultaneously open so two useDialog instances are active.
+     */
+    function StackedDialogs() {
+      const [drawerOpen, setDrawerOpen] = useState(true)
+      const [confirmOpen, setConfirmOpen] = useState(true)
+
+      return (
+        <>
+          <Modal
+            open={drawerOpen}
+            onClose={() => { onCloseBottom(); setDrawerOpen(false) }}
+            title="Bottom dialog"
+          >
+            <p>Lower layer</p>
+          </Modal>
+          <Modal
+            open={confirmOpen}
+            onClose={() => { onCloseTop(); setConfirmOpen(false) }}
+            title="Top dialog"
+          >
+            <p>Upper layer</p>
+          </Modal>
+        </>
+      )
+    }
+
+    render(<StackedDialogs />)
+
+    // Both dialogs should be in the DOM.
+    expect(screen.getByRole('heading', { name: 'Bottom dialog' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Top dialog' })).toBeInTheDocument()
+
+    // One Esc — only the top dialog's onClose should fire.
+    await user.keyboard('{Escape}')
+
+    expect(onCloseTop).toHaveBeenCalledTimes(1)
+    expect(onCloseBottom).toHaveBeenCalledTimes(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 2 — stale onClose / return-focus stability
+// ---------------------------------------------------------------------------
+
+describe('useDialog — stale onClose return-focus', () => {
+  it('returns focus to the original opener even if onClose identity changed while open', async () => {
+    const user = userEvent.setup()
+
+    /**
+     * The parent re-renders with a new inline onClose every time `count`
+     * changes, while the modal is still open.
+     */
+    function Wrapper() {
+      const [open, setOpen] = useState(false)
+      const [count, setCount] = useState(0)
+
+      // A fresh arrow function on every render — the typical "stale" scenario.
+      const handleClose = () => setOpen(false)
+
+      return (
+        <>
+          <button type="button" id="opener" onClick={() => setOpen(true)}>
+            Open
+          </button>
+          {/* Trigger a parent re-render while the modal is open */}
+          <button
+            type="button"
+            id="bump"
+            onClick={() => setCount((c) => c + 1)}
+          >
+            Bump ({count})
+          </button>
+          <Modal open={open} onClose={handleClose} title="Stale test">
+            <p>content</p>
+          </Modal>
+        </>
+      )
+    }
+
+    render(<Wrapper />)
+
+    const opener = screen.getByRole('button', { name: 'Open' })
+    await user.click(opener)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Force a re-render with a new inline onClose while the modal is open.
+    await user.click(screen.getByRole('button', { name: /Bump/ }))
+    await user.click(screen.getByRole('button', { name: /Bump/ }))
+
+    // Close via Esc — this should call the *current* onClose correctly.
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // Focus must return to the original opener, not an element inside the panel.
+    await new Promise((r) => setTimeout(r, 10))
+    expect(document.activeElement).toBe(opener)
   })
 })

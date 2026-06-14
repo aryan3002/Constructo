@@ -150,4 +150,46 @@ describe('Drawer — focus management', () => {
     await new Promise((r) => setTimeout(r, 10))
     expect(document.activeElement).toBe(opener)
   })
+
+  // Fix 6a — Tab cycle: focus must never leave the panel.
+  it('Tab from last focusable wraps to first; Shift-Tab from first wraps to last', async () => {
+    const user = userEvent.setup()
+
+    // Render a drawer with multiple focusable elements so there is a clear
+    // first and last item inside the panel.
+    const React = await import('react')
+    function Wrapper() {
+      const [open, setOpen] = React.useState(true)
+      return (
+        <Drawer open={open} onClose={() => setOpen(false)} title="Focus cycle">
+          <button type="button">Action A</button>
+          <button type="button">Action B</button>
+        </Drawer>
+      )
+    }
+
+    render(<Wrapper />)
+
+    const dialog = screen.getByRole('dialog')
+    // All tabbable elements inside the panel (close button + 2 action buttons).
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    )
+    expect(focusable.length).toBeGreaterThanOrEqual(2)
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+
+    // Move focus to the last element, then Tab — should wrap to first.
+    last.focus()
+    expect(document.activeElement).toBe(last)
+    await user.tab()
+    expect(document.activeElement).toBe(first)
+
+    // From first, Shift-Tab — should wrap to last.
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(last)
+  })
 })
