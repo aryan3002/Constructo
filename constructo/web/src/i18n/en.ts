@@ -29,6 +29,7 @@ export const en = {
   'nav.permits': 'Permits',
   'nav.groups': 'WhatsApp Groups',
   'nav.reports': 'Reports',
+  'nav.documents': 'Documents',
   'nav.settings': 'Settings',
   'nav.more': 'More',
 
@@ -612,6 +613,7 @@ export const en = {
   'admin.section.vendors': 'Vendors',
   'admin.section.materials': 'Materials',
   'admin.section.security': 'Security',
+  'admin.section.documents': 'Drawings register',
   'admin.company.title': 'Company profile',
   'admin.company.subtitle': 'Your company’s identity across every site and export.',
   'admin.company.name_label': 'Company name',
@@ -801,6 +803,29 @@ export const en = {
   'reports.from_label': 'From',
   'reports.to_label': 'To',
   'reports.error': 'Could not generate report.',
+
+  // === documents register (W5 Slice 2a) ===
+  'documents.title': 'Drawings Register',
+  'documents.subtitle': 'Append-only record of every drawing issued for this project.',
+  'documents.drawings_heading': 'Current drawings',
+  'documents.upload_revision': 'Upload new revision',
+  'documents.new_drawing': 'New drawing',
+  'documents.version': 'Version',
+  'documents.current': 'Current',
+  'documents.superseded': 'Superseded',
+  'documents.show_versions': 'Show versions',
+  'documents.hide_versions': 'Hide versions',
+  'documents.change_note': 'Change note',
+  'documents.published': 'Published',
+  'documents.no_drawings': 'No drawings yet',
+  'documents.upload_unavailable': 'File storage is not configured — contact your administrator.',
+  'documents.uploading': 'Uploading…',
+  'documents.search_placeholder': 'Search by title, site or version…',
+  'documents.file_label': 'File',
+  'documents.version_label': 'Version',
+  'documents.save': 'Save',
+  'documents.cancel': 'Cancel',
+  'documents.open': 'Open',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

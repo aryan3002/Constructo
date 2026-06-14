@@ -54,6 +54,10 @@ const SpecDesk = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 )
+// === documents register (W5 Slice 2a) === lazy: keeps register UI out of entry chunk
+const DocumentsPage = lazy(() =>
+  import('./features/documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
+)
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -143,6 +147,9 @@ export function App() {
 
       {/* Reports & exports (W5 Slice 1). */}
       <Route path="/reports" element={<Guarded><ReportsPage /></Guarded>} />
+
+      {/* Drawings register (W5 Slice 2a). */}
+      <Route path="/settings/documents" element={<Guarded><DocumentsPage /></Guarded>} />
 
       {/* Per-role overflow hub. */}
       <Route path="/more" element={<Guarded><More /></Guarded>} />
