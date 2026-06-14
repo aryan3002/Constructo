@@ -61,6 +61,7 @@ from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    DrawingRegisterOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
     PropertyCreateIn,
@@ -73,6 +74,7 @@ from app.publish.schemas import (
     SpaceUpdateIn,
 )
 from app.push.sender import notify_site_homeowners
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/publish", tags=["publish"])
 
@@ -565,6 +567,76 @@ async def list_drawings(
         )
     ).scalars().all()
     return [_drawing_out(d) for d in rows]
+
+
+# ---- drawings register (S2a-E1) --------------------------------------------
+
+
+async def _site_name_map(session: AsyncSession, site_ids: list[UUID]) -> dict[UUID, str]:
+    """Return {site_id: name} for the given site ids (single query)."""
+    from app.models import Site
+
+    if not site_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Site.id, Site.name).where(Site.id.in_(site_ids))
+        )
+    ).all()
+    return {row.id: row.name for row in rows}
+
+
+@router.get("/drawings/register", response_model=list[DrawingRegisterOut])
+async def drawings_register(
+    site_id: UUID | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[DrawingRegisterOut]:
+    """Company-wide drawings register: all drawings across the caller's visible sites.
+
+    Resolves bare R2 keys to presigned GET URLs via the process-wide storage backend.
+    Computes ``is_current`` within the returned set (a drawing is current iff no
+    other returned row's ``supersedes_id`` points at it).
+
+    Optional ``site_id`` filter narrows to a single site; 403 if not in scope.
+    """
+    from app.sites.router import effective_visible_site_ids
+
+    visible = await effective_visible_site_ids(session, user)
+    if site_id is not None and site_id not in visible:
+        raise AppError(403, "forbidden", "Site not in scope")
+    target = [site_id] if site_id is not None else visible
+    if not target:
+        return []
+
+    rows = (
+        await session.execute(
+            select(PublishedDrawing)
+            .where(PublishedDrawing.site_id.in_(target))
+            .order_by(PublishedDrawing.published_at.desc())
+        )
+    ).scalars().all()
+
+    superseded = {r.supersedes_id for r in rows if r.supersedes_id is not None}
+    names = await _site_name_map(session, target)
+    storage = get_storage()
+
+    return [
+        DrawingRegisterOut(
+            id=r.id,
+            site_id=r.site_id,
+            title=r.title,
+            version=r.version,
+            kind=r.kind,
+            change_note=r.change_note,
+            published_at=r.published_at,
+            supersedes_id=r.supersedes_id,
+            site_name=names.get(r.site_id, ""),
+            is_current=(r.id not in superseded),
+            file_url=(storage.url_for(r.file_url) or r.file_url),
+        )
+        for r in rows
+    ]
 
 
 # ---- members (contractor view) ---------------------------------------------

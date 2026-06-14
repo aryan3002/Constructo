@@ -163,3 +163,27 @@ class ChangeCreateIn(BaseModel):
     cost_delta: float | None = None
     schedule_delta_days: int | None = None
     reason: str | None = None
+
+
+# ---- drawings register (S2a-E1) --------------------------------------------
+
+
+class DrawingRegisterOut(BaseModel):
+    """A single row in the company-wide drawings register.
+
+    ``file_url`` is a resolved URL (presigned GET or local path), never the
+    bare R2 key. ``is_current`` is True for any drawing not superseded by
+    another row in the returned set.
+    """
+
+    id: UUID
+    site_id: UUID
+    site_name: str
+    title: str
+    version: str
+    kind: DrawingKind
+    change_note: str | None = None
+    published_at: object  # datetime — kept as object to accept tz-aware dt
+    supersedes_id: UUID | None = None
+    is_current: bool
+    file_url: str
