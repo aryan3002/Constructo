@@ -250,3 +250,81 @@ async def test_register_site_id_out_of_scope_is_403(client, reg_ctx):
         )
 
     assert resp.status_code == 403, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Task 2: presign endpoint
+# ---------------------------------------------------------------------------
+
+
+async def test_presign_in_scope_returns_ticket(client, reg_ctx):
+    """In-scope site + S3 storage → 200 with presigned ticket."""
+    from app.storage.base import PresignedUpload
+
+    fake_ticket: PresignedUpload = {
+        "key": "drawings/abc/foo.pdf",
+        "url": "https://r2.example.com/presigned",
+        "method": "PUT",
+        "headers": {},
+        "expires_in": 300,
+    }
+
+    with patch("app.publish.router.get_storage") as mock_gs:
+        mock_storage = MagicMock()
+        mock_storage.presigned_put.return_value = fake_ticket
+        mock_gs.return_value = mock_storage
+
+        resp = await client.post(
+            "/api/v1/publish/drawings/presign",
+            json={
+                "site_id": str(reg_ctx.site_a.id),
+                "filename": "foundation.pdf",
+                "content_type": "application/pdf",
+            },
+            headers=auth(reg_ctx.owner_a),
+        )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["mode"] == "presigned"
+    assert body["put_url"] == "https://r2.example.com/presigned"
+    assert body["key"].endswith(".pdf")
+    assert body["key"].startswith("drawings/")
+
+
+async def test_presign_out_of_scope_returns_403(client, reg_ctx):
+    """owner_a requesting a presign on site_c (other company) → 403 or 404."""
+    resp = await client.post(
+        "/api/v1/publish/drawings/presign",
+        json={
+            "site_id": str(reg_ctx.site_c.id),
+            "filename": "secret.pdf",
+            "content_type": "application/pdf",
+        },
+        headers=auth(reg_ctx.owner_a),
+    )
+    assert resp.status_code in (403, 404), resp.text
+
+
+async def test_presign_local_storage_returns_unavailable(client, reg_ctx):
+    """When presigned_put raises NotImplementedError → mode='unavailable', status 200."""
+    with patch("app.publish.router.get_storage") as mock_gs:
+        mock_storage = MagicMock()
+        mock_storage.presigned_put.side_effect = NotImplementedError("local has no presign")
+        mock_gs.return_value = mock_storage
+
+        resp = await client.post(
+            "/api/v1/publish/drawings/presign",
+            json={
+                "site_id": str(reg_ctx.site_a.id),
+                "filename": "plan.pdf",
+                "content_type": "application/pdf",
+            },
+            headers=auth(reg_ctx.owner_a),
+        )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["mode"] == "unavailable"
+    assert body["put_url"] is None
+    assert "key" in body

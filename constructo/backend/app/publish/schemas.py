@@ -187,3 +187,24 @@ class DrawingRegisterOut(BaseModel):
     supersedes_id: UUID | None = None
     is_current: bool
     file_url: str
+
+
+class DrawingPresignIn(BaseModel):
+    """Request a short-lived direct-to-R2 upload ticket for a new revision."""
+
+    site_id: UUID
+    filename: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+
+
+class DrawingPresignOut(BaseModel):
+    """Upload ticket response.
+
+    ``mode="presigned"`` — R2 is configured; ``put_url`` is the signed PUT URL.
+    ``mode="unavailable"`` — local storage backend; ``put_url`` is None and the
+    caller should fall back to the server-side upload path. Status is always 200.
+    """
+
+    key: str
+    put_url: str | None
+    mode: str  # Literal["presigned", "unavailable"]

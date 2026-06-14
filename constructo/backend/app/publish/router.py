@@ -11,7 +11,8 @@ the model drafts, the human approves.
 """
 from __future__ import annotations
 
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -61,6 +62,8 @@ from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    DrawingPresignIn,
+    DrawingPresignOut,
     DrawingRegisterOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
@@ -637,6 +640,30 @@ async def drawings_register(
         )
         for r in rows
     ]
+
+
+@router.post("/drawings/presign", response_model=DrawingPresignOut)
+async def drawings_presign(
+    body: DrawingPresignIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DrawingPresignOut:
+    """Mint a short-lived direct-to-R2 upload ticket for a new drawing revision.
+
+    When the storage backend is local (dev / tests) ``presigned_put`` raises
+    ``NotImplementedError``; we return ``mode="unavailable"`` with ``put_url=None``
+    and status 200 so the web app can gracefully fall back to the server-side
+    upload path.
+    """
+    await _assert_site(session, user, body.site_id)
+    suffix = Path(body.filename).suffix
+    key = f"drawings/{body.site_id}/{uuid4().hex}{suffix}"
+    storage = get_storage()
+    try:
+        ticket = storage.presigned_put(key, body.content_type)
+        return DrawingPresignOut(key=ticket["key"], put_url=ticket["url"], mode="presigned")
+    except NotImplementedError:
+        return DrawingPresignOut(key=key, put_url=None, mode="unavailable")
 
 
 # ---- members (contractor view) ---------------------------------------------
