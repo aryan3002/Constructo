@@ -423,6 +423,21 @@ class VisitPhotoPatchIn(BaseModel):
     room_tag: str | None = None
 
 
+class CommentCreateIn(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class CommentOut(BaseModel):
+    id: UUID
+    photo_id: UUID
+    author_name: str | None
+    author_role: str | None
+    body: str
+    created_at: datetime
+    # True when the caller authored it (so the UI can align the bubble).
+    is_mine: bool
+
+
 class RequestOut(BaseModel):
     id: UUID
     site_id: UUID

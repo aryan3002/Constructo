@@ -28,6 +28,7 @@ import type {
   Milestone,
   Paginated,
   Photo,
+  PhotoComment,
   Property,
   QuietPeriod,
   Update,
@@ -138,6 +139,16 @@ export const homeowner = {
     request<Photo>(`/api/v1/homeowner/photos/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ room_tag: roomTag }),
+    }),
+
+  /** The comment thread on a published feed photo (oldest → newest). */
+  photoComments: (photoId: string) =>
+    request<PhotoComment[]>(`/api/v1/homeowner/photos/${photoId}/comments`),
+  /** Add a comment to a published photo. */
+  addPhotoComment: (photoId: string, body: string) =>
+    request<PhotoComment>(`/api/v1/homeowner/photos/${photoId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
     }),
 
   /** Upload a voice note (audio) for an issue/request. The server stores the

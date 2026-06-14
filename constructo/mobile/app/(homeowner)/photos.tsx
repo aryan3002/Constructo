@@ -402,16 +402,18 @@ function ActionBar({ photoId, imageUrl, caption, pinned, onTogglePin, onDismiss,
         <Small color={c.accentDeep}>{s.markUp}</Small>
       </Pressable>
 
-      {/* Comment — honest stub */}
+      {/* Comment — opens the photo's conversation thread */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={s.comment}
-        onPress={() => toast(s.commentSoon, 'message-circle')}
+        onPress={() =>
+          router.push({ pathname: '/(homeowner)/comments', params: { id: photoId, uri: imageUrl } })
+        }
         hitSlop={4}
         style={({ pressed }) => [buttonStyle, { opacity: pressed ? 0.6 : 1, flex: 1 }]}
       >
-        <Feather name="message-circle" size={15} color={c.textMute} />
-        <Small muted>{s.comment}</Small>
+        <Feather name="message-circle" size={15} color={c.accentDeep} />
+        <Small color={c.accentDeep}>{s.comment}</Small>
       </Pressable>
 
       {/* Share */}
@@ -1378,17 +1380,33 @@ export default function Photos() {
                   </View>
                 ) : null}
 
-                {/* Mark up — annotate this photo, then send it to the team */}
-                <Button
-                  title={s.markUp}
-                  variant="secondary"
-                  block
-                  onPress={() => {
-                    const url = active.image_url
-                    setActive(null)
-                    router.push({ pathname: '/(homeowner)/markup', params: { uri: url } })
-                  }}
-                />
+                {/* Mark up + Comment. Comment only on published feed photos
+                    (the homeowner's own visit photos aren't a shared thread). */}
+                <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                  <Button
+                    title={s.markUp}
+                    variant="secondary"
+                    style={{ flex: 1 }}
+                    onPress={() => {
+                      const url = active.image_url
+                      setActive(null)
+                      router.push({ pathname: '/(homeowner)/markup', params: { uri: url } })
+                    }}
+                  />
+                  {tab !== 'mine' ? (
+                    <Button
+                      title={s.comment}
+                      variant="secondary"
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        const id = active.id
+                        const url = active.image_url
+                        setActive(null)
+                        router.push({ pathname: '/(homeowner)/comments', params: { id, uri: url } })
+                      }}
+                    />
+                  ) : null}
+                </View>
 
                 {/* Save / Share / Hide */}
                 <View style={{ flexDirection: 'row', gap: SPACE.sm }}>

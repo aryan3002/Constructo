@@ -55,6 +55,8 @@ from app.homeowner.schemas import (
     CapabilitiesOut,
     ChangeOut,
     ChangesOut,
+    CommentCreateIn,
+    CommentOut,
     ComponentOut,
     ConsistencyCheckIn,
     ConsistencyCheckOut,
@@ -113,6 +115,7 @@ from app.models import (
     MemberStatus,
     Milestone,
     MilestoneStatus,
+    PhotoComment,
     Property,
     PublishedDrawing,
     PublishedPhoto,
@@ -1297,6 +1300,78 @@ async def delete_visit_photo(
         get_storage().delete(key)
     except Exception:
         pass  # best-effort; the DB row is already gone
+
+
+# ── Photo comments (threaded conversation on a published feed photo) ──────────
+
+def _comment_out(c: PhotoComment, caller_member_id: UUID | None) -> CommentOut:
+    return CommentOut(
+        id=c.id,
+        photo_id=c.photo_id,
+        author_name=c.author_name,
+        author_role=c.author_role,
+        body=c.body,
+        created_at=c.created_at,
+        is_mine=c.member_id is not None and c.member_id == caller_member_id,
+    )
+
+
+async def _published_photo_on_site(
+    session: AsyncSession, photo_id: UUID, sid: UUID
+) -> PublishedPhoto:
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None or photo.site_id != sid:
+        raise AppError(404, "not_found", "Photo not found")
+    return photo
+
+
+@router.get("/photos/{photo_id}/comments", response_model=list[CommentOut])
+async def list_photo_comments(
+    photo_id: UUID,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> list[CommentOut]:
+    """The comment thread on a published photo (oldest → newest)."""
+    sid = await resolve_site(session, user, site_id)
+    await _published_photo_on_site(session, photo_id, sid)
+    mid = await _caller_member_id(session, user, sid)
+    rows = (
+        await session.execute(
+            select(PhotoComment)
+            .where(PhotoComment.photo_id == photo_id)
+            .order_by(PhotoComment.created_at)
+        )
+    ).scalars().all()
+    return [_comment_out(c, mid) for c in rows]
+
+
+@router.post("/photos/{photo_id}/comments", response_model=CommentOut, status_code=201)
+async def add_photo_comment(
+    photo_id: UUID,
+    body: CommentCreateIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> CommentOut:
+    """Add a comment to a published photo. Commenting is always open to every
+    active member (authority.py); the author's name + role are snapshotted."""
+    sid = await resolve_site(session, user, site_id)
+    await _published_photo_on_site(session, photo_id, sid)
+    mid = await _caller_member_id(session, user, sid)
+    member = await session.get(HomeownerMember, mid) if mid else None
+    row = PhotoComment(
+        site_id=sid,
+        photo_id=photo_id,
+        member_id=mid,
+        author_name=(member.display_name if member else None) or user.name,
+        author_role=(member.sub_role.value if member and member.sub_role else None),
+        body=body.body.strip(),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _comment_out(row, mid)
 
 
 @router.get("/updates", response_model=Page[UpdateOut])

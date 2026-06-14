@@ -150,3 +150,36 @@ class Change(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class PhotoComment(Base):
+    """A homeowner comment on a published feed photo (threaded conversation).
+
+    The author's name/role are SNAPSHOTTED at write time so the thread stays
+    readable even if the member is later removed ("who said it" is part of the
+    homeowner contract).
+    """
+
+    __tablename__ = "photo_comments"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    site_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=False
+    )
+    photo_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("published_photos.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The author's member row (SET NULL if removed later); name/role snapshotted.
+    member_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("homeowner_members.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    author_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    author_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

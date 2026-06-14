@@ -401,6 +401,17 @@ export interface VoiceNoteOut {
   voice_url: string | null
 }
 
+/** A comment in a photo's thread. `is_mine` aligns the bubble in the UI. */
+export interface PhotoComment {
+  id: string
+  photo_id: string
+  author_name: string | null
+  author_role: string | null
+  body: string
+  created_at: string
+  is_mine: boolean
+}
+
 export interface HomeownerDecision {
   id: string
   site_id: string | null
