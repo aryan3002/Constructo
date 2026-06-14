@@ -97,15 +97,16 @@ export function SiteChangeDrawer({ change, open, onClose }: SiteChangeDrawerProp
     }
   }
 
-  const handleLinkDrawing = async (drawingId: string) => {
+  const handleLinkDrawing = async (drawingId: string, drawingTitle?: string, drawingVersion?: string) => {
     if (!change) return
     setLinkingDrawing(true)
     try {
       await siteChangesApi.update(change.id, { linked_drawing_id: drawingId })
       invalidate()
-      // We need the drawing title+version for the toast — look it up from the picker
-      // The toast shows a generic "Linked." message; the DrawingLinkPicker handles the label
-      show({ status: 'ok', message: t('sitechanges.linked', { title: '', version: '' }).replace(' ', '').trim() !== '' ? t('sitechanges.linked', { title: '—', version: '' }) : t('sitechanges.impact_saved') })
+      const toastMsg = drawingTitle
+        ? t('sitechanges.linked', { title: drawingTitle, version: drawingVersion ?? '' })
+        : t('sitechanges.impact_saved')
+      show({ status: 'ok', message: toastMsg })
     } catch {
       show({ status: 'risk', message: t('sitechanges.error.link') })
     } finally {

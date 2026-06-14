@@ -23,7 +23,7 @@ import type { DrawingRegisterRow } from '../../api/drawings'
 interface DrawingLinkPickerProps {
   siteId: string
   linkedDrawingId: string | null
-  onLink: (drawingId: string) => void
+  onLink: (drawingId: string, title?: string, version?: string) => void
   busy: boolean
 }
 
@@ -48,11 +48,13 @@ export function DrawingLinkPicker({
     ? drawings?.find((d) => d.id === linkedDrawingId)
     : undefined
 
+  const currentDrawings = drawings?.filter((d) => d.is_current) ?? []
+
   const handleLink = () => {
     if (!selected) return
-    onLink(selected)
+    const drawing = currentDrawings.find((d) => d.id === selected)
+    onLink(selected, drawing?.title, drawing?.version)
     setRelinking(false)
-    // Optimistically pre-populate the selected value for future re-links
     setSelected('')
     // The parent's onLink handles cache invalidation
     void qc.invalidateQueries({ queryKey: qk.drawings(siteId) })
@@ -73,8 +75,6 @@ export function DrawingLinkPicker({
       </p>
     )
   }
-
-  const currentDrawings = drawings?.filter((d) => d.is_current) ?? []
 
   // No drawings published yet
   if (!isLoading && currentDrawings.length === 0) {
