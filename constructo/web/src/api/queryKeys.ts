@@ -42,4 +42,6 @@ export const qk = {
   search: (query: string) => ['search', query] as const,
   reports: () => ['reports'] as const,
   drawings: (siteId?: string) => (siteId ? (['drawings', siteId] as const) : (['drawings'] as const)),
+  /** Company-wide documents register (W5 Slice 2b). */
+  companyDocuments: (includeArchived?: boolean) => ['company_documents', !!includeArchived] as const,
 } as const
