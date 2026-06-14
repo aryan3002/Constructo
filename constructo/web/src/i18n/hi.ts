@@ -822,8 +822,9 @@ export const hi: Record<TranslationKey, string> = {
   'documents.archive': 'संग्रहीत करें',
   'documents.restore': 'पुनर्स्थापित करें',
   'documents.show_archived': 'संग्रहीत दिखाएँ',
+  'documents.archived_badge': 'संग्रहीत',
   'documents.no_documents': 'अभी कोई दस्तावेज़ नहीं',
   'documents.notes': 'टिप्पणियाँ',
   'documents.doc_title': 'दस्तावेज़ शीर्षक',
-  'documents.upload_unavailable_doc': 'फ़ाइल स्टोरेज कॉन्फ़िगर नहीं है — अपने प्रशासक से संपर्क करें।',
+  'documents.doc_type_label': 'दस्तावेज़ प्रकार',
 }

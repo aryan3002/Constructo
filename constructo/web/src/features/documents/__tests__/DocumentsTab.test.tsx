@@ -331,6 +331,14 @@ describe('DocumentsTab', () => {
         }),
       )
     })
+
+    // Strict call order: presign → putToR2 → create (no interleaving allowed).
+    expect(mockPresign.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPutToR2.mock.invocationCallOrder[0],
+    )
+    expect(mockPutToR2.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreate.mock.invocationCallOrder[0],
+    )
   })
 
   // -------------------------------------------------------------------------

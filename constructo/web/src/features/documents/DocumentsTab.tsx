@@ -10,7 +10,7 @@
  *   - Archive / Restore per row (optimistic update).
  *   - Add-document form via AddDocument component.
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { documentsApi, type CompanyDocument, type DocType } from '../../api/documents'
 import { qk } from '../../api/queryKeys'
@@ -120,7 +120,7 @@ function DocumentRow({ doc, siteName, canManage, today }: DocumentRowProps) {
 
             {/* Archived badge */}
             {!doc.is_active && (
-              <StatusPill status="info" label={t('documents.show_archived')} size="sm" />
+              <StatusPill status="info" label={t('documents.archived_badge')} size="sm" />
             )}
           </div>
         </div>
@@ -165,7 +165,9 @@ export function DocumentsTab({ canManage }: DocumentsTabProps) {
   const [showAddForm, setShowAddForm] = useState(false)
 
   // Fixed "today" for the entire render so pills are consistent.
-  const today = new Date()
+  // useMemo ensures we don't recreate the Date on every render and avoids
+  // midnight-straddle risk where a re-render crosses midnight.
+  const today = useMemo(() => new Date(), [])
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: qk.companyDocuments(showArchived),
@@ -192,7 +194,7 @@ export function DocumentsTab({ canManage }: DocumentsTabProps) {
   })
 
   function invalidateDocs() {
-    void qc.invalidateQueries({ queryKey: ['company_documents'] })
+    void qc.invalidateQueries({ queryKey: qk.companyDocuments() })
   }
 
   return (

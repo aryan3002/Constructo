@@ -847,10 +847,11 @@ export const en = {
   'documents.archive': 'Archive',
   'documents.restore': 'Restore',
   'documents.show_archived': 'Show archived',
+  'documents.archived_badge': 'Archived',
   'documents.no_documents': 'No documents yet',
   'documents.notes': 'Notes',
   'documents.doc_title': 'Document title',
-  'documents.upload_unavailable_doc': 'File storage is not configured — contact your administrator.',
+  'documents.doc_type_label': 'Document type',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

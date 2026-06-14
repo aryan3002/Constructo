@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { documentsApi, putToR2, type DocType } from '../../api/documents'
+import { qk } from '../../api/queryKeys'
 import { useSites } from '../../api/hooks'
 import { useT, type TranslationKey } from '../../i18n'
 import { Button, Small } from '../../ui'
@@ -77,7 +78,7 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
       })
 
       // Invalidate both archived and non-archived views.
-      void qc.invalidateQueries({ queryKey: ['company_documents'] })
+      void qc.invalidateQueries({ queryKey: qk.companyDocuments() })
       setPhase('idle')
       onDone()
     } catch {
@@ -98,17 +99,13 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
             htmlFor="add-doc-type"
             className="font-body text-small font-semibold text-text-mute"
           >
-            {t('documents.tab_documents')} — {t('documents.doc_type.other').toLowerCase()} …
-          </label>
-          <label htmlFor="add-doc-type" className="sr-only">
-            Type
+            {t('documents.doc_type_label')}
           </label>
           <select
             id="add-doc-type"
             value={docType}
             onChange={(e) => setDocType(e.target.value as DocType)}
             className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Type"
           >
             {DOC_TYPES.map((dt) => (
               <option key={dt} value={dt}>
@@ -216,7 +213,7 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
         {/* Upload unavailable note */}
         {phase === 'unavailable' && (
           <p role="alert" className="font-body text-small text-text-mute">
-            {t('documents.upload_unavailable_doc')}
+            {t('documents.upload_unavailable')}
           </p>
         )}
 
