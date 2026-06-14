@@ -57,6 +57,7 @@ from app.sites.router import router as sites_router
 from app.specs.router import router as specs_router
 from app.survey.router import router as survey_router
 from app.vendor_confirm.router import router as vendor_confirm_router
+from app.documents.router import router as documents_router
 from app.vendors.router import router as vendors_router
 
 
@@ -142,6 +143,7 @@ app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
 app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
 app.include_router(reports_router)  # W5 Slice 1 PDF reports
+app.include_router(documents_router)  # W5 Slice 2b company documents
 if settings.enable_labs:
     app.include_router(dispute_pack_router)  # Phase 3.6 tamper-evident dispute pack
     app.include_router(vendor_confirm_router)  # Phase 3.8 vendor confirm-loop

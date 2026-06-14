@@ -26,6 +26,7 @@ from app.models.chat import (
 )
 from app.models.company import Company
 from app.models.company_billing import CompanyBilling
+from app.models.company_document import CompanyDocument
 from app.models.conversation_member import ConversationMember, MemberRole
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.dpr import Dpr, DprStatus
@@ -134,6 +135,7 @@ __all__ = [
     "ChatMessage",
     "Company",
     "CompanyBilling",
+    "CompanyDocument",
     "CompanyNotificationSettings",
     "Component",
     "ComponentStatus",
