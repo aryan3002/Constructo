@@ -1027,6 +1027,47 @@ export const en = {
   // nav key for the architect's primary tab
   'nav.designer': 'Designer',
 
+  // === intake brief surface (D5) ===
+  'intake.loading': 'Loading design brief…',
+  'intake.error': 'Could not load the design brief.',
+  'intake.unavailable_title': 'Design intake not enabled here',
+  'intake.unavailable_hint':
+    'The design brief has not been set up for this site yet. Check the Selections tab for existing specifications.',
+  'intake.no_brief_title': 'No brief generated yet',
+  'intake.no_brief_hint':
+    'The design profile exists but no brief has been generated. Contact the PM or design coordinator.',
+  'intake.version_chip': 'Brief v{version}',
+  'intake.scope_chip': 'Scope: {scope}',
+  'intake.themes.section_title': 'Design Themes',
+  'intake.themes.loading': 'Loading themes…',
+  'intake.themes.empty': 'No themes proposed for this area yet.',
+  'intake.themes.palette_label': 'Palette',
+  'intake.themes.materials_label': 'Materials',
+  'intake.themes.rationale_label': 'Rationale',
+  'intake.themes.ai_framing':
+    'AI has proposed these themes from contributor preferences. You review and decide.',
+  'intake.decision.approve': 'Approve',
+  'intake.decision.adjust': 'Adjust',
+  'intake.decision.reject': 'Reject',
+  'intake.decision.toast.approved': 'Theme approved.',
+  'intake.decision.toast.adjusted': 'Theme marked for adjustment.',
+  'intake.decision.toast.rejected': 'Theme rejected.',
+  'intake.decision.toast.error': 'Could not save decision.',
+  'intake.materialize.button': 'Materialize to specs',
+  'intake.materialize.confirm_title': 'Create spec lines from brief?',
+  'intake.materialize.confirm_message':
+    'This will propose spec lines from the design brief. You can review and edit them in the Selections tab before releasing.',
+  'intake.materialize.confirm_cta': 'Create specs',
+  'intake.materialize.toast.success': 'Proposed {count} spec line(s) — review them in Selections.',
+  'intake.materialize.toast.error': 'Could not materialize the brief.',
+  'intake.confidence.high': 'High confidence',
+  'intake.confidence.review': 'Review recommended',
+  'intake.confidence.confirm': 'Confirm before use',
+  'intake.status.suggested': 'Proposed',
+  'intake.status.approved': 'Approved',
+  'intake.status.adjusted': 'Adjusted',
+  'intake.status.rejected': 'Rejected',
+
   // === settings appearance (Settings.tsx) ===
   'settings.appearance.title': 'Appearance',
   'settings.appearance.subtitle': 'Choose how the console looks. System follows your device.',

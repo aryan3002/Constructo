@@ -29,9 +29,9 @@ import {
   type Role,
   type SiteSummary,
 } from '../../ui'
-import { EmptyState } from '../../components/states'
 import { Selections } from './Selections'
 import { SiteChanges } from './SiteChanges'
+import { Intake } from './Intake'
 
 // ---------------------------------------------------------------------------
 // Tab IDs
@@ -45,22 +45,6 @@ type TabId = (typeof VALID_TABS)[number]
 
 function isValidTab(s: string | null): s is TabId {
   return VALID_TABS.includes(s as TabId)
-}
-
-// ---------------------------------------------------------------------------
-// Intake placeholder (honest EmptyState, not a dead control)
-// ---------------------------------------------------------------------------
-
-function IntakePlaceholder() {
-  const t = useT()
-  return (
-    <div className="py-6">
-      <EmptyState
-        title={t('designer.intake_coming')}
-        hint={t('designer.intake_coming_hint')}
-      />
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +158,7 @@ export function DesignerWorkspace() {
           hidden={activeTab !== TAB_INTAKE}
           className="focus-visible:outline-none"
         >
-          {activeTab === TAB_INTAKE && <IntakePlaceholder />}
+          {activeTab === TAB_INTAKE && <Intake siteId={effectiveSiteId} />}
         </div>
       </div>
     </AppShell>

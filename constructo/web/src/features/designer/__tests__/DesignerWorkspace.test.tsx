@@ -37,6 +37,12 @@ vi.mock('../SiteChanges', () => ({
   ),
 }))
 
+vi.mock('../Intake', () => ({
+  Intake: ({ siteId }: { siteId?: string }) => (
+    <div data-testid="intake-surface">Intake (siteId={siteId})</div>
+  ),
+}))
+
 // ---------------------------------------------------------------------------
 // Mock useMeRole → architect
 // ---------------------------------------------------------------------------
@@ -167,7 +173,7 @@ describe('DesignerWorkspace (D4)', () => {
   // 4. Clicking "Intake" shows the placeholder
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('clicking "Intake" shows the intake placeholder', async () => {
+  it('clicking "Intake" shows the Intake surface', async () => {
     renderWorkspace()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Intake' }))
@@ -177,10 +183,8 @@ describe('DesignerWorkspace (D4)', () => {
       'true',
     )
 
-    // Placeholder text from i18n
-    expect(
-      screen.getByText('Design intake — coming in this workspace'),
-    ).toBeInTheDocument()
+    // Intake surface rendered (mocked)
+    expect(screen.getByTestId('intake-surface')).toBeInTheDocument()
   })
 
   // ─────────────────────────────────────────────────────────────────────────

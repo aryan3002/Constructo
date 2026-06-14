@@ -1002,6 +1002,48 @@ export const hi: Record<TranslationKey, string> = {
   // nav key for the architect's primary tab
   'nav.designer': 'डिज़ाइनर',
 
+  // === intake brief surface (D5) ===
+  'intake.loading': 'डिज़ाइन ब्रीफ़ लोड हो रही है…',
+  'intake.error': 'डिज़ाइन ब्रीफ़ लोड नहीं हो सकी।',
+  'intake.unavailable_title': 'यहाँ डिज़ाइन इनटेक सक्रिय नहीं है',
+  'intake.unavailable_hint':
+    'इस साइट के लिए डिज़ाइन ब्रीफ़ अभी तैयार नहीं है। मौजूदा स्पेसिफ़िकेशन के लिए चयन टैब देखें।',
+  'intake.no_brief_title': 'अभी कोई ब्रीफ़ नहीं बनी है',
+  'intake.no_brief_hint':
+    'डिज़ाइन प्रोफ़ाइल मौजूद है लेकिन अभी तक कोई ब्रीफ़ नहीं बनाई गई। PM या डिज़ाइन को-ऑर्डिनेटर से संपर्क करें।',
+  'intake.version_chip': 'ब्रीफ़ v{version}',
+  'intake.scope_chip': 'दायरा: {scope}',
+  'intake.themes.section_title': 'डिज़ाइन थीम',
+  'intake.themes.loading': 'थीम लोड हो रही हैं…',
+  'intake.themes.empty': 'इस क्षेत्र के लिए अभी कोई थीम प्रस्तावित नहीं है।',
+  'intake.themes.palette_label': 'रंग-पट्टी',
+  'intake.themes.materials_label': 'सामग्री',
+  'intake.themes.rationale_label': 'तर्क',
+  'intake.themes.ai_framing':
+    'AI ने कंट्रीब्यूटर की प्राथमिकताओं के आधार पर ये थीम प्रस्तावित की हैं। आप समीक्षा करें और निर्णय लें।',
+  'intake.decision.approve': 'मंज़ूर करें',
+  'intake.decision.adjust': 'संशोधित करें',
+  'intake.decision.reject': 'अस्वीकार करें',
+  'intake.decision.toast.approved': 'थीम मंज़ूर हुई।',
+  'intake.decision.toast.adjusted': 'थीम संशोधन के लिए चिह्नित।',
+  'intake.decision.toast.rejected': 'थीम अस्वीकार हुई।',
+  'intake.decision.toast.error': 'निर्णय सहेजा नहीं जा सका।',
+  'intake.materialize.button': 'स्पेक में बदलें',
+  'intake.materialize.confirm_title': 'ब्रीफ़ से स्पेक लाइनें बनाएँ?',
+  'intake.materialize.confirm_message':
+    'यह डिज़ाइन ब्रीफ़ से स्पेक लाइनें प्रस्तावित करेगा। रिलीज़ से पहले आप इन्हें चयन टैब में देख और संपादित कर सकते हैं।',
+  'intake.materialize.confirm_cta': 'स्पेक बनाएँ',
+  'intake.materialize.toast.success':
+    '{count} स्पेक लाइन(ें) प्रस्तावित हुईं — चयन टैब में समीक्षा करें।',
+  'intake.materialize.toast.error': 'ब्रीफ़ को स्पेक में नहीं बदला जा सका।',
+  'intake.confidence.high': 'उच्च विश्वास',
+  'intake.confidence.review': 'समीक्षा अनुशंसित',
+  'intake.confidence.confirm': 'उपयोग से पहले पुष्टि करें',
+  'intake.status.suggested': 'प्रस्तावित',
+  'intake.status.approved': 'मंज़ूर',
+  'intake.status.adjusted': 'संशोधित',
+  'intake.status.rejected': 'अस्वीकार',
+
   // === settings appearance (Settings.tsx) ===
   'settings.appearance.title': 'दिखावट',
   'settings.appearance.subtitle': 'कंसोल कैसा दिखे यह चुनें। सिस्टम आपके डिवाइस का अनुसरण करता है।',

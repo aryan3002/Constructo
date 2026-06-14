@@ -53,4 +53,11 @@ export const qk = {
     ['site_changes', opts?.siteId ?? null, opts?.status ?? null] as const,
   /** Single site change detail (D3). */
   siteChange: (id: string) => ['site_change', id] as const,
+  /** Design-profiler: most recent profile for a site (D5). */
+  designProfile: (siteId: string) => ['design_profile', siteId] as const,
+  /** Design-profiler: architect brief rendering for a profile (D5). */
+  designBrief: (profileId: string) => ['design_brief', profileId] as const,
+  /** Design-profiler: themes for one area (D5). */
+  designThemes: (profileId: string, areaId: string) =>
+    ['design_themes', profileId, areaId] as const,
 } as const
