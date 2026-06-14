@@ -14,6 +14,7 @@ Both endpoints:
 """
 from __future__ import annotations
 
+from datetime import date as Date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -64,7 +65,7 @@ async def _audit(
     scope: str,
     date_range: str,
 ) -> None:
-    """Write one append-only ReportExport row and flush it within the request session."""
+    """Write one append-only ReportExport row and commit/persist it within the request session."""
     session.add(
         ReportExport(
             company_id=company_id,
@@ -86,7 +87,7 @@ async def _audit(
 @router.get("/dpr.pdf")
 async def dpr_pdf(
     site_id: UUID,
-    date: str,
+    date: Date,
     user: User = Depends(require_role(UserRole.owner, UserRole.accountant, UserRole.pm)),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
@@ -97,8 +98,9 @@ async def dpr_pdf(
     Audit: one ReportExport row per call.
     """
     await _require_site_in_scope(session, user, site_id)
-    data = await builders.build_dpr_pack(session, site_id=site_id, on_date=date)
+    data = await builders.build_dpr_pack(session, site_id=site_id, on_date=date.isoformat())
     content = pdf.render("dpr_pack.html", data)
+    date_str = date.isoformat()
     await _audit(
         session,
         company_id=user.company_id,
@@ -106,21 +108,21 @@ async def dpr_pdf(
         kind="dpr_pack",
         fmt="pdf",
         scope=str(site_id),
-        date_range=date,
+        date_range=date_str,
     )
     return Response(
         content=content,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="dpr-{site_id}-{date}.pdf"'
+            "Content-Disposition": f'attachment; filename="dpr-{site_id}-{date_str}.pdf"'
         },
     )
 
 
 @router.get("/progress.pdf")
 async def progress_pdf(
-    date_from: str,
-    date_to: str,
+    date_from: Date,
+    date_to: Date,
     site_id: UUID | None = Query(default=None),
     user: User = Depends(require_role(UserRole.owner, UserRole.accountant)),
     session: AsyncSession = Depends(get_session),
@@ -137,8 +139,8 @@ async def progress_pdf(
         session,
         company_id=user.company_id,
         site_id=site_id,
-        date_from=date_from,
-        date_to=date_to,
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
     )
     content = pdf.render("progress.html", data)
     await _audit(
@@ -148,7 +150,7 @@ async def progress_pdf(
         kind="progress",
         fmt="pdf",
         scope=str(site_id or "all"),
-        date_range=f"{date_from}..{date_to}",
+        date_range=f"{date_from.isoformat()}..{date_to.isoformat()}",
     )
     return Response(
         content=content,

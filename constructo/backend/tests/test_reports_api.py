@@ -144,3 +144,13 @@ async def test_dpr_pdf_cross_company_site_rejected(client, setup, factory, db_se
         headers=_tok(owner),
     )
     assert r.status_code in (403, 404)
+
+
+async def test_dpr_pdf_bad_date_returns_422(client, setup):
+    """A malformed date value yields 422 (FastAPI validation) not 500."""
+    _, owner, _, _, site = setup
+    r = await client.get(
+        f"/api/v1/reports/dpr.pdf?site_id={site.id}&date=notadate",
+        headers=_tok(owner),
+    )
+    assert r.status_code == 422
