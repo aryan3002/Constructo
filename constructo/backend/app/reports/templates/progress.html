@@ -24,6 +24,8 @@
     <!-- stage line -->
     <div class="site-header__meta" style="margin-top: 5pt;">
       {% if s.stage and s.stage.stage_index is defined %}
+        {# Forward-compat: stage_index/stage_total/variance_days light up once
+           SiteBaseline gains stage columns. Kept so the template is ready. #}
         Stage {{ s.stage.stage_index }} of {{ s.stage.stage_total }}
         &nbsp;·&nbsp;
         {% if s.stage.variance_days > 0 %}
@@ -35,6 +37,10 @@
         {% endif %}
       {% else %}
         <span class="empty">Stages not set — no baseline configured.</span>
+        &nbsp;·&nbsp;
+        {{ s.stage.progress_updates | default(0) }} progress update(s)
+        &nbsp;·&nbsp;
+        {{ s.stage.issues | default(0) }} issue(s) this period
       {% endif %}
       {% if s.expected_headcount is not none %}
         &nbsp;·&nbsp; Expected headcount: <strong>{{ s.expected_headcount }}</strong>

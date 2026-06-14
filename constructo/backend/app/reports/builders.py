@@ -277,7 +277,13 @@ async def build_progress(
             baselines_by_site.get(site.id),
         )
 
-        # Extract progress pulse facts (stage/variance live there)
+        # Extract progress pulse facts from the dashboard "progress" tile.
+        # The facts dict contains: {"progress_updates": int, "issues": int}.
+        # stage_index / stage_total / variance_days are forward-compat fields
+        # that no part of the system emits yet (SiteBaseline has no stage
+        # columns); the template guards them with `if s.stage.stage_index is
+        # defined` so they light up automatically once baseline gains those
+        # fields without any change here.
         progress_pulse = next(
             (t for t in card.get("pulse", []) if t["kind"] == "progress"),
             None,

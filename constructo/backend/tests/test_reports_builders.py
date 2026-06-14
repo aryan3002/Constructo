@@ -246,6 +246,55 @@ async def test_build_progress_filters_to_single_site(db_session, factory):
     assert result["sites"][0]["name"] == "Site X"
 
 
+async def test_build_progress_stage_carries_real_pulse_facts(db_session, factory):
+    """For a site with no SiteBaseline, stage must contain the real progress
+    pulse keys (progress_updates and issues) that build_site_card actually emits,
+    not forward-compat stage_index/stage_total fields that nothing emits yet."""
+    from app.reports.builders import build_progress
+
+    company = await factory.company(name="Pulse Facts Co")
+    site = await factory.site(company, name="No-Baseline Site")
+
+    # Seed two progress_update events and one issue event on the snapshot date
+    await _add_event(
+        db_session, site.id, EventType.progress_update, summary="Column casting done"
+    )
+    await _add_event(
+        db_session, site.id, EventType.progress_update, summary="Slab reinforcement laid"
+    )
+    await _add_event(
+        db_session, site.id, EventType.issue, summary="Water pump broke"
+    )
+    await db_session.flush()
+
+    result = await build_progress(
+        db_session,
+        company.id,
+        site_id=site.id,
+        date_from="2026-06-10",
+        date_to="2026-06-10",
+    )
+
+    assert len(result["sites"]) == 1
+    stage = result["sites"][0]["stage"]
+
+    # The real contract: progress pulse facts contain these two keys
+    assert "progress_updates" in stage, (
+        f"stage dict is missing 'progress_updates'; got keys: {list(stage.keys())}"
+    )
+    assert "issues" in stage, (
+        f"stage dict is missing 'issues'; got keys: {list(stage.keys())}"
+    )
+    # Values must match what we seeded
+    assert stage["progress_updates"] == 2
+    assert stage["issues"] == 1
+
+    # Forward-compat fields must NOT be present (nothing emits them yet)
+    assert "stage_index" not in stage
+    assert "stage_total" not in stage
+    assert "variance_days" not in stage
+
+
 async def test_build_progress_money_strings_not_numbers(db_session, factory):
     """money values in build_progress must be strings (tracking display, not numbers)."""
     from app.reports.builders import build_progress

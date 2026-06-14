@@ -190,6 +190,33 @@ def test_render_dpr_pack_no_stage_baseline():
     assert len(pdf) > 800
 
 
+def test_render_dpr_pack_missing_work_done_and_blockers_keys():
+    """dpr_pack.html must not crash when sections lacks work_done and blockers.
+
+    A stored DPR whose sections JSONB was saved without those top-level keys
+    previously raised Jinja UndefinedError. After the guard fix it must render
+    a valid PDF with the empty-state fallbacks instead.
+    """
+    from app.reports.pdf import render
+
+    data = {
+        "company": {"name": "Sparse DPR Co", "gstin": None, "address": None},
+        "site": {"name": "Sparse Site", "id": "00000000-0000-0000-0000-000000000088"},
+        "date": "2026-06-10",
+        "status": "draft",
+        "sections": {
+            # work_done and blockers are intentionally absent
+            "labor": {"headcount": 5, "entries": []},
+            "materials": {"deliveries": []},
+            "next": {"items": ["Check pump"]},
+            "summary": "Partial DPR with no work_done or blockers keys.",
+        },
+    }
+    pdf = render("dpr_pack.html", data)
+    assert pdf[:5] == b"%PDF-", "Must produce a valid PDF even without work_done/blockers"
+    assert len(pdf) > 500
+
+
 def test_render_progress_stage_not_set():
     """Progress report renders 'stages not set' when stage facts are empty."""
     from app.reports.pdf import render

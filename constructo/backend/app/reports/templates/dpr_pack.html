@@ -87,7 +87,7 @@
 {% endif %}
 
 <!-- 3. WORK DONE -->
-{% set work_items = sections["work_done"]["items"] %}
+{% set work_items = sections["work_done"]["items"] if sections["work_done"] is defined and sections["work_done"] else [] %}
 <h2>Work Done</h2>
 {% if work_items %}
 <table>
@@ -105,7 +105,7 @@
 {% endif %}
 
 <!-- 4. BLOCKERS -->
-{% set blocker_items = sections["blockers"]["items"] %}
+{% set blocker_items = sections["blockers"]["items"] if sections["blockers"] is defined and sections["blockers"] else [] %}
 <h2>Blockers</h2>
 {% if blocker_items %}
 <table>
