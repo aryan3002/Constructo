@@ -7,9 +7,9 @@ Create Date: 2026-06-14 09:36:41.284570
 """
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'aa7fc0979f57'
@@ -31,7 +31,14 @@ def upgrade() -> None:
         sa.Column('notes', sa.Text(), nullable=True),
         sa.Column('is_active', sa.Boolean(), server_default='true', nullable=False),
         sa.Column('created_by', sa.UUID(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column(
+            'created_at',
+            sa.DateTime(timezone=True),
+            server_default=sa.text('now()'),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['site_id'], ['sites.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
     )
     op.create_index(
