@@ -997,8 +997,6 @@ export const hi: Record<TranslationKey, string> = {
   'designer.tab.selections': 'चयन',
   'designer.tab.site_changes': 'साइट परिवर्तन',
   'designer.tab.intake': 'इनटेक',
-  'designer.intake_coming': 'डिज़ाइन इनटेक — इस वर्कस्पेस में आ रहा है',
-  'designer.intake_coming_hint': 'पूरी इनटेक ब्रीफ़ सतह (D5) यहाँ आएगी। जल्द आ रहा है।',
   // nav key for the architect's primary tab
   'nav.designer': 'डिज़ाइनर',
 

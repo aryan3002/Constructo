@@ -365,7 +365,8 @@ export const designApi = {
 
   /**
    * GET /api/v1/design/profiles/{profileId}/areas/{areaId}/themes
-   * Returns the theme list for one area.
+   * Returns the theme list for one area, or [] on 404 (area has no themes yet /
+   * partial Labs state). Throws on other errors.
    */
   async themesForArea(profileId: string, areaId: string): Promise<DesignTheme[]> {
     if (USE_MOCKS) {
@@ -373,9 +374,14 @@ export const designApi = {
       const themes = Array.from(_mockThemes.values()).filter((t) => t.area_id === areaId)
       return Promise.resolve(themes.map((t) => ({ ...t })))
     }
-    return call<DesignTheme[]>(
-      `/api/v1/design/profiles/${encodeURIComponent(profileId)}/areas/${encodeURIComponent(areaId)}/themes`
-    )
+    try {
+      return await call<DesignTheme[]>(
+        `/api/v1/design/profiles/${encodeURIComponent(profileId)}/areas/${encodeURIComponent(areaId)}/themes`
+      )
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return []
+      throw err
+    }
   },
 
   /**

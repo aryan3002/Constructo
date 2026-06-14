@@ -256,6 +256,7 @@ function AreaThemesSection({
 interface BriefBodyProps {
   profile: DesignProfile
   briefId: string
+  siteId: string
   narrative: {
     headline: string
     summary: string
@@ -265,7 +266,7 @@ interface BriefBodyProps {
   canDecide: boolean
 }
 
-function BriefBody({ profile, briefId, narrative, version, canDecide }: BriefBodyProps) {
+function BriefBody({ profile, briefId, siteId, narrative, version, canDecide }: BriefBodyProps) {
   const t = useT()
   const qc = useQueryClient()
   const { show } = useToast()
@@ -311,8 +312,8 @@ function BriefBody({ profile, briefId, narrative, version, canDecide }: BriefBod
         status: 'ok' as const,
       })
       // Invalidate specs so Selections reflects new lines
-      qc.invalidateQueries({ queryKey: ['specs'] })
-      qc.invalidateQueries({ queryKey: ['spec_desk'] })
+      qc.invalidateQueries({ queryKey: qk.specs(siteId) })
+      qc.invalidateQueries({ queryKey: qk.specDesk(siteId) })
     },
     onError: () => {
       setShowMaterialize(false)
@@ -539,6 +540,7 @@ export function Intake({ siteId }: IntakeProps) {
       <BriefBody
         profile={profile}
         briefId={brief.brief_id}
+        siteId={siteId}
         narrative={brief.narrative}
         version={brief.version}
         canDecide={canDecide}

@@ -1022,8 +1022,6 @@ export const en = {
   'designer.tab.selections': 'Selections',
   'designer.tab.site_changes': 'Site changes',
   'designer.tab.intake': 'Intake',
-  'designer.intake_coming': 'Design intake — coming in this workspace',
-  'designer.intake_coming_hint': 'The full intake brief surface (D5) will appear here. Coming soon.',
   // nav key for the architect's primary tab
   'nav.designer': 'Designer',
 
