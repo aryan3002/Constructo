@@ -71,6 +71,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Install WeasyPrint system libs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libcairo2 libffi8
+
       - name: Run database migrations
         run: uv run alembic upgrade head
 
