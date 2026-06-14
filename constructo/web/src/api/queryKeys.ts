@@ -40,4 +40,5 @@ export const qk = {
   /** Company notification & SLA settings (Setup & Admin, W4.7). */
   notificationSettings: () => ['notifications', 'settings'] as const,
   search: (query: string) => ['search', query] as const,
+  reports: () => ['reports'] as const,
 } as const
