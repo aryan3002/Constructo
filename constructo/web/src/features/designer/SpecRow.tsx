@@ -11,13 +11,14 @@ import type { DeskLine, RoutingStatus } from '../../api/specs'
 import type { Status } from '../../ui'
 import { useT } from '../../i18n'
 import type { TFunction } from '../../i18n'
+import { formatRupees } from '../../lib/money'
 
-/** ₹ with Indian grouping; em-dash for null/invalid. */
+/** Null-safe ₹ formatter: em-dash for missing/non-finite values. */
 function inr(value: string | null | undefined): string {
   if (value == null) return '—'
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  return formatRupees(n)
 }
 
 const ROUTING_STATUS_PILL: Record<RoutingStatus, { status: Status; labelKey: 'selections.status.draft' | 'selections.status.out_for_approval' | 'selections.status.approved' | 'selections.status.released' | 'selections.status.returned' }> = {

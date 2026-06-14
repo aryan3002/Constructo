@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -491,7 +491,7 @@ describe('Selections cockpit (D2)', () => {
     await screen.findByText('Vitrified Tile')
 
     // ↓ should move to first line (s1 selected)
-    press('ArrowDown')
+    await act(async () => { press('ArrowDown') })
 
     // The first row (s1) should get aria-selected="true"
     await waitFor(() => {
@@ -500,21 +500,21 @@ describe('Selections cockpit (D2)', () => {
     })
 
     // ↓ again → s2 selected
-    press('ArrowDown')
+    await act(async () => { press('ArrowDown') })
     await waitFor(() => {
       const row = screen.getByTestId('spec-row-s2')
       expect(row).toHaveAttribute('aria-selected', 'true')
     })
 
     // ↑ back to s1
-    press('ArrowUp')
+    await act(async () => { press('ArrowUp') })
     await waitFor(() => {
       const row = screen.getByTestId('spec-row-s1')
       expect(row).toHaveAttribute('aria-selected', 'true')
     })
 
     // Enter → open drawer for s1
-    press('Enter')
+    await act(async () => { press('Enter') })
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText(/Vitrified Tile/i, { selector: 'h2' })).toBeInTheDocument()
   })
@@ -569,5 +569,60 @@ describe('Selections cockpit (D2)', () => {
     const dialog = await screen.findByRole('dialog')
 
     expect(within(dialog).getByRole('button', { name: /Route to owner/i })).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 11. Return action (owner): open drawer → Return → confirm → specsApi.approve({status:'rejected'}) + toast
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('owner can return an out_for_approval spec (Return → confirm → toast)', async () => {
+    mockUseMeRole.mockReturnValue('owner' as string | undefined)
+    mockApprove.mockResolvedValue({ id: 's2', routing_status: 'returned' })
+    renderSelections()
+    await screen.findByText('Decorative Panel')
+
+    // Open s2 (out_for_approval)
+    await userEvent.click(screen.getByTestId('spec-row-s2'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Click the Return button
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Return$/i }))
+
+    // Confirm dialog appears (title: "Return to designer")
+    const confirmDialog = await screen.findByRole('dialog', { name: /Return to designer/i })
+    expect(confirmDialog).toBeInTheDocument()
+
+    // Confirm the return (CTA: "Return for revision")
+    await userEvent.click(within(confirmDialog).getByRole('button', { name: /Return for revision/i }))
+
+    // specsApi.approve called with { status: 'rejected' }
+    await waitFor(() =>
+      expect(mockApprove).toHaveBeenCalledWith('s2', { status: 'rejected' }),
+    )
+
+    // Toast message visible
+    await waitFor(() =>
+      expect(screen.getByText(/Selection returned for revision/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 12. pm-role: out_for_approval → "Awaiting owner" calm state, NO Approve button (WC4 invariant)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('pm sees "Awaiting owner sign-off" for an out_for_approval spec (no Approve button)', async () => {
+    mockUseMeRole.mockReturnValue('pm' as string | undefined)
+    renderSelections()
+    await screen.findByText('Decorative Panel')
+
+    // Open s2 (out_for_approval)
+    await userEvent.click(screen.getByTestId('spec-row-s2'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Awaiting text visible
+    expect(within(dialog).getByText(/Awaiting owner sign-off/i)).toBeInTheDocument()
+
+    // No Approve button
+    expect(within(dialog).queryByRole('button', { name: /^Approve$/i })).not.toBeInTheDocument()
   })
 })

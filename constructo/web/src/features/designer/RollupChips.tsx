@@ -8,13 +8,14 @@
 import { Mono, Small, StatusPill } from '../../ui'
 import type { DeskOut } from '../../api/specs'
 import { useT } from '../../i18n'
+import { formatRupees } from '../../lib/money'
 
-/** ₹ with Indian (lakh/crore) grouping; em-dash for missing. */
+/** Null-safe ₹ formatter: em-dash for missing/non-finite values. */
 function inr(value: string | null | undefined): string {
   if (value == null) return '—'
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  return formatRupees(n)
 }
 
 export function RollupChips({ desk }: { desk: DeskOut }) {

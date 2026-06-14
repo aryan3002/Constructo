@@ -31,6 +31,7 @@ import { Spinner, ErrorState, EmptyState } from '../../components/states'
 import { useT } from '../../i18n'
 import { H1, H2, Small, Mono } from '../../ui'
 import { useCockpitKeys } from '../reconcile/useCockpitKeys'
+import { formatRupees } from '../../lib/money'
 import { RollupChips } from './RollupChips'
 import { SpecRow } from './SpecRow'
 import { SelectionDrawer } from './SelectionDrawer'
@@ -39,11 +40,12 @@ import { SelectionDrawer } from './SelectionDrawer'
 // ₹ helper (for room subtotals in the section header)
 // ---------------------------------------------------------------------------
 
+/** Null-safe ₹ formatter: returns em-dash for missing/non-finite values. */
 function inr(value: string | null | undefined): string {
   if (value == null) return '—'
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  return formatRupees(n)
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +206,7 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
               <Small className="!text-text-mute">{t('selections.kbd_hint')}</Small>
 
               {/* Room-grouped master list */}
-              <div className="space-y-6" role="grid" aria-label={t('selections.title')}>
+              <div className="space-y-6" role="region" aria-label={t('selections.title')}>
                 {desk.data.rooms.map((room) => (
                   <section
                     key={room.room}
@@ -228,13 +230,11 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
                     <div className="overflow-x-auto">
                       <table
                         className="w-full text-left"
-                        role="rowgroup"
                         aria-label={room.room}
                       >
                         <thead>
                           <tr
                             className="border-b border-line text-text-mute"
-                            role="row"
                           >
                             <th
                               scope="col"

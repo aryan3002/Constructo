@@ -32,17 +32,18 @@ import { qk } from '../../api/queryKeys'
 import { useT } from '../../i18n'
 import type { TFunction } from '../../i18n'
 import type { Role } from '../../api/auth'
+import { formatRupees } from '../../lib/money'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** ₹ Indian grouping; em-dash for null. */
+/** Null-safe ₹ formatter: em-dash for missing/non-finite values. */
 function inr(value: string | null | undefined): string {
   if (value == null) return '—'
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  return formatRupees(n)
 }
 
 /** Human-readable short date from ISO string. */
