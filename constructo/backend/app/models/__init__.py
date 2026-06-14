@@ -102,6 +102,7 @@ from app.models.profiler import (
 )
 from app.models.push_token import PushToken
 from app.models.raw_message import RawMessageModel
+from app.models.report_export import ReportExport
 from app.models.site import Site
 from app.models.site_baseline import SiteBaseline
 from app.models.site_change import SiteChange, SiteChangeStatus
@@ -181,6 +182,7 @@ __all__ = [
     "QuietPeriod",
     "QuietStatus",
     "RawMessageModel",
+    "ReportExport",
     "ReferenceSource",
     # Design Profiler engine
     "AreaKind",
