@@ -24,7 +24,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
-import { design, homeowner } from '../../src/api/client'
+import { ApiError, design, homeowner } from '../../src/api/client'
 import type { DesignSelection, Drawing } from '../../src/api/types'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -269,7 +269,11 @@ function DPHubSection({ profileId }: { profileId?: string }) {
     )
   }
 
-  if (q.isError || propQ.isError) {
+  // A 404 from the profiler means the designer hasn't started this home's design
+  // profile yet — a calm "on its way" state, NOT an error. Only genuine failures
+  // (network / 500 / the property lookup) show the retry card.
+  const notStarted = q.isError && (q.error as ApiError | null)?.status === 404
+  if (propQ.isError || (q.isError && !notStarted)) {
     return (
       <Card padded>
         <BodyStrong style={{ color: c.warn }}>Couldn't load design profile</BodyStrong>
@@ -279,6 +283,23 @@ function DPHubSection({ profileId }: { profileId?: string }) {
           size="md"
           onPress={() => void q.refetch()}
         />
+      </Card>
+    )
+  }
+
+  if (notStarted) {
+    return (
+      <Card padded>
+        <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+          <Feather name="feather" size={18} color={c.accent} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1, gap: SPACE.xs }}>
+            <BodyStrong>Your design profile is on its way</BodyStrong>
+            <Small muted>
+              Your designer will set up your style ranking here. You’ll rank what you love and
+              we’ll turn it into a clear brief — nothing for you to do yet.
+            </Small>
+          </View>
+        </View>
       </Card>
     )
   }

@@ -19,7 +19,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 
-import { design, homeowner } from '../../../src/api/client'
+import { ApiError, design, homeowner } from '../../../src/api/client'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../src/theme/tokens'
 import {
@@ -180,7 +180,7 @@ export default function ProfilerHubScreen() {
           <Small muted>Loading design profile…</Small>
         </Card>
       )}
-      {(q.isError || propQ.isError) && (
+      {(propQ.isError || (q.isError && (q.error as ApiError | null)?.status !== 404)) && (
         <FadeInUp>
           <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
             <Eyebrow style={{ color: c.warn }}>Could not load</Eyebrow>
@@ -191,6 +191,24 @@ export default function ProfilerHubScreen() {
               size="md"
               onPress={() => void q.refetch()}
             />
+          </Card>
+        </FadeInUp>
+      )}
+
+      {/* No profiler profile yet → the designer hasn't started it; calm, not an error. */}
+      {q.isError && (q.error as ApiError | null)?.status === 404 && (
+        <FadeInUp>
+          <Card padded>
+            <View style={{ flexDirection: 'row', gap: SPACE.md, alignItems: 'flex-start' }}>
+              <Feather name="feather" size={18} color={c.accent} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: SPACE.xs }}>
+                <BodyStrong>Your design profile is on its way</BodyStrong>
+                <Small muted>
+                  Your designer will set up your style ranking here. You’ll rank what you love and
+                  we’ll turn it into a clear brief — nothing for you to do yet.
+                </Small>
+              </View>
+            </View>
           </Card>
         </FadeInUp>
       )}
