@@ -75,11 +75,7 @@ async def _audit(
             date_range=date_range,
         )
     )
-    # flush so the row is visible in the same session (tests use savepoint rollback),
-    # but do not commit the outer transaction — that matches what the test fixtures
-    # expect (join_transaction_mode="create_savepoint" turns commit into savepoint
-    # release so reads within the same session see the row).
-    await session.flush()
+    await session.commit()
 
 
 # ---------------------------------------------------------------------------
