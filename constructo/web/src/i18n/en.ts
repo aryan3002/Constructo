@@ -790,6 +790,17 @@ export const en = {
   'reports.empty': 'No data in range.',
   'reports.generating': 'Generating…',
   'reports.otp_required': 'Enter OTP to export',
+  'reports.otp_label': 'Verification code',
+  'reports.otp_prompt': 'Enter the code sent to you',
+  'reports.otp_verify': 'Verify & export',
+  'reports.otp_bad': 'That code did not work — try again.',
+  'reports.otp_error': 'Could not export. Try again.',
+  'reports.no_sites': 'No sites',
+  'reports.site_label': 'Site',
+  'reports.date_label': 'Date',
+  'reports.from_label': 'From',
+  'reports.to_label': 'To',
+  'reports.error': 'Could not generate report.',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.
