@@ -116,6 +116,13 @@ class DeskLine(BaseModel):
     line_total: Decimal | None  # costing.line_total(qty, unit_rate, wastage_pct)
     approval_status: SpecApprovalStatus
     client_final_code: str | None
+    # Designer selection lifecycle — derived + raw stamps so the cockpit can
+    # display the full state without a second call per line.
+    routing_status: RoutingStatus
+    sent_at: datetime | None
+    released_at: datetime | None
+    notes: str | None
+    material_id: UUID | None
 
 
 class DeskRoom(BaseModel):

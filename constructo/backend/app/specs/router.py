@@ -31,6 +31,7 @@ from app.specs.schemas import (
     SpecCreate,
     SpecOut,
     SpecUpdate,
+    _routing_status,
 )
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
@@ -167,6 +168,11 @@ async def spec_desk(
             line_total=lt,
             approval_status=spec.approval_status,
             client_final_code=spec.client_final_code,
+            routing_status=_routing_status(spec.approval_status, spec.sent_at, spec.released_at),
+            sent_at=spec.sent_at,
+            released_at=spec.released_at,
+            notes=spec.notes,
+            material_id=spec.material_id,
         )
         bucket = rooms_map.setdefault(
             space_name,
