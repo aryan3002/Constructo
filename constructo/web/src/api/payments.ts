@@ -57,28 +57,6 @@ export interface Financials {
   currency: string
 }
 
-export interface FinancialsUpdate {
-  quotation_amount?: string | null
-  billed_amount?: string | null
-  currency?: string
-}
-
-export interface CreatePaymentRequest {
-  direction: PaymentDirection
-  counterparty_name: string
-  amount: string | number
-  paid_on: string
-  site_id?: string | null
-  currency?: string
-  method?: string | null
-  reference_no?: string | null
-  status?: PaymentStatus
-  notes?: string | null
-  source_event_id?: string | null
-}
-
-export type UpdatePaymentRequest = Partial<CreatePaymentRequest>
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
@@ -211,34 +189,4 @@ export const paymentsApi = {
     )
   },
 
-  setFinancials(siteId: string, body: FinancialsUpdate): Promise<Financials> {
-    return request<Financials>(
-      `/api/v1/payments/financials/${encodeURIComponent(siteId)}`,
-      { method: 'PUT', body: JSON.stringify(body) },
-    )
-  },
-
-  get(id: string): Promise<Payment> {
-    return request<Payment>(`/api/v1/payments/${id}`)
-  },
-
-  create(body: CreatePaymentRequest): Promise<Payment> {
-    return request<Payment>('/api/v1/payments', {
-      method: 'POST',
-      body: JSON.stringify({ ...body, amount: String(body.amount) }),
-    })
-  },
-
-  update(id: string, body: UpdatePaymentRequest): Promise<Payment> {
-    const payload: Record<string, unknown> = { ...body }
-    if (body.amount != null) payload.amount = String(body.amount)
-    return request<Payment>(`/api/v1/payments/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    })
-  },
-
-  remove(id: string): Promise<void> {
-    return request<void>(`/api/v1/payments/${id}`, { method: 'DELETE' })
-  },
 }

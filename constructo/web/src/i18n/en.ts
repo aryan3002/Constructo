@@ -852,6 +852,40 @@ export const en = {
   'documents.notes': 'Notes',
   'documents.doc_title': 'Document title',
   'documents.doc_type_label': 'Document type',
+
+  // === spec desk (SpecDesk.tsx) ===
+  'specdesk.title': 'Spec schedule',
+  'specdesk.subtitle': 'Materials by room — proposed by AI, confirmed by you.',
+  'specdesk.site_label': 'Site',
+  'specdesk.status.approved': 'Approved',
+  'specdesk.status.pending': 'Pending',
+  'specdesk.status.rejected': 'Rejected',
+  'specdesk.empty_title': 'No sites yet',
+  'specdesk.empty_hint': 'Create a site to start a spec schedule.',
+  'specdesk.loading': 'Loading spec schedule…',
+  'specdesk.error': 'Could not load the spec schedule.',
+  'specdesk.sites_loading': 'Loading…',
+  'specdesk.sites_error': 'Could not load sites.',
+  'specdesk.cost_label': 'Estimated material cost',
+  'specdesk.awaiting_rate': '{count} awaiting a rate',
+  'specdesk.all_priced': 'All priced',
+  'specdesk.unpriced': '{count} unpriced',
+  'specdesk.no_specs_title': 'No specs yet',
+  'specdesk.no_specs_hint': 'Import a schedule, or add a material from a photo.',
+  'specdesk.col.element': 'Element',
+  'specdesk.col.material': 'Material',
+  'specdesk.col.qty': 'Qty',
+  'specdesk.col.rate': 'Rate',
+  'specdesk.col.total': 'Total',
+  'specdesk.col.status': 'Status',
+
+  // === settings appearance (Settings.tsx) ===
+  'settings.appearance.title': 'Appearance',
+  'settings.appearance.subtitle': 'Choose how the console looks. System follows your device.',
+  'settings.appearance.theme': 'Theme',
+  'settings.appearance.light': 'Light',
+  'settings.appearance.dark': 'Dark',
+  'settings.appearance.system': 'System',
 } as const
 
 // The set of valid translation keys. hi.ts must provide all of these.

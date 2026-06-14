@@ -3,11 +3,21 @@ import { clearToken, type Role } from '../api/auth'
 import { useMeRole } from '../auth/useCan'
 import { useT, type TranslationKey } from '../i18n'
 import { AppShell, Display, H2, Small, useRoleTabs, type Role as ShellRole } from '../ui'
+import {
+  CashIcon,
+  DocIcon,
+  GridIcon,
+  ListIcon,
+  MessageIcon,
+  SearchIcon,
+  SettingsIcon,
+  SignOutIcon,
+} from '../ui/icons'
 
 interface MoreLink {
   to: string
   labelKey: TranslationKey
-  icon: string
+  icon: React.ReactNode
 }
 
 /**
@@ -17,29 +27,29 @@ interface MoreLink {
  */
 const ROLE_MORE: Record<Role, MoreLink[]> = {
   owner: [
-    { to: '/payments', labelKey: 'nav.payments', icon: '₹' },
-    { to: '/permits', labelKey: 'nav.permits', icon: '📋' },
-    { to: '/reconcile', labelKey: 'nav.reconcile', icon: '🧾' },
-    { to: '/groups', labelKey: 'nav.groups', icon: '💬' },
+    { to: '/payments', labelKey: 'nav.payments', icon: <CashIcon /> },
+    { to: '/permits', labelKey: 'nav.permits', icon: <DocIcon /> },
+    { to: '/reconcile', labelKey: 'nav.reconcile', icon: <ListIcon /> },
+    { to: '/groups', labelKey: 'nav.groups', icon: <MessageIcon /> },
   ],
   pm: [
-    { to: '/approvals', labelKey: 'nav.approvals', icon: '✓' },
-    { to: '/payments', labelKey: 'nav.payments', icon: '₹' },
-    { to: '/permits', labelKey: 'nav.permits', icon: '📋' },
-    { to: '/reconcile', labelKey: 'nav.reconcile', icon: '🧾' },
-    { to: '/groups', labelKey: 'nav.groups', icon: '💬' },
+    { to: '/approvals', labelKey: 'nav.approvals', icon: <DocIcon /> },
+    { to: '/payments', labelKey: 'nav.payments', icon: <CashIcon /> },
+    { to: '/permits', labelKey: 'nav.permits', icon: <DocIcon /> },
+    { to: '/reconcile', labelKey: 'nav.reconcile', icon: <ListIcon /> },
+    { to: '/groups', labelKey: 'nav.groups', icon: <MessageIcon /> },
   ],
-  architect: [{ to: '/sites', labelKey: 'nav.sites', icon: '🏗' }],
+  architect: [{ to: '/sites', labelKey: 'nav.sites', icon: <GridIcon /> }],
   supervisor: [
-    { to: '/permits', labelKey: 'nav.permits', icon: '📋' },
+    { to: '/permits', labelKey: 'nav.permits', icon: <DocIcon /> },
   ],
   accountant: [
-    { to: '/payments', labelKey: 'nav.payments', icon: '₹' },
-    { to: '/permits', labelKey: 'nav.permits', icon: '📋' },
+    { to: '/payments', labelKey: 'nav.payments', icon: <CashIcon /> },
+    { to: '/permits', labelKey: 'nav.permits', icon: <DocIcon /> },
   ],
   procurement: [
-    { to: '/payments', labelKey: 'nav.payments', icon: '₹' },
-    { to: '/search', labelKey: 'nav.search', icon: '🔍' },
+    { to: '/payments', labelKey: 'nav.payments', icon: <CashIcon /> },
+    { to: '/search', labelKey: 'nav.search', icon: <SearchIcon /> },
   ],
   labor_contractor: [],
 }
@@ -91,7 +101,7 @@ export function More() {
         </H2>
         <ul className="overflow-hidden rounded-card border border-line bg-card shadow-card">
           <li className="border-b border-line">
-            <MoreRow to="/settings" icon="⚙️" label={t('nav.settings')} />
+            <MoreRow to="/settings" icon={<SettingsIcon />} label={t('nav.settings')} />
           </li>
           <li>
             <button
@@ -99,7 +109,7 @@ export function More() {
               onClick={signOut}
               className="flex min-h-tap w-full items-center gap-3 px-4 py-3 text-left font-body text-body font-semibold text-risk cstk-animate hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <span aria-hidden className="text-xl leading-none">⎋</span>
+              <span aria-hidden className="text-xl leading-none"><SignOutIcon /></span>
               <span>{t('settings.signout')}</span>
             </button>
           </li>
@@ -109,7 +119,7 @@ export function More() {
   )
 }
 
-function MoreRow({ to, icon, label }: { to: string; icon: string; label: string }) {
+function MoreRow({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
     <Link
       to={to}
