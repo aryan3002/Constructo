@@ -48,3 +48,12 @@ export { AppShell, ROLE_TABS, useRoleTabs } from './AppShell'
 export type { AppShellProps, Role, TabDef } from './AppShell'
 
 export * as Icons from './icons'
+
+export { Drawer } from './Drawer'
+export type { DrawerProps } from './Drawer'
+
+export { Modal, ConfirmDialog } from './Modal'
+export type { ModalProps, ConfirmDialogProps } from './Modal'
+
+export { ToastProvider, useToast } from './Toast'
+export type { ToastItem, ShowToastOptions } from './Toast'
