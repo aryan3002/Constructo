@@ -174,16 +174,20 @@ function AskInner() {
     if (!sessionKey || !hydrated.current) return
     AsyncStorage.setItem(sessionKey, JSON.stringify(session)).catch(() => undefined)
   }, [session, sessionKey])
-  const requests: HomeownerRequest[] = [...(q.data ?? [])].sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  )
+  // Dedupe by id defensively (a stale/duplicated request would otherwise collide
+  // React keys) then sort oldest→newest.
+  const requests: HomeownerRequest[] = [
+    ...new Map((q.data ?? []).map((r) => [r.id, r])).values(),
+  ].sort((a, b) => a.created_at.localeCompare(b.created_at))
 
   const canSend = !!text.trim() && !asking
 
   async function onSend() {
     const question = text.trim()
     if (!question || asking) return
-    const id = `x${(seq.current += 1)}`
+    // Globally-unique id: a per-record timestamp + a counter. (A bare counter
+    // collided with ids restored from a previous session → duplicate React keys.)
+    const id = `x${Date.now().toString(36)}_${(seq.current += 1)}`
     setText('')
     setSession((s) => [...s, { id, question, status: 'pending' }])
     setAsking(true)
