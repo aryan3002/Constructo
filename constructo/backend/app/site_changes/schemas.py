@@ -33,6 +33,9 @@ class SiteChangeOut(BaseModel):
     impact: str | None
     photo_url: str | None
     reported_by: UUID | None
+    # Human-readable name for the reporting user — resolved server-side in a
+    # single batched query (no N+1). None when the user row cannot be found.
+    reported_by_name: str | None = None
     status: SiteChangeStatus
     linked_drawing_id: UUID | None
     created_at: datetime

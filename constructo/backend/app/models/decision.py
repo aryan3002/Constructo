@@ -60,6 +60,11 @@ class Decision(Base):
     site_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True
     )
+    # Nullable FK to specs.id — set when a Decision is auto-created by spec routing.
+    # ON DELETE SET NULL keeps the audit trail intact if the spec is deleted.
+    spec_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("specs.id", ondelete="SET NULL"), nullable=True
+    )
     kind: Mapped[DecisionKind] = mapped_column(
         SAEnum(DecisionKind, name="decision_kind"), nullable=False
     )

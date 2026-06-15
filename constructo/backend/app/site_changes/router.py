@@ -41,6 +41,45 @@ async def _scoped_or_404(session: AsyncSession, user: User, change_id: UUID) -> 
     return change
 
 
+async def _resolve_reporter_names(
+    session: AsyncSession, changes: list[SiteChange]
+) -> dict[UUID, str]:
+    """Batched single-query lookup of User.name for all reported_by ids.
+
+    Returns a dict {user_id: name} with only the ids that exist in the DB.
+    Avoids N+1 regardless of list length.
+    """
+    reporter_ids = {c.reported_by for c in changes if c.reported_by is not None}
+    if not reporter_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(User.id, User.name).where(User.id.in_(reporter_ids))
+        )
+    ).all()
+    return {row.id: row.name for row in rows if row.name}
+
+
+def _out_with_name(change: SiteChange, names: dict[UUID, str]) -> SiteChangeOut:
+    name = names.get(change.reported_by) if change.reported_by is not None else None
+    return SiteChangeOut(
+        id=change.id,
+        company_id=change.company_id,
+        site_id=change.site_id,
+        room=change.room,
+        title=change.title,
+        note=change.note,
+        impact=change.impact,
+        photo_url=change.photo_url,
+        reported_by=change.reported_by,
+        reported_by_name=name,
+        status=change.status,
+        linked_drawing_id=change.linked_drawing_id,
+        created_at=change.created_at,
+        resolved_at=change.resolved_at,
+    )
+
+
 @router.get("", response_model=list[SiteChangeOut])
 async def list_site_changes(
     user: User = Depends(get_current_user),
@@ -60,8 +99,9 @@ async def list_site_changes(
     if status is not None:
         stmt = stmt.where(SiteChange.status == status)
     stmt = stmt.order_by(SiteChange.created_at.desc())
-    rows = (await session.execute(stmt)).scalars().all()
-    return [SiteChangeOut.model_validate(c) for c in rows]
+    rows = list((await session.execute(stmt)).scalars().all())
+    names = await _resolve_reporter_names(session, rows)
+    return [_out_with_name(c, names) for c in rows]
 
 
 @router.post("", response_model=SiteChangeOut, status_code=201)
@@ -86,7 +126,8 @@ async def report_site_change(
     session.add(change)
     await session.commit()
     await session.refresh(change)
-    return SiteChangeOut.model_validate(change)
+    names = await _resolve_reporter_names(session, [change])
+    return _out_with_name(change, names)
 
 
 @router.get("/{change_id}", response_model=SiteChangeOut)
@@ -95,7 +136,9 @@ async def get_site_change(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> SiteChangeOut:
-    return SiteChangeOut.model_validate(await _scoped_or_404(session, user, change_id))
+    change = await _scoped_or_404(session, user, change_id)
+    names = await _resolve_reporter_names(session, [change])
+    return _out_with_name(change, names)
 
 
 @router.patch("/{change_id}", response_model=SiteChangeOut)
@@ -125,4 +168,5 @@ async def update_site_change(
         )
     await session.commit()
     await session.refresh(change)
-    return SiteChangeOut.model_validate(change)
+    names = await _resolve_reporter_names(session, [change])
+    return _out_with_name(change, names)

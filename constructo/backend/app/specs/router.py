@@ -11,13 +11,27 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.approvals.service import apply_action
+from app.approvals.state_machine import DecisionAction
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.models import Component, Material, Space, Spec, SpecApprovalStatus, User, UserRole
+from app.models import (
+    Component,
+    Decision,
+    DecisionKind,
+    DecisionState,
+    Material,
+    Space,
+    Spec,
+    SpecApprovalStatus,
+    User,
+    UserRole,
+)
 from app.specs.costing import line_total as line_total_fn
 from app.specs.costing import rollup_by_room
 from app.specs.extraction import extract_material_from_image, get_llm
@@ -31,6 +45,7 @@ from app.specs.schemas import (
     SpecCreate,
     SpecOut,
     SpecUpdate,
+    _routing_status,
 )
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
@@ -38,6 +53,49 @@ router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
 # Architect + Site Engineer (supervisor) maintain the spec; Architect/owner/pm approve.
 _EDIT_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
 _APPROVE_ROLES = (UserRole.owner, UserRole.pm, UserRole.architect)
+
+
+# ---------------------------------------------------------------------------
+# Decision / approval-inbox helpers
+# ---------------------------------------------------------------------------
+
+
+def _spec_client_decision_id(spec_id: UUID) -> str:
+    """Idempotency key scoped to a spec's approval loop."""
+    return f"spec:{spec_id}:route"
+
+
+async def _find_decision_for_spec(
+    session: AsyncSession, company_id: UUID, spec_id: UUID
+) -> Decision | None:
+    """Fetch the linked Decision by spec_id FK (preferred) or client_decision_id fallback.
+
+    Falls back to the idempotency-key lookup for decisions created before the FK
+    column existed.
+    """
+    row = (
+        await session.execute(
+            select(Decision).where(
+                Decision.company_id == company_id,
+                Decision.spec_id == spec_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return row
+    return (
+        await session.execute(
+            select(Decision).where(
+                Decision.company_id == company_id,
+                Decision.client_decision_id == _spec_client_decision_id(spec_id),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 
 @router.get("", response_model=list[SpecOut])
@@ -167,6 +225,11 @@ async def spec_desk(
             line_total=lt,
             approval_status=spec.approval_status,
             client_final_code=spec.client_final_code,
+            routing_status=_routing_status(spec.approval_status, spec.sent_at, spec.released_at),
+            sent_at=spec.sent_at,
+            released_at=spec.released_at,
+            notes=spec.notes,
+            material_id=spec.material_id,
         )
         bucket = rooms_map.setdefault(
             space_name,
@@ -229,6 +292,22 @@ async def approve_spec(
     spec.approval_status = body.status
     if body.client_final_code is not None:
         spec.client_final_code = body.client_final_code
+
+    # Keep the linked Decision in sync (if one exists — do not error if missing).
+    linked_decision = await _find_decision_for_spec(session, user.company_id, spec_id)
+    if linked_decision is not None:
+        action = (
+            DecisionAction.resolve
+            if body.status == SpecApprovalStatus.approved
+            else DecisionAction.reject
+        )
+        # apply_action handles idempotent no-op (already resolved/rejected).
+        try:
+            await apply_action(session, linked_decision, action)
+        except AppError:
+            # Invalid transition (e.g. already resolved from another path) — ignore.
+            pass
+
     await session.commit()
     await session.refresh(spec)
     return SpecOut.model_validate(spec)
@@ -242,13 +321,57 @@ async def route_spec(
 ) -> SpecOut:
     """Send a selection out for approval (the designer routes it). Restarts the
     approval clock — back to pending — so a revised, returned selection re-sends
-    cleanly. Derived routing_status → "out_for_approval"."""
+    cleanly. Derived routing_status → "out_for_approval".
+
+    Also creates (or reopens) a Decision so the spec appears in the owner's
+    approvals inbox and notification bell. Idempotent: re-routing the same spec
+    reuses the existing Decision (by spec_id FK or client_decision_id key) rather
+    than creating a duplicate. If the Decision was previously rejected/resolved, it
+    is reopened to pending (re-proposed).
+    """
     spec = await session.get(Spec, spec_id)
     if spec is None or spec.company_id != user.company_id:
         raise AppError(404, "not_found", "Spec not found")
     spec.sent_at = datetime.now(UTC)
     spec.approval_status = SpecApprovalStatus.pending
     spec.released_at = None
+    await session.flush()  # stamp spec before touching Decision
+
+    decision_title = f"Selection sign-off: {spec.label}"
+
+    existing_decision = await _find_decision_for_spec(session, user.company_id, spec_id)
+    if existing_decision is not None:
+        # Reopen to pending if terminal (rejected/resolved from a previous round).
+        if existing_decision.state in (DecisionState.resolved, DecisionState.rejected):
+            existing_decision.state = DecisionState.pending
+            existing_decision.resolved_at = None
+            existing_decision.resolution_note = None
+        # Refresh the title in case the spec label changed.
+        existing_decision.title = decision_title
+        existing_decision.raised_by = user.id
+    else:
+        new_decision = Decision(
+            company_id=user.company_id,
+            site_id=spec.site_id,
+            spec_id=spec.id,
+            kind=DecisionKind.approval,
+            title=decision_title,
+            raised_by=user.id,
+            client_decision_id=_spec_client_decision_id(spec_id),
+        )
+        session.add(new_decision)
+        try:
+            await session.flush()
+        except IntegrityError:
+            # Concurrent race on the same client_decision_id — reconcile.
+            await session.rollback()
+            spec = await session.get(Spec, spec_id)
+            if spec is None or spec.company_id != user.company_id:
+                raise AppError(404, "not_found", "Spec not found") from None
+            spec.sent_at = datetime.now(UTC)
+            spec.approval_status = SpecApprovalStatus.pending
+            spec.released_at = None
+
     await session.commit()
     await session.refresh(spec)
     return SpecOut.model_validate(spec)
