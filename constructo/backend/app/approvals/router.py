@@ -54,6 +54,7 @@ def _out(d: Decision) -> DecisionOut:
         id=d.id,
         company_id=d.company_id,
         site_id=d.site_id,
+        spec_id=d.spec_id,
         kind=d.kind,
         title=d.title,
         detail=d.detail,
