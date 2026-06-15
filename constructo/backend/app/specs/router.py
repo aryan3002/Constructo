@@ -33,6 +33,7 @@ from app.specs.schemas import (
     SpecUpdate,
     _routing_status,
 )
+from app.specs.service import sync_spec_approved_decision, sync_spec_routed_decision
 
 router = APIRouter(prefix="/api/v1/specs", tags=["specs"])
 
@@ -237,6 +238,9 @@ async def approve_spec(
         spec.client_final_code = body.client_final_code
     await session.commit()
     await session.refresh(spec)
+    # Sync the linked Decision (if any) to match the new spec approval state.
+    # No-op when no Decision exists (spec was approved without routing).
+    await sync_spec_approved_decision(session, spec)
     return SpecOut.model_validate(spec)
 
 
@@ -248,7 +252,12 @@ async def route_spec(
 ) -> SpecOut:
     """Send a selection out for approval (the designer routes it). Restarts the
     approval clock — back to pending — so a revised, returned selection re-sends
-    cleanly. Derived routing_status → "out_for_approval"."""
+    cleanly. Derived routing_status → "out_for_approval".
+
+    Also creates (or reopens) a Decision in the owner's approval inbox so the
+    owner can commit or return the selection from the same approvals feed they
+    already use for other decisions.
+    """
     spec = await session.get(Spec, spec_id)
     if spec is None or spec.company_id != user.company_id:
         raise AppError(404, "not_found", "Spec not found")
@@ -257,6 +266,8 @@ async def route_spec(
     spec.released_at = None
     await session.commit()
     await session.refresh(spec)
+    # Wire into the approvals inbox (idempotent — safe to call after commit).
+    await sync_spec_routed_decision(session, spec, user)
     return SpecOut.model_validate(spec)
 
 
