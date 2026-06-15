@@ -37,6 +37,8 @@ export interface SiteChange {
   /** Bare R2 key or URL — treat as opaque in production; display behind a link. */
   photo_url: string | null
   reported_by: string | null
+  /** Human-readable name resolved by the server. Always prefer this over reported_by. */
+  reported_by_name?: string | null
   status: SiteChangeStatus
   linked_drawing_id: string | null
   created_at: string
@@ -96,7 +98,8 @@ const mockRoster: SiteChange[] = [
     note: 'Structural beam installed at grid C-3 is 200mm east of the drawing. Ceiling design and AC duct routing will be affected.',
     impact: null,
     photo_url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=400&q=80',
-    reported_by: 'Site Engineer Rajan',
+    reported_by: 'mock-user-rajan',
+    reported_by_name: 'Site Engineer Rajan',
     status: 'new',
     linked_drawing_id: null,
     created_at: '2026-06-13T09:15:00Z',
@@ -111,7 +114,8 @@ const mockRoster: SiteChange[] = [
     note: 'Owner requested window sill height at 800mm instead of the drawn 900mm. Tile layout and countertop splash will need revision.',
     impact: 'Kitchen tile layout revised — splash runs to 800mm sill. Counter detail on KT-02 updated.',
     photo_url: null,
-    reported_by: 'Supervisor Mukesh',
+    reported_by: 'mock-user-mukesh',
+    reported_by_name: 'Supervisor Mukesh',
     status: 'linked',
     linked_drawing_id: 'drw-mock-2',
     created_at: '2026-06-10T14:30:00Z',
@@ -126,7 +130,8 @@ const mockRoster: SiteChange[] = [
     note: 'False ceiling at 2750mm clashes with existing column on grid A-2. Column is 50mm wider than plan shows.',
     impact: 'False ceiling on north side notched around column. Light cove detail FL-07 updated to reflect the notch.',
     photo_url: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=400&q=80',
-    reported_by: 'Site Engineer Rajan',
+    reported_by: 'mock-user-rajan',
+    reported_by_name: 'Site Engineer Rajan',
     status: 'resolved',
     linked_drawing_id: 'drw-mock-3',
     created_at: '2026-06-08T11:00:00Z',
@@ -141,7 +146,8 @@ const mockRoster: SiteChange[] = [
     note: 'Plumber moved the waste outlet 300mm towards the door to avoid the structural slab edge. Shower tray now overhangs the door opening slightly.',
     impact: null,
     photo_url: null,
-    reported_by: 'Supervisor Mukesh',
+    reported_by: 'mock-user-mukesh',
+    reported_by_name: 'Supervisor Mukesh',
     status: 'new',
     linked_drawing_id: null,
     created_at: '2026-06-14T07:50:00Z',

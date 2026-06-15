@@ -36,7 +36,8 @@ const MOCK_CHANGES = [
     note: 'Structural beam at grid C-3 is 200mm east of the drawing. Ceiling and AC duct routing affected.',
     impact: null,
     photo_url: 'https://example.com/photo.jpg',
-    reported_by: 'Site Engineer Rajan',
+    reported_by: 'aaaaaaaa-0000-0000-0000-000000000001',
+    reported_by_name: 'Rajan',
     status: 'new' as const,
     linked_drawing_id: null,
     created_at: '2026-06-13T09:15:00Z',
@@ -51,7 +52,8 @@ const MOCK_CHANGES = [
     note: 'Owner requested window sill height at 800mm. Tile layout needs revision.',
     impact: 'Kitchen tile layout revised.',
     photo_url: null,
-    reported_by: 'Supervisor Mukesh',
+    reported_by: 'aaaaaaaa-0000-0000-0000-000000000002',
+    reported_by_name: 'Supervisor Mukesh',
     status: 'linked' as const,
     linked_drawing_id: 'drw-1',
     created_at: '2026-06-10T14:30:00Z',
@@ -66,7 +68,8 @@ const MOCK_CHANGES = [
     note: 'False ceiling at 2750mm clashes with existing column on grid A-2.',
     impact: 'False ceiling notched around column. Light cove FL-07 updated.',
     photo_url: null,
-    reported_by: 'Site Engineer Rajan',
+    reported_by: 'aaaaaaaa-0000-0000-0000-000000000001',
+    reported_by_name: 'Rajan',
     status: 'resolved' as const,
     linked_drawing_id: 'drw-2',
     created_at: '2026-06-08T11:00:00Z',
@@ -488,5 +491,70 @@ describe('SiteChanges surface (D3)', () => {
     expect(
       screen.getByText(/When a site engineer reports a condition change/i),
     ).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 11. reported_by_name: card shows name, never raw UUID
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('card shows reported_by_name ("Rajan"), not the raw UUID', async () => {
+    renderSiteChanges()
+    await screen.findByText('Beam shifted 200mm east')
+
+    // "Reported by Rajan" appears on one or more cards
+    expect(screen.getAllByText(/Reported by Rajan/i).length).toBeGreaterThan(0)
+
+    // The raw UUID must NOT appear anywhere
+    expect(screen.queryByText('aaaaaaaa-0000-0000-0000-000000000001')).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 12. reported_by_name: drawer shows name, never raw UUID
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('drawer shows reported_by_name ("Rajan"), not the raw UUID', async () => {
+    renderSiteChanges()
+    await screen.findByText('Beam shifted 200mm east')
+    await userEvent.click(screen.getByTestId('sc-card-sc-1'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+
+    // Name appears in the meta row
+    expect(within(dialog).getByText('Rajan')).toBeInTheDocument()
+
+    // Raw UUID must NOT appear
+    expect(within(dialog).queryByText('aaaaaaaa-0000-0000-0000-000000000001')).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 13. reported_by_name null → fallback label "Site team" (never renders UUID)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('null reported_by_name shows fallback label "Site team", never a UUID', async () => {
+    const withNullReporter = [
+      {
+        ...MOCK_CHANGES[0],
+        id: 'sc-null',
+        reported_by: 'bbbbbbbb-0000-0000-0000-000000000099',
+        reported_by_name: null,
+      },
+    ]
+    mockList.mockResolvedValue(withNullReporter)
+    renderSiteChanges()
+
+    await screen.findByText('Beam shifted 200mm east')
+
+    // Fallback label appears on the card
+    expect(screen.getByText(/Site team/i)).toBeInTheDocument()
+
+    // The raw UUID must NOT appear anywhere
+    expect(screen.queryByText('bbbbbbbb-0000-0000-0000-000000000099')).not.toBeInTheDocument()
+
+    // Open the drawer and check there too
+    await userEvent.click(screen.getByTestId('sc-card-sc-null'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Site team/i)).toBeInTheDocument()
+    expect(within(dialog).queryByText('bbbbbbbb-0000-0000-0000-000000000099')).not.toBeInTheDocument()
   })
 })

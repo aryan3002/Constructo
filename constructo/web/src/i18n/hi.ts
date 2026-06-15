@@ -999,6 +999,7 @@ export const hi: Record<TranslationKey, string> = {
   'sitechanges.empty.title': 'कोई साइट परिवर्तन नहीं',
   'sitechanges.empty.hint': 'जब कोई साइट इंजीनियर परिवर्तन रिपोर्ट करेगा, वह यहाँ दिखेगा।',
   'sitechanges.card.reported_by': '{name} द्वारा रिपोर्ट',
+  'sitechanges.reported_by_unknown': 'साइट टीम',
   'sitechanges.card.photo': 'फ़ोटो देखें',
   'sitechanges.drawer.note': 'फ़ील्ड नोट',
   'sitechanges.drawer.room': 'कमरा / क्षेत्र',

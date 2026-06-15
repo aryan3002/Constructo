@@ -110,11 +110,12 @@ export function SiteChangeCard({ change, onClick }: SiteChangeCardProps) {
           )
         )}
 
-        {change.reported_by && (
-          <p className="font-body text-micro text-text-mute">
-            {t('sitechanges.card.reported_by', { name: change.reported_by })}
-          </p>
-        )}
+        {/* Always render reporter — use resolved name, fall back to localized label (never UUID). */}
+        <p className="font-body text-micro text-text-mute">
+          {t('sitechanges.card.reported_by', {
+            name: change.reported_by_name ?? t('sitechanges.reported_by_unknown'),
+          })}
+        </p>
       </div>
     </button>
   )

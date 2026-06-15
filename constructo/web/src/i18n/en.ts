@@ -1024,6 +1024,7 @@ export const en = {
   'sitechanges.empty.title': 'No site changes',
   'sitechanges.empty.hint': 'When a site engineer reports a condition change, it will appear here.',
   'sitechanges.card.reported_by': 'Reported by {name}',
+  'sitechanges.reported_by_unknown': 'Site team',
   'sitechanges.card.photo': 'View photo',
   'sitechanges.drawer.note': 'Field note',
   'sitechanges.drawer.room': 'Room / area',

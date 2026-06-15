@@ -242,14 +242,15 @@ export function SiteChangeDrawer({ change, open, onClose }: SiteChangeDrawerProp
 
         {/* ── Meta: reported by / created / resolved ── */}
         <div className="mb-5 space-y-1 border-t border-[var(--divider)] pt-4">
-          {change.reported_by && (
-            <div className="flex gap-2">
-              <Small className="w-28 shrink-0 font-semibold text-text-mute">
-                {t('sitechanges.drawer.reported_by')}
-              </Small>
-              <Small className="text-text">{change.reported_by}</Small>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Small className="w-28 shrink-0 font-semibold text-text-mute">
+              {t('sitechanges.drawer.reported_by')}
+            </Small>
+            {/* Use resolved name; fall back to localized label — never render the raw UUID. */}
+            <Small className="text-text">
+              {change.reported_by_name ?? t('sitechanges.reported_by_unknown')}
+            </Small>
+          </div>
           <div className="flex gap-2">
             <Small className="w-28 shrink-0 font-semibold text-text-mute">
               {t('sitechanges.drawer.reported_at')}
