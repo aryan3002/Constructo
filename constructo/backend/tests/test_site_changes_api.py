@@ -6,7 +6,7 @@ to a revision, and resolves it. Company-scoped + site-visibility-scoped.
 import pytest_asyncio
 
 from app.auth.jwt import create_access_token
-from app.models import PublishedDrawing, UserRole
+from app.models import PublishedDrawing, SiteChange, UserRole
 
 
 def auth(user) -> dict[str, str]:
@@ -111,3 +111,83 @@ async def test_link_to_drawing_must_be_same_site(client, factory, world, db_sess
     assert ok.status_code == 200
     assert ok.json()["status"] == "linked"
     assert ok.json()["linked_drawing_id"] == str(same.id)
+
+
+# ---------------------------------------------------------------------------
+# reported_by_name resolution tests
+# ---------------------------------------------------------------------------
+
+
+async def test_reported_by_name_on_create(client, world):
+    """POST /site-changes response includes reported_by_name matching the reporter's name."""
+    _, arch, site = world
+    resp = await _report(client, arch, site)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["reported_by"] == str(arch.id)
+    assert data["reported_by_name"] == "Anamika"
+
+
+async def test_reported_by_name_on_get(client, world):
+    """GET /site-changes/{id} includes reported_by_name."""
+    _, arch, site = world
+    change = (await _report(client, arch, site)).json()
+
+    got = await client.get(f"/api/v1/site-changes/{change['id']}", headers=auth(arch))
+    assert got.status_code == 200
+    data = got.json()
+    assert data["reported_by_name"] == "Anamika"
+
+
+async def test_reported_by_name_on_list_batch(client, factory, world):
+    """GET /site-changes list includes reported_by_name for all changes (batched lookup, no N+1).
+
+    Two different architect reporters → both names resolved correctly in a single list query.
+    Architects see all company sites without a site-assignment constraint.
+    """
+    company, arch, site = world
+    arch2 = await factory.user(company=company, role=UserRole.architect, name="Priya Mehta")
+
+    await _report(client, arch, site)   # reported_by=arch.id → "Anamika"
+    await _report(client, arch2, site)  # reported_by=arch2.id → "Priya Mehta"
+
+    listed = await client.get("/api/v1/site-changes", headers=auth(arch))
+    assert listed.status_code == 200
+    items = listed.json()
+    assert len(items) == 2
+
+    names = {item["reported_by_name"] for item in items}
+    assert "Anamika" in names
+    assert "Priya Mehta" in names
+    # None of the raw UUIDs must appear as reported_by_name
+    for item in items:
+        assert item["reported_by_name"] is not None
+
+
+async def test_reported_by_name_null_for_unknown_reporter(client, world, db_session):
+    """A change with no reporter (reported_by = NULL) → reported_by_name is null."""
+    company, arch, site = world
+    from app.models import SiteChangeStatus
+
+    # Insert a change directly with reported_by=NULL
+    orphan = SiteChange(
+        company_id=company.id,
+        site_id=site.id,
+        title="Orphan change",
+        note="Reporter unknown",
+        status=SiteChangeStatus.new,
+        reported_by=None,
+    )
+    db_session.add(orphan)
+    await db_session.flush()
+
+    got = await client.get(f"/api/v1/site-changes/{orphan.id}", headers=auth(arch))
+    assert got.status_code == 200
+    data = got.json()
+    assert data["reported_by"] is None
+    assert data["reported_by_name"] is None
+
+    # Also appears correctly in list
+    listed = await client.get("/api/v1/site-changes", headers=auth(arch))
+    orphan_item = next(i for i in listed.json() if i["id"] == str(orphan.id))
+    assert orphan_item["reported_by_name"] is None

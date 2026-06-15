@@ -33,6 +33,7 @@ class SiteChangeOut(BaseModel):
     impact: str | None
     photo_url: str | None
     reported_by: UUID | None
+    reported_by_name: str | None = None
     status: SiteChangeStatus
     linked_drawing_id: UUID | None
     created_at: datetime
