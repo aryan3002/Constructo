@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd constructo/mobile && npm install && npx expo export --platform web",
+  "outputDirectory": "constructo/mobile/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+}
