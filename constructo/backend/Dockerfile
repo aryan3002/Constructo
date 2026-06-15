@@ -15,6 +15,9 @@ WORKDIR /app
 
 # 1) Dependency layer — only re-runs when pyproject/uv.lock change.
 COPY pyproject.toml uv.lock ./
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libcairo2 libffi8 \
+    && rm -rf /var/lib/apt/lists/*
 RUN uv sync --frozen --no-dev
 
 # 2) App layer.

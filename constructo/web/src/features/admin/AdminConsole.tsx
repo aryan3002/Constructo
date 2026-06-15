@@ -43,6 +43,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'baselines', labelKey: 'admin.section.baselines', built: true },
   { key: 'vendors', labelKey: 'admin.section.vendors', built: true },
   { key: 'materials', labelKey: 'admin.section.materials', built: true },
+  { key: 'documents', labelKey: 'admin.section.documents', link: '/settings/documents' },
   { key: 'integrations', labelKey: 'admin.section.integrations' },
   { key: 'notifications', labelKey: 'admin.section.notifications', built: true },
   { key: 'billing', labelKey: 'admin.section.billing', built: true },

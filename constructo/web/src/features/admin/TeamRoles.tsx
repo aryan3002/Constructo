@@ -14,14 +14,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   authApi,
   StepUpRequiredError,
-  type Me,
   type Role,
   type TeamMember,
   type TeamMemberUpdate,
 } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import { qk } from '../../api/queryKeys'
-import { useCan } from '../../auth/useCan'
+import { useCan, useMe } from '../../auth/useCan'
 import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, H2, Mono, Small, StatusPill, type Status } from '../../ui'
 import { ErrorState, Spinner } from '../../components/states'
@@ -57,7 +56,7 @@ export function TeamRoles() {
   const qc = useQueryClient()
   const canManage = useCan('manage_team')
 
-  const me = useQuery({ queryKey: qk.me(), queryFn: () => authApi.me() })
+  const me = useMe()
   const team = useQuery({ queryKey: qk.team(), queryFn: () => authApi.listTeam() })
 
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
@@ -152,7 +151,7 @@ export function TeamRoles() {
   }
 
   const members = team.data
-  const selfId = (me.data as Me | undefined)?.id
+  const selfId = me.data?.id
 
   return (
     <section aria-labelledby="admin-team-heading" className="flex flex-col gap-5">

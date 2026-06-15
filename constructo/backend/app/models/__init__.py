@@ -26,6 +26,7 @@ from app.models.chat import (
 )
 from app.models.company import Company
 from app.models.company_billing import CompanyBilling
+from app.models.company_document import CompanyDocument
 from app.models.conversation_member import ConversationMember, MemberRole
 from app.models.decision import Decision, DecisionKind, DecisionState
 from app.models.dpr import Dpr, DprStatus
@@ -102,6 +103,7 @@ from app.models.profiler import (
 )
 from app.models.push_token import PushToken
 from app.models.raw_message import RawMessageModel
+from app.models.report_export import ReportExport
 from app.models.site import Site
 from app.models.site_baseline import SiteBaseline
 from app.models.site_change import SiteChange, SiteChangeStatus
@@ -133,6 +135,7 @@ __all__ = [
     "ChatMessage",
     "Company",
     "CompanyBilling",
+    "CompanyDocument",
     "CompanyNotificationSettings",
     "Component",
     "ComponentStatus",
@@ -181,6 +184,7 @@ __all__ = [
     "QuietPeriod",
     "QuietStatus",
     "RawMessageModel",
+    "ReportExport",
     "ReferenceSource",
     # Design Profiler engine
     "AreaKind",

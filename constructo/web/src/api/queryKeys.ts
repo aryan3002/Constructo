@@ -40,4 +40,24 @@ export const qk = {
   /** Company notification & SLA settings (Setup & Admin, W4.7). */
   notificationSettings: () => ['notifications', 'settings'] as const,
   search: (query: string) => ['search', query] as const,
+  reports: () => ['reports'] as const,
+  drawings: (siteId?: string) => (siteId ? (['drawings', siteId] as const) : (['drawings'] as const)),
+  /** Company-wide documents register (W5 Slice 2b). */
+  companyDocuments: (includeArchived?: boolean) => ['company_documents', !!includeArchived] as const,
+  /** Flat spec list for a site (SpecOut[]). */
+  specs: (siteId: string) => ['specs', siteId] as const,
+  /** Room-grouped spec desk (DeskOut). */
+  specDesk: (siteId: string) => ['spec_desk', siteId] as const,
+  /** Site changes feed (D3). Keyed by siteId + optional status filter. */
+  siteChanges: (opts?: { siteId?: string; status?: string }) =>
+    ['site_changes', opts?.siteId ?? null, opts?.status ?? null] as const,
+  /** Single site change detail (D3). */
+  siteChange: (id: string) => ['site_change', id] as const,
+  /** Design-profiler: most recent profile for a site (D5). */
+  designProfile: (siteId: string) => ['design_profile', siteId] as const,
+  /** Design-profiler: architect brief rendering for a profile (D5). */
+  designBrief: (profileId: string) => ['design_brief', profileId] as const,
+  /** Design-profiler: themes for one area (D5). */
+  designThemes: (profileId: string, areaId: string) =>
+    ['design_themes', profileId, areaId] as const,
 } as const

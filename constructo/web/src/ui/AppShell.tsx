@@ -5,6 +5,7 @@ import { useUiStore } from '../store/ui'
 import {
   CameraIcon,
   CheckIcon,
+  DocIcon,
   DotsIcon,
   GridIcon,
   ListIcon,
@@ -56,6 +57,7 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
+    { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
@@ -64,12 +66,13 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
+    { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
-  // Architect (interior fit-out) — owns the Material Specification schedule.
+  // Architect (interior fit-out) — primary cockpit is the /designer workspace (D4).
   architect: [
-    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon />, end: true },
+    { to: '/designer', labelKey: 'nav.designer', label: 'Designer', icon: <ListIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
@@ -83,6 +86,7 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
   accountant: [
     { to: '/reconcile', labelKey: 'nav.reconcile', label: 'Reconcile', icon: <GridIcon />, end: true },
     { to: '/payments', labelKey: 'nav.bills', label: 'Bills', icon: CashIcon },
+    { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],

@@ -58,6 +58,7 @@ class DecisionOut(BaseModel):
     id: UUID
     company_id: UUID
     site_id: UUID | None
+    spec_id: UUID | None = None
     kind: DecisionKind
     title: str
     detail: str | None

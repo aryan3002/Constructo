@@ -1,8 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { todayIso } from '../api/config'
 import { useSite, useSiteEvents } from '../api/hooks'
-import { authApi, type Role } from '../api/auth'
+import { type Role } from '../api/auth'
+import { useMeRole } from '../auth/useCan'
 import { EventTimeline } from '../components/EventTimeline'
 import { EmptyState, ErrorState, Spinner } from '../components/states'
 import { useT } from '../i18n'
@@ -33,8 +33,7 @@ export function SiteDetail() {
   const date = todayIso()
   const site = useSite(id)
   const events = useSiteEvents(id, date)
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = me.data?.role ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
 
   return (

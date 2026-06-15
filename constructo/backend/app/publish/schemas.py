@@ -8,7 +8,8 @@ the loop.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -163,3 +164,48 @@ class ChangeCreateIn(BaseModel):
     cost_delta: float | None = None
     schedule_delta_days: int | None = None
     reason: str | None = None
+
+
+# ---- drawings register (S2a-E1) --------------------------------------------
+
+
+class DrawingRegisterOut(BaseModel):
+    """A single row in the company-wide drawings register.
+
+    ``file_url`` is a resolved URL (presigned GET or local path), never the
+    bare R2 key. ``is_current`` is True for any drawing not superseded by
+    another row in the returned set.
+    """
+
+    id: UUID
+    site_id: UUID
+    site_name: str
+    title: str
+    version: str
+    kind: DrawingKind
+    change_note: str | None = None
+    published_at: datetime
+    supersedes_id: UUID | None = None
+    is_current: bool
+    file_url: str
+
+
+class DrawingPresignIn(BaseModel):
+    """Request a short-lived direct-to-R2 upload ticket for a new revision."""
+
+    site_id: UUID
+    filename: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+
+
+class DrawingPresignOut(BaseModel):
+    """Upload ticket response.
+
+    ``mode="presigned"`` — R2 is configured; ``put_url`` is the signed PUT URL.
+    ``mode="unavailable"`` — local storage backend; ``put_url`` is None and the
+    caller should fall back to the server-side upload path. Status is always 200.
+    """
+
+    key: str
+    put_url: str | None
+    mode: Literal["presigned", "unavailable"]

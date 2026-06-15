@@ -160,15 +160,20 @@ export function Settings() {
               </div>
             </Section>
 
-            {/* TODO(i18n W6): move these labels into en.ts/hi.ts */}
-            <Section title="Appearance">
-              <Small>Choose how the console looks. System follows your device.</Small>
+            <Section title={t('settings.appearance.title')}>
+              <Small>{t('settings.appearance.subtitle')}</Small>
               <div
                 className="mt-3 inline-flex rounded-control border border-line p-1"
                 role="group"
-                aria-label="Theme"
+                aria-label={t('settings.appearance.theme')}
               >
-                {(['light', 'dark', 'system'] as ThemeMode[]).map((m) => (
+                {(
+                  [
+                    ['light', t('settings.appearance.light')],
+                    ['dark', t('settings.appearance.dark')],
+                    ['system', t('settings.appearance.system')],
+                  ] as [ThemeMode, string][]
+                ).map(([m, label]) => (
                   <button
                     key={m}
                     type="button"
@@ -180,7 +185,7 @@ export function Settings() {
                         : 'text-text-mute hover:text-text'
                     }`}
                   >
-                    {m}
+                    {label}
                   </button>
                 ))}
               </div>

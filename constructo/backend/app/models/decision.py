@@ -60,6 +60,12 @@ class Decision(Base):
     site_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True
     )
+    # Link to the Spec that triggered this approval (nullable — most decisions are not
+    # spec-linked). Used by route_spec to create an owner-visible approval and by
+    # approve_spec to sync the decision state when the spec is committed or returned.
+    spec_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("specs.id", ondelete="SET NULL"), nullable=True
+    )
     kind: Mapped[DecisionKind] = mapped_column(
         SAEnum(DecisionKind, name="decision_kind"), nullable=False
     )

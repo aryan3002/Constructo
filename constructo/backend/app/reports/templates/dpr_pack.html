@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- report title -->
+<h2 style="border-left: none; padding-left: 0; font-size: 13pt; margin-top: 0;">
+  Daily Progress Report
+</h2>
+<div style="font-size: 9pt; color: var(--muted); margin-bottom: 2pt;">
+  <strong>Site:</strong> {{ site.name }}
+  &nbsp;·&nbsp;
+  <strong>Date:</strong> {{ date }}
+  &nbsp;·&nbsp;
+  <strong>Status:</strong>
+  {% if status == "sent" %}
+    <span style="color: #166534; font-weight: 700;">Sent</span>
+  {% else %}
+    <span style="color: #854D0E; font-weight: 700;">Draft</span>
+  {% endif %}
+</div>
+
+<hr style="border: none; border-top: 0.5pt solid var(--border); margin: 8pt 0;" />
+
+<!-- 1. LABOUR -->
+<h2>Labour</h2>
+{% if sections.labor.headcount is not none %}
+<div style="font-size: 9pt; color: var(--muted); margin-bottom: 4pt;">
+  Total on site: <strong style="color: var(--ink); font-size: 10pt;">{{ sections.labor.headcount }}</strong>
+</div>
+{% endif %}
+{% if sections.labor.entries %}
+<table>
+  <thead>
+    <tr>
+      <th>Entry</th>
+      <th style="width: 60pt; text-align: right;">Headcount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in sections.labor.entries %}
+    <tr>
+      <td>
+        {{ row.summary }}
+        {% if row.needs_clarification %}<span class="flag">clarify</span>{% endif %}
+      </td>
+      <td style="text-align: right; font-variant-numeric: tabular-nums;">
+        {{ row.headcount if row.headcount is not none else "—" }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No labour entries recorded.</p>
+{% endif %}
+
+<!-- 2. MATERIALS -->
+<h2>Materials</h2>
+{% if sections.materials.deliveries %}
+<table>
+  <thead>
+    <tr>
+      <th>Material</th>
+      <th style="width: 70pt;">Qty / Unit</th>
+      <th style="width: 80pt;">Vendor</th>
+      <th style="width: 120pt;">Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in sections.materials.deliveries %}
+    <tr>
+      <td>
+        {% if d.material %}{{ d.material }}: {% endif %}{{ d.summary }}
+        {% if d.needs_clarification %}<span class="flag">clarify</span>{% endif %}
+      </td>
+      <td style="font-variant-numeric: tabular-nums;">
+        {% if d.quantity is not none %}{{ d.quantity }}{% else %}—{% endif %}
+        {% if d.unit %} {{ d.unit }}{% endif %}
+      </td>
+      <td>{{ d.vendor if d.vendor else "—" }}</td>
+      <td></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No material deliveries recorded.</p>
+{% endif %}
+
+<!-- 3. WORK DONE -->
+{% set work_items = sections["work_done"]["items"] if sections["work_done"] is defined and sections["work_done"] else [] %}
+<h2>Work Done</h2>
+{% if work_items %}
+<table>
+  <thead>
+    <tr><th>Progress Update</th></tr>
+  </thead>
+  <tbody>
+    {% for item in work_items %}
+    <tr><td>{{ item.summary }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No progress updates recorded.</p>
+{% endif %}
+
+<!-- 4. BLOCKERS -->
+{% set blocker_items = sections["blockers"]["items"] if sections["blockers"] is defined and sections["blockers"] else [] %}
+<h2>Blockers</h2>
+{% if blocker_items %}
+<table>
+  <thead>
+    <tr>
+      <th>Issue</th>
+      <th style="width: 55pt;">Severity</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in blocker_items %}
+    <tr>
+      <td>
+        <strong>{{ b.summary }}</strong><br />
+        <span style="color: var(--muted); font-size: 8.5pt;">{{ b.description }}</span>
+      </td>
+      <td>
+        {% if b.severity %}
+        <span class="badge badge--{{ b.severity }}">{{ b.severity }}</span>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No blockers raised.</p>
+{% endif %}
+
+<!-- 5. WHAT'S NEXT -->
+{% set next_items = sections["next"]["items"] if sections["next"] else [] %}
+{% if next_items %}
+<h2>What's Next</h2>
+<ul style="font-size: 9pt; padding-left: 14pt; margin: 4pt 0 8pt;">
+  {% for item in next_items %}
+  <li style="margin-bottom: 3pt;">{{ item }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<!-- 6. SUMMARY -->
+<h2>Summary</h2>
+{% if sections.summary %}
+<p class="prose">{{ sections.summary }}</p>
+{% else %}
+<p class="empty">No summary available.</p>
+{% endif %}
+{% endblock %}
+
+{% block footnote %}
+This report was generated from site events captured in Constructo.
+All figures reflect recorded data; no values have been fabricated.
+{% endblock %}
