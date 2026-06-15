@@ -1,5 +1,1 @@
-{
-  "buildCommand": "npm install && npx expo export --platform web",
-  "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
-}
+{}
