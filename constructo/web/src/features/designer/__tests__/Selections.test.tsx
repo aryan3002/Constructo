@@ -33,6 +33,8 @@ const mockRoute   = vi.fn()
 const mockApprove = vi.fn()
 const mockRelease = vi.fn()
 const mockUpdate  = vi.fn()
+const mockCreate  = vi.fn()
+const mockExtract = vi.fn()
 
 /**
  * desk() returns a roster with one line in each of the 5 lifecycle states
@@ -52,6 +54,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's1',
+          component_id: 'comp1',
           element: 'Vitrified Tile',
           location: 'Floor',
           category: 'Floor',
@@ -74,6 +77,7 @@ const MOCK_DESK = {
         },
         {
           id: 's2',
+          component_id: 'comp1',
           element: 'Decorative Panel',
           location: 'Feature Wall',
           category: 'Wall',
@@ -103,6 +107,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's3',
+          component_id: 'comp2',
           element: 'Laminate',
           location: 'Wardrobe Shutter',
           category: 'Joinery',
@@ -125,6 +130,7 @@ const MOCK_DESK = {
         },
         {
           id: 's4',
+          component_id: 'comp2',
           element: 'Paint',
           location: 'Wall General',
           category: 'Finish',
@@ -154,6 +160,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's5',
+          component_id: 'comp3',
           element: 'Granite',
           location: 'Counter',
           category: 'Stone',
@@ -176,6 +183,7 @@ const MOCK_DESK = {
         },
         {
           id: 's6',
+          component_id: 'comp4',
           element: 'Backsplash Tile',
           location: null,
           category: 'Wall',
@@ -208,6 +216,8 @@ vi.mock('../../../api/specs', () => ({
     approve: (...a: unknown[]) => mockApprove(...a),
     release: (...a: unknown[]) => mockRelease(...a),
     update:  (...a: unknown[]) => mockUpdate(...a),
+    create:  (...a: unknown[]) => mockCreate(...a),
+    extract: (...a: unknown[]) => mockExtract(...a),
   },
 }))
 
@@ -297,6 +307,26 @@ describe('Selections cockpit (D2)', () => {
     mockApprove.mockResolvedValue({ id: 's2', routing_status: 'approved' })
     mockRelease.mockResolvedValue({ id: 's3', routing_status: 'released' })
     mockUpdate.mockResolvedValue({ id: 's1' })
+    mockCreate.mockResolvedValue({
+      id: 'snew', component_id: 'comp1', site_id: 'site-1',
+      label: 'New Line', material_id: null, qty: null, unit: null,
+      unit_rate: null, wastage_pct: null, approval_status: 'pending',
+      client_final_code: null, assignee_id: null, notes: null,
+      sent_at: null, released_at: null, created_at: new Date().toISOString(),
+      routing_status: 'draft', company_id: 'c1',
+    })
+    mockExtract.mockResolvedValue({
+      spec: {
+        id: 'sphoto', component_id: 'comp1', site_id: 'site-1',
+        label: 'Proposed', material_id: 'mat-proposed',
+        qty: null, unit: null, unit_rate: null, wastage_pct: null,
+        approval_status: 'pending', client_final_code: null, assignee_id: null,
+        notes: 'Proposed from a photo — confirm.',
+        sent_at: null, released_at: null, created_at: new Date().toISOString(),
+        routing_status: 'draft', company_id: 'c1',
+      },
+      extracted: { name: 'test.jpg', category: 'Proposed', brand: null },
+    })
   })
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -815,5 +845,111 @@ describe('Selections cockpit (D2)', () => {
 
     // No Approve button
     expect(within(dialog).queryByRole('button', { name: /^Approve$/i })).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 13. Originate — Add from photo: choose file + submit → specsApi.extract
+  //     called with (siteId, componentId, file) → toast "AI proposed a draft"
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Add from photo: choosing a file and submitting calls specsApi.extract with correct args → toast', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // "Add from photo" button is visible for comp1 in Living Room
+    const addPhotoBtn = screen.getByTestId('add-photo-btn-comp1')
+    expect(addPhotoBtn).toBeInTheDocument()
+    await userEvent.click(addPhotoBtn)
+
+    // Form is now visible
+    const form = screen.getByTestId('add-from-photo-form')
+    expect(form).toBeInTheDocument()
+
+    // Upload a file via the hidden input
+    const fileInput = screen.getByTestId('add-photo-file-input')
+    const file = new File(['(mock image)'], 'photo.jpg', { type: 'image/jpeg' })
+    await userEvent.upload(fileInput, file)
+
+    // File name shown
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument()
+
+    // Submit
+    await userEvent.click(screen.getByTestId('add-photo-submit'))
+
+    // specsApi.extract called with (siteId='site-1', componentId='comp1', file)
+    await waitFor(() =>
+      expect(mockExtract).toHaveBeenCalledWith('site-1', 'comp1', file),
+    )
+
+    // Toast: "AI proposed a draft — confirm or edit before routing."
+    await waitFor(() =>
+      expect(screen.getByText(/AI proposed a draft/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 14. Originate — Add line: fill label + material → specsApi.create called
+  //     with {component_id, site_id, label, material_id, …}
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Add line: filling the form calls specsApi.create with component_id, site_id, label, material_id → toast', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // "Add line" button visible for comp1
+    const addLineBtn = screen.getByTestId('add-line-btn-comp1')
+    expect(addLineBtn).toBeInTheDocument()
+    await userEvent.click(addLineBtn)
+
+    // Form visible
+    const form = screen.getByTestId('add-line-form')
+    expect(form).toBeInTheDocument()
+
+    // Fill label
+    const labelInput = screen.getByTestId('add-line-label')
+    await userEvent.clear(labelInput)
+    await userEvent.type(labelInput, 'Ceramic Tile – Bathroom')
+
+    // Pick material (mat2 in the mock)
+    const materialPicker = screen.getByTestId('add-material-picker')
+    await userEvent.selectOptions(materialPicker, 'mat2')
+
+    // Submit
+    await userEvent.click(screen.getByTestId('add-line-submit'))
+
+    // specsApi.create called with correct args
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          component_id: 'comp1',
+          site_id: 'site-1',
+          label: 'Ceramic Tile – Bathroom',
+          material_id: 'mat2',
+        }),
+      ),
+    )
+
+    // Toast: "Selection draft created."
+    await waitFor(() =>
+      expect(screen.getByText(/Selection draft created/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 15. Role gate — non-proposer (supervisor role) does NOT see Add affordances
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Role gate: supervisor role does not see Add line / Add from photo buttons', async () => {
+    mockUseMeRole.mockReturnValue('supervisor' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // No add affordances for any component
+    expect(screen.queryByTestId('add-line-btn-comp1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-photo-btn-comp1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-line-btn-comp2')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-photo-btn-comp2')).not.toBeInTheDocument()
   })
 })
