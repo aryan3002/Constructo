@@ -42,6 +42,8 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "https://constructo-mobile.vercel.app",
+        "https://constructo-topaz.vercel.app",
     ]
 
     # ---- Wave 2 integration ------------------------------------------------
