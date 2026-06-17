@@ -302,32 +302,64 @@ function DrawingRow({ current, isSelected, onClick, kindLabel, rowRef }: Drawing
           : 'border-line hover:border-primary/40 hover:shadow-card',
       ].join(' ')}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-body text-body font-semibold text-text">
-            {current.title}
-          </h3>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <KindBadge kind={current.kind} label={kindLabel} />
-            <Small className="text-text-mute">{current.site_name}</Small>
-            <Small className="font-semibold text-text">
-              {t('documents.version')} {current.version}
-            </Small>
-            <Small className="text-text-mute">
-              {t('documents.published')}: {formatDate(current.published_at.slice(0, 10))}
-            </Small>
-            {current.change_note && (
-              <Small className="text-text-mute">{current.change_note}</Small>
-            )}
-          </div>
+      {/*
+       * Single DOM structure — one heading, one Open link per row.
+       * CSS grid places the action button in a fixed right column on wide
+       * screens and in-line with title on narrow screens.
+       *
+       * Layout:
+       *   Narrow (<md):
+       *     Row 1: [title ···············] [Open]
+       *     Row 2: [kind] [site] [ver] [date] [note]
+       *   Wide (md+):
+       *     Row 1: [title ··] [kind][site][ver][date][note] ··· [Open]
+       *
+       * grid-template-areas achieves position switching without duplication.
+       */}
+      <div
+        className={[
+          'grid gap-x-3 gap-y-0.5',
+          // Narrow: two rows (title+action / meta)
+          '[grid-template-areas:"title_action""meta_meta"]',
+          '[grid-template-columns:1fr_auto]',
+          // Wide: single row (title+meta span left, action right)
+          'md:[grid-template-areas:"title_action""meta_action"]',
+        ].join(' ')}
+      >
+        <h3
+          className="font-body text-body font-semibold text-text [grid-area:title]"
+        >
+          {current.title}
+        </h3>
+
+        {/* Metadata row */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 [grid-area:meta]">
+          <KindBadge kind={current.kind} label={kindLabel} />
+          <Small className="text-text-mute">{current.site_name}</Small>
+          <Small className="font-semibold text-text">
+            {t('documents.version')} {current.version}
+          </Small>
+          <Small className="text-text-mute">
+            {t('documents.published')}: {formatDate(current.published_at.slice(0, 10))}
+          </Small>
+          {current.change_note && (
+            <Small className="text-text-mute">{current.change_note}</Small>
+          )}
         </div>
-        {/* Open link (doesn't propagate to drawer) */}
+
+        {/* Open link — single node, CSS grid places it in [action] area */}
         <a
           href={current.file_url}
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex min-h-tap shrink-0 items-center rounded-control border border-line bg-paper px-3 font-body text-small font-semibold text-text cstk-animate hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className={[
+            'inline-flex min-h-tap shrink-0 self-start items-center',
+            'rounded-control border border-line bg-paper px-3',
+            'font-body text-small font-semibold text-text cstk-animate',
+            'hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            '[grid-area:action]',
+          ].join(' ')}
         >
           {t('documents.open')}
         </a>
