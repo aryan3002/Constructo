@@ -13,7 +13,7 @@
  *   widthClass  — Tailwind max-w-* class; defaults to max-w-lg (32 rem)
  */
 
-import { useRef, useId } from 'react'
+import { useRef, useId, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useDialog } from './useDialog'
 
@@ -37,31 +37,65 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
+  // entered=true triggers the CSS enter transition (false = "from" state).
+  // Two nested rAFs: first paint renders the "from" state so the browser can
+  // interpolate; the second flips to "to". On close we unmount immediately
+  // (instant leave) which is simplest, test-safe, and acceptable per spec.
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    if (!open) {
+      setEntered(false)
+      return
+    }
+    let id1: number
+    let id2: number
+    id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => {
+        setEntered(true)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(id1)
+      cancelAnimationFrame(id2)
+    }
+  }, [open])
+
   useDialog({ open, onClose, panelRef })
 
   if (!open) return null
 
   return createPortal(
     <>
-      {/* Overlay — semi-opaque scrim, click → close */}
+      {/* Overlay — semi-opaque scrim, click → close.
+          Fades in from transparent; cstk-animate collapses transition under
+          prefers-reduced-motion: reduce (theme.css). */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 z-40 bg-[var(--scrim)] cstk-animate"
+        className={[
+          'fixed inset-0 z-40 bg-[var(--scrim)] cstk-animate',
+          'transition-opacity duration-200',
+          entered ? 'opacity-100' : 'opacity-0',
+        ].join(' ')}
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — slides in from the right.
+          • entered=false → translate-x-full (off-screen right) + opacity-0
+          • entered=true  → translate-x-0 + opacity-100
+          • cstk-animate forces transition: none under prefers-reduced-motion
+            so .translate-x-full is never shown (instant mount at final position). */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        data-state={entered ? 'open' : 'closed'}
         className={[
           'fixed inset-y-0 right-0 z-50 flex flex-col',
           'w-full bg-card shadow-sheet border-l border-[var(--divider)]',
           widthClass,
-          // Slide-in from right; motion-safe guard lives in .cstk-animate in theme.css
-          'translate-x-0 transition-transform duration-160 cstk-animate',
+          'transition-[transform,opacity] duration-200 ease-out cstk-animate',
+          entered ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0',
         ].join(' ')}
       >
         {/* Header */}

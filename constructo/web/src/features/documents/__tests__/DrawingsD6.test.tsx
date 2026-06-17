@@ -514,6 +514,29 @@ describe('D6 — Drawings register elevation', () => {
       const roomTexts = within(linkedSection).getAllByText(/^Kitchen$/i)
       expect(roomTexts.length).toBeGreaterThan(0)
     })
+
+    it('linked-change status pill shows LOCALIZED label ("Linked" not raw "linked")', async () => {
+      mockListRegister.mockResolvedValue([rowV1, rowV2])
+      mockSiteChangesList.mockResolvedValue([linkedSiteChange])
+
+      renderPage()
+
+      await screen.findByRole('heading', { name: /Ground Floor Plan/i })
+      await userEvent.click(screen.getByRole('heading', { name: /Ground Floor Plan/i }))
+
+      const dialog = await screen.findByRole('dialog')
+
+      await waitFor(() => {
+        expect(
+          within(dialog).getByText(/Window sill height reduced to 800mm/i),
+        ).toBeInTheDocument()
+      })
+
+      const linkedSection = within(dialog).getByText(/^Linked site changes$/i).closest('section')!
+
+      // The localized label is title-case "Linked" from sitechanges.badge.linked
+      expect(within(linkedSection).getByText('Linked')).toBeInTheDocument()
+    })
   })
 
   // -------------------------------------------------------------------------

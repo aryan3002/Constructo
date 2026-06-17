@@ -90,6 +90,10 @@ export function DesignerWorkspace() {
     )
   }
 
+  function handleViewSelections() {
+    setActiveTab(TAB_SELECTIONS)
+  }
+
   // Tab definitions for the TabBar (not the AppShell nav)
   const internalTabs = [
     { id: TAB_SELECTIONS, label: t('designer.tab.selections') },
@@ -133,7 +137,9 @@ export function DesignerWorkspace() {
           className="focus-visible:outline-none"
         >
           {activeTab === TAB_SELECTIONS && (
-            <Selections siteId={effectiveSiteId} />
+            <div className="max-w-3xl mx-auto">
+              <Selections siteId={effectiveSiteId} />
+            </div>
           )}
         </div>
 
@@ -146,7 +152,9 @@ export function DesignerWorkspace() {
           className="focus-visible:outline-none"
         >
           {activeTab === TAB_SITE_CHANGES && (
-            <SiteChanges siteId={effectiveSiteId} />
+            <div className="max-w-3xl mx-auto">
+              <SiteChanges siteId={effectiveSiteId} />
+            </div>
           )}
         </div>
 
@@ -158,7 +166,11 @@ export function DesignerWorkspace() {
           hidden={activeTab !== TAB_INTAKE}
           className="focus-visible:outline-none"
         >
-          {activeTab === TAB_INTAKE && <Intake siteId={effectiveSiteId} />}
+          {activeTab === TAB_INTAKE && (
+            <div className="max-w-3xl mx-auto">
+              <Intake siteId={effectiveSiteId} onViewSelections={handleViewSelections} />
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

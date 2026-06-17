@@ -10,7 +10,7 @@
  *   • Supports variant="danger" (red confirm) + busy spinner
  */
 
-import { useRef, useId } from 'react'
+import { useRef, useId, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useDialog } from './useDialog'
 import { Button } from './Button'
@@ -31,16 +31,45 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
+  // entered=true triggers the CSS enter transition (false = "from" state).
+  // Two nested rAFs: first paint renders the "from" state so the browser can
+  // interpolate; the second flips to "to". On close we unmount immediately
+  // (instant leave) which is simplest, test-safe, and acceptable per spec.
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    if (!open) {
+      setEntered(false)
+      return
+    }
+    let id1: number
+    let id2: number
+    id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => {
+        setEntered(true)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(id1)
+      cancelAnimationFrame(id2)
+    }
+  }, [open])
+
   useDialog({ open, onClose, panelRef })
 
   if (!open) return null
 
   return createPortal(
     <>
-      {/* Overlay — semi-opaque scrim, aria-hidden (purely visual) */}
+      {/* Overlay — semi-opaque scrim, aria-hidden (purely visual).
+          Fades in from transparent; cstk-animate collapses transition under
+          prefers-reduced-motion: reduce (theme.css). */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 z-40 bg-[var(--scrim)] cstk-animate"
+        className={[
+          'fixed inset-0 z-40 bg-[var(--scrim)] cstk-animate',
+          'transition-opacity duration-200',
+          entered ? 'opacity-100' : 'opacity-0',
+        ].join(' ')}
         onClick={onClose}
       />
 
@@ -48,17 +77,22 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
       >
-        {/* Panel — pointer-events-auto so clicks inside work; stop propagation is not needed
-            because the centering shell has pointer-events-none (overlay handles click-outside) */}
+        {/* Panel — scales+fades in from slightly smaller.
+            • entered=false → scale-95 + opacity-0
+            • entered=true  → scale-100 + opacity-100
+            • cstk-animate forces transition: none under prefers-reduced-motion
+              so scale-95 is never shown (instant mount at final size). */}
         <div
           ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          data-state={entered ? 'open' : 'closed'}
           className={[
             'relative flex flex-col w-full max-w-md pointer-events-auto',
             'bg-card rounded-sheet shadow-pop',
-            'cstk-animate',
+            'transition-[transform,opacity] duration-200 ease-out cstk-animate',
+            entered ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
           ].join(' ')}
         >
           {/* Header */}

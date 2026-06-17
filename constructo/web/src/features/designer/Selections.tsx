@@ -20,7 +20,7 @@
  *             first site by default. D4 will lift this as the workspace shell
  *             passes the active site down.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { specsApi } from '../../api/specs'
 import type { DeskLine } from '../../api/specs'
@@ -35,6 +35,8 @@ import { formatRupees } from '../../lib/money'
 import { RollupChips } from './RollupChips'
 import { SpecRow } from './SpecRow'
 import { SelectionDrawer } from './SelectionDrawer'
+import { AddSelectionForms } from './AddSelectionForms'
+import type { AddMode } from './AddSelectionForms'
 
 // ---------------------------------------------------------------------------
 // ₹ helper (for room subtotals in the section header)
@@ -89,8 +91,26 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  // --- Add-selection form state: keyed by componentId ---
+  const [addModes, setAddModes] = useState<Record<string, AddMode>>({})
+
+  function setAddMode(componentId: string, mode: AddMode) {
+    setAddModes((prev) => ({ ...prev, [componentId]: mode }))
+  }
+
+  // canPropose gate (same logic as SelectionDrawer)
+  const canPropose = role === 'owner' || role === 'pm' || role === 'architect'
+
   // Flatten all line IDs in render order for cockpit keyboard navigation
   const allLineIds: string[] = desk.data?.rooms.flatMap((r) => r.lines.map((l) => l.id)) ?? []
+
+  // Roving focus refs — one per line in allLineIds order
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
+
+  // Reset rowRefs on list length change
+  useEffect(() => {
+    rowRefs.current = rowRefs.current.slice(0, allLineIds.length)
+  }, [allLineIds.length])
 
   // Find the line and its room for the drawer
   function findLineAndRoom(id: string): { line: DeskLine; room: string } | null {
@@ -107,6 +127,12 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
   // --- Keyboard nav ---
   const handleMove = useCallback((id: string) => {
     setSelectedId(id)
+    // Roving focus: focus + scroll the moved-to row
+    const el = rowRefs.current.find((r) => r?.getAttribute('data-spec-id') === id)
+    if (el) {
+      el.focus()
+      el.scrollIntoView?.({ block: 'nearest' })
+    }
   }, [])
 
   const handleOpen = useCallback((id: string) => {
@@ -275,20 +301,50 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
                           </tr>
                         </thead>
                         <tbody>
-                          {room.lines.map((line) => (
-                            <SpecRow
-                              key={line.id}
-                              line={line}
-                              selected={selectedId === line.id}
-                              onClick={() => {
-                                setSelectedId(line.id)
-                                setDrawerOpen(true)
-                              }}
-                            />
-                          ))}
+                          {room.lines.map((line) => {
+                            const globalIdx = allLineIds.indexOf(line.id)
+                            return (
+                              <SpecRow
+                                key={line.id}
+                                line={line}
+                                selected={selectedId === line.id}
+                                onClick={() => {
+                                  setSelectedId(line.id)
+                                  setDrawerOpen(true)
+                                }}
+                                rowRef={(el) => { rowRefs.current[globalIdx] = el }}
+                              />
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Contextual "Add selection" affordance — one per unique component in this room.
+                        We derive unique components from the desk lines (component_id + element).
+                        Role-gated: only canPropose roles see these buttons. */}
+                    {canPropose && effectiveSiteId && (() => {
+                      // Deduplicate components in this room (preserve insertion order)
+                      const seen = new Set<string>()
+                      const comps: { componentId: string; elementName: string }[] = []
+                      for (const line of room.lines) {
+                        if (!seen.has(line.component_id)) {
+                          seen.add(line.component_id)
+                          comps.push({ componentId: line.component_id, elementName: line.element })
+                        }
+                      }
+                      return comps.map(({ componentId, elementName }) => (
+                        <AddSelectionForms
+                          key={componentId}
+                          siteId={effectiveSiteId}
+                          componentId={componentId}
+                          elementName={elementName}
+                          canPropose={canPropose}
+                          mode={addModes[componentId] ?? null}
+                          onModeChange={(mode) => setAddMode(componentId, mode)}
+                        />
+                      ))
+                    })()}
                   </section>
                 ))}
               </div>
@@ -304,7 +360,7 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
           onClose={() => {
             setDrawerOpen(false)
           }}
-          line={selectedEntry.line}
+          lineId={selectedEntry.line.id}
           room={selectedEntry.room}
           siteId={effectiveSiteId}
           role={role}

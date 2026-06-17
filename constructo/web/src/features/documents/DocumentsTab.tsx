@@ -104,32 +104,46 @@ function DocumentRow({ doc, siteName, canManage, today }: DocumentRowProps) {
 
   return (
     <li className="flex flex-col gap-1 rounded-card border border-line bg-card px-4 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-body text-body font-semibold text-text">{doc.title}</h3>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-            {/* Localized doc type */}
-            <Small className="font-semibold text-text">{t(docTypeKey(doc.doc_type))}</Small>
+      {/*
+       * Single DOM structure — one heading, one set of actions.
+       * CSS grid places actions in a fixed right column on wide screens
+       * and inline with title on narrow screens without duplicating nodes.
+       *
+       * Layout:
+       *   Narrow (<md):
+       *     Row 1: [title ···············] [actions]
+       *     Row 2: [type] [site] [expiry] [archived?]
+       *   Wide (md+):
+       *     Row 1: [title ··] [type][site][expiry]  ··· [actions]
+       */}
+      <div
+        className={[
+          'grid gap-x-3 gap-y-0.5',
+          '[grid-template-areas:"title_actions""meta_meta"]',
+          '[grid-template-columns:1fr_auto]',
+          'md:[grid-template-areas:"title_actions""meta_actions"]',
+        ].join(' ')}
+      >
+        <h3 className="font-body text-body font-semibold text-text [grid-area:title]">
+          {doc.title}
+        </h3>
 
-            {/* Site or company-wide */}
-            <Small className="text-text-mute">{siteName}</Small>
-
-            {/* Expiry */}
-            {expiryHint ? (
-              <StatusPill status={expiryHint.status} label={expiryHint.text} size="sm" />
-            ) : (
-              <Small className="text-text-mute">{t('documents.no_expiry')}</Small>
-            )}
-
-            {/* Archived badge */}
-            {!doc.is_active && (
-              <StatusPill status="info" label={t('documents.archived_badge')} size="sm" />
-            )}
-          </div>
+        {/* Metadata */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 [grid-area:meta]">
+          <Small className="font-semibold text-text">{t(docTypeKey(doc.doc_type))}</Small>
+          <Small className="text-text-mute">{siteName}</Small>
+          {expiryHint ? (
+            <StatusPill status={expiryHint.status} label={expiryHint.text} size="sm" />
+          ) : (
+            <Small className="text-text-mute">{t('documents.no_expiry')}</Small>
+          )}
+          {!doc.is_active && (
+            <StatusPill status="info" label={t('documents.archived_badge')} size="sm" />
+          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {/* Actions — single node, grid places it in [actions] area */}
+        <div className="flex shrink-0 self-start items-center gap-2 [grid-area:actions]">
           <a
             href={doc.file_url}
             target="_blank"

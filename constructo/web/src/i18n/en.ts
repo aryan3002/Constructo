@@ -1002,11 +1002,31 @@ export const en = {
   // Keyboard hint
   'selections.kbd_hint': '↑ ↓ move · Enter open',
   // Edit form fields
+  'selections.edit.material': 'Material',
+  'selections.edit.material_none': '— No material —',
   'selections.edit.qty': 'Quantity',
   'selections.edit.unit': 'Unit',
   'selections.edit.rate': 'Rate / unit',
   'selections.edit.wastage': 'Wastage %',
   'selections.edit.notes': 'Notes',
+
+  // Originate — "Add selection" (contextual per component group)
+  'selections.add.add_line': 'Add line',
+  'selections.add.add_from_photo': 'Add from photo',
+  'selections.add.title': 'New selection',
+  'selections.add.label': 'Label',
+  'selections.add.label_placeholder': 'e.g. Vitrified Tile – Floor',
+  'selections.add.creating': 'Creating…',
+  'selections.add.create': 'Create draft',
+  'selections.add.created': 'Selection draft created.',
+  'selections.add.cancel': 'Cancel',
+  // Add from photo
+  'selections.add_photo.title': 'Add from photo',
+  'selections.add_photo.choose': 'Choose photo',
+  'selections.add_photo.extracting': 'Analysing photo…',
+  'selections.add_photo.extract': 'Propose from photo',
+  'selections.add_photo.proposed': 'AI proposed a draft — confirm or edit before routing.',
+  'selections.add_photo.note': 'AI will propose a material — you confirm before routing.',
 
   // === site changes (D3 — field → designer feedback loop) ===
   'sitechanges.title': 'Site Changes',
@@ -1051,6 +1071,7 @@ export const en = {
   'sitechanges.drawer.resolved_state': 'Resolved',
   'sitechanges.drawer.resolved_hint': 'This change has been resolved and closed.',
   'sitechanges.drawer.readonly_hint': 'View only — only the architect, owner, or PM can add impact notes and link drawings.',
+  'sitechanges.drawer.view_drawing_register': 'View in drawings register',
   // Toast messages
   'sitechanges.impact_saved': 'Impact note saved.',
   'sitechanges.linked': 'Linked to {title} {version}.',
@@ -1107,6 +1128,7 @@ export const en = {
   'intake.materialize.confirm_cta': 'Create specs',
   'intake.materialize.toast.success': 'Proposed {count} spec line(s) — review them in Selections.',
   'intake.materialize.toast.error': 'Could not materialize the brief.',
+  'intake.materialize.view_selections': 'View in Selections',
   'intake.confidence.high': 'High confidence',
   'intake.confidence.review': 'Review recommended',
   'intake.confidence.confirm': 'Confirm before use',

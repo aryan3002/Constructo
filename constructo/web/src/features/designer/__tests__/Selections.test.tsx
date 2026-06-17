@@ -33,6 +33,8 @@ const mockRoute   = vi.fn()
 const mockApprove = vi.fn()
 const mockRelease = vi.fn()
 const mockUpdate  = vi.fn()
+const mockCreate  = vi.fn()
+const mockExtract = vi.fn()
 
 /**
  * desk() returns a roster with one line in each of the 5 lifecycle states
@@ -52,6 +54,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's1',
+          component_id: 'comp1',
           element: 'Vitrified Tile',
           location: 'Floor',
           category: 'Floor',
@@ -74,6 +77,7 @@ const MOCK_DESK = {
         },
         {
           id: 's2',
+          component_id: 'comp1',
           element: 'Decorative Panel',
           location: 'Feature Wall',
           category: 'Wall',
@@ -103,6 +107,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's3',
+          component_id: 'comp2',
           element: 'Laminate',
           location: 'Wardrobe Shutter',
           category: 'Joinery',
@@ -125,6 +130,7 @@ const MOCK_DESK = {
         },
         {
           id: 's4',
+          component_id: 'comp2',
           element: 'Paint',
           location: 'Wall General',
           category: 'Finish',
@@ -154,6 +160,7 @@ const MOCK_DESK = {
       lines: [
         {
           id: 's5',
+          component_id: 'comp3',
           element: 'Granite',
           location: 'Counter',
           category: 'Stone',
@@ -176,6 +183,7 @@ const MOCK_DESK = {
         },
         {
           id: 's6',
+          component_id: 'comp4',
           element: 'Backsplash Tile',
           location: null,
           category: 'Wall',
@@ -208,6 +216,21 @@ vi.mock('../../../api/specs', () => ({
     approve: (...a: unknown[]) => mockApprove(...a),
     release: (...a: unknown[]) => mockRelease(...a),
     update:  (...a: unknown[]) => mockUpdate(...a),
+    create:  (...a: unknown[]) => mockCreate(...a),
+    extract: (...a: unknown[]) => mockExtract(...a),
+  },
+}))
+
+vi.mock('../../../api/client', () => ({
+  api: {
+    listMaterials: vi.fn().mockResolvedValue([
+      { id: 'mat1', name: 'Vitrified Tile', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-01T00:00:00Z' },
+      { id: 'mat2', name: 'Decorative Panel', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-02T00:00:00Z' },
+      { id: 'mat3', name: 'Laminate', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-03T00:00:00Z' },
+    ]),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(public status: number, message: string) { super(message) }
   },
 }))
 
@@ -284,6 +307,26 @@ describe('Selections cockpit (D2)', () => {
     mockApprove.mockResolvedValue({ id: 's2', routing_status: 'approved' })
     mockRelease.mockResolvedValue({ id: 's3', routing_status: 'released' })
     mockUpdate.mockResolvedValue({ id: 's1' })
+    mockCreate.mockResolvedValue({
+      id: 'snew', component_id: 'comp1', site_id: 'site-1',
+      label: 'New Line', material_id: null, qty: null, unit: null,
+      unit_rate: null, wastage_pct: null, approval_status: 'pending',
+      client_final_code: null, assignee_id: null, notes: null,
+      sent_at: null, released_at: null, created_at: new Date().toISOString(),
+      routing_status: 'draft', company_id: 'c1',
+    })
+    mockExtract.mockResolvedValue({
+      spec: {
+        id: 'sphoto', component_id: 'comp1', site_id: 'site-1',
+        label: 'Proposed', material_id: 'mat-proposed',
+        qty: null, unit: null, unit_rate: null, wastage_pct: null,
+        approval_status: 'pending', client_final_code: null, assignee_id: null,
+        notes: 'Proposed from a photo — confirm.',
+        sent_at: null, released_at: null, created_at: new Date().toISOString(),
+        routing_status: 'draft', company_id: 'c1',
+      },
+      extracted: { name: 'test.jpg', category: 'Proposed', brand: null },
+    })
   })
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -607,6 +650,184 @@ describe('Selections cockpit (D2)', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Fix 4 — Edit can change the material (material picker in EditForm)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 4: EditForm shows a material picker and includes material_id in specsApi.update', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Open s1 (draft, canEdit = true)
+    await userEvent.click(screen.getByTestId('spec-row-s1'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Click Edit
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Edit$/i }))
+
+    // Material picker must be rendered
+    const materialPicker = within(dialog).getByTestId('material-picker')
+    expect(materialPicker).toBeInTheDocument()
+
+    // Change the material to mat2
+    await userEvent.selectOptions(materialPicker, 'mat2')
+
+    // Save changes
+    await userEvent.click(within(dialog).getByRole('button', { name: /Save changes/i }))
+
+    // specsApi.update must have been called with material_id: 'mat2'
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({ material_id: 'mat2' }),
+      ),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fix 1 — Optimistic stay-open drawer
+  // After an action (Approve), the drawer STAYS OPEN — the drawer no longer
+  // calls onClose() after an action; the user closes it themselves.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 1: drawer stays open after Approve (no auto-close on action)', async () => {
+    mockUseMeRole.mockReturnValue('owner' as string | undefined)
+    renderSelections()
+    await screen.findByText('Decorative Panel')
+
+    // Open s2 (out_for_approval)
+    await userEvent.click(screen.getByTestId('spec-row-s2'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Enter a code and approve
+    const codeInput = within(dialog).getByTestId('approve-code-input')
+    await userEvent.clear(codeInput)
+    await userEvent.type(codeInput, 'MER-WALL-CHR-02')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Approve$/i }))
+
+    // API called
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledWith('s2', { status: 'approved', client_final_code: 'MER-WALL-CHR-02' }))
+
+    // Toast shown
+    await waitFor(() => expect(screen.getByText(/Selection approved/i)).toBeInTheDocument())
+
+    // Drawer is STILL open (not closed) — the critical assertion
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Fix 1: drawer stays open after Route action (no auto-close on action)', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Open s1 (draft)
+    await userEvent.click(screen.getByTestId('spec-row-s1'))
+    await screen.findByRole('dialog')
+
+    // Click Route to owner + confirm
+    await userEvent.click(screen.getByRole('button', { name: /Route to owner/i }))
+    const confirmDialog = await screen.findByRole('dialog', { name: /Route to owner/i })
+    await userEvent.click(within(confirmDialog).getByRole('button', { name: /Send for approval/i }))
+
+    // API called
+    await waitFor(() => expect(mockRoute).toHaveBeenCalledWith('s1'))
+
+    // Toast shown
+    await waitFor(() => expect(screen.getByText(/Selection sent to owner for sign-off/i)).toBeInTheDocument())
+
+    // Drawer is STILL open — the critical assertion
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fix 3 — Real keyboard cockpit: roving tabIndex + DOM focus
+  // ArrowDown moves selection AND focuses the new row (tabIndex=0).
+  // Non-selected rows must have tabIndex=-1 (roving focus, not tabIndex=0).
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 3: ArrowDown moves selection AND focuses the new row (roving tabIndex)', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Before any key: all rows should be tabIndex=-1 (roving) — none are selected
+    const s1Row = screen.getByTestId('spec-row-s1')
+    expect(s1Row).toHaveAttribute('tabindex', '-1')
+
+    // ArrowDown → s1 selected
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => {
+      expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('aria-selected', 'true')
+    })
+
+    // s1 must be tabIndex=0 (selected), others must be -1
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('tabindex', '0')
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('tabindex', '-1')
+
+    // ArrowDown → s2 selected + focused
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => {
+      expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('aria-selected', 'true')
+    })
+    // s2 gets tabIndex=0, s1 back to -1
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('tabindex', '0')
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('tabindex', '-1')
+
+    // The focused element should be s2 (DOM focus via ref.focus())
+    expect(document.activeElement).toBe(screen.getByTestId('spec-row-s2'))
+  })
+
+  it('Fix 3: keyboard keys disabled while drawer is open', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Select s1 via ArrowDown, then open drawer via Enter
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => screen.getByTestId('spec-row-s1').getAttribute('aria-selected') === 'true')
+    await act(async () => { press('Enter') })
+    await screen.findByRole('dialog')
+
+    // While drawer is open, ArrowDown should NOT change selection
+    const s1Row = screen.getByTestId('spec-row-s1')
+    expect(s1Row).toHaveAttribute('aria-selected', 'true')
+    await act(async () => { press('ArrowDown') })
+
+    // s1 should still be selected (key disabled while drawer open)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('aria-selected', 'true')
+    // s2 should NOT be selected
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('aria-selected', 'false')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fix 2 — approved vs released render DIFFERENT pill tones
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 2: approved (s3) and released (s4) show different status pill tones', async () => {
+    renderSelections()
+    await screen.findByText('Laminate') // s3 approved
+
+    const approvedRow = screen.getByTestId('spec-row-s3')
+    const releasedRow = screen.getByTestId('spec-row-s4')
+
+    // Get the pill in each row
+    const approvedPill = approvedRow.querySelector('[role="status"]')
+    const releasedPill = releasedRow.querySelector('[role="status"]')
+
+    expect(approvedPill).not.toBeNull()
+    expect(releasedPill).not.toBeNull()
+
+    // The data-status attribute must differ
+    expect(approvedPill!.getAttribute('data-status')).not.toBe(
+      releasedPill!.getAttribute('data-status'),
+    )
+    // Approved → ok; Released → done
+    expect(approvedPill!.getAttribute('data-status')).toBe('ok')
+    expect(releasedPill!.getAttribute('data-status')).toBe('done')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 12. pm-role: out_for_approval → "Awaiting owner" calm state, NO Approve button (WC4 invariant)
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -624,5 +845,111 @@ describe('Selections cockpit (D2)', () => {
 
     // No Approve button
     expect(within(dialog).queryByRole('button', { name: /^Approve$/i })).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 13. Originate — Add from photo: choose file + submit → specsApi.extract
+  //     called with (siteId, componentId, file) → toast "AI proposed a draft"
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Add from photo: choosing a file and submitting calls specsApi.extract with correct args → toast', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // "Add from photo" button is visible for comp1 in Living Room
+    const addPhotoBtn = screen.getByTestId('add-photo-btn-comp1')
+    expect(addPhotoBtn).toBeInTheDocument()
+    await userEvent.click(addPhotoBtn)
+
+    // Form is now visible
+    const form = screen.getByTestId('add-from-photo-form')
+    expect(form).toBeInTheDocument()
+
+    // Upload a file via the hidden input
+    const fileInput = screen.getByTestId('add-photo-file-input')
+    const file = new File(['(mock image)'], 'photo.jpg', { type: 'image/jpeg' })
+    await userEvent.upload(fileInput, file)
+
+    // File name shown
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument()
+
+    // Submit
+    await userEvent.click(screen.getByTestId('add-photo-submit'))
+
+    // specsApi.extract called with (siteId='site-1', componentId='comp1', file)
+    await waitFor(() =>
+      expect(mockExtract).toHaveBeenCalledWith('site-1', 'comp1', file),
+    )
+
+    // Toast: "AI proposed a draft — confirm or edit before routing."
+    await waitFor(() =>
+      expect(screen.getByText(/AI proposed a draft/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 14. Originate — Add line: fill label + material → specsApi.create called
+  //     with {component_id, site_id, label, material_id, …}
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Add line: filling the form calls specsApi.create with component_id, site_id, label, material_id → toast', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // "Add line" button visible for comp1
+    const addLineBtn = screen.getByTestId('add-line-btn-comp1')
+    expect(addLineBtn).toBeInTheDocument()
+    await userEvent.click(addLineBtn)
+
+    // Form visible
+    const form = screen.getByTestId('add-line-form')
+    expect(form).toBeInTheDocument()
+
+    // Fill label
+    const labelInput = screen.getByTestId('add-line-label')
+    await userEvent.clear(labelInput)
+    await userEvent.type(labelInput, 'Ceramic Tile – Bathroom')
+
+    // Pick material (mat2 in the mock)
+    const materialPicker = screen.getByTestId('add-material-picker')
+    await userEvent.selectOptions(materialPicker, 'mat2')
+
+    // Submit
+    await userEvent.click(screen.getByTestId('add-line-submit'))
+
+    // specsApi.create called with correct args
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          component_id: 'comp1',
+          site_id: 'site-1',
+          label: 'Ceramic Tile – Bathroom',
+          material_id: 'mat2',
+        }),
+      ),
+    )
+
+    // Toast: "Selection draft created."
+    await waitFor(() =>
+      expect(screen.getByText(/Selection draft created/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 15. Role gate — non-proposer (supervisor role) does NOT see Add affordances
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Role gate: supervisor role does not see Add line / Add from photo buttons', async () => {
+    mockUseMeRole.mockReturnValue('supervisor' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // No add affordances for any component
+    expect(screen.queryByTestId('add-line-btn-comp1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-photo-btn-comp1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-line-btn-comp2')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-photo-btn-comp2')).not.toBeInTheDocument()
   })
 })

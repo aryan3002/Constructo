@@ -19,6 +19,7 @@ export default {
         warn: 'var(--c-warn)',
         risk: 'var(--c-risk)',
         info: 'var(--c-info)',
+        done: 'var(--done-solid)',
         // Status tints + text (for pills/badges)
         'ok-bg': 'var(--ok-bg)',
         'ok-fg': 'var(--ok-fg)',
@@ -28,6 +29,8 @@ export default {
         'risk-fg': 'var(--risk-fg)',
         'info-bg': 'var(--info-bg)',
         'info-fg': 'var(--info-fg)',
+        'done-bg': 'var(--done-bg)',
+        'done-fg': 'var(--done-fg)',
 
         // --- NEW semantic role tokens (prefer these in new code) ---
         surface: 'var(--surface)',

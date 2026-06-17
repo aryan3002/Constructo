@@ -32,7 +32,7 @@ const RISK_KIND_KEY: Record<string, TranslationKey> = {
 /** Money-bearing exception kinds get the explicit ₹ glyph on the Approve chip. */
 const MONEY_KINDS = new Set(['unverified_invoice', 'pending_approval'])
 
-const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3 }
+const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3, done: 3 }
 const MAX_CARDS = 3
 
 /** Worst-status-first, then busiest; only sites that actually need attention. */

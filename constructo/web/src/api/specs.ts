@@ -36,6 +36,7 @@ export interface Spec {
 
 export interface DeskLine {
   id: string
+  component_id: string
   element: string
   location: string | null
   category: string | null
@@ -170,6 +171,7 @@ function _specToDesk(siteId: string): DeskOut {
       : s.component_id === 'comp2' ? 'Master Bedroom' : 'Kitchen'
     ;(groups[room] ??= []).push({
       id: s.id,
+      component_id: s.component_id,
       element: s.label.split('–')[0].trim(),
       location: null,
       category: s.label.split('–')[1]?.trim() ?? s.label,

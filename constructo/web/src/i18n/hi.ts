@@ -977,11 +977,31 @@ export const hi: Record<TranslationKey, string> = {
   // Keyboard hint
   'selections.kbd_hint': '↑ ↓ चुनें · Enter खोलें',
   // Edit form fields
+  'selections.edit.material': 'सामग्री',
+  'selections.edit.material_none': '— कोई सामग्री नहीं —',
   'selections.edit.qty': 'मात्रा',
   'selections.edit.unit': 'इकाई',
   'selections.edit.rate': 'दर / इकाई',
   'selections.edit.wastage': 'बर्बादी %',
   'selections.edit.notes': 'टिप्पणियाँ',
+
+  // Originate — "Add selection" (contextual per component group)
+  'selections.add.add_line': 'लाइन जोड़ें',
+  'selections.add.add_from_photo': 'फ़ोटो से जोड़ें',
+  'selections.add.title': 'नया सिलेक्शन',
+  'selections.add.label': 'नाम',
+  'selections.add.label_placeholder': 'जैसे विट्रिफ़ाइड टाइल – फ़र्श',
+  'selections.add.creating': 'बन रहा है…',
+  'selections.add.create': 'ड्राफ़्ट बनाएँ',
+  'selections.add.created': 'सिलेक्शन ड्राफ़्ट बनाया गया।',
+  'selections.add.cancel': 'रद्द करें',
+  // Add from photo
+  'selections.add_photo.title': 'फ़ोटो से जोड़ें',
+  'selections.add_photo.choose': 'फ़ोटो चुनें',
+  'selections.add_photo.extracting': 'फ़ोटो का विश्लेषण हो रहा है…',
+  'selections.add_photo.extract': 'फ़ोटो से सुझाव लें',
+  'selections.add_photo.proposed': 'AI ने ड्राफ़्ट सुझाया — रूट करने से पहले पुष्टि करें।',
+  'selections.add_photo.note': 'AI एक सामग्री सुझाएगा — रूट करने से पहले आप पुष्टि करें।',
 
   // === site changes (D3 — field → designer feedback loop) ===
   'sitechanges.title': 'साइट परिवर्तन',
@@ -1026,6 +1046,7 @@ export const hi: Record<TranslationKey, string> = {
   'sitechanges.drawer.resolved_state': 'हल हुआ',
   'sitechanges.drawer.resolved_hint': 'यह परिवर्तन हल हो चुका है और बंद है।',
   'sitechanges.drawer.readonly_hint': 'केवल देखें — प्रभाव नोट और ड्राइंग लिंक केवल आर्किटेक्ट, मालिक या PM जोड़ सकते हैं।',
+  'sitechanges.drawer.view_drawing_register': 'ड्राइंग रजिस्टर में देखें',
   // Toast messages
   'sitechanges.impact_saved': 'प्रभाव नोट सहेजा गया।',
   'sitechanges.linked': '{title} {version} से लिंक किया गया।',
@@ -1083,6 +1104,7 @@ export const hi: Record<TranslationKey, string> = {
   'intake.materialize.toast.success':
     '{count} स्पेक लाइन(ें) प्रस्तावित हुईं — चयन टैब में समीक्षा करें।',
   'intake.materialize.toast.error': 'ब्रीफ़ को स्पेक में नहीं बदला जा सका।',
+  'intake.materialize.view_selections': 'Selections में देखें',
   'intake.confidence.high': 'उच्च विश्वास',
   'intake.confidence.review': 'समीक्षा अनुशंसित',
   'intake.confidence.confirm': 'उपयोग से पहले पुष्टि करें',

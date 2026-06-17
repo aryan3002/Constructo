@@ -155,22 +155,24 @@ export function SiteChanges({ siteId: externalSiteId }: { siteId?: string }) {
   const showSiteSelector = !externalSiteId
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl mx-auto px-4 py-6">
-      {/* ── Page header ── */}
-      <div>
-        <div className="flex items-baseline gap-3">
-          <H1 as="h1">{t('sitechanges.title')}</H1>
-          {newCount > 0 && (
-            <span
-              data-testid="new-count-badge"
-              className="inline-flex items-center gap-1 rounded-pill bg-warn/15 border border-warn/30 px-2 py-0.5 font-body text-micro font-semibold text-warn"
-            >
-              {t('sitechanges.count.needs_you', { n: newCount })}
-            </span>
-          )}
+    <div className="flex flex-col gap-6">
+      {/* ── Page header (standalone only — workspace shell owns the title) ── */}
+      {!externalSiteId && (
+        <div>
+          <div className="flex items-baseline gap-3">
+            <H1 as="h1">{t('sitechanges.title')}</H1>
+            {newCount > 0 && (
+              <span
+                data-testid="new-count-badge"
+                className="inline-flex items-center gap-1 rounded-pill bg-warn/15 border border-warn/30 px-2 py-0.5 font-body text-micro font-semibold text-warn"
+              >
+                {t('sitechanges.count.needs_you', { n: newCount })}
+              </span>
+            )}
+          </div>
+          <Small className="mt-1">{t('sitechanges.subtitle')}</Small>
         </div>
-        <Small className="mt-1">{t('sitechanges.subtitle')}</Small>
-      </div>
+      )}
 
       {/* ── Site selector (standalone) ── */}
       {showSiteSelector && (

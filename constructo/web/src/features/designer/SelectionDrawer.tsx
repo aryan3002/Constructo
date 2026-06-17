@@ -23,9 +23,9 @@
  *   released                       → Done state ("Released to site on {date}")
  */
 import { useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Drawer, ConfirmDialog, Button, Mono, Small, Body } from '../../ui'
-import type { DeskLine, RoutingStatus } from '../../api/specs'
+import type { DeskLine, DeskOut, RoutingStatus } from '../../api/specs'
 import { specsApi } from '../../api/specs'
 import { useToast } from '../../ui'
 import { qk } from '../../api/queryKeys'
@@ -33,6 +33,8 @@ import { useT } from '../../i18n'
 import type { TFunction } from '../../i18n'
 import type { Role } from '../../api/auth'
 import { formatRupees } from '../../lib/money'
+import { api } from '../../api/client'
+import type { Material } from '../../api/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,10 +157,55 @@ function LifecycleTimeline({ line }: { line: DeskLine }) {
 }
 
 // ---------------------------------------------------------------------------
+// MaterialPicker — a <select> of active materials from the catalog
+// ---------------------------------------------------------------------------
+
+function MaterialPicker({
+  value,
+  onChange,
+}: {
+  value: string | null
+  onChange: (id: string | null) => void
+}) {
+  const t = useT()
+  const { data: materials } = useQuery({
+    queryKey: qk.materials(false),
+    queryFn: () => api.listMaterials(false),
+  })
+
+  const list: Material[] = materials ?? []
+
+  return (
+    <label className="flex flex-col gap-1">
+      <Small className="font-semibold !text-text">{t('selections.edit.material')}</Small>
+      <select
+        data-testid="material-picker"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        aria-label={t('selections.edit.material')}
+        className={[
+          'min-h-tap rounded-control border border-line bg-card px-3',
+          'font-body text-body text-text',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        ].join(' ')}
+      >
+        <option value="">{t('selections.edit.material_none')}</option>
+        {list.filter((m) => m.is_active).map((m) => (
+          <option key={m.id} value={m.id}>
+            {[m.name, m.category, m.unit].filter(Boolean).join(' · ')}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Inline edit form
 // ---------------------------------------------------------------------------
 
 interface EditValues {
+  material_id: string | null
   qty: string
   unit: string
   unit_rate: string
@@ -177,6 +224,7 @@ function EditForm({
 }) {
   const t = useT()
   const [values, setValues] = useState<EditValues>({
+    material_id: line.material_id,
     qty: line.qty ?? '',
     unit: line.unit ?? '',
     unit_rate: line.unit_rate ?? '',
@@ -186,7 +234,7 @@ function EditForm({
   const [saving, setSaving] = useState(false)
 
   function field(
-    key: keyof EditValues,
+    key: Exclude<keyof EditValues, 'material_id'>,
     labelKey: Parameters<TFunction>[0],
     placeholder?: string,
   ) {
@@ -195,7 +243,7 @@ function EditForm({
         <Small className="font-semibold !text-text">{t(labelKey)}</Small>
         <input
           type="text"
-          value={values[key]}
+          value={values[key] as string}
           onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
           placeholder={placeholder}
           className={[
@@ -213,6 +261,7 @@ function EditForm({
     setSaving(true)
     try {
       const patch: Partial<EditValues> = {}
+      if (values.material_id !== line.material_id) patch.material_id = values.material_id
       if (values.qty !== (line.qty ?? '')) patch.qty = values.qty || undefined as unknown as string
       if (values.unit !== (line.unit ?? '')) patch.unit = values.unit || undefined as unknown as string
       if (values.unit_rate !== (line.unit_rate ?? '')) patch.unit_rate = values.unit_rate || undefined as unknown as string
@@ -226,6 +275,11 @@ function EditForm({
 
   return (
     <div className="space-y-3 rounded-card border border-primary/30 bg-primary/5 p-4">
+      {/* Material picker — full width */}
+      <MaterialPicker
+        value={values.material_id}
+        onChange={(id) => setValues((v) => ({ ...v, material_id: id }))}
+      />
       <div className="grid grid-cols-2 gap-3">
         {field('qty', 'selections.edit.qty')}
         {field('unit', 'selections.edit.unit')}
@@ -301,7 +355,8 @@ function ApproveForm({
 export interface SelectionDrawerProps {
   open: boolean
   onClose: () => void
-  line: DeskLine
+  /** The id of the line to display — used to look up the live line in query cache. */
+  lineId: string
   room: string
   siteId: string
   /** The current user's role — drives role-shaped actions. */
@@ -310,10 +365,22 @@ export interface SelectionDrawerProps {
 
 type DialogKind = 'route' | 'return' | 'release' | null
 
+/** Look up the live DeskLine by id from the desk query cache. */
+function useLiveLine(siteId: string, lineId: string): DeskLine | null {
+  const qc = useQueryClient()
+  const deskData = qc.getQueryData<DeskOut>(qk.specDesk(siteId))
+  if (!deskData) return null
+  for (const r of deskData.rooms) {
+    const found = r.lines.find((l) => l.id === lineId)
+    if (found) return found
+  }
+  return null
+}
+
 export function SelectionDrawer({
   open,
   onClose,
-  line,
+  lineId,
   room,
   siteId,
   role,
@@ -326,6 +393,9 @@ export function SelectionDrawer({
   const [dialogKind, setDialogKind] = useState<DialogKind>(null)
   const [editing, setEditing] = useState(false)
 
+  // Live line — reads from the query cache so a refetch advances the open drawer
+  const line = useLiveLine(siteId, lineId)
+
   // Role flags
   const canPropose = role === 'owner' || role === 'pm' || role === 'architect'
   const canCommit = role === 'owner'
@@ -336,13 +406,14 @@ export function SelectionDrawer({
 
   // ── Route action ──
   async function handleRoute() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.route(line.id)
       invalidate()
       show({ status: 'ok', message: t('selections.routed') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open — user closes it themselves
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -352,12 +423,13 @@ export function SelectionDrawer({
 
   // ── Approve action ──
   async function handleApprove(code: string) {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.approve(line.id, { status: 'approved', client_final_code: code || undefined })
       invalidate()
       show({ status: 'ok', message: t('selections.approved') })
-      onClose()
+      // Drawer stays open — lifecycle pill + timeline tick forward on refetch
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -367,13 +439,14 @@ export function SelectionDrawer({
 
   // ── Return action ──
   async function handleReturn() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.approve(line.id, { status: 'rejected' })
       invalidate()
       show({ status: 'warn', message: t('selections.returned') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -383,13 +456,14 @@ export function SelectionDrawer({
 
   // ── Release action ──
   async function handleRelease() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.release(line.id)
       invalidate()
       show({ status: 'ok', message: t('selections.released') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -398,12 +472,23 @@ export function SelectionDrawer({
   }
 
   // ── Edit save ──
-  async function handleEditSave(patch: Record<string, string | undefined>) {
+  async function handleEditSave(patch: Partial<{
+    material_id: string | null
+    qty: string
+    unit: string
+    unit_rate: string
+    wastage_pct: string
+    notes: string
+  }>) {
+    if (!line) return
     await specsApi.update(line.id, patch)
     invalidate()
     show({ status: 'ok', message: t('selections.saved') })
     setEditing(false)
   }
+
+  // If line not yet in cache (shouldn't happen in practice), show nothing
+  if (!line) return null
 
   const status: RoutingStatus = line.routing_status
   const isReleased = status === 'released'
@@ -430,14 +515,17 @@ export function SelectionDrawer({
     : '—'
 
   // ── Footer ── role-shaped, single clear action per role×status
+  // `line` is guaranteed non-null here (we returned null above if it wasn't).
+  const safeLine = line as DeskLine
+
   function renderActions() {
-    // Released: done state, no actions
+    // Released: done state, no actions — calm "locked" look
     if (isReleased) {
       return (
-        <div className="rounded-card border border-ok/30 bg-ok/10 px-4 py-3">
-          <Small className="font-semibold !text-ok">
+        <div className="rounded-card border border-done-fg/20 bg-done-bg px-4 py-3">
+          <Small className="font-semibold !text-done-fg">
             {t('selections.released_on')}
-            {line.released_at ? ` · ${fmtDate(line.released_at)}` : ''}
+            {safeLine.released_at ? ` · ${fmtDate(safeLine.released_at)}` : ''}
           </Small>
         </div>
       )
