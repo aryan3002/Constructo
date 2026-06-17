@@ -390,7 +390,7 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
             <div className="flex items-center gap-2">
               <p className="font-body font-semibold text-text">{areaTitle(area.area_key)}</p>
               {area.has_conflict && (
-                <StatusPill status="warn" label="Conflict" size="sm" />
+                <StatusPill status="warn" label={t('intake.themes.conflict')} size="sm" />
               )}
             </div>
             <AreaThemesSection

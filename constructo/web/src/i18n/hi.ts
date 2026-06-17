@@ -833,6 +833,8 @@ export const hi: Record<TranslationKey, string> = {
   'documents.dashboard.expired': '{n} समाप्त',
   'documents.dashboard.expiring': '{n} ≤30 दिनों में समाप्त',
   'documents.dashboard.all_current': 'सभी दस्तावेज़ अद्यतन हैं',
+  'documents.dashboard.clear_filter': 'फ़िल्टर हटाएँ',
+  'documents.dashboard.tracked': '{count} ट्रैक किए',
   // D6b — empty state
   'documents.empty.title': 'अभी कोई दस्तावेज़ नहीं',
   'documents.empty.hint': 'पहला कंपनी दस्तावेज़ जोड़ें — अनुबंध, NOC, बीमा और अन्य।',
@@ -1084,6 +1086,7 @@ export const hi: Record<TranslationKey, string> = {
   'intake.version_chip': 'ब्रीफ़ v{version}',
   'intake.scope_chip': 'दायरा: {scope}',
   'intake.themes.section_title': 'डिज़ाइन थीम',
+  'intake.themes.conflict': 'विरोध',
   'intake.themes.loading': 'थीम लोड हो रही हैं…',
   'intake.themes.empty': 'इस क्षेत्र के लिए अभी कोई थीम प्रस्तावित नहीं है।',
   'intake.themes.palette_label': 'रंग-पट्टी',

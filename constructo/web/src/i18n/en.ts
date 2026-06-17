@@ -858,6 +858,8 @@ export const en = {
   'documents.dashboard.expired': '{n} expired',
   'documents.dashboard.expiring': '{n} expiring ≤30 days',
   'documents.dashboard.all_current': 'All documents current',
+  'documents.dashboard.clear_filter': 'Clear filter',
+  'documents.dashboard.tracked': '{count} tracked',
   // D6b — empty state
   'documents.empty.title': 'No documents yet',
   'documents.empty.hint': 'Add your first company document — contracts, NOCs, insurance, and more.',
@@ -1109,6 +1111,7 @@ export const en = {
   'intake.version_chip': 'Brief v{version}',
   'intake.scope_chip': 'Scope: {scope}',
   'intake.themes.section_title': 'Design Themes',
+  'intake.themes.conflict': 'Conflict',
   'intake.themes.loading': 'Loading themes…',
   'intake.themes.empty': 'No themes proposed for this area yet.',
   'intake.themes.palette_label': 'Palette',

@@ -128,14 +128,14 @@ export function ExpiryDashboard({
           onClick={() => onFilterChange(null)}
           className="inline-flex min-h-tap items-center rounded-pill border border-line bg-paper px-3 py-0.5 font-body text-small text-text-mute transition cstk-animate hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          Clear filter
+          {t('documents.dashboard.clear_filter')}
         </button>
       )}
       {/* Passive "tracked" indicator (count of all docs with an expiry date) */}
       {docs.filter((d) => d.expiry_on).length > 0 && activeFilter === null && (
         <StatusPill
           status="info"
-          label={`${docs.filter((d) => d.expiry_on).length} tracked`}
+          label={t('documents.dashboard.tracked', { count: docs.filter((d) => d.expiry_on).length })}
           size="sm"
         />
       )}
