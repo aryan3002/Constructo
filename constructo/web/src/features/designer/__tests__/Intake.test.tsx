@@ -345,6 +345,47 @@ describe('Intake', () => {
   })
 
   // -------------------------------------------------------------------------
+  // 5b. Materialize → View in Selections affordance
+  // -------------------------------------------------------------------------
+
+  it('after materialize succeeds, a "View in Selections" button appears', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue(MOCK_BRIEF)
+    mockThemesForArea.mockResolvedValue([])
+    const onViewSelections = vi.fn()
+
+    const qc = makeQC()
+    render(
+      <QueryClientProvider client={qc}>
+        <LanguageProvider>
+          <ToastProvider>
+            <MemoryRouter>
+              <Intake siteId="site-1" onViewSelections={onViewSelections} />
+            </MemoryRouter>
+          </ToastProvider>
+        </LanguageProvider>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('A warm, nature-rooted home')
+
+    // Click Materialize
+    await userEvent.click(screen.getByTestId('materialize-btn'))
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: /Create specs/i }))
+
+    // Wait for success toast and the View in Selections button
+    await screen.findByText(/Proposed 5 spec line/i)
+
+    const viewBtn = await screen.findByRole('button', { name: /View in Selections/i })
+    expect(viewBtn).toBeInTheDocument()
+
+    // Clicking it calls onViewSelections
+    await userEvent.click(viewBtn)
+    expect(onViewSelections).toHaveBeenCalledOnce()
+  })
+
+  // -------------------------------------------------------------------------
   // 6. Non-decider role (supervisor) — read-only
   // -------------------------------------------------------------------------
 

@@ -1086,6 +1086,7 @@ export const hi: Record<TranslationKey, string> = {
   'intake.materialize.toast.success':
     '{count} स्पेक लाइन(ें) प्रस्तावित हुईं — चयन टैब में समीक्षा करें।',
   'intake.materialize.toast.error': 'ब्रीफ़ को स्पेक में नहीं बदला जा सका।',
+  'intake.materialize.view_selections': 'Selections में देखें',
   'intake.confidence.high': 'उच्च विश्वास',
   'intake.confidence.review': 'समीक्षा अनुशंसित',
   'intake.confidence.confirm': 'उपयोग से पहले पुष्टि करें',

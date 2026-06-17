@@ -264,15 +264,17 @@ interface BriefBodyProps {
   }
   version?: number
   canDecide: boolean
+  onViewSelections?: () => void
 }
 
-function BriefBody({ profile, briefId, siteId, narrative, version, canDecide }: BriefBodyProps) {
+function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, onViewSelections }: BriefBodyProps) {
   const t = useT()
   const qc = useQueryClient()
   const { show } = useToast()
 
   // Materialize dialog
   const [showMaterialize, setShowMaterialize] = useState(false)
+  const [materializedCount, setMaterializedCount] = useState<number | null>(null)
 
   // Theme decision mutation
   const [decidingId, setDecidingId] = useState<string | null>(null)
@@ -307,6 +309,7 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide }: 
     mutationFn: () => designApi.materialize(briefId),
     onSuccess: (result) => {
       setShowMaterialize(false)
+      setMaterializedCount(result.specs_created)
       show({
         message: t('intake.materialize.toast.success', { count: result.specs_created }),
         status: 'ok' as const,
@@ -404,13 +407,23 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide }: 
       {/* Materialize CTA */}
       {canDecide && (
         <div className="pt-2">
-          <Button
-            variant="primary"
-            onClick={() => setShowMaterialize(true)}
-            data-testid="materialize-btn"
-          >
-            {t('intake.materialize.button')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="primary"
+              onClick={() => setShowMaterialize(true)}
+              data-testid="materialize-btn"
+            >
+              {t('intake.materialize.button')}
+            </Button>
+            {materializedCount !== null && onViewSelections && (
+              <Button
+                variant="secondary"
+                onClick={onViewSelections}
+              >
+                {t('intake.materialize.view_selections')}
+              </Button>
+            )}
+          </div>
           <Small className="mt-2 block text-text-mute">
             {t('intake.materialize.confirm_message')}
           </Small>
@@ -438,9 +451,10 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide }: 
 
 export interface IntakeProps {
   siteId?: string
+  onViewSelections?: () => void
 }
 
-export function Intake({ siteId }: IntakeProps) {
+export function Intake({ siteId, onViewSelections }: IntakeProps) {
   const t = useT()
   const role = useMeRole()
   const canDecide = canDecideRole(role)
@@ -544,6 +558,7 @@ export function Intake({ siteId }: IntakeProps) {
         narrative={brief.narrative}
         version={brief.version}
         canDecide={canDecide}
+        onViewSelections={onViewSelections}
       />
     </div>
   )

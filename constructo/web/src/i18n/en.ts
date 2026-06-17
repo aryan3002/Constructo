@@ -1110,6 +1110,7 @@ export const en = {
   'intake.materialize.confirm_cta': 'Create specs',
   'intake.materialize.toast.success': 'Proposed {count} spec line(s) — review them in Selections.',
   'intake.materialize.toast.error': 'Could not materialize the brief.',
+  'intake.materialize.view_selections': 'View in Selections',
   'intake.confidence.high': 'High confidence',
   'intake.confidence.review': 'Review recommended',
   'intake.confidence.confirm': 'Confirm before use',
