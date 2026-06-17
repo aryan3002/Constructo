@@ -35,6 +35,8 @@ import { formatRupees } from '../../lib/money'
 import { RollupChips } from './RollupChips'
 import { SpecRow } from './SpecRow'
 import { SelectionDrawer } from './SelectionDrawer'
+import { AddSelectionForms } from './AddSelectionForms'
+import type { AddMode } from './AddSelectionForms'
 
 // ---------------------------------------------------------------------------
 // ₹ helper (for room subtotals in the section header)
@@ -88,6 +90,16 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
   // --- Selection / drawer state ---
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // --- Add-selection form state: keyed by componentId ---
+  const [addModes, setAddModes] = useState<Record<string, AddMode>>({})
+
+  function setAddMode(componentId: string, mode: AddMode) {
+    setAddModes((prev) => ({ ...prev, [componentId]: mode }))
+  }
+
+  // canPropose gate (same logic as SelectionDrawer)
+  const canPropose = role === 'owner' || role === 'pm' || role === 'architect'
 
   // Flatten all line IDs in render order for cockpit keyboard navigation
   const allLineIds: string[] = desk.data?.rooms.flatMap((r) => r.lines.map((l) => l.id)) ?? []
@@ -307,6 +319,32 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Contextual "Add selection" affordance — one per unique component in this room.
+                        We derive unique components from the desk lines (component_id + element).
+                        Role-gated: only canPropose roles see these buttons. */}
+                    {canPropose && effectiveSiteId && (() => {
+                      // Deduplicate components in this room (preserve insertion order)
+                      const seen = new Set<string>()
+                      const comps: { componentId: string; elementName: string }[] = []
+                      for (const line of room.lines) {
+                        if (!seen.has(line.component_id)) {
+                          seen.add(line.component_id)
+                          comps.push({ componentId: line.component_id, elementName: line.element })
+                        }
+                      }
+                      return comps.map(({ componentId, elementName }) => (
+                        <AddSelectionForms
+                          key={componentId}
+                          siteId={effectiveSiteId}
+                          componentId={componentId}
+                          elementName={elementName}
+                          canPropose={canPropose}
+                          mode={addModes[componentId] ?? null}
+                          onModeChange={(mode) => setAddMode(componentId, mode)}
+                        />
+                      ))
+                    })()}
                   </section>
                 ))}
               </div>

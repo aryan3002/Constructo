@@ -1010,6 +1010,24 @@ export const en = {
   'selections.edit.wastage': 'Wastage %',
   'selections.edit.notes': 'Notes',
 
+  // Originate — "Add selection" (contextual per component group)
+  'selections.add.add_line': 'Add line',
+  'selections.add.add_from_photo': 'Add from photo',
+  'selections.add.title': 'New selection',
+  'selections.add.label': 'Label',
+  'selections.add.label_placeholder': 'e.g. Vitrified Tile – Floor',
+  'selections.add.creating': 'Creating…',
+  'selections.add.create': 'Create draft',
+  'selections.add.created': 'Selection draft created.',
+  'selections.add.cancel': 'Cancel',
+  // Add from photo
+  'selections.add_photo.title': 'Add from photo',
+  'selections.add_photo.choose': 'Choose photo',
+  'selections.add_photo.extracting': 'Analysing photo…',
+  'selections.add_photo.extract': 'Propose from photo',
+  'selections.add_photo.proposed': 'AI proposed a draft — confirm or edit before routing.',
+  'selections.add_photo.note': 'AI will propose a material — you confirm before routing.',
+
   // === site changes (D3 — field → designer feedback loop) ===
   'sitechanges.title': 'Site Changes',
   'sitechanges.subtitle': 'Field-reported conditions that need your design response.',

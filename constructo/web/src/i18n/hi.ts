@@ -985,6 +985,24 @@ export const hi: Record<TranslationKey, string> = {
   'selections.edit.wastage': 'बर्बादी %',
   'selections.edit.notes': 'टिप्पणियाँ',
 
+  // Originate — "Add selection" (contextual per component group)
+  'selections.add.add_line': 'लाइन जोड़ें',
+  'selections.add.add_from_photo': 'फ़ोटो से जोड़ें',
+  'selections.add.title': 'नया सिलेक्शन',
+  'selections.add.label': 'नाम',
+  'selections.add.label_placeholder': 'जैसे विट्रिफ़ाइड टाइल – फ़र्श',
+  'selections.add.creating': 'बन रहा है…',
+  'selections.add.create': 'ड्राफ़्ट बनाएँ',
+  'selections.add.created': 'सिलेक्शन ड्राफ़्ट बनाया गया।',
+  'selections.add.cancel': 'रद्द करें',
+  // Add from photo
+  'selections.add_photo.title': 'फ़ोटो से जोड़ें',
+  'selections.add_photo.choose': 'फ़ोटो चुनें',
+  'selections.add_photo.extracting': 'फ़ोटो का विश्लेषण हो रहा है…',
+  'selections.add_photo.extract': 'फ़ोटो से सुझाव लें',
+  'selections.add_photo.proposed': 'AI ने ड्राफ़्ट सुझाया — रूट करने से पहले पुष्टि करें।',
+  'selections.add_photo.note': 'AI एक सामग्री सुझाएगा — रूट करने से पहले आप पुष्टि करें।',
+
   // === site changes (D3 — field → designer feedback loop) ===
   'sitechanges.title': 'साइट परिवर्तन',
   'sitechanges.subtitle': 'साइट इंजीनियर द्वारा रिपोर्ट की गई स्थितियाँ जिन पर आपका डिज़ाइन जवाब चाहिए।',
