@@ -14,6 +14,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Drawer } from '../../ui/Drawer'
 import { ConfirmDialog } from '../../ui/Modal'
@@ -347,27 +348,46 @@ export function SiteChangeDrawer({ change, open, onClose }: SiteChangeDrawerProp
           </div>
         )}
 
-        {/* Linked drawing (read-only, resolved state) — shows title+version, never raw UUID */}
+        {/* Linked drawing (read-only, resolved state) — shows title+version as a link to the register */}
         {isResolved && change.linked_drawing_id && (
-          <div className="mb-2">
+          <div className="mb-2" data-testid="resolved-linked-drawing">
             <Small className="mb-1 uppercase tracking-wide font-semibold">
               {t('sitechanges.drawer.linked_drawing')}
             </Small>
-            <div
-              data-testid="resolved-linked-drawing"
-              className="rounded-card border border-info/30 bg-info/10 px-3 py-2"
-            >
-              {linkedDrawing ? (
-                <p className="font-body text-small font-semibold text-info">
-                  {linkedDrawing.title}
-                  <span className="ml-1.5 font-normal text-text-mute">{linkedDrawing.version}</span>
-                </p>
-              ) : (
-                <p className="font-body text-small text-text-mute">
-                  {t('sitechanges.drawer.linked_drawing')}
-                </p>
-              )}
-            </div>
+            {linkedDrawing ? (
+              <Link
+                to="/settings/documents"
+                data-testid="linked-drawing-chip"
+                className={[
+                  'inline-flex items-center gap-1.5 rounded-card border border-info/30 bg-info/10 px-3 py-2',
+                  'font-body text-small font-semibold text-info',
+                  'hover:bg-info/15 hover:border-info/50 transition cstk-animate',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                ].join(' ')}
+                aria-label={t('sitechanges.drawer.view_drawing_register')}
+              >
+                {linkedDrawing.title}
+                <span className="ml-1 font-normal text-text-mute">{linkedDrawing.version}</span>
+                <svg
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="ml-1 shrink-0 opacity-60"
+                >
+                  <path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3M10 2h4m0 0v4m0-4L7 9" />
+                </svg>
+              </Link>
+            ) : (
+              <p className="font-body text-small text-text-mute">
+                {t('sitechanges.drawer.linked_drawing')}
+              </p>
+            )}
           </div>
         )}
       </Drawer>

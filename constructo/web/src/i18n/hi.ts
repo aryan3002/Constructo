@@ -1028,6 +1028,7 @@ export const hi: Record<TranslationKey, string> = {
   'sitechanges.drawer.resolved_state': 'हल हुआ',
   'sitechanges.drawer.resolved_hint': 'यह परिवर्तन हल हो चुका है और बंद है।',
   'sitechanges.drawer.readonly_hint': 'केवल देखें — प्रभाव नोट और ड्राइंग लिंक केवल आर्किटेक्ट, मालिक या PM जोड़ सकते हैं।',
+  'sitechanges.drawer.view_drawing_register': 'ड्राइंग रजिस्टर में देखें',
   // Toast messages
   'sitechanges.impact_saved': 'प्रभाव नोट सहेजा गया।',
   'sitechanges.linked': '{title} {version} से लिंक किया गया।',

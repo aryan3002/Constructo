@@ -1053,6 +1053,7 @@ export const en = {
   'sitechanges.drawer.resolved_state': 'Resolved',
   'sitechanges.drawer.resolved_hint': 'This change has been resolved and closed.',
   'sitechanges.drawer.readonly_hint': 'View only — only the architect, owner, or PM can add impact notes and link drawings.',
+  'sitechanges.drawer.view_drawing_register': 'View in drawings register',
   // Toast messages
   'sitechanges.impact_saved': 'Impact note saved.',
   'sitechanges.linked': 'Linked to {title} {version}.',
