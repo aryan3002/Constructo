@@ -65,6 +65,7 @@ const STATUS_TOAST_CLASSES: Record<Status, string> = {
   warn: 'bg-warn-bg text-warn-fg border-warn/30',
   risk: 'bg-risk-bg text-risk-fg border-risk/30',
   info: 'bg-info-bg text-info-fg border-info/30',
+  done: 'bg-done-bg text-done-fg border-done-fg/20',
 }
 
 function ToastCard({

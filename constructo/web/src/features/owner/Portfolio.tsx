@@ -12,10 +12,10 @@ import {
   type Status,
 } from '../../ui'
 import { useT } from '../../i18n'
-import type { OwnerHome, PulseTile, SiteCard } from '../../api/dashboard'
+import type { OwnerHome, PulseTile, SiteCard, DashStatus } from '../../api/dashboard'
 import type { TranslationKey } from '../../i18n'
 
-const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3 }
+const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3, done: 3 }
 
 /** Aggregate the same-kind tiles across all sites for the "All Sites" view. */
 export function aggregatePulse(sites: SiteCard[]): PulseTile[] {
@@ -24,8 +24,8 @@ export function aggregatePulse(sites: SiteCard[]): PulseTile[] {
     const tiles = sites
       .map((s) => s.pulse.find((p) => p.kind === kind))
       .filter((p): p is PulseTile => Boolean(p))
-    const status = tiles.reduce<Status>((worst, p) => {
-      const s = p.status as Status
+    const status = tiles.reduce<DashStatus>((worst, p) => {
+      const s = p.status as DashStatus
       return STATUS_RANK[s] < STATUS_RANK[worst] ? s : worst
     }, 'ok')
     const value = tiles.reduce<number | null>((sum, p) => {

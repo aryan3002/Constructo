@@ -515,6 +515,9 @@ export function SelectionDrawer({
     : '—'
 
   // ── Footer ── role-shaped, single clear action per role×status
+  // `line` is guaranteed non-null here (we returned null above if it wasn't).
+  const safeLine = line as DeskLine
+
   function renderActions() {
     // Released: done state, no actions — calm "locked" look
     if (isReleased) {
@@ -522,7 +525,7 @@ export function SelectionDrawer({
         <div className="rounded-card border border-done-fg/20 bg-done-bg px-4 py-3">
           <Small className="font-semibold !text-done-fg">
             {t('selections.released_on')}
-            {line.released_at ? ` · ${fmtDate(line.released_at)}` : ''}
+            {safeLine.released_at ? ` · ${fmtDate(safeLine.released_at)}` : ''}
           </Small>
         </div>
       )
