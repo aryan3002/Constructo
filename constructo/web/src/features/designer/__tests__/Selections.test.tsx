@@ -952,4 +952,31 @@ describe('Selections cockpit (D2)', () => {
     expect(screen.queryByTestId('add-line-btn-comp2')).not.toBeInTheDocument()
     expect(screen.queryByTestId('add-photo-btn-comp2')).not.toBeInTheDocument()
   })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fix 2 — truthful timeline: Approved step must NOT show sent_at as its date
+  //
+  // s3 (Laminate) has routing_status='approved', sent_at='2026-06-08T09:00:00Z'.
+  // The routed date (8 Jun) must appear under the "Routed" step only; the
+  // "Approved" step must carry NO date (null) so we don't mislead the user.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 2: Approved timeline step does NOT display sent_at as its date', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Laminate') // s3 approved
+
+    // Open s3 (approved, sent_at = 2026-06-08)
+    await userEvent.click(screen.getByTestId('spec-row-s3'))
+    const dialog = await screen.findByRole('dialog')
+
+    // The routed date "8 Jun 2026" appears exactly once (under Routed step).
+    // If the Approved step were also showing sent_at it would appear twice.
+    const routedDate = '8 Jun 2026'
+    const allInstances = within(dialog).queryAllByText(routedDate)
+    expect(allInstances.length).toBe(1)
+
+    // The "Approved" step label must be present (step renders), just with no date
+    expect(within(dialog).getByText('Approved')).toBeInTheDocument()
+  })
 })

@@ -39,6 +39,10 @@ export interface Decision {
   evidence_event_ids: string[]
   created_at: string
   updated_at: string
+  /** Set when this decision was created by the designer routing a spec selection
+   *  to the owner for approval. Enables the "Selection" badge + deep-link in the
+   *  owner's inbox. Already present on the backend DecisionOut schema. */
+  spec_id?: string | null
 }
 
 export interface Paginated<T> {
@@ -122,7 +126,7 @@ const mockDecisions: Decision[] = [
     site_id: 'site-1',
     kind: 'approval',
     title: 'Approve extra 50 bags of cement (₹17,500)',
-    detail: 'Supervisor raised a shortfall against today’s pour.',
+    detail: "Supervisor raised a shortfall against today's pour.",
     raised_by: null,
     assigned_to: null,
     state: 'pending',
@@ -132,6 +136,7 @@ const mockDecisions: Decision[] = [
     evidence_event_ids: ['evt-2', 'evt-3'],
     created_at: '2026-05-29T07:02:00Z',
     updated_at: '2026-05-29T07:02:00Z',
+    spec_id: null,
   },
 ]
 
@@ -148,7 +153,7 @@ const mockNotifications: AppNotification[] = [
     site_id: 'site-1',
     kind: 'approval_pending',
     title: 'Cement shortfall needs your approval (₹17,500)',
-    body: 'Tower B · supervisor raised a shortfall against today’s pour.',
+    body: "Tower B · supervisor raised a shortfall against today's pour.",
     severity: 'risk',
     read_at: null,
     created_at: '2026-06-04T07:02:00Z',

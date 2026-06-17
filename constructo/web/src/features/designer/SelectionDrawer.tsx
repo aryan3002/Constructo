@@ -90,9 +90,9 @@ function buildTimeline(line: DeskLine): TimelineStep[] {
     },
     {
       labelKey: line.approval_status === 'rejected' ? 'selections.drawer.timeline.returned' : 'selections.drawer.timeline.approved',
-      date: line.approval_status === 'approved' || line.approval_status === 'rejected'
-        ? fmtDate(line.sent_at) || null  // sent_at is the closest proxy
-        : null,
+      // No truthful approved/decided timestamp exists on DeskLine — do not show
+      // sent_at here (that is the *routed* date, not the approval date).
+      date: null,
       done: ['approved', 'returned', 'released'].includes(status),
       active: status === 'approved' || status === 'returned',
       code: line.client_final_code,
