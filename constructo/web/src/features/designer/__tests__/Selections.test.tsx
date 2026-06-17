@@ -662,6 +662,33 @@ describe('Selections cockpit (D2)', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Fix 2 — approved vs released render DIFFERENT pill tones
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 2: approved (s3) and released (s4) show different status pill tones', async () => {
+    renderSelections()
+    await screen.findByText('Laminate') // s3 approved
+
+    const approvedRow = screen.getByTestId('spec-row-s3')
+    const releasedRow = screen.getByTestId('spec-row-s4')
+
+    // Get the pill in each row
+    const approvedPill = approvedRow.querySelector('[role="status"]')
+    const releasedPill = releasedRow.querySelector('[role="status"]')
+
+    expect(approvedPill).not.toBeNull()
+    expect(releasedPill).not.toBeNull()
+
+    // The data-status attribute must differ
+    expect(approvedPill!.getAttribute('data-status')).not.toBe(
+      releasedPill!.getAttribute('data-status'),
+    )
+    // Approved → ok; Released → done
+    expect(approvedPill!.getAttribute('data-status')).toBe('ok')
+    expect(releasedPill!.getAttribute('data-status')).toBe('done')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 12. pm-role: out_for_approval → "Awaiting owner" calm state, NO Approve button (WC4 invariant)
   // ─────────────────────────────────────────────────────────────────────────
 

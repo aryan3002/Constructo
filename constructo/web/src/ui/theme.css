@@ -62,6 +62,11 @@
   --info-bg: #e4eefb;
   --info-fg: #1f5bae;
 
+  /* ---- Done (5th tone) — calm slate/ink "locked" look for released state ---- */
+  --done-solid: #5b6172;  /* muted slate — neutral, "locked" */
+  --done-bg: #f0eee9;     /* warm paper tint — sunken, inert */
+  --done-fg: #3a3f4a;     /* dark slate text — AA on done-bg (6:1+) */
+
   /* ---- Data-viz — categorical (colorblind-distinguishable, status-safe) ---- */
   --chart-1: #3b7dd8;
   --chart-2: #d98c00; /* deep amber — never the CTA #f2a100 */
@@ -102,6 +107,10 @@
   --ring: #ffb72e;
   --ring-offset: var(--surface);
   --scrim: rgba(0, 0, 0, 0.6);
+
+  --done-solid: #8a8f9e;  /* lifted slate — distinguishable on dark canvas */
+  --done-bg: #1b1e25;    /* near-surface — deeper than card, "settled" */
+  --done-fg: #b0b5c2;    /* light slate — AA on done-bg (5:1+) */
 
   --ok-solid: #3bc07a;
   --ok-bg: #11271c;

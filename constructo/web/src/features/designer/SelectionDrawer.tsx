@@ -455,11 +455,11 @@ export function SelectionDrawer({
 
   // ── Footer ── role-shaped, single clear action per role×status
   function renderActions() {
-    // Released: done state, no actions
+    // Released: done state, no actions — calm "locked" look
     if (isReleased) {
       return (
-        <div className="rounded-card border border-ok/30 bg-ok/10 px-4 py-3">
-          <Small className="font-semibold !text-ok">
+        <div className="rounded-card border border-done-fg/20 bg-done-bg px-4 py-3">
+          <Small className="font-semibold !text-done-fg">
             {t('selections.released_on')}
             {line.released_at ? ` · ${fmtDate(line.released_at)}` : ''}
           </Small>

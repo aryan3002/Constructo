@@ -25,7 +25,7 @@ const ROUTING_STATUS_PILL: Record<RoutingStatus, { status: Status; labelKey: 'se
   draft: { status: 'info', labelKey: 'selections.status.draft' },
   out_for_approval: { status: 'warn', labelKey: 'selections.status.out_for_approval' },
   approved: { status: 'ok', labelKey: 'selections.status.approved' },
-  released: { status: 'ok', labelKey: 'selections.status.released' },
+  released: { status: 'done', labelKey: 'selections.status.released' },
   returned: { status: 'risk', labelKey: 'selections.status.returned' },
 }
 

@@ -165,3 +165,10 @@ export const SignOutIcon = (p: IconProps) =>
     <polyline points="16 17 21 12 16 7" />
     <line x1="21" y1="12" x2="9" y2="12" />
   </>) })
+
+/** Lock — padlock closed (distinct shape for the 'done' status tone). */
+export const LockIcon = (p: IconProps) =>
+  base({ ...p, children: (<>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </>) })

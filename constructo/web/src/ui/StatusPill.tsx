@@ -4,10 +4,11 @@ import {
   InfoSquareIcon,
   RiskOctagonIcon,
   WarnTriangleIcon,
+  LockIcon,
 } from './icons'
 
-/** Canonical status spine used across the kit. */
-export type Status = 'ok' | 'warn' | 'risk' | 'info'
+/** Canonical status spine used across the kit. 'done' = calm locked/released state. */
+export type Status = 'ok' | 'warn' | 'risk' | 'info' | 'done'
 
 interface StatusMeta {
   label: string
@@ -48,6 +49,13 @@ export const STATUS_META: Record<Status, StatusMeta> = {
     fg: 'text-info',
     chip: 'bg-info/10 border-info/30 text-info',
     dot: 'bg-info',
+  },
+  done: {
+    label: 'Done',
+    Icon: LockIcon,
+    fg: 'text-done',
+    chip: 'bg-done-bg border-done-fg/20 text-done-fg',
+    dot: 'bg-done',
   },
 }
 
