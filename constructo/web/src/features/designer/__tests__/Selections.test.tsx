@@ -211,6 +211,19 @@ vi.mock('../../../api/specs', () => ({
   },
 }))
 
+vi.mock('../../../api/client', () => ({
+  api: {
+    listMaterials: vi.fn().mockResolvedValue([
+      { id: 'mat1', name: 'Vitrified Tile', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-01T00:00:00Z' },
+      { id: 'mat2', name: 'Decorative Panel', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-02T00:00:00Z' },
+      { id: 'mat3', name: 'Laminate', category: 'finishing', unit: 'Sq Ft', notes: null, is_active: true, company_id: 'c1', created_at: '2026-01-03T00:00:00Z' },
+    ]),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(public status: number, message: string) { super(message) }
+  },
+}))
+
 // ---------------------------------------------------------------------------
 // Mock useMeRole so tests can control role without an auth server
 // ---------------------------------------------------------------------------
@@ -603,6 +616,41 @@ describe('Selections cockpit (D2)', () => {
     // Toast message visible
     await waitFor(() =>
       expect(screen.getByText(/Selection returned for revision/i)).toBeInTheDocument(),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fix 4 — Edit can change the material (material picker in EditForm)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 4: EditForm shows a material picker and includes material_id in specsApi.update', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Open s1 (draft, canEdit = true)
+    await userEvent.click(screen.getByTestId('spec-row-s1'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Click Edit
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Edit$/i }))
+
+    // Material picker must be rendered
+    const materialPicker = within(dialog).getByTestId('material-picker')
+    expect(materialPicker).toBeInTheDocument()
+
+    // Change the material to mat2
+    await userEvent.selectOptions(materialPicker, 'mat2')
+
+    // Save changes
+    await userEvent.click(within(dialog).getByRole('button', { name: /Save changes/i }))
+
+    // specsApi.update must have been called with material_id: 'mat2'
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        's1',
+        expect.objectContaining({ material_id: 'mat2' }),
+      ),
     )
   })
 

@@ -977,6 +977,8 @@ export const hi: Record<TranslationKey, string> = {
   // Keyboard hint
   'selections.kbd_hint': '↑ ↓ चुनें · Enter खोलें',
   // Edit form fields
+  'selections.edit.material': 'सामग्री',
+  'selections.edit.material_none': '— कोई सामग्री नहीं —',
   'selections.edit.qty': 'मात्रा',
   'selections.edit.unit': 'इकाई',
   'selections.edit.rate': 'दर / इकाई',

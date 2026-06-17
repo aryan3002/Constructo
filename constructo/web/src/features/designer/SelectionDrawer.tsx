@@ -23,7 +23,7 @@
  *   released                       → Done state ("Released to site on {date}")
  */
 import { useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Drawer, ConfirmDialog, Button, Mono, Small, Body } from '../../ui'
 import type { DeskLine, DeskOut, RoutingStatus } from '../../api/specs'
 import { specsApi } from '../../api/specs'
@@ -33,6 +33,8 @@ import { useT } from '../../i18n'
 import type { TFunction } from '../../i18n'
 import type { Role } from '../../api/auth'
 import { formatRupees } from '../../lib/money'
+import { api } from '../../api/client'
+import type { Material } from '../../api/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,10 +157,55 @@ function LifecycleTimeline({ line }: { line: DeskLine }) {
 }
 
 // ---------------------------------------------------------------------------
+// MaterialPicker — a <select> of active materials from the catalog
+// ---------------------------------------------------------------------------
+
+function MaterialPicker({
+  value,
+  onChange,
+}: {
+  value: string | null
+  onChange: (id: string | null) => void
+}) {
+  const t = useT()
+  const { data: materials } = useQuery({
+    queryKey: qk.materials(false),
+    queryFn: () => api.listMaterials(false),
+  })
+
+  const list: Material[] = materials ?? []
+
+  return (
+    <label className="flex flex-col gap-1">
+      <Small className="font-semibold !text-text">{t('selections.edit.material')}</Small>
+      <select
+        data-testid="material-picker"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        aria-label={t('selections.edit.material')}
+        className={[
+          'min-h-tap rounded-control border border-line bg-card px-3',
+          'font-body text-body text-text',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        ].join(' ')}
+      >
+        <option value="">{t('selections.edit.material_none')}</option>
+        {list.filter((m) => m.is_active).map((m) => (
+          <option key={m.id} value={m.id}>
+            {[m.name, m.category, m.unit].filter(Boolean).join(' · ')}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Inline edit form
 // ---------------------------------------------------------------------------
 
 interface EditValues {
+  material_id: string | null
   qty: string
   unit: string
   unit_rate: string
@@ -177,6 +224,7 @@ function EditForm({
 }) {
   const t = useT()
   const [values, setValues] = useState<EditValues>({
+    material_id: line.material_id,
     qty: line.qty ?? '',
     unit: line.unit ?? '',
     unit_rate: line.unit_rate ?? '',
@@ -186,7 +234,7 @@ function EditForm({
   const [saving, setSaving] = useState(false)
 
   function field(
-    key: keyof EditValues,
+    key: Exclude<keyof EditValues, 'material_id'>,
     labelKey: Parameters<TFunction>[0],
     placeholder?: string,
   ) {
@@ -195,7 +243,7 @@ function EditForm({
         <Small className="font-semibold !text-text">{t(labelKey)}</Small>
         <input
           type="text"
-          value={values[key]}
+          value={values[key] as string}
           onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
           placeholder={placeholder}
           className={[
@@ -213,6 +261,7 @@ function EditForm({
     setSaving(true)
     try {
       const patch: Partial<EditValues> = {}
+      if (values.material_id !== line.material_id) patch.material_id = values.material_id
       if (values.qty !== (line.qty ?? '')) patch.qty = values.qty || undefined as unknown as string
       if (values.unit !== (line.unit ?? '')) patch.unit = values.unit || undefined as unknown as string
       if (values.unit_rate !== (line.unit_rate ?? '')) patch.unit_rate = values.unit_rate || undefined as unknown as string
@@ -226,6 +275,11 @@ function EditForm({
 
   return (
     <div className="space-y-3 rounded-card border border-primary/30 bg-primary/5 p-4">
+      {/* Material picker — full width */}
+      <MaterialPicker
+        value={values.material_id}
+        onChange={(id) => setValues((v) => ({ ...v, material_id: id }))}
+      />
       <div className="grid grid-cols-2 gap-3">
         {field('qty', 'selections.edit.qty')}
         {field('unit', 'selections.edit.unit')}
@@ -418,7 +472,14 @@ export function SelectionDrawer({
   }
 
   // ── Edit save ──
-  async function handleEditSave(patch: Record<string, string | undefined>) {
+  async function handleEditSave(patch: Partial<{
+    material_id: string | null
+    qty: string
+    unit: string
+    unit_rate: string
+    wastage_pct: string
+    notes: string
+  }>) {
     if (!line) return
     await specsApi.update(line.id, patch)
     invalidate()

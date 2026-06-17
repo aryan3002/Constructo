@@ -1002,6 +1002,8 @@ export const en = {
   // Keyboard hint
   'selections.kbd_hint': '↑ ↓ move · Enter open',
   // Edit form fields
+  'selections.edit.material': 'Material',
+  'selections.edit.material_none': '— No material —',
   'selections.edit.qty': 'Quantity',
   'selections.edit.unit': 'Unit',
   'selections.edit.rate': 'Rate / unit',
