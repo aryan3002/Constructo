@@ -25,7 +25,7 @@
 import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Drawer, ConfirmDialog, Button, Mono, Small, Body } from '../../ui'
-import type { DeskLine, RoutingStatus } from '../../api/specs'
+import type { DeskLine, DeskOut, RoutingStatus } from '../../api/specs'
 import { specsApi } from '../../api/specs'
 import { useToast } from '../../ui'
 import { qk } from '../../api/queryKeys'
@@ -301,7 +301,8 @@ function ApproveForm({
 export interface SelectionDrawerProps {
   open: boolean
   onClose: () => void
-  line: DeskLine
+  /** The id of the line to display — used to look up the live line in query cache. */
+  lineId: string
   room: string
   siteId: string
   /** The current user's role — drives role-shaped actions. */
@@ -310,10 +311,22 @@ export interface SelectionDrawerProps {
 
 type DialogKind = 'route' | 'return' | 'release' | null
 
+/** Look up the live DeskLine by id from the desk query cache. */
+function useLiveLine(siteId: string, lineId: string): DeskLine | null {
+  const qc = useQueryClient()
+  const deskData = qc.getQueryData<DeskOut>(qk.specDesk(siteId))
+  if (!deskData) return null
+  for (const r of deskData.rooms) {
+    const found = r.lines.find((l) => l.id === lineId)
+    if (found) return found
+  }
+  return null
+}
+
 export function SelectionDrawer({
   open,
   onClose,
-  line,
+  lineId,
   room,
   siteId,
   role,
@@ -326,6 +339,9 @@ export function SelectionDrawer({
   const [dialogKind, setDialogKind] = useState<DialogKind>(null)
   const [editing, setEditing] = useState(false)
 
+  // Live line — reads from the query cache so a refetch advances the open drawer
+  const line = useLiveLine(siteId, lineId)
+
   // Role flags
   const canPropose = role === 'owner' || role === 'pm' || role === 'architect'
   const canCommit = role === 'owner'
@@ -336,13 +352,14 @@ export function SelectionDrawer({
 
   // ── Route action ──
   async function handleRoute() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.route(line.id)
       invalidate()
       show({ status: 'ok', message: t('selections.routed') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open — user closes it themselves
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -352,12 +369,13 @@ export function SelectionDrawer({
 
   // ── Approve action ──
   async function handleApprove(code: string) {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.approve(line.id, { status: 'approved', client_final_code: code || undefined })
       invalidate()
       show({ status: 'ok', message: t('selections.approved') })
-      onClose()
+      // Drawer stays open — lifecycle pill + timeline tick forward on refetch
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -367,13 +385,14 @@ export function SelectionDrawer({
 
   // ── Return action ──
   async function handleReturn() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.approve(line.id, { status: 'rejected' })
       invalidate()
       show({ status: 'warn', message: t('selections.returned') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -383,13 +402,14 @@ export function SelectionDrawer({
 
   // ── Release action ──
   async function handleRelease() {
+    if (!line) return
     setBusy(true)
     try {
       await specsApi.release(line.id)
       invalidate()
       show({ status: 'ok', message: t('selections.released') })
       setDialogKind(null)
-      onClose()
+      // Drawer stays open
     } catch {
       show({ status: 'risk', message: t('common.error') })
     } finally {
@@ -399,11 +419,15 @@ export function SelectionDrawer({
 
   // ── Edit save ──
   async function handleEditSave(patch: Record<string, string | undefined>) {
+    if (!line) return
     await specsApi.update(line.id, patch)
     invalidate()
     show({ status: 'ok', message: t('selections.saved') })
     setEditing(false)
   }
+
+  // If line not yet in cache (shouldn't happen in practice), show nothing
+  if (!line) return null
 
   const status: RoutingStatus = line.routing_status
   const isReleased = status === 'released'

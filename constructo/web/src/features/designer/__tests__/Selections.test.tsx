@@ -607,6 +607,61 @@ describe('Selections cockpit (D2)', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Fix 1 — Optimistic stay-open drawer
+  // After an action (Approve), the drawer STAYS OPEN — the drawer no longer
+  // calls onClose() after an action; the user closes it themselves.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 1: drawer stays open after Approve (no auto-close on action)', async () => {
+    mockUseMeRole.mockReturnValue('owner' as string | undefined)
+    renderSelections()
+    await screen.findByText('Decorative Panel')
+
+    // Open s2 (out_for_approval)
+    await userEvent.click(screen.getByTestId('spec-row-s2'))
+    const dialog = await screen.findByRole('dialog')
+
+    // Enter a code and approve
+    const codeInput = within(dialog).getByTestId('approve-code-input')
+    await userEvent.clear(codeInput)
+    await userEvent.type(codeInput, 'MER-WALL-CHR-02')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Approve$/i }))
+
+    // API called
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledWith('s2', { status: 'approved', client_final_code: 'MER-WALL-CHR-02' }))
+
+    // Toast shown
+    await waitFor(() => expect(screen.getByText(/Selection approved/i)).toBeInTheDocument())
+
+    // Drawer is STILL open (not closed) — the critical assertion
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Fix 1: drawer stays open after Route action (no auto-close on action)', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Open s1 (draft)
+    await userEvent.click(screen.getByTestId('spec-row-s1'))
+    await screen.findByRole('dialog')
+
+    // Click Route to owner + confirm
+    await userEvent.click(screen.getByRole('button', { name: /Route to owner/i }))
+    const confirmDialog = await screen.findByRole('dialog', { name: /Route to owner/i })
+    await userEvent.click(within(confirmDialog).getByRole('button', { name: /Send for approval/i }))
+
+    // API called
+    await waitFor(() => expect(mockRoute).toHaveBeenCalledWith('s1'))
+
+    // Toast shown
+    await waitFor(() => expect(screen.getByText(/Selection sent to owner for sign-off/i)).toBeInTheDocument())
+
+    // Drawer is STILL open — the critical assertion
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 12. pm-role: out_for_approval → "Awaiting owner" calm state, NO Approve button (WC4 invariant)
   // ─────────────────────────────────────────────────────────────────────────
 

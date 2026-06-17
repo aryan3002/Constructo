@@ -304,7 +304,7 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
           onClose={() => {
             setDrawerOpen(false)
           }}
-          line={selectedEntry.line}
+          lineId={selectedEntry.line.id}
           room={selectedEntry.room}
           siteId={effectiveSiteId}
           role={role}
