@@ -498,6 +498,8 @@ export const en = {
   'approvals.state.rejected': 'Rejected',
   'approvals.state.escalated': 'Escalated',
   'approvals.toast.done': 'Decision recorded',
+  'approvals.from_selection': 'Selection',
+  'approvals.view_selection': 'View selection →',
   'notifications.title': 'Notifications',
   'notifications.empty': 'You’re all caught up.',
   'notifications.mark_read': 'Mark read',

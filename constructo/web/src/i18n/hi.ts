@@ -474,6 +474,8 @@ export const hi: Record<TranslationKey, string> = {
   'approvals.state.rejected': 'अस्वीकृत',
   'approvals.state.escalated': 'बढ़ाया गया',
   'approvals.toast.done': 'फ़ैसला दर्ज हुआ',
+  'approvals.from_selection': 'चयन',
+  'approvals.view_selection': 'चयन देखें →',
   'notifications.title': 'सूचनाएँ',
   'notifications.empty': 'सब पढ़ लिया गया।',
   'notifications.mark_read': 'पढ़ा हुआ चिह्नित करें',

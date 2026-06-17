@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { LanguageProvider } from '../../i18n'
 import type { Decision } from '../../api/approvals'
@@ -50,7 +51,9 @@ function wrap(node: ReactNode, role: string = 'owner') {
   qc.setQueryData(['me'], { role })
   return render(
     <QueryClientProvider client={qc}>
-      <LanguageProvider defaultLanguage="en">{node}</LanguageProvider>
+      <LanguageProvider defaultLanguage="en">
+        <MemoryRouter>{node}</MemoryRouter>
+      </LanguageProvider>
     </QueryClientProvider>,
   )
 }
@@ -143,5 +146,31 @@ describe('ApprovalInbox', () => {
     wrap(<ApprovalInbox />)
     const card = await screen.findByText('When is handover?')
     expect(within(card.closest('article')!).getByText('SLA overdue')).toBeInTheDocument()
+  })
+
+  it('Fix 1: a decision with spec_id shows the "Selection" badge and a deep-link to /designer?tab=selections', async () => {
+    list.mockResolvedValue({
+      items: [makeDecision({ spec_id: 'spec-abc' })],
+      next_cursor: null,
+    })
+    wrap(<ApprovalInbox />)
+    await screen.findByText('Approve extra cement')
+    // Badge visible
+    expect(screen.getByText('Selection')).toBeInTheDocument()
+    // Deep-link visible with correct href
+    const link = screen.getByTestId('view-selection-link')
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveAttribute('href', '/designer?tab=selections')
+  })
+
+  it('Fix 1: a decision WITHOUT spec_id shows no "Selection" badge and no deep-link', async () => {
+    list.mockResolvedValue({
+      items: [makeDecision({ spec_id: null })],
+      next_cursor: null,
+    })
+    wrap(<ApprovalInbox />)
+    await screen.findByText('Approve extra cement')
+    expect(screen.queryByText('Selection')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('view-selection-link')).not.toBeInTheDocument()
   })
 })
