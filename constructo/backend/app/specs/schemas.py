@@ -102,6 +102,7 @@ class ExtractedSpecOut(BaseModel):
 
 class DeskLine(BaseModel):
     id: UUID
+    component_id: UUID  # FK to Component — needed by the "add line / add from photo" affordances
     element: str  # Component.name
     location: str | None  # Component.location
     category: str | None  # Material.category (fallback Spec.label)

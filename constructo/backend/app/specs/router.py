@@ -155,6 +155,7 @@ async def spec_desk(
         category = (material.category if material is not None else None) or spec.label
         line = DeskLine(
             id=spec.id,
+            component_id=spec.component_id,
             element=comp_name,
             location=comp_location,
             category=category,
