@@ -164,7 +164,7 @@ const { SiteChanges } = await import('../SiteChanges')
 // Render helper
 // ---------------------------------------------------------------------------
 
-function renderSiteChanges(siteId = 'site-1') {
+function renderSiteChanges(siteId?: string) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -215,7 +215,7 @@ describe('SiteChanges surface (D3)', () => {
 
   it('shows the "N new" needs-you badge in the header', async () => {
     // newCount computed from all changes (not filtered): 1 new
-    renderSiteChanges()
+    renderSiteChanges(undefined)  // standalone mode — no siteId prop, badge renders
 
     // Wait for data to load
     await screen.findByText('Beam shifted 200mm east')
@@ -556,5 +556,24 @@ describe('SiteChanges surface (D3)', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/Site team/i)).toBeInTheDocument()
     expect(within(dialog).queryByText('bbbbbbbb-0000-0000-0000-000000000099')).not.toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 14. Workspace mode (siteId prop) — no internal H1 or site-select
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('workspace mode (siteId prop): no internal H1 or site-select rendered', async () => {
+    mockList.mockResolvedValue(MOCK_CHANGES)
+    renderSiteChanges('site-1')  // siteId provided = workspace mode
+
+    // Wait for data to ensure the component has fully rendered
+    await screen.findByText('Beam shifted 200mm east')
+
+    // The standalone H1 ("Site Changes") must NOT appear —
+    // the workspace shell owns the title
+    expect(screen.queryByRole('heading', { name: /^Site Changes$/i })).not.toBeInTheDocument()
+
+    // The internal site <select> must NOT appear when siteId is provided
+    expect(screen.queryByTestId('site-select')).not.toBeInTheDocument()
   })
 })
