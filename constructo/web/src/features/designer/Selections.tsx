@@ -20,7 +20,7 @@
  *             first site by default. D4 will lift this as the workspace shell
  *             passes the active site down.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { specsApi } from '../../api/specs'
 import type { DeskLine } from '../../api/specs'
@@ -92,6 +92,14 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
   // Flatten all line IDs in render order for cockpit keyboard navigation
   const allLineIds: string[] = desk.data?.rooms.flatMap((r) => r.lines.map((l) => l.id)) ?? []
 
+  // Roving focus refs — one per line in allLineIds order
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
+
+  // Reset rowRefs on list length change
+  useEffect(() => {
+    rowRefs.current = rowRefs.current.slice(0, allLineIds.length)
+  }, [allLineIds.length])
+
   // Find the line and its room for the drawer
   function findLineAndRoom(id: string): { line: DeskLine; room: string } | null {
     if (!desk.data) return null
@@ -107,6 +115,12 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
   // --- Keyboard nav ---
   const handleMove = useCallback((id: string) => {
     setSelectedId(id)
+    // Roving focus: focus + scroll the moved-to row
+    const el = rowRefs.current.find((r) => r?.getAttribute('data-spec-id') === id)
+    if (el) {
+      el.focus()
+      el.scrollIntoView?.({ block: 'nearest' })
+    }
   }, [])
 
   const handleOpen = useCallback((id: string) => {
@@ -275,17 +289,21 @@ export function Selections({ siteId: propSiteId }: SelectionsProps) {
                           </tr>
                         </thead>
                         <tbody>
-                          {room.lines.map((line) => (
-                            <SpecRow
-                              key={line.id}
-                              line={line}
-                              selected={selectedId === line.id}
-                              onClick={() => {
-                                setSelectedId(line.id)
-                                setDrawerOpen(true)
-                              }}
-                            />
-                          ))}
+                          {room.lines.map((line) => {
+                            const globalIdx = allLineIds.indexOf(line.id)
+                            return (
+                              <SpecRow
+                                key={line.id}
+                                line={line}
+                                selected={selectedId === line.id}
+                                onClick={() => {
+                                  setSelectedId(line.id)
+                                  setDrawerOpen(true)
+                                }}
+                                rowRef={(el) => { rowRefs.current[globalIdx] = el }}
+                              />
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>

@@ -662,6 +662,67 @@ describe('Selections cockpit (D2)', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Fix 3 — Real keyboard cockpit: roving tabIndex + DOM focus
+  // ArrowDown moves selection AND focuses the new row (tabIndex=0).
+  // Non-selected rows must have tabIndex=-1 (roving focus, not tabIndex=0).
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Fix 3: ArrowDown moves selection AND focuses the new row (roving tabIndex)', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Before any key: all rows should be tabIndex=-1 (roving) — none are selected
+    const s1Row = screen.getByTestId('spec-row-s1')
+    expect(s1Row).toHaveAttribute('tabindex', '-1')
+
+    // ArrowDown → s1 selected
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => {
+      expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('aria-selected', 'true')
+    })
+
+    // s1 must be tabIndex=0 (selected), others must be -1
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('tabindex', '0')
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('tabindex', '-1')
+
+    // ArrowDown → s2 selected + focused
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => {
+      expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('aria-selected', 'true')
+    })
+    // s2 gets tabIndex=0, s1 back to -1
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('tabindex', '0')
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('tabindex', '-1')
+
+    // The focused element should be s2 (DOM focus via ref.focus())
+    expect(document.activeElement).toBe(screen.getByTestId('spec-row-s2'))
+  })
+
+  it('Fix 3: keyboard keys disabled while drawer is open', async () => {
+    mockUseMeRole.mockReturnValue('architect' as string | undefined)
+    renderSelections()
+    await screen.findByText('Vitrified Tile')
+
+    // Select s1 via ArrowDown, then open drawer via Enter
+    await act(async () => { press('ArrowDown') })
+    await waitFor(() => screen.getByTestId('spec-row-s1').getAttribute('aria-selected') === 'true')
+    await act(async () => { press('Enter') })
+    await screen.findByRole('dialog')
+
+    // While drawer is open, ArrowDown should NOT change selection
+    const s1Row = screen.getByTestId('spec-row-s1')
+    expect(s1Row).toHaveAttribute('aria-selected', 'true')
+    await act(async () => { press('ArrowDown') })
+
+    // s1 should still be selected (key disabled while drawer open)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByTestId('spec-row-s1')).toHaveAttribute('aria-selected', 'true')
+    // s2 should NOT be selected
+    expect(screen.getByTestId('spec-row-s2')).toHaveAttribute('aria-selected', 'false')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Fix 2 — approved vs released render DIFFERENT pill tones
   // ─────────────────────────────────────────────────────────────────────────
 

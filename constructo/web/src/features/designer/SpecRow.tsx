@@ -6,6 +6,7 @@
  *
  * Shows: element / material identity / qty·unit / rate / line_total / lifecycle pill.
  */
+import type { Ref } from 'react'
 import { Mono, Small, StatusPill } from '../../ui'
 import type { DeskLine, RoutingStatus } from '../../api/specs'
 import type { Status } from '../../ui'
@@ -42,14 +43,17 @@ interface SpecRowProps {
   line: DeskLine
   selected: boolean
   onClick: () => void
+  /** Roving focus ref — assigned so the parent can call .focus() on ArrowDown/Up. */
+  rowRef?: Ref<HTMLTableRowElement>
 }
 
-export function SpecRow({ line, selected, onClick }: SpecRowProps) {
+export function SpecRow({ line, selected, onClick, rowRef }: SpecRowProps) {
   const t: TFunction = useT()
   const pill = ROUTING_STATUS_PILL[line.routing_status]
 
   return (
     <tr
+      ref={rowRef}
       data-spec-id={line.id}
       data-testid={`spec-row-${line.id}`}
       aria-selected={selected}
@@ -60,7 +64,7 @@ export function SpecRow({ line, selected, onClick }: SpecRowProps) {
           onClick()
         }
       }}
-      tabIndex={0}
+      tabIndex={selected ? 0 : -1}
       role="row"
       className={[
         'border-b border-line last:border-0',
