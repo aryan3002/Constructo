@@ -16,6 +16,7 @@ import { drawingsApi } from '../../api/drawings'
 import { siteChangesApi } from '../../api/siteChanges'
 import { qk } from '../../api/queryKeys'
 import { useT } from '../../i18n'
+import type { TranslationKey } from '../../i18n/en'
 import {
   Drawer,
   ConfirmDialog,
@@ -30,6 +31,12 @@ import { formatDate } from '../../lib/format'
 // ---------------------------------------------------------------------------
 // Kind badge
 // ---------------------------------------------------------------------------
+
+const SC_STATUS_LABEL: Record<string, TranslationKey> = {
+  new: 'sitechanges.badge.new',
+  linked: 'sitechanges.badge.linked',
+  resolved: 'sitechanges.badge.resolved',
+}
 
 const KIND_CLASS: Record<string, string> = {
   plan: 'bg-primary/10 text-primary-deep border-primary/20',
@@ -381,7 +388,7 @@ export function DrawingDetailDrawer({
                 <Small className="flex-1 font-semibold text-text">{sc.title}</Small>
                 <StatusPill
                   status={sc.status === 'resolved' ? 'ok' : sc.status === 'linked' ? 'info' : 'warn'}
-                  label={sc.status}
+                  label={t(SC_STATUS_LABEL[sc.status] ?? 'sitechanges.badge.new')}
                   size="sm"
                 />
                 {sc.room && (
