@@ -396,10 +396,12 @@ async def import_messages(
                 counts["media_failed"] += 1
                 print(f"  ! media upload failed for {m.media_filename}: {exc}")
 
-        # Channel routing: ambiguous firm roles get one cheap LLM label (skipped
-        # when extraction is off); everyone else is deterministic.
+        # Channel routing: ambiguous firm roles get one cheap LLM label so the
+        # homeowner↔firm design thread routes correctly. Runs even under
+        # --skip-extraction (the decoupled fast-seed path) so channel quality is
+        # preserved; only the heavier per-message event extraction is deferred.
         llm_label: str | None = None
-        if role in _LLM_CHANNEL_ROLES and not opts.skip_extraction:
+        if role in _LLM_CHANNEL_ROLES and m.text and m.text.strip():
             llm_label = await _llm_channel_label(m.text)
         channel = classify_channel(
             sender_role=role, text=m.text, media_kind=m.media_kind, llm_label=llm_label,
