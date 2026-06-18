@@ -130,16 +130,49 @@ async def _upsert(session, model, ident: UUID, **fields):
     return obj
 
 
+# Bounded concurrency for the (network-bound) vision calls. Override with
+# VISION_CONCURRENCY. Kept modest so we stay under Azure's tokens/min limit.
+_VISION_CONCURRENCY = int(os.environ.get("VISION_CONCURRENCY", "6"))
+
+
+async def _vision_for(image_url: str, llm) -> dict | None:
+    """Resolve a photo to a data URI and caption it (session-free, tolerant).
+
+    Returns the vision result dict, or ``None`` when the object can't be fetched
+    or the model errors (a re-run retries it — captioning is idempotent). One
+    retry smooths a transient 429 / connection blip.
+    """
+    data_uri = await _data_uri(image_url)
+    if data_uri is None:
+        return None
+    for attempt in range(2):
+        try:
+            return await caption_photo(data_uri, llm=llm)
+        except Exception:
+            if attempt == 0:
+                await asyncio.sleep(2.0)
+            else:
+                return None
+    return None
+
+
 async def run(session_factory: Callable = SessionLocal) -> dict:
     """Caption every imported photo + create its timeline event (idempotent).
 
-    ``session_factory`` is injectable so tests bind it to a rolled-back test
-    session; defaults to the real ``SessionLocal``. Returns
+    The vision calls (network-bound, the slow part) run concurrently under a
+    bounded semaphore; the DB writes stay serial on one session (so an injected
+    rolled-back test session still works). ``session_factory`` is injectable for
+    tests; defaults to the real ``SessionLocal``. Returns
     ``{"photos", "captioned", "events"}``.
     """
     site_id = _id("site")
     llm = get_llm_client("vision")
     photos = captioned = events = 0
+    sem = asyncio.Semaphore(_VISION_CONCURRENCY)
+
+    async def _visit(image_url: str):
+        async with sem:
+            return await _vision_for(image_url, llm)
 
     async with session_factory() as s:
         rows = (
@@ -149,17 +182,17 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
                 .order_by(PublishedPhoto.published_at)
             )
         ).scalars().all()
+        photos = len(rows)
 
-        for photo in rows:
-            photos += 1
+        # Phase 1: caption all photos concurrently (no DB access in here).
+        results = await asyncio.gather(*[_visit(p.image_url) for p in rows])
 
-            data_uri = await _data_uri(photo.image_url)
-            if data_uri is None:
-                # No fetchable bytes (e.g. object missing) — skip captioning AND
-                # event creation for this photo; a re-run retries it.
+        # Phase 2: apply DB writes serially on the open session.
+        for photo, result in zip(rows, results):
+            if result is None:
+                # No fetchable bytes or vision error — skip; a re-run retries it.
                 continue
 
-            result = await caption_photo(data_uri, llm=llm)
             caption = (result.get("caption") or "").strip()
             room_hint = result.get("room_hint")
             category = result.get("category") or "other"
