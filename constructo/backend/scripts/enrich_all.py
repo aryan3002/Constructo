@@ -33,6 +33,9 @@ from __future__ import annotations
 
 import asyncio
 import traceback
+from uuid import NAMESPACE_URL, uuid5
+
+from sqlalchemy import delete, select
 
 # Import each pass's run() under a clear alias. The driver calls them in order.
 import scripts.enrich_action_items as enrich_action_items
@@ -64,6 +67,37 @@ _STEPS = [
 ]
 
 
+_NS = uuid5(NAMESPACE_URL, "constructo.wa-import.tripathi-dream-home")
+_SITE_ID = uuid5(_NS, "site")
+
+
+async def prune_noise_events(session_factory=SessionLocal) -> dict:
+    """Delete redundant ``unknown`` site_events for the imported site.
+
+    Every imported message is now a chat bubble (and RAG-indexed via the
+    message), so an ``unknown`` event — chatter the classifier could not map to a
+    construction event type — is duplicative noise that would only clutter the
+    events feed/search. No signal is lost (the message is preserved in chat).
+    Idempotent: re-running deletes any newly created unknowns.
+    """
+    from app.models import EventEmbedding, SiteEventModel
+
+    async with session_factory() as s:
+        ids = (
+            await s.execute(
+                select(SiteEventModel.id).where(
+                    SiteEventModel.site_id == _SITE_ID,
+                    SiteEventModel.event_type == "unknown",
+                )
+            )
+        ).scalars().all()
+        if ids:
+            await s.execute(delete(EventEmbedding).where(EventEmbedding.site_event_id.in_(ids)))
+            await s.execute(delete(SiteEventModel).where(SiteEventModel.id.in_(ids)))
+            await s.commit()
+        return {"pruned": len(ids)}
+
+
 async def run_all() -> dict:
     """Run every enrichment pass in order, then index. Returns per-step results."""
     results: dict[str, object] = {}
@@ -77,6 +111,17 @@ async def run_all() -> dict:
             results[label] = {"error": str(exc)}
             print(f"[{label}] FAILED: {exc}")
             traceback.print_exc()
+
+    # De-noise: drop redundant 'unknown' chatter events (preserved as chat
+    # bubbles). Runs before indexing so we don't embed rows we're deleting.
+    try:
+        pruned = await prune_noise_events()
+        results["pruned"] = pruned
+        print(f"[prune] {pruned}")
+    except Exception as exc:
+        results["pruned"] = {"error": str(exc)}
+        print(f"[prune] FAILED: {exc}")
+        traceback.print_exc()
 
     # Best-effort: make any newly created events searchable. Never fatal.
     try:
