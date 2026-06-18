@@ -76,15 +76,15 @@ async def main() -> None:
             failures.append(f"unknown share {pct}% > {UNKNOWN_MAX_PCT}%")
 
         # --- per-surface counts (table, where) ---
+        cm = "chat_messages m join conversations c on c.id=m.conversation_id"
+        cm_named = f"{cm} join users u on u.id=m.sender_id"
         surfaces = {
-            "chat: site thread": ("chat_messages m join conversations c on c.id=m.conversation_id",
-                                   "c.site_id=:site and c.kind='site'"),
-            "chat: homeowner thread": ("chat_messages m join conversations c on c.id=m.conversation_id",
-                                       "c.site_id=:site and c.kind='homeowner'"),
-            "chat: named senders": ("chat_messages m join conversations c on c.id=m.conversation_id "
-                                    "join users u on u.id=m.sender_id", "c.site_id=:site"),
+            "chat: site thread": (cm, "c.site_id=:site and c.kind='site'"),
+            "chat: homeowner thread": (cm, "c.site_id=:site and c.kind='homeowner'"),
+            "chat: named senders": (cm_named, "c.site_id=:site"),
             "published_photos": ("published_photos", "site_id=:site"),
-            "published_photos w/ caption": ("published_photos", "site_id=:site and caption is not null"),
+            "published_photos w/ caption": ("published_photos",
+                                            "site_id=:site and caption is not null"),
             "published_drawings": ("published_drawings", "site_id=:site"),
             "spaces (rooms/floors)": ("spaces", "site_id=:site"),
             "milestones": ("milestones", "site_id=:site"),
