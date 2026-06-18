@@ -751,7 +751,10 @@ async def purge() -> dict[str, int]:
     app_group_id = f"app:{site_id}"
 
     async with SessionLocal() as s:
-        # R2/local objects first (keys from raw messages + published photos).
+        # Collect media keys IN MEMORY first, then do every DB delete in this one
+        # fast transaction. The slow per-object R2 delete loop runs AFTER the
+        # session closes (below) — holding a DB connection idle across thousands
+        # of R2 deletes is what made Neon's pooler drop it mid-purge.
         keys = set(
             (
                 await s.execute(
@@ -769,15 +772,6 @@ async def purge() -> dict[str, int]:
                 )
             ).scalars().all()
         )
-        if hasattr(storage, "delete"):
-            for key in keys:
-                if not key or key.lower().startswith(("http://", "https://")):
-                    continue
-                try:
-                    storage.delete(key)
-                    out["media_deleted"] += 1
-                except Exception:
-                    out["media_delete_failed"] += 1
 
         await s.execute(delete(PublishedPhoto).where(PublishedPhoto.site_id == site_id))
 
@@ -839,6 +833,19 @@ async def purge() -> dict[str, int]:
         await s.execute(delete(User).where(User.company_id == company_id))
         await s.execute(delete(Company).where(Company.id == company_id))
         await s.commit()
+
+    # DB is fully purged + committed. Now delete the storage objects — slow on R2
+    # (thousands of objects, sequential), but holds NO DB connection so a long
+    # loop can't trip the Neon idle timeout.
+    if hasattr(storage, "delete"):
+        for key in keys:
+            if not key or key.lower().startswith(("http://", "https://")):
+                continue
+            try:
+                storage.delete(key)
+                out["media_deleted"] += 1
+            except Exception:
+                out["media_delete_failed"] += 1
 
     return dict(out)
 

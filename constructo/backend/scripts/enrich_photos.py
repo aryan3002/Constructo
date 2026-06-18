@@ -184,86 +184,92 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
         ).scalars().all()
         photos = len(rows)
 
-        # Phase 1: caption all photos concurrently (no DB access in here).
-        results = await asyncio.gather(*[_visit(p.image_url) for p in rows])
+        # Process in batches: caption a batch concurrently (no DB), then write +
+        # COMMIT it. Frequent commits keep the connection active (a 15-min idle
+        # gather over a held session trips Neon's pooler) and make it resumable.
+        _BATCH = 50
+        for _start in range(0, len(rows), _BATCH):
+            batch = rows[_start : _start + _BATCH]
+            results = await asyncio.gather(*[_visit(p.image_url) for p in batch])
 
-        # Phase 2: apply DB writes serially on the open session.
-        for photo, result in zip(rows, results):
-            if result is None:
-                # No fetchable bytes or vision error — skip; a re-run retries it.
-                continue
+            for photo, result in zip(batch, results, strict=True):
+                if result is None:
+                    # No fetchable bytes or vision error — skip; re-run retries it.
+                    continue
 
-            caption = (result.get("caption") or "").strip()
-            room_hint = result.get("room_hint")
-            category = result.get("category") or "other"
+                caption = (result.get("caption") or "").strip()
+                room_hint = result.get("room_hint")
+                category = result.get("category") or "other"
 
-            # Fill caption only when blank (never clobber a human caption).
-            if not (photo.caption or "").strip():
-                photo.caption = caption or photo.caption
-                if caption:
-                    captioned += 1
-            # room_tag: set when we learned one and it isn't already populated.
-            if room_hint and not photo.room_tag:
-                photo.room_tag = room_hint
+                # Fill caption only when blank (never clobber a human caption).
+                if not (photo.caption or "").strip():
+                    photo.caption = caption or photo.caption
+                    if caption:
+                        captioned += 1
+                # room_tag: set when we learned one and it isn't already populated.
+                if room_hint and not photo.room_tag:
+                    photo.room_tag = room_hint
 
-            event_type = _CATEGORY_TO_EVENT.get(category, "progress_update")
-            # Skip event creation for documents or when there is no caption text.
-            if event_type is None or not caption:
-                continue
+                event_type = _CATEGORY_TO_EVENT.get(category, "progress_update")
+                # Skip event creation for documents or when there is no caption.
+                if event_type is None or not caption:
+                    continue
 
-            # Resolve the photo's source message (via the import bridge:
-            # PublishedPhoto.image_url == ChatMessage.attachment_key) to recover
-            # the original send date + the linked RawMessage id.
-            occurred_dt: datetime | None = None
-            raw_id: UUID | None = None
-            link = (
-                await s.execute(
-                    select(ChatMessage.created_at, ChatMessage.raw_message_id)
-                    .join(Conversation, ChatMessage.conversation_id == Conversation.id)
-                    .where(
-                        Conversation.site_id == site_id,
-                        ChatMessage.attachment_key == photo.image_url,
-                    )
-                    .order_by(ChatMessage.created_at)
-                    .limit(1)
-                )
-            ).first()
-            if link is not None:
-                occurred_dt, raw_id = link[0], link[1]
-                if raw_id is not None:
-                    # Prefer the RawMessage's original send date if present.
-                    rm_sent = (
-                        await s.execute(
-                            select(RawMessageModel.sent_at).where(RawMessageModel.id == raw_id)
+                # Resolve the photo's source message (via the import bridge:
+                # PublishedPhoto.image_url == ChatMessage.attachment_key) to
+                # recover the original send date + the linked RawMessage id.
+                occurred_dt: datetime | None = None
+                raw_id: UUID | None = None
+                link = (
+                    await s.execute(
+                        select(ChatMessage.created_at, ChatMessage.raw_message_id)
+                        .join(Conversation, ChatMessage.conversation_id == Conversation.id)
+                        .where(
+                            Conversation.site_id == site_id,
+                            ChatMessage.attachment_key == photo.image_url,
                         )
-                    ).scalar_one_or_none()
-                    if rm_sent is not None:
-                        occurred_dt = rm_sent
+                        .order_by(ChatMessage.created_at)
+                        .limit(1)
+                    )
+                ).first()
+                if link is not None:
+                    occurred_dt, raw_id = link[0], link[1]
+                    if raw_id is not None:
+                        # Prefer the RawMessage's original send date if present.
+                        rm_sent = (
+                            await s.execute(
+                                select(RawMessageModel.sent_at).where(
+                                    RawMessageModel.id == raw_id
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if rm_sent is not None:
+                            occurred_dt = rm_sent
 
-            occurred_on = (
-                occurred_dt.date()
-                if occurred_dt is not None
-                else (photo.published_at or datetime.now(UTC)).date()
-            )
-            source_ids = [raw_id] if raw_id is not None else []
+                occurred_on = (
+                    occurred_dt.date()
+                    if occurred_dt is not None
+                    else (photo.published_at or datetime.now(UTC)).date()
+                )
+                source_ids = [raw_id] if raw_id is not None else []
 
-            await _upsert(
-                s,
-                SiteEventModel,
-                _id("photo-event", str(photo.id)),
-                site_id=site_id,
-                event_type=event_type,
-                occurred_on=occurred_on,
-                summary=caption,
-                fields={"description": caption, "room": room_hint},
-                confidence=0.8,
-                needs_clarification=False,
-                source_message_ids=source_ids,
-                version=1,
-            )
-            events += 1
+                await _upsert(
+                    s,
+                    SiteEventModel,
+                    _id("photo-event", str(photo.id)),
+                    site_id=site_id,
+                    event_type=event_type,
+                    occurred_on=occurred_on,
+                    summary=caption,
+                    fields={"description": caption, "room": room_hint},
+                    confidence=0.8,
+                    needs_clarification=False,
+                    source_message_ids=source_ids,
+                    version=1,
+                )
+                events += 1
 
-        await s.commit()
+            await s.commit()  # commit per batch — keeps the connection alive
 
     return {"photos": photos, "captioned": captioned, "events": events}
 
