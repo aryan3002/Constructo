@@ -371,34 +371,32 @@ class AzureOpenAILLMClient:
         return json.loads(content)
 
 
-def get_llm_client() -> LLMClient:
-    """Return an :class:`LLMClient` selected by environment.
+def get_llm_client(tier: str = "cheap") -> LLMClient:
+    """Return an LLMClient for a routing tier.
 
-    Reads ``LLM_PROVIDER`` (default ``"openai"``):
-      - ``openai``: needs ``OPENAI_API_KEY`` (+ optional ``LLM_MODEL``).
-      - ``azure``: needs ``AZURE_OPENAI_API_KEY``, ``AZURE_OPENAI_ENDPOINT``,
-        ``AZURE_OPENAI_DEPLOYMENT`` (the chat model deployment name), and
-        ``AZURE_OPENAI_API_VERSION``.
-
-    If the required credentials are missing, returns a :class:`FakeLLMClient`
-    so the pipeline degrades gracefully in dev/test without credentials.
+    tier: "cheap" -> AZURE_OPENAI_DEPLOYMENT (gpt-4o-mini);
+          "smart"/"vision" -> AZURE_OPENAI_DEPLOYMENT_SMART (gpt-4o),
+          falling back to the cheap deployment when SMART is unset.
+    Back-compat: no-arg call returns the cheap/default client.
     """
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider == "azure":
         key = os.environ.get("AZURE_OPENAI_API_KEY")
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-        deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+        cheap = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+        smart = os.environ.get("AZURE_OPENAI_DEPLOYMENT_SMART") or cheap
         api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        deployment = smart if tier in ("smart", "vision") else cheap
         if key and endpoint and deployment:
             return AzureOpenAILLMClient(
-                api_key=key,
-                endpoint=endpoint,
-                deployment=deployment,
-                api_version=api_version,
+                api_key=key, endpoint=endpoint,
+                deployment=deployment, api_version=api_version,
             )
     elif provider == "openai":
         key = os.environ.get("OPENAI_API_KEY")
         if key:
-            model = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+            cheap = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+            smart = os.environ.get("LLM_MODEL_SMART") or cheap
+            model = smart if tier in ("smart", "vision") else cheap
             return OpenAILLMClient(api_key=key, model=model)
     return FakeLLMClient()
