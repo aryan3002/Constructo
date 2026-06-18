@@ -14,10 +14,13 @@ import { useHighContrast, useNotifPrefs } from './useDisplayPrefs'
 const ROLE_KEY: Record<string, TranslationKey> = {
   owner: 'invite.role.owner',
   pm: 'invite.role.pm',
+  architect: 'invite.role.architect',
   supervisor: 'invite.role.supervisor',
   accountant: 'invite.role.accountant',
   procurement: 'invite.role.procurement',
   labor_contractor: 'invite.role.labor_contractor',
+  contractor: 'invite.role.labor_contractor',
+  client: 'invite.role.client',
 }
 
 function Section({
@@ -126,7 +129,7 @@ export function Settings() {
                       {t('settings.profile.role')}
                     </dt>
                     <dd className="font-body text-body text-text">
-                      {me ? t(ROLE_KEY[me.role] ?? 'invite.role.owner') : ''}
+                      {me ? (ROLE_KEY[me.role] ? t(ROLE_KEY[me.role]) : me.role) : ''}
                     </dd>
                   </div>
                 </dl>
