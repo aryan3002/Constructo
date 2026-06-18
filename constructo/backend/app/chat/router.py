@@ -194,6 +194,10 @@ class ChatMessageOut(BaseModel):
     # Machine payload (e.g. {"blocked": {...}}) — drives a system/blocked notice
     # in the client; never rendered as free text.
     meta: dict | None = None
+    # Human-readable author identity — resolved at read time (not stored on the
+    # message row). None for system/nivaan rows that have no User sender.
+    sender_name: str | None = None
+    sender_role: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -797,6 +801,8 @@ async def send_message(
         await enqueue_extraction(raw.id)
     out = ChatMessageOut.model_validate(msg)
     out.attachment_url = _safe_attachment_url(msg.attachment_key)
+    out.sender_name = user.name
+    out.sender_role = user.role.value
     # Push the new message live to any subscribed clients (2.0). The card upgrade
     # arrives on the client's next refetch once extraction runs; the bubble is live.
     await get_broadcaster().publish(
@@ -976,12 +982,28 @@ async def list_messages(
             )
         ).all()
         status_by_raw = {row.id: row.status for row in status_rows}
+    # Batch-resolve sender names + roles for attribution labels on multi-sender
+    # bubbles (site/group threads). Mirrors the status_by_raw fetch above.
+    sender_ids = {r.sender_id for r in rows if r.sender_id is not None}
+    users_by_id: dict[UUID, tuple[str | None, str | None]] = {}
+    if sender_ids:
+        urows = (
+            await session.execute(
+                select(User.id, User.name, User.role).where(User.id.in_(sender_ids))
+            )
+        ).all()
+        users_by_id = {
+            u.id: (u.name, u.role.value if u.role else None) for u in urows
+        }
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
         msg_out = ChatMessageOut.model_validate(r)
         msg_out.attachment_url = _safe_attachment_url(r.attachment_key, storage)
         msg_out.raw_status = status_by_raw.get(r.raw_message_id)
+        name, role = users_by_id.get(r.sender_id, (None, None))
+        msg_out.sender_name = name
+        msg_out.sender_role = role
         events = []
         for e in events_by_raw.get(r.raw_message_id, []):
             eo = ChatEventOut.model_validate(e)
