@@ -111,12 +111,20 @@ async def main() -> None:
 
         # --- focus-role readiness ---
         roles = {
-            "HOMEOWNER": ["chat: homeowner thread", "published_photos", "updates (homeowner timeline)",
-                          "decisions", "published_drawings"],
-            "OWNER": ["owner_briefs", "decisions", "specs", "payments", "audits", "chat: site thread"],
-            "SUPERVISOR": ["chat: site thread", "audits", "dprs", "action_items", "published_photos"],
-            "ARCHITECT": ["specs", "spaces (rooms/floors)", "published_drawings", "profiler_profiles",
-                          "decisions"],
+            "HOMEOWNER": [
+                "chat: homeowner thread", "published_photos",
+                "updates (homeowner timeline)", "decisions", "published_drawings",
+            ],
+            "OWNER": [
+                "owner_briefs", "decisions", "specs", "payments", "audits", "chat: site thread",
+            ],
+            "SUPERVISOR": [
+                "chat: site thread", "audits", "dprs", "action_items", "published_photos",
+            ],
+            "ARCHITECT": [
+                "specs", "spaces (rooms/floors)", "published_drawings",
+                "profiler_profiles", "decisions",
+            ],
         }
         print("\n=== FOCUS-ROLE READINESS ===")
         for role, needs in roles.items():
