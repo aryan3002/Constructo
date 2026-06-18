@@ -617,6 +617,8 @@ export default function CrewChat() {
                   timestamp={fmtTime(item.created_at)}
                   deliveryState={thread.deliveryState(item)}
                   onLongPress={() => thread.setReply(item)}
+                  showSenderName
+                  senderName={item.sender_name}
                 />
               </View>
             </View>
