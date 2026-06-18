@@ -210,12 +210,30 @@ async def build_world(session, participants: dict[str, str]) -> dict:
     for i, (sender, role) in enumerate(participants.items()):
         phone = _phone_for(i)
         phones[sender] = phone
-        users[sender] = await _upsert(
-            session, User, _id("user", sender),
-            company_id=company.id, phone=phone, role=UserRole(role),
-            name=sender, language="hi",
-        )
+        # Phone is the unique login key. Reuse any pre-existing user with this
+        # phone (e.g. an auto-login-minted owner from earlier testing, or a prior
+        # import) instead of inserting a colliding new uuid5 id — then re-home it
+        # to this company + real role. Keeps the import idempotent on phone.
+        existing = (
+            await session.execute(select(User).where(User.phone == phone))
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.company_id = company.id
+            existing.role = UserRole(role)
+            existing.name = sender
+            existing.language = "hi"
+            existing.is_active = True
+            users[sender] = existing
+        else:
+            users[sender] = await _upsert(
+                session, User, _id("user", sender),
+                company_id=company.id, phone=phone, role=UserRole(role),
+                name=sender, language="hi",
+            )
     await session.flush()
+    # Capture the ACTUAL persisted ids (a reused user keeps its original id, which
+    # differs from _id("user", sender)) so downstream stages resolve the right rows.
+    user_ids: dict[str, UUID] = {s: users[s].id for s in participants}
 
     # Field/finance roles only see sites they are assigned to.
     for sender, role in participants.items():
@@ -266,7 +284,7 @@ async def build_world(session, participants: dict[str, str]) -> dict:
         "site_id": _id("site"),
         "site_conv_id": site_conv.id,
         "homeowner_conv_id": homeowner_conv.id,
-        "users": {s: {"id": _id("user", s), "phone": phones[s]} for s in participants},
+        "users": {s: {"id": user_ids[s], "phone": phones[s]} for s in participants},
     }
 
 
@@ -927,6 +945,13 @@ async def _run(opts: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # Load .env into os.environ so the extraction clients (get_llm_client/OCR/STT,
+    # which read os.environ directly) see the real Azure creds. Done here in the
+    # CLI entry — NOT at import — so tests that import this module stay on the
+    # network-free FakeLLM. CLI/prod env vars already set are NOT overridden.
+    from scripts._bootstrap_env import load as _load_env
+
+    _load_env()
     p = argparse.ArgumentParser(description="Import a WhatsApp export into Constructo.")
     p.add_argument("--zip", help="Path to the WhatsApp 'Export Chat' .zip")
     p.add_argument("--run", action="store_true", help="Actually import (default: dry-run only)")
