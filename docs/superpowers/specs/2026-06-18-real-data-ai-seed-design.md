@@ -111,7 +111,27 @@ Seed the real conversation **as in-app chat**, replacing the old
   created (forward-compat for live WhatsApp bridging) but history is seeded via
   `app_chat`, so events are produced once.
 
-### 5.3 Vision pipeline — new `app/extraction/vision.py`
+### 5.3 Chat sender attribution (multi-sender bubbles)
+
+**Gap (verified):** `ChatMessageOut` (`app/chat/router.py:168`) returns `sender_id`
+(a UUID) and `sender_side` but **no sender name**; the mobile UI only uses
+`sender_id` to test "is this mine" (`supervisor/chat.tsx:558`, `threadState.ts:105`)
+and renders **no name on any bubble**. Acceptable for the 1:1 homeowner channel,
+useless for the multi-sender `site`/`group` threads this seed creates.
+
+**Fix:**
+- **Backend:** add `sender_name: str | None` (and `sender_role: str | None`) to
+  `ChatMessageOut`, resolved from `User`. Populate on the send response and the
+  list endpoint via an efficient batch user-id→(name,role) lookup (no N+1).
+  Nivaan/system rows keep name `None` (client already styles them by
+  `sender_kind`).
+- **Mobile** (`src/chat/MessageView.tsx`, type `src/api/chat.ts`): show the
+  sender name above incoming bubbles (not "mine", not nivaan/system),
+  WhatsApp-style — only on the first message of a same-sender run, and only in
+  multi-sender conversations (`site`/`group`; skip the 1:1 homeowner channel).
+- **Web** owner console chat view: same treatment if present.
+
+### 5.4 Vision pipeline — new `app/extraction/vision.py`
 
 - **Photos (2,319):** `cheap` (4o-mini) vision captions + classifies routine site
   photos → caption + room tag → `progress_update`/`issue` event +
@@ -124,7 +144,7 @@ Seed the real conversation **as in-app chat**, replacing the old
 - Routing keeps cost down: mini for the photo bulk, 4o for the ~167 plans + the
   design-option subset.
 
-### 5.4 Derived-surface generators — `scripts/enrich_*.py` (idempotent, uuid5)
+### 5.5 Derived-surface generators — `scripts/enrich_*.py` (idempotent, uuid5)
 
 | Surface | Real signal → | Target tables | Tier |
 |---|---|---|---|
@@ -139,7 +159,7 @@ Seed the real conversation **as in-app chat**, replacing the old
 | Quiet periods | event-gap analysis (no LLM) | `QuietPeriod` | deterministic |
 | Permits / vendor-confirm / disputes | derive only if real signal exists; else honest-empty | — | — |
 
-### 5.5 Role mapping / cast (written into importer `SENDER_ROLES`)
+### 5.6 Role mapping / cast (written into importer `SENDER_ROLES`)
 
 | Sender | Msgs | Role | Notes |
 |---|---|---|---|
@@ -186,8 +206,8 @@ conversation, decisions, specs, etc.). Fix any thin surface.
 - **P0 — Foundations:** tiered model routing + escalation; `vision.py`; prod prep
   (Neon URL, purge, dry-run).
 - **P1 — Core import as in-app chat:** evolve message stage → conversations +
-  `app_chat` seeding + extraction; media → R2 + photos/drawings; briefs + index;
-  homeowner scaffold.
+  `app_chat` seeding + extraction; **chat sender attribution (§5.3)**; media → R2
+  + photos/drawings; briefs + index; homeowner scaffold.
 - **P2 — Document intelligence:** the 167 PDFs → rooms/components/specs/drawings.
 - **P3 — Derived surfaces:** decisions, specs, profiler+brief, audits, DPR,
   action items, payments, site changes, quiet periods.
