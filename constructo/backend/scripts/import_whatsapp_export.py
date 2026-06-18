@@ -433,12 +433,15 @@ async def import_messages(
         counts["chat_messages"] += 1
         counts["site_channel" if channel == "site" else "homeowner_channel"] += 1
 
-        # Run real extraction off the bridged RawMessage when there is text or a
-        # document/image to read — the SAME pipeline, no double extraction.
+        # Run real extraction off the bridged RawMessage when there is a human
+        # caption OR a document (PDF) to read — the SAME pipeline, no double
+        # extraction. A CAPTIONLESS photo is deliberately NOT text-extracted (it
+        # would only yield a "no message provided" guess); the vision pass
+        # (enrich_photos) captions it and creates its event with real content.
         should_extract = (
             not opts.skip_extraction
             and raw_id is not None
-            and (bool(m.text) or m.media_kind in EXTRACT_KINDS or m.media_kind == "image")
+            and (bool(m.text and m.text.strip()) or m.media_kind in EXTRACT_KINDS)
         )
         if should_extract:
             try:
