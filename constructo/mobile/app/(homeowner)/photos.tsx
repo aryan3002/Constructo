@@ -488,85 +488,38 @@ function StandardCard({
           ...theme.shadowCard,
         }}
       >
-        {/* Large photo (hero aspect ratio, flush) + a floating date chip and a
-            room chip overlaid on the image for a more immersive, editorial feel. */}
-        <View style={{ position: 'relative' }}>
-          <PhotoTile
-            photo={{
-              id: photo.id,
-              imageUri: photo.image_url,
-              caption: photo.caption,
-              date: shortDate(photo.published_at, lang),
-              room: photo.room_tag,
-              starred: photo.is_starred,
-            }}
-            variant="hero"
-            labels={tileLabels}
-            onPress={() => onPress(photo)}
-            onTranslate={onTranslate}
-            style={{ borderRadius: 0, borderWidth: 0 }}
-          />
-          {photo.published_at ? (
-            <View
-              style={{
-                position: 'absolute',
-                top: SPACE.sm,
-                right: SPACE.sm,
-                backgroundColor: 'rgba(0,0,0,0.42)',
-                borderRadius: theme.radii.pill,
-                paddingHorizontal: 10,
-                paddingVertical: 3,
-              }}
-            >
-              <Small style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
-                {shortDate(photo.published_at, lang)}
-              </Small>
-            </View>
-          ) : null}
-          {photo.room_tag ? (
-            <View
-              style={{
-                position: 'absolute',
-                bottom: SPACE.sm,
-                left: SPACE.sm,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-                backgroundColor: 'rgba(0,0,0,0.42)',
-                borderRadius: theme.radii.pill,
-                paddingHorizontal: 10,
-                paddingVertical: 3,
-              }}
-            >
-              <Feather name="map-pin" size={11} color="#fff" />
-              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }}>
-                {photo.room_tag}
-              </Small>
-            </View>
-          ) : null}
-        </View>
+        {/* PhotoTile owns the image + caption + date + room chip — render it once
+            (no overlays/duplicate caption). StandardCard only adds the "shared by"
+            attribution + the homeowner action bar. */}
+        <PhotoTile
+          photo={{
+            id: photo.id,
+            imageUri: photo.image_url,
+            caption: photo.caption,
+            date: shortDate(photo.published_at, lang),
+            room: photo.room_tag,
+            starred: photo.is_starred,
+          }}
+          variant="hero"
+          labels={tileLabels}
+          onPress={() => onPress(photo)}
+          onTranslate={onTranslate}
+          style={{ borderRadius: 0, borderWidth: 0 }}
+        />
 
-        {/* Attribution row — icon-led, calm. */}
+        {/* Attribution — the one thing PhotoTile doesn't show. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: SPACE.xs,
             paddingHorizontal: SPACE.lg,
-            paddingTop: SPACE.sm,
-            paddingBottom: SPACE.xs,
+            paddingBottom: SPACE.sm,
           }}
         >
           <Feather name="check-circle" size={13} color={c.accent} />
           <Small muted style={{ fontSize: 12 }}>{s.sharedBy}</Small>
         </View>
-
-        {/* Caption */}
-        {photo.caption ? (
-          <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm }}>
-            <Body style={{ fontSize: 14 }}>{photo.caption}</Body>
-          </View>
-        ) : null}
 
         {/* Action bar — sits on a top hairline */}
         <ActionBar
