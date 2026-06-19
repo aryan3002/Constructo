@@ -604,6 +604,8 @@ function MilestoneTracker({ milestones, lang }: { milestones: Milestone[]; lang:
  */
 function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
   const str = STR[lang]
+  const { theme } = useTheme()
+  const c = theme.colors
   const meta = updateMeta(u.type, lang)
   const occurred = formatDate(u.published_at, lang)
 
@@ -642,24 +644,78 @@ function TimelineEntry({ u, lang }: { u: Update; lang: Lang }) {
     )
   }
 
-  // Milestone / change / progress / quiet — calm coloured-spine cards.
+  // Quiet day — keep the calm muted card.
+  if (u.type === 'quiet') {
+    return (
+      <CalmCard
+        status="quiet"
+        title={u.title}
+        body={u.body ?? undefined}
+        trailing={<MonoSm muted style={{ fontSize: 12 }}>{occurred}</MonoSm>}
+      />
+    )
+  }
+
+  // Progress / milestone / change — a premium card: a status-tinted icon chip,
+  // an eyebrow + title + body, and a soft date pill. Reads as a real timeline
+  // entry rather than a flat row.
   const eyebrow =
     u.type === 'milestone'
       ? str.milestoneEyebrow
       : u.type === 'change'
         ? str.changeEyebrow
-        : meta.status === 'mute'
-          ? str.tabs.timeline
-          : str.progressEyebrow
-  const status: Status = meta.status === 'mute' ? 'quiet' : meta.status
+        : str.progressEyebrow
+  const tone: Status = meta.status === 'mute' ? 'quiet' : meta.status
+  const accent = STATUS[tone] ?? c.accent
+  const icon =
+    u.type === 'milestone' ? 'flag' : u.type === 'change' ? 'refresh-cw' : 'trending-up'
   return (
-    <CalmCard
-      status={status}
-      eyebrow={u.type === 'quiet' ? undefined : eyebrow}
-      title={u.title}
-      body={u.body ?? undefined}
-      trailing={<MonoSm muted style={{ fontSize: 12 }}>{occurred}</MonoSm>}
-    />
+    <View
+      style={[
+        {
+          backgroundColor: c.card,
+          borderRadius: theme.radii.card,
+          padding: SPACE.lg,
+          flexDirection: 'row',
+          gap: SPACE.md,
+        },
+        theme.shadowCard,
+      ]}
+    >
+      <View
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 19,
+          backgroundColor: `${accent}1A`,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Feather name={icon} size={18} color={accent} />
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm }}
+        >
+          <Eyebrow style={{ color: accent }}>{eyebrow}</Eyebrow>
+          <View
+            style={{
+              backgroundColor: c.paper,
+              borderRadius: theme.radii.pill,
+              paddingHorizontal: SPACE.sm,
+              paddingVertical: 2,
+              borderWidth: 1,
+              borderColor: c.line,
+            }}
+          >
+            <MonoSm muted style={{ fontSize: 11 }}>{occurred}</MonoSm>
+          </View>
+        </View>
+        <Body style={{ fontWeight: '600' }}>{u.title}</Body>
+        {u.body ? <Body muted style={{ fontSize: 14 }}>{u.body}</Body> : null}
+      </View>
+    </View>
   )
 }
 
