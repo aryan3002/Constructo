@@ -162,6 +162,9 @@ class UpdateOut(BaseModel):
     impact_days: int | None = None
     impact_cost_delta: float | None = None  # rupees; the client formats lakh/crore
     reason: str | None = None
+    # A presigned thumbnail (the first published photo on this update's day) so
+    # the homeowner "recent activity" feed shows the real photo, not a placeholder.
+    thumbnail_url: str | None = None
 
 
 class WeeklySummaryOut(BaseModel):

@@ -429,6 +429,7 @@ async def import_messages(
                         id=pid, site_id=world["site_id"], image_url=media_url,
                         caption=m.text, room_tag=None, milestone_id=None,
                         is_starred=False, published_by=user_info["id"],
+                        published_at=m.sent_at,  # real message date, not import time
                     ))
                     counts["photos_published"] += 1
             await s.commit()

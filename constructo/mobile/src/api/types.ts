@@ -176,6 +176,9 @@ export interface Update {
   impact_days: number | null
   impact_cost_delta: number | null // rupees; formatRupees handles lakh/crore
   reason: string | null
+  // Presigned thumbnail (first published photo on this update's day) — shown in
+  // the recent-activity row instead of the placeholder icon when present.
+  thumbnail_url?: string | null
 }
 
 export interface WeeklySummary {

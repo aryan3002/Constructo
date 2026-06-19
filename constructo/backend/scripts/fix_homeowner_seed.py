@@ -32,10 +32,12 @@ from sqlalchemy import delete, select, update
 
 from app.db import SessionLocal
 from app.models import (
+    ChatMessage,
     Decision,
     ProfilerProfile,
     ProfilerReference,
     ProfilerTheme,
+    PublishedPhoto,
     User,
 )
 from app.models.decision import DecisionState
@@ -111,12 +113,36 @@ async def _fix_references(s) -> dict:
     return {"deleted": len(ref_ids), "themes_cleared": len(themes)}
 
 
+async def _fix_photo_dates(s) -> dict:
+    """Backfill PublishedPhoto.published_at to the real message date.
+
+    The import left published_at at row-insert time, so the Photos feed ordered
+    by import time (all clustered today) and home thumbnails couldn't date-match.
+    Recover the true date from the bridged chat message (image_url ==
+    ChatMessage.attachment_key → created_at == the message's sent_at).
+    """
+    rows = (
+        await s.execute(
+            select(PublishedPhoto, ChatMessage.created_at)
+            .join(ChatMessage, ChatMessage.attachment_key == PublishedPhoto.image_url)
+            .where(PublishedPhoto.site_id == SITE_ID)
+        )
+    ).all()
+    n = 0
+    for photo, created in rows:
+        if created is not None and photo.published_at != created:
+            photo.published_at = created
+            n += 1
+    return {"redated": n}
+
+
 async def run(session_factory=SessionLocal) -> dict:
     out: dict = {}
     async with session_factory() as s:
         out["users_set_en"] = await _fix_language(s)
         out["decisions"] = await _fix_decisions(s)
         out["references"] = await _fix_references(s)
+        out["photo_dates"] = await _fix_photo_dates(s)
         await s.commit()
     return out
 
