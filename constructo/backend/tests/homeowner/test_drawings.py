@@ -1,6 +1,40 @@
 """C3 — published drawings: the contractor publishes a drawing, the homeowner
 reads it; versioning supersedes; cross-site/scope is enforced."""
+from app.storage import get_storage
+
 from .conftest import auth
+
+
+async def test_drawing_file_url_is_resolved_not_a_bare_key(client, ctx):
+    """A drawing whose ``file_url`` is a bare storage key (as the WhatsApp
+    importer stores PDFs) must be served as a fetchable URL on both the
+    contractor and homeowner reads — otherwise the app's ``Linking.openURL``
+    throws and the user sees "Could not open the file"."""
+    bare_key = "documents/ground-floor-plan.pdf"
+    pub = await client.post(
+        "/api/v1/publish/drawings",
+        json={
+            "site_id": str(ctx.site.id),
+            "title": "Ground floor plan",
+            "version": "Rev A",
+            "file_url": bare_key,
+            "kind": "plan",
+        },
+        headers=auth(ctx.owner),
+    )
+    assert pub.status_code == 201, pub.text
+    resolved = get_storage().url_for(bare_key)
+    # Contractor read resolves the key.
+    assert pub.json()["file_url"] == resolved
+    assert pub.json()["file_url"] != bare_key
+
+    # Homeowner read resolves it too.
+    read = await client.get(
+        f"/api/v1/homeowner/drawings?site_id={ctx.site.id}", headers=auth(ctx.homeowner)
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()[0]["file_url"] == resolved
+    assert read.json()[0]["file_url"] != bare_key
 
 
 async def test_publish_drawing_appears_in_homeowner_read(client, ctx):

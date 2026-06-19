@@ -73,6 +73,7 @@ from app.publish.schemas import (
     SpaceUpdateIn,
 )
 from app.push.sender import notify_site_homeowners
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/publish", tags=["publish"])
 
@@ -503,7 +504,9 @@ def _drawing_out(d: PublishedDrawing) -> DrawingOut:
         site_id=d.site_id,
         title=d.title,
         version=d.version,
-        file_url=d.file_url,
+        # Resolve bare storage keys to a fetchable URL (full http(s) URLs pass
+        # through unchanged) so the app can open the file. See homeowner._drawing_out.
+        file_url=get_storage().url_for(d.file_url) or d.file_url,
         kind=d.kind,
         published_by=d.published_by,
         published_at=d.published_at,
