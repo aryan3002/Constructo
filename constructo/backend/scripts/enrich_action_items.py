@@ -131,50 +131,66 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
         if not msgs:
             return {"scanned": 0, "action_items": 0}
 
-        for msg in msgs:
+        # Judge messages in concurrent batches (cheap-tier), committing per batch.
+        # Concurrency = throughput on the network-bound LLM calls; per-message
+        # try/except keeps one Azure content-filter rejection (e.g. a message
+        # flagged self_harm) from aborting the whole pass; the per-batch commit
+        # keeps the DB connection active (no minutes-long idle → no Neon drop).
+        sem = asyncio.Semaphore(8)
+
+        async def _judge(msg):
             body = (msg.body or "").strip()
             if not body:
-                continue
-            scanned += 1
+                return msg, None, False
+            async with sem:
+                try:
+                    return msg, (await llm.complete(_SYSTEM, body, _SCHEMA) or {}), True
+                except Exception:
+                    # Azure content filter or a transient error — skip, keep going.
+                    return msg, None, True
 
-            out = await llm.complete(_SYSTEM, body, _SCHEMA) or {}
-            if not _is_true(out.get("is_task")):
-                continue
-            title = (out.get("title") or body).strip()
-            if not title:
-                continue
+        _BATCH = 100
+        for _i in range(0, len(msgs), _BATCH):
+            judged = await asyncio.gather(*[_judge(m) for m in msgs[_i : _i + _BATCH]])
+            for msg, out, did_scan in judged:
+                if did_scan:
+                    scanned += 1
+                if not out or not _is_true(out.get("is_task")):
+                    continue
+                title = (out.get("title") or (msg.body or "").strip()).strip()
+                if not title:
+                    continue
 
-            item_id = _id("action_item", str(msg.id))
-            existed = await s.get(ActionItem, item_id) is not None
-            await _upsert(
-                s,
-                ActionItem,
-                item_id,
-                company_id=company_id,
-                site_id=site_id,
-                source_message_id=msg.id,
-                title=title[:200],
-                detail=(out.get("assignee_hint") or None),
-                created_by=None,
-                created_by_ai=True,
-                status=ActionItemStatus.open,
-                due_on=_parse_due(out.get("due_hint")),
-            )
-            action_items += 1
-
-            # One created event per item — only on first creation (the event log
-            # is append-only; re-runs must not pile up duplicate created rows).
-            if not existed:
-                s.add(
-                    ActionItemEvent(
-                        id=_id("action_item_event", str(msg.id)),
-                        action_item_id=item_id,
-                        kind=ActionItemEventKind.created,
-                        actor_is_ai=True,
-                    )
+                item_id = _id("action_item", str(msg.id))
+                existed = await s.get(ActionItem, item_id) is not None
+                await _upsert(
+                    s,
+                    ActionItem,
+                    item_id,
+                    company_id=company_id,
+                    site_id=site_id,
+                    source_message_id=msg.id,
+                    title=title[:200],
+                    detail=(out.get("assignee_hint") or None),
+                    created_by=None,
+                    created_by_ai=True,
+                    status=ActionItemStatus.open,
+                    due_on=_parse_due(out.get("due_hint")),
                 )
+                action_items += 1
 
-        await s.commit()
+                # One created event per item — only on first creation (append-only
+                # log; re-runs must not pile up duplicate created rows).
+                if not existed:
+                    s.add(
+                        ActionItemEvent(
+                            id=_id("action_item_event", str(msg.id)),
+                            action_item_id=item_id,
+                            kind=ActionItemEventKind.created,
+                            actor_is_ai=True,
+                        )
+                    )
+            await s.commit()
 
     return {"scanned": scanned, "action_items": action_items}
 
