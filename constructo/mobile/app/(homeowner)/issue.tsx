@@ -345,7 +345,10 @@ export default function IssueScreen() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
       toast(t.successToast)
-      router.back()
+      // Markup → issue uses router.replace, so the back stack can be empty here.
+      // Pop if we can, else land on Photos — never collapse to the tab root (Home).
+      if (router.canGoBack()) router.back()
+      else router.replace('/(homeowner)/photos')
     },
     onError: () => setFormError(t.submitError),
   })
@@ -401,7 +404,11 @@ export default function IssueScreen() {
       <SubHeader
         title={t.title}
         subtitle={t.subtitle}
-        onBack={step === 1 ? () => router.back() : () => setStep(1)}
+        onBack={
+          step === 1
+            ? () => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/photos'))
+            : () => setStep(1)
+        }
         right={<StepDots step={step} />}
       />
 

@@ -753,9 +753,15 @@ export default function Home() {
               <Body style={{ fontWeight: '600', color: c.text }}>{t.activityTitle}</Body>
             </View>
 
-            {/* Activity rows */}
-            <View style={{ gap: SPACE.md }}>
-              {recent_activity.slice(0, 3).map((item: Update, idx: number) => (
+            {/* Activity rows — scrollable when there are more than 3, so the card
+                stays calm but the recent feed feels alive (not a static 3). */}
+            <ScrollView
+              style={{ maxHeight: recent_activity.length > 3 ? 3 * 76 : undefined }}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={recent_activity.length > 3}
+              contentContainerStyle={{ gap: SPACE.md }}
+            >
+              {recent_activity.map((item: Update, idx: number) => (
                 <Pressable
                   key={item.id}
                   accessibilityRole="button"
@@ -810,7 +816,7 @@ export default function Home() {
                   <Feather name="chevron-right" size={16} color={c.textMute} />
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             {/* Footer */}
             <View style={{ marginTop: SPACE.md }}>

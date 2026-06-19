@@ -235,7 +235,12 @@ export default function DecisionDetailScreen() {
             ? t.commentSuccess
             : t.changeSuccess
       toast(msg)
-      router.back()
+      // A comment is upward voice — the decision stays open, so keep the user on
+      // this screen instead of popping back to Home. Only terminal actions
+      // (approve / request_change) navigate away.
+      if (vars.action !== 'comment') {
+        router.back()
+      }
     },
     onError: (e) =>
       setRespondError(e instanceof ApiError ? e.message : t.respondError),

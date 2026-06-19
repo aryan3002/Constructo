@@ -1,0 +1,9 @@
+node_modules
+constructo/mobile/node_modules
+constructo/web/node_modules
+constructo/whatsapp-bridge/node_modules
+constructo/backend/__pycache__
+constructo/backend/.venv
+.git
+.claude
+docs

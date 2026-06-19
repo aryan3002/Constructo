@@ -859,7 +859,7 @@ async def home(
                 _quiet_visible_filter(visible_quiet),
             )
             .order_by(Update.published_at.desc())
-            .limit(5)
+            .limit(8)
         )
     ).scalars().all()
 
@@ -873,29 +873,39 @@ async def home(
         total = sum(float(c.cost_delta) for c in changes if c.cost_delta is not None)
         spend = SpendSummary(total_change_cost_delta=total, change_count=len(changes))
 
-    # Thumbnail per recent item: the first published photo on that update's day
-    # (presigned), so the feed shows the real site photo, not a placeholder icon.
-    thumb_by_date: dict = {}
-    recent_dates = {u.published_at.date() for u in recent}
-    if recent_dates:
-        storage = get_storage()
-        photo_rows = (
-            await session.execute(
-                select(PublishedPhoto.published_at, PublishedPhoto.image_url)
-                .where(PublishedPhoto.site_id == sid)
-                .order_by(PublishedPhoto.published_at.desc())
-                .limit(300)
-            )
-        ).all()
-        for pa, key in photo_rows:
-            d = pa.date()
-            if key and d in recent_dates and d not in thumb_by_date:
-                thumb_by_date[d] = storage.url_for(key) or key
+    # Thumbnail per recent item: a DISTINCT real published photo for each update
+    # (presigned), preferring one from the update's own day, else the newest
+    # unused photo — so no two rows show the same image (regression: keying by
+    # day alone made every same-day update collapse to one photo).
+    storage = get_storage()
+    photo_rows = (
+        await session.execute(
+            select(PublishedPhoto.published_at, PublishedPhoto.image_url)
+            .where(PublishedPhoto.site_id == sid, PublishedPhoto.image_url.is_not(None))
+            .order_by(PublishedPhoto.published_at.desc())
+            .limit(300)
+        )
+    ).all()
+    photo_pool = [(pa.date(), key) for pa, key in photo_rows if key]
+    used_keys: set[str] = set()
+
+    def _take_thumb(update_date) -> str | None:
+        # Prefer an unused photo from the same day, else the newest unused photo.
+        for d, key in photo_pool:
+            if key not in used_keys and d == update_date:
+                used_keys.add(key)
+                return key
+        for _d, key in photo_pool:
+            if key not in used_keys:
+                used_keys.add(key)
+                return key
+        return None
 
     recent_activity = []
     for u in recent:
         out = await _render_update(session, translation, user.language, _update_out(u))
-        thumb = thumb_by_date.get(u.published_at.date())
+        key = _take_thumb(u.published_at.date())
+        thumb = (storage.url_for(key) or key) if key else None
         recent_activity.append(out.model_copy(update={"thumbnail_url": thumb}) if thumb else out)
     quiet_out = None
     if quiet_window:
@@ -2194,9 +2204,9 @@ async def update_request_status(
 
 # ---- decisions -------------------------------------------------------------
 
+# "comment" is handled separately (it never changes state) — see respond_to_decision.
 _RESPOND_ACTION: dict[str, DecisionAction] = {
     "approve": DecisionAction.resolve,
-    "comment": DecisionAction.acknowledge,
     "request_change": DecisionAction.reject,
 }
 
@@ -2259,8 +2269,20 @@ async def respond_to_decision(
                 "Only a property owner can approve this. You can add a comment.",
                 extra={"can_comment": True},
             )
-    action = _RESPOND_ACTION[body.action]
-    updated = await apply_action(session, decision, action, note=body.note)
+    if body.action == "comment":
+        # A comment is upward voice, NOT authorization — it must NOT change the
+        # decision's state. It stays pending so it remains on the homeowner's
+        # Home "needs your input" (regression: comment used to flip it to
+        # acknowledged and drop it off Home). The note is preserved; Phase 2
+        # routes it to the site team thread + a "My reports" list.
+        if body.note and not decision.resolution_note:
+            decision.resolution_note = body.note
+            await session.commit()
+            await session.refresh(decision)
+        updated = decision
+    else:
+        action = _RESPOND_ACTION[body.action]
+        updated = await apply_action(session, decision, action, note=body.note)
     return HomeownerDecisionOut(
         id=updated.id, site_id=updated.site_id, kind=str(updated.kind),
         title=_strip_tag(updated.title), detail=updated.detail, state=str(updated.state),

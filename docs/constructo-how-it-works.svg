@@ -1,0 +1,257 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Constructo — How It Works</title>
+  <desc id="desc">A left-to-right system architecture infographic showing information sources, the processing engine, answer outputs, and user roles.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#23313B" flood-opacity="0.10"/>
+    </filter>
+    <filter id="softShadow" x="-15%" y="-15%" width="130%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#23313B" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrowMarigold" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path d="M1 1L11 6L1 11Z" fill="#F0A21F"/>
+    </marker>
+    <marker id="arrowThin" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M1 1L9 5L1 9Z" fill="#88959E"/>
+    </marker>
+    <style>
+      .bg { fill: #EFEADF; }
+      .ink { fill: #1F2A33; }
+      .muted { fill: #61707C; }
+      .line { stroke: #D8D0C0; stroke-width: 2; }
+      .card { fill: #FFFDF8; stroke: #E0D8C9; stroke-width: 2; filter: url(#softShadow); }
+      .panel { fill: #FFFDF8; stroke: #DDD3C1; stroke-width: 2; filter: url(#shadow); }
+      .heading { font-family: Inter, Arial, sans-serif; font-size: 27px; font-weight: 800; letter-spacing: 0; }
+      .title { font-family: Inter, Arial, sans-serif; font-size: 48px; font-weight: 850; letter-spacing: 0; }
+      .label { font-family: Inter, Arial, sans-serif; font-size: 20px; font-weight: 750; letter-spacing: 0; }
+      .small { font-family: Inter, Arial, sans-serif; font-size: 16px; font-weight: 650; letter-spacing: 0; }
+      .tiny { font-family: Inter, Arial, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0; }
+      .legend { font-family: Inter, Arial, sans-serif; font-size: 15px; font-weight: 650; letter-spacing: 0; }
+      .green { fill: #3AA76D; }
+      .purple { fill: #7C5CC4; }
+      .amber { fill: #E5A72E; }
+      .blue { fill: #3D8BD8; }
+      .marigold { fill: #F0A21F; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1600" height="900"/>
+  <circle cx="1450" cy="72" r="58" fill="#F0A21F" opacity="0.16"/>
+  <circle cx="126" cy="840" r="72" fill="#F0A21F" opacity="0.12"/>
+
+  <text x="70" y="72" class="title ink">Constructo — How It Works</text>
+  <text x="72" y="103" class="small muted">A reliable event ledger turns noisy field communication into reviewed project answers.</text>
+
+  <path d="M386 404H410" stroke="#F0A21F" stroke-width="14" stroke-linecap="round"/>
+  <polygon points="438,404 407,386 407,422" fill="#F0A21F"/>
+  <path d="M790 404H808" stroke="#F0A21F" stroke-width="14" stroke-linecap="round"/>
+  <polygon points="836,404 805,386 805,422" fill="#F0A21F"/>
+  <path d="M1232 404H1248" stroke="#F0A21F" stroke-width="14" stroke-linecap="round"/>
+  <polygon points="1276,404 1245,386 1245,422" fill="#F0A21F"/>
+
+  <g id="column-1">
+    <text x="70" y="160" class="heading ink">Where info comes in</text>
+    <g transform="translate(70 194)">
+      <rect class="card" x="0" y="0" width="300" height="84" rx="18"/>
+      <rect x="18" y="22" width="40" height="40" rx="12" fill="#E7F3FF"/>
+      <path d="M31 46C28 43 26 39 26 35C26 27 32 21 40 21C48 21 54 27 54 35C54 43 48 49 40 49C38 49 36 49 34 48L27 52L29 44" stroke="#3D8BD8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="76" y="50" class="label ink">WhatsApp messages</text>
+    </g>
+    <g transform="translate(70 298)">
+      <rect class="card" x="0" y="0" width="300" height="84" rx="18"/>
+      <rect x="18" y="22" width="40" height="40" rx="12" fill="#FFF0CC"/>
+      <path d="M29 35H48C52 35 55 38 55 42V48C55 52 52 55 48 55H29C25 55 22 52 22 48V42C22 38 25 35 29 35Z" stroke="#F0A21F" stroke-width="4"/>
+      <path d="M33 35L36 28H44L47 35" stroke="#F0A21F" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="39" cy="45" r="5" fill="#F0A21F"/>
+      <text x="76" y="41" class="small ink">App capture</text>
+      <text x="76" y="63" class="small muted">(photo/voice)</text>
+    </g>
+    <g transform="translate(70 402)">
+      <rect class="card" x="0" y="0" width="300" height="84" rx="18"/>
+      <rect x="18" y="22" width="40" height="40" rx="12" fill="#E7F3FF"/>
+      <path d="M26 31H51V47H37L29 54V47H26V31Z" stroke="#3D8BD8" stroke-width="4" stroke-linejoin="round"/>
+      <text x="76" y="50" class="label ink">In-app chat</text>
+    </g>
+    <g transform="translate(70 506)">
+      <rect class="card" x="0" y="0" width="300" height="84" rx="18"/>
+      <rect x="18" y="22" width="40" height="40" rx="12" fill="#F4EFFF"/>
+      <path d="M26 44L39 30L52 44V56H30V44" stroke="#7C5CC4" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M36 56V46H43V56" stroke="#7C5CC4" stroke-width="4" stroke-linejoin="round"/>
+      <text x="76" y="50" class="label ink">Homeowner inputs</text>
+    </g>
+  </g>
+
+  <g id="column-2">
+    <text x="456" y="160" class="heading ink">The engine</text>
+    <rect class="panel" x="438" y="194" width="338" height="396" rx="24"/>
+    <g transform="translate(468 226)">
+      <rect x="0" y="0" width="278" height="70" rx="16" fill="#F8F4EA" stroke="#E2D9C7" stroke-width="2"/>
+      <text x="139" y="43" text-anchor="middle" class="label ink">Raw message</text>
+    </g>
+    <path d="M607 305V338" stroke="#F0A21F" stroke-width="7" stroke-linecap="round" marker-end="url(#arrowMarigold)"/>
+    <g transform="translate(468 350)">
+      <rect x="0" y="0" width="278" height="102" rx="18" fill="#F4EFFF" stroke="#D9CCF8" stroke-width="2"/>
+      <g transform="translate(19 27)">
+        <rect x="0" y="8" width="44" height="36" rx="11" fill="#7C5CC4"/>
+        <rect x="11" y="0" width="22" height="13" rx="6" fill="#7C5CC4"/>
+        <circle cx="14" cy="26" r="4" fill="#FFFDF8"/>
+        <circle cx="30" cy="26" r="4" fill="#FFFDF8"/>
+        <path d="M16 38H28" stroke="#FFFDF8" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <text x="78" y="38" class="small ink">Extraction:</text>
+      <text x="78" y="63" class="small ink">speech-to-text + OCR + AI</text>
+    </g>
+    <path d="M607 462V494" stroke="#F0A21F" stroke-width="7" stroke-linecap="round" marker-end="url(#arrowMarigold)"/>
+    <g transform="translate(477 502)">
+      <ellipse cx="130" cy="22" rx="121" ry="22" fill="#FBF1D8" stroke="#D8B562" stroke-width="2"/>
+      <rect x="9" y="22" width="242" height="56" fill="#FBF1D8" stroke="#D8B562" stroke-width="2"/>
+      <ellipse cx="130" cy="78" rx="121" ry="22" fill="#F6E4B3" stroke="#D8B562" stroke-width="2"/>
+      <text x="130" y="45" text-anchor="middle" class="tiny ink">EVENT LEDGER</text>
+      <text x="130" y="68" text-anchor="middle" class="tiny muted">one source of truth</text>
+    </g>
+  </g>
+
+  <g id="column-3">
+    <text x="850" y="160" class="heading ink">Turned into answers</text>
+    <g transform="translate(850 194)">
+      <g id="card-reconcile">
+        <rect class="card" x="0" y="0" width="174" height="62" rx="14"/>
+        <rect x="0" y="0" width="9" height="62" rx="4.5" class="green"/>
+        <text x="25" y="38" class="small ink">Reconcile</text>
+      </g>
+      <g id="card-daily-report">
+        <rect class="card" x="194" y="0" width="174" height="62" rx="14"/>
+        <rect x="194" y="0" width="9" height="62" rx="4.5" class="purple"/>
+        <text x="219" y="38" class="small ink">Daily report</text>
+      </g>
+      <g id="card-exact-numbers">
+        <rect class="card" x="0" y="82" width="174" height="62" rx="14"/>
+        <rect x="0" y="82" width="9" height="62" rx="4.5" class="green"/>
+        <text x="25" y="120" class="small ink">Exact numbers</text>
+      </g>
+      <g id="card-owner-brief">
+        <rect class="card" x="194" y="82" width="174" height="62" rx="14"/>
+        <rect x="194" y="82" width="9" height="62" rx="4.5" class="purple"/>
+        <text x="219" y="120" class="small ink">Owner brief</text>
+      </g>
+      <g id="card-forecast">
+        <rect class="card" x="0" y="164" width="174" height="62" rx="14"/>
+        <rect x="0" y="164" width="9" height="62" rx="4.5" class="green"/>
+        <text x="25" y="202" class="small ink">Forecast</text>
+      </g>
+      <g id="card-search">
+        <rect class="card" x="194" y="164" width="174" height="62" rx="14"/>
+        <rect x="194" y="164" width="9" height="62" rx="4.5" class="purple"/>
+        <text x="219" y="193" class="small ink">Semantic</text>
+        <text x="219" y="214" class="small ink">search</text>
+      </g>
+      <g id="card-risk">
+        <rect class="card" x="0" y="246" width="174" height="62" rx="14"/>
+        <rect x="0" y="246" width="9" height="62" rx="4.5" class="green"/>
+        <text x="25" y="275" class="small ink">Risk</text>
+        <text x="25" y="296" class="small ink">detection</text>
+      </g>
+      <g id="card-photo-captions">
+        <rect class="card" x="194" y="246" width="174" height="62" rx="14"/>
+        <rect x="194" y="246" width="9" height="62" rx="4.5" class="purple"/>
+        <text x="219" y="275" class="small ink">Photo</text>
+        <text x="219" y="296" class="small ink">captions</text>
+      </g>
+      <g id="card-approvals">
+        <rect class="card" x="0" y="328" width="174" height="62" rx="14"/>
+        <rect x="0" y="328" width="9" height="62" rx="4.5" class="green"/>
+        <text x="25" y="366" class="small ink">Approvals</text>
+      </g>
+      <g id="card-human-approves">
+        <rect class="card" x="194" y="328" width="174" height="62" rx="14"/>
+        <rect x="194" y="328" width="9" height="62" rx="4.5" class="amber"/>
+        <text x="219" y="357" class="small ink">Human</text>
+        <text x="219" y="378" class="small ink">approves</text>
+      </g>
+    </g>
+  </g>
+
+  <g id="role-arrows" stroke="#88959E" stroke-width="2" stroke-linecap="round" opacity="0.82">
+    <path d="M1218 225C1242 222 1252 222 1278 224"/>
+    <path d="M1218 307C1242 296 1252 285 1278 280"/>
+    <path d="M1218 389C1245 382 1253 363 1278 336"/>
+    <path d="M1024 553C1132 570 1198 448 1278 448"/>
+    <path d="M1218 471C1244 462 1252 449 1278 448"/>
+    <path d="M1024 389C1148 403 1202 501 1278 504"/>
+    <path d="M1024 307C1144 317 1195 565 1278 560"/>
+    <path d="M1024 225C1145 238 1197 562 1278 560"/>
+    <path d="M1218 553C1240 553 1253 558 1278 560"/>
+    <path d="M1218 307C1245 326 1255 612 1278 616"/>
+    <path d="M1218 225C1244 252 1255 611 1278 616"/>
+  </g>
+  <g id="role-arrowheads" fill="#88959E" opacity="0.82">
+    <polygon points="1278,224 1268,218 1268,230"/>
+    <polygon points="1278,280 1268,274 1268,286"/>
+    <polygon points="1278,336 1268,330 1268,342"/>
+    <polygon points="1278,448 1268,442 1268,454"/>
+    <polygon points="1278,504 1268,498 1268,510"/>
+    <polygon points="1278,560 1268,554 1268,566"/>
+    <polygon points="1278,616 1268,610 1268,622"/>
+  </g>
+
+  <g id="column-4">
+    <text x="1280" y="160" class="heading ink">Who sees it</text>
+    <g transform="translate(1280 194)">
+      <rect class="card" x="0" y="0" width="250" height="58" rx="16"/>
+      <circle cx="28" cy="29" r="16" fill="#F0A21F" opacity="0.35"/>
+      <path d="M20 31C20 23 36 23 36 31M24 20C24 15 32 15 32 20" stroke="#1F2A33" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="36" class="small ink">Owner / PM</text>
+    </g>
+    <g transform="translate(1280 250)">
+      <rect class="card" x="0" y="0" width="250" height="58" rx="16"/>
+      <circle cx="28" cy="29" r="16" fill="#3AA76D" opacity="0.24"/>
+      <path d="M20 31C20 23 36 23 36 31M24 20C24 15 32 15 32 20" stroke="#1F2A33" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="36" class="small ink">Supervisor</text>
+    </g>
+    <g transform="translate(1280 306)">
+      <rect class="card" x="0" y="0" width="250" height="58" rx="16"/>
+      <circle cx="28" cy="29" r="16" fill="#7C5CC4" opacity="0.22"/>
+      <path d="M20 31C20 23 36 23 36 31M24 20C24 15 32 15 32 20" stroke="#1F2A33" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="36" class="small ink">Mukadam</text>
+    </g>
+    <g transform="translate(1280 418)">
+      <rect class="card" x="0" y="0" width="250" height="58" rx="16"/>
+      <circle cx="28" cy="29" r="16" fill="#3D8BD8" opacity="0.22"/>
+      <path d="M20 31C20 23 36 23 36 31M24 20C24 15 32 15 32 20" stroke="#1F2A33" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="36" class="small ink">Accountant</text>
+    </g>
+    <g transform="translate(1280 530)">
+      <rect class="card" x="0" y="0" width="250" height="86" rx="16"/>
+      <circle cx="28" cy="42" r="16" fill="#F0A21F" opacity="0.25"/>
+      <path d="M20 44C20 36 36 36 36 44M24 33C24 28 32 28 32 33" stroke="#1F2A33" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="38" class="small ink">Homeowner</text>
+      <text x="58" y="62" class="small muted">(calm view)</text>
+    </g>
+  </g>
+
+  <g id="legend" transform="translate(70 724)">
+    <rect class="panel" x="0" y="0" width="710" height="116" rx="20"/>
+    <text x="24" y="33" class="small ink">Legend</text>
+    <g transform="translate(24 56)">
+      <rect x="0" y="0" width="18" height="18" rx="5" class="green"/>
+      <text x="28" y="15" class="legend ink">GREEN = Deterministic (rules/math, always reliable)</text>
+    </g>
+    <g transform="translate(24 84)">
+      <rect x="0" y="0" width="18" height="18" rx="5" class="purple"/>
+      <text x="28" y="15" class="legend ink">PURPLE = AI (drafts &amp; extraction only)</text>
+    </g>
+    <g transform="translate(408 56)">
+      <rect x="0" y="0" width="18" height="18" rx="5" class="amber"/>
+      <text x="28" y="15" class="legend ink">AMBER = Human approval</text>
+    </g>
+    <g transform="translate(408 84)">
+      <rect x="0" y="0" width="18" height="18" rx="5" class="blue"/>
+      <text x="28" y="15" class="legend ink">BLUE = Chat</text>
+    </g>
+  </g>
+
+  <g id="footer-note" transform="translate(850 755)">
+    <path d="M0 20H662" stroke="#D8D0C0" stroke-width="2" stroke-linecap="round"/>
+    <text x="0" y="58" class="small muted">Green outputs are computed from the ledger. Purple outputs stay draft-only until reviewed.</text>
+  </g>
+</svg>

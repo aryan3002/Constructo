@@ -1302,7 +1302,12 @@ function PropertyTab() {
               key={s.id}
               accessibilityRole="button"
               accessibilityLabel={`${s.name} — ${str.viewPhotos}`}
-              onPress={() => router.push('/(homeowner)/photos')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(homeowner)/photos',
+                  params: { tab: 'all', room: s.name },
+                })
+              }
               style={{
                 padding: SPACE.lg,
                 minHeight: 48,

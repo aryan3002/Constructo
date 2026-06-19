@@ -46,10 +46,10 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as MediaLibrary from 'expo-media-library'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { homeowner } from '../../src/api/client'
-import type { HomeownerDecision, Photo, QuietPeriod } from '../../src/api/types'
+import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../src/theme/tokens'
@@ -61,7 +61,6 @@ import {
   Button,
   CalmCard,
   Card,
-  DecisionCard,
   Display,
   Eyebrow,
   FadeInUp,
@@ -566,30 +565,6 @@ function StandardCard({
 }
 
 /**
- * DecisionFeedCard — wraps the kit DecisionCard with real data from
- * homeowner.decisions(). Routes to /(homeowner)/decisions/[id] on "Review".
- */
-interface DecisionFeedCardProps {
-  decision: HomeownerDecision
-  s: Strings
-}
-
-function DecisionFeedCard({ decision, s }: DecisionFeedCardProps) {
-  const router = useRouter()
-  return (
-    <FadeInUp>
-      <DecisionCard
-        title={decision.title}
-        eyebrow={s.decisionEyebrow}
-        whenLabel={decision.detail ?? undefined}
-        reviewLabel={s.decisionReview}
-        onReview={() => router.push(`/(homeowner)/decisions/${decision.id}`)}
-      />
-    </FadeInUp>
-  )
-}
-
-/**
  * FeedView — the chronological feed of real photos + real decisions + quiet
  * state. No importance ranking, no fake progress-confirmation cards (no data
  * source exists for that pattern — skipped honestly per spec).
@@ -599,7 +574,6 @@ function DecisionFeedCard({ decision, s }: DecisionFeedCardProps) {
  */
 interface FeedViewProps {
   photos: Photo[]
-  decisions: HomeownerDecision[]
   activeQuiet: QuietPeriod | null
   hidden: Set<string>
   pinnedIds: Set<string>
@@ -620,7 +594,6 @@ interface FeedViewProps {
 
 function FeedView({
   photos,
-  decisions,
   activeQuiet,
   hidden,
   pinnedIds,
@@ -662,12 +635,16 @@ function FeedView({
     )
   }
 
-  // Visible photos: not hidden, ordered newest-first (API returns DESC)
-  const visiblePhotos = photos.filter((p) => !hidden.has(p.id))
-  // Pending decisions only
-  const pendingDecisions = decisions.filter((d) => d.state !== 'approved')
+  // Visible photos: not hidden, pinned floated to the top (stable within group
+  // so newest-first is preserved), de-duped by id so a repeated row never
+  // paints twice.
+  const seenIds = new Set<string>()
+  const visiblePhotos = photos
+    .filter((p) => !hidden.has(p.id))
+    .filter((p) => (seenIds.has(p.id) ? false : (seenIds.add(p.id), true)))
+    .sort((a, b) => Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)))
 
-  if (visiblePhotos.length === 0 && pendingDecisions.length === 0 && !activeQuiet) {
+  if (visiblePhotos.length === 0 && !activeQuiet) {
     return (
       <FadeInUp rise={false} linear>
         <CalmCard status="quiet" title={s.feedEmpty} body={s.feedEmptyBody} />
@@ -724,11 +701,6 @@ function FeedView({
         </FadeInUp>
       ) : null}
 
-      {/* Decision cards — real data, interleaved at top (they need action) */}
-      {pendingDecisions.map((d) => (
-        <DecisionFeedCard key={d.id} decision={d} s={s} />
-      ))}
-
       {/* Chronological photo cards */}
       {visiblePhotos.map((photo) => (
         <StandardCard
@@ -748,6 +720,11 @@ function FeedView({
   )
 }
 
+// Local-only persistence (no backend): pinned floats a photo to the top, hidden
+// removes it. Both survive refresh + relaunch so the user's curation sticks.
+const PINNED_KEY = 'homeowner.photos.pinned.v1'
+const HIDDEN_KEY = 'homeowner.photos.hidden.v1'
+
 export default function Photos() {
   const { theme } = useTheme()
   const c = theme.colors
@@ -757,10 +734,14 @@ export default function Photos() {
   const insets = useSafeAreaInsets()
 
   const router = useRouter()
+  // "View photos" from Updates → Property passes ?tab=&room= so we land on the
+  // right segment (filtered to the room) instead of wherever the persistent tab
+  // was last left (which was landing users on "My visits").
+  const params = useLocalSearchParams<{ tab?: string; room?: string }>()
   const [tab, setTab] = useState<FilterTab>('feed')
   const [search, setSearch] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
-  // Feed-only: locally pinned photo ids (no backend — per spec)
+  // Feed-only: locally pinned photo ids (persisted locally, no backend)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -805,18 +786,34 @@ export default function Photos() {
     })
   }, [])
 
-  // Photos query — feed uses 'all' view, grid tabs use their own view.
+  // Hydrate locally-persisted pinned + hidden ids once on mount.
+  useEffect(() => {
+    void AsyncStorage.getItem(PINNED_KEY).then((raw) => {
+      if (raw) try { setPinnedIds(new Set(JSON.parse(raw) as string[])) } catch { /* ignore */ }
+    })
+    void AsyncStorage.getItem(HIDDEN_KEY).then((raw) => {
+      if (raw) try { setHidden(new Set(JSON.parse(raw) as string[])) } catch { /* ignore */ }
+    })
+  }, [])
+
+  // Honor ?tab/?room from "View photos" each time the screen gains focus (the
+  // tab screen stays mounted, so a plain push can't reset the inner segment).
+  useFocusEffect(
+    useCallback(() => {
+      const wanted = params.tab as FilterTab | undefined
+      if (wanted && (['feed', 'all', 'room', 'milestone', 'mine'] as const).includes(wanted)) {
+        setTab(wanted)
+      }
+      if (params.room) setSearch(String(params.room))
+    }, [params.tab, params.room]),
+  )
+
+  // Photos query — feed gets its own cache slot so it never interleaves with the
+  // "All" grid; grid tabs use their own view.
   const queryView = tab === 'feed' ? 'all' : tab
   const query = useQuery({
-    queryKey: ['photos', queryView],
+    queryKey: ['photos', tab === 'feed' ? 'feed' : queryView],
     queryFn: () => homeowner.photos(undefined, queryView),
-  })
-
-  // Decisions query — only needed for the Feed tab.
-  const decisionsQ = useQuery({
-    queryKey: ['homeowner', 'decisions'],
-    queryFn: () => homeowner.decisions(),
-    enabled: tab === 'feed',
   })
 
   const quietQ = useQuery({
@@ -869,6 +866,7 @@ export default function Photos() {
     setHidden((prev) => {
       const next = new Set(prev)
       next.add(id)
+      void AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
       return next
     })
     setActive(null)
@@ -882,6 +880,7 @@ export default function Photos() {
       } else {
         next.add(id)
       }
+      void AsyncStorage.setItem(PINNED_KEY, JSON.stringify([...next]))
       return next
     })
   }, [])
@@ -1088,7 +1087,6 @@ export default function Photos() {
       {tab === 'feed' ? (
         <FeedView
           photos={query.data?.items ?? []}
-          decisions={decisionsQ.data ?? []}
           activeQuiet={activeQuiet}
           hidden={hidden}
           pinnedIds={pinnedIds}

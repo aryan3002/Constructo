@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_5k1zFYwGwbgXHS5j5xzTqxRUh8wE",
+  "orgId": "team_C8atlL7PoJE1koGXmweyeZDM",
+  "projectName": "constructo-mobile",
+  "settings": {
+    "createdAt": 1781485578458,
+    "framework": null,
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": "constructo/mobile",
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
