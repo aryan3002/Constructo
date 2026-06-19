@@ -476,6 +476,19 @@ function StandardCard({
   const { theme } = useTheme()
   const c = theme.colors
 
+  const when = shortDate(photo.published_at, lang)
+  const phase = photo.milestone_label
+  const glassChip = {
+    position: 'absolute' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    bottom: SPACE.sm,
+    backgroundColor: 'rgba(20,17,12,0.5)',
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  }
   return (
     <FadeInUp>
       <View
@@ -488,37 +501,105 @@ function StandardCard({
           ...theme.shadowCard,
         }}
       >
-        {/* PhotoTile owns the image + caption + date + room chip — render it once
-            (no overlays/duplicate caption). StandardCard only adds the "shared by"
-            attribution + the homeowner action bar. */}
-        <PhotoTile
-          photo={{
-            id: photo.id,
-            imageUri: photo.image_url,
-            caption: photo.caption,
-            date: shortDate(photo.published_at, lang),
-            room: photo.room_tag,
-            starred: photo.is_starred,
-          }}
-          variant="hero"
-          labels={tileLabels}
-          onPress={() => onPress(photo)}
-          onTranslate={onTranslate}
-          style={{ borderRadius: 0, borderWidth: 0 }}
-        />
+        {/* Photo only (its caption strip is suppressed) + glass date/room chips
+            overlaid along the bottom edge — photo-forward (direction B). */}
+        <View style={{ position: 'relative' }}>
+          <PhotoTile
+            photo={{
+              id: photo.id,
+              imageUri: photo.image_url,
+              caption: photo.caption,
+              date: when,
+              room: photo.room_tag,
+              starred: photo.is_starred,
+            }}
+            variant="hero"
+            hideCaption
+            labels={tileLabels}
+            onPress={() => onPress(photo)}
+            style={{ borderRadius: 0, borderWidth: 0 }}
+          />
+          {photo.room_tag ? (
+            <View style={{ ...glassChip, left: SPACE.sm }}>
+              <Feather name="map-pin" size={11} color="#fff" />
+              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }} numberOfLines={1}>
+                {photo.room_tag}
+              </Small>
+            </View>
+          ) : null}
+          {when ? (
+            <View style={{ ...glassChip, right: SPACE.sm }}>
+              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }}>{when}</Small>
+            </View>
+          ) : null}
+        </View>
 
-        {/* Attribution — the one thing PhotoTile doesn't show. */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: SPACE.xs,
-            paddingHorizontal: SPACE.lg,
-            paddingBottom: SPACE.sm,
-          }}
-        >
-          <Feather name="check-circle" size={13} color={c.accent} />
-          <Small muted style={{ fontSize: 12 }}>{s.sharedBy}</Small>
+        {/* Clay phase-rail body (direction C): phase chip + editorial caption +
+            attribution, hung off a clay accent rail that ties the photo to the
+            construction phase it belongs to. */}
+        <View style={{ paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: SPACE.sm }}>
+          <View
+            style={{
+              borderLeftWidth: 3,
+              borderLeftColor: c.secondary,
+              borderRadius: 0,
+              paddingLeft: SPACE.md,
+              gap: SPACE.sm,
+            }}
+          >
+            {phase ? (
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: c.secondaryContainer,
+                  borderRadius: theme.radii.pill,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                }}
+              >
+                <Small style={{ color: AP.clay, fontWeight: '600', fontSize: 11.5 }} numberOfLines={1}>
+                  {phase}
+                </Small>
+              </View>
+            ) : null}
+
+            {photo.caption ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+                <Body style={{ flex: 1, fontSize: 15, fontWeight: '500', lineHeight: 21 }}>
+                  {photo.caption}
+                </Body>
+                {onTranslate ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={tileLabels.translate}
+                    onPress={() => onTranslate()}
+                    hitSlop={8}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 1 })}
+                  >
+                    <Feather name="info" size={16} color={c.accent} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Attribution — avatar + "shared by builder". */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: AP.chip,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="tool" size={11} color={AP.onChip} />
+              </View>
+              <Small muted style={{ fontSize: 12, flex: 1 }}>{s.sharedBy}</Small>
+              <Feather name="check-circle" size={13} color={c.accent} />
+            </View>
+          </View>
         </View>
 
         {/* Action bar — sits on a top hairline */}

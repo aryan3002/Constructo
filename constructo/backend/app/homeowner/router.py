@@ -1175,8 +1175,9 @@ async def photos(
         session, stmt, cursor, limit, PublishedPhoto.id, _photo_out
     )
     items = [await _render_photo(session, translation, user.language, p) for p in items]
-    if view == "milestone":
-        items = await _bucket_photos_by_milestone(session, sid, items)
+    # Tag every published photo with the construction phase active when it was
+    # taken — powers the By-Milestone grouping AND the phase chip on the feed card.
+    items = await _bucket_photos_by_milestone(session, sid, items)
     return Page[PhotoOut](items=items, next_cursor=next_cursor)
 
 

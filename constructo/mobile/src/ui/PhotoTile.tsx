@@ -58,6 +58,9 @@ export interface PhotoTileProps {
   onHide?: (photo: PhotoTileData) => void
   /** Show the inline Save/Share/Hide action row (default off for grid). */
   showActions?: boolean
+  /** Render the image only (no caption/date/room strip) — the caller draws its
+   *  own metadata below (e.g. the feed's hybrid card). */
+  hideCaption?: boolean
   /** Localized a11y/action labels (active language). */
   labels: {
     caption: string
@@ -104,6 +107,7 @@ export function PhotoTile({
   onShare,
   onHide,
   showActions = false,
+  hideCaption = false,
   labels,
   style,
 }: PhotoTileProps) {
@@ -207,7 +211,9 @@ export function PhotoTile({
         ) : null}
       </Pressable>
 
-      {/* Caption strip below the photo (warm-paper card foot). */}
+      {/* Caption strip below the photo (warm-paper card foot). Suppressed when
+          the caller renders its own metadata (the feed's hybrid card). */}
+      {hideCaption ? null : (
       <View style={{ padding: isHero ? SPACE.lg : SPACE.md, gap: SPACE.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
           <Small
@@ -298,6 +304,7 @@ export function PhotoTile({
           </View>
         ) : null}
       </View>
+      )}
     </View>
   )
 }
