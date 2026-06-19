@@ -228,7 +228,7 @@ async def build_world(session, participants: dict[str, str]) -> dict:
             users[sender] = await _upsert(
                 session, User, _id("user", sender),
                 company_id=company.id, phone=phone, role=UserRole(role),
-                name=sender, language="hi",
+                name=sender, language="en",  # English-first; homeowner API translates per-user
             )
     await session.flush()
     # Capture the ACTUAL persisted ids (a reused user keeps its original id, which
