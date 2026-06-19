@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner, ApiError } from '../../../src/api/client'
 import type { Capabilities, DesignProfile, HomeownerDecision } from '../../../src/api/types'
+import { shortDate } from '../_updates.util'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../src/theme/tokens'
@@ -53,6 +54,7 @@ interface Strings {
   status: string
   contractorNote: string
   whyNow: string
+  raisedOn: string
   reversible: string
   styleLeans: string
   approve: string
@@ -83,6 +85,7 @@ const STR: Record<Lang, Strings> = {
     status: 'Status',
     contractorNote: 'From your team',
     whyNow: 'WHY THIS IS COMING UP NOW',
+    raisedOn: 'Raised',
     reversible: 'You can change your mind — nothing is final until work starts.',
     styleLeans: 'Your style leans',
     approve: 'Approve',
@@ -111,6 +114,7 @@ const STR: Record<Lang, Strings> = {
     status: 'स्थिति',
     contractorNote: 'आपकी टीम से',
     whyNow: 'यह अभी क्यों आ रहा है',
+    raisedOn: 'दर्ज किया गया',
     reversible: 'आप अपना मन बदल सकते हैं — काम शुरू होने तक कुछ भी अंतिम नहीं है।',
     styleLeans: 'आपकी पसंद',
     approve: 'स्वीकृत करें',
@@ -323,6 +327,14 @@ export default function DecisionDetailScreen() {
               size="sm"
             />
           </View>
+          {decision.created_at && shortDate(decision.created_at, lang) ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Feather name="clock" size={12} color={c.textMute} />
+              <Small muted style={{ fontSize: 12 }}>
+                {t.raisedOn} {shortDate(decision.created_at, lang)}
+              </Small>
+            </View>
+          ) : null}
         </View>
 
         {/* Contractor note / detail */}

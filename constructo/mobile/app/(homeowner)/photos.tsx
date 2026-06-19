@@ -488,60 +488,77 @@ function StandardCard({
           ...theme.shadowCard,
         }}
       >
-        {/* Large photo (hero aspect ratio, flush — no inner radius) */}
-        <PhotoTile
-          photo={{
-            id: photo.id,
-            imageUri: photo.image_url,
-            caption: photo.caption,
-            date: shortDate(photo.published_at, lang),
-            room: photo.room_tag,
-            starred: photo.is_starred,
-          }}
-          variant="hero"
-          labels={tileLabels}
-          onPress={() => onPress(photo)}
-          onTranslate={onTranslate}
-          style={{ borderRadius: 0, borderWidth: 0 }}
-        />
+        {/* Large photo (hero aspect ratio, flush) + a floating date chip and a
+            room chip overlaid on the image for a more immersive, editorial feel. */}
+        <View style={{ position: 'relative' }}>
+          <PhotoTile
+            photo={{
+              id: photo.id,
+              imageUri: photo.image_url,
+              caption: photo.caption,
+              date: shortDate(photo.published_at, lang),
+              room: photo.room_tag,
+              starred: photo.is_starred,
+            }}
+            variant="hero"
+            labels={tileLabels}
+            onPress={() => onPress(photo)}
+            onTranslate={onTranslate}
+            style={{ borderRadius: 0, borderWidth: 0 }}
+          />
+          {photo.published_at ? (
+            <View
+              style={{
+                position: 'absolute',
+                top: SPACE.sm,
+                right: SPACE.sm,
+                backgroundColor: 'rgba(0,0,0,0.42)',
+                borderRadius: theme.radii.pill,
+                paddingHorizontal: 10,
+                paddingVertical: 3,
+              }}
+            >
+              <Small style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                {shortDate(photo.published_at, lang)}
+              </Small>
+            </View>
+          ) : null}
+          {photo.room_tag ? (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: SPACE.sm,
+                left: SPACE.sm,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                backgroundColor: 'rgba(0,0,0,0.42)',
+                borderRadius: theme.radii.pill,
+                paddingHorizontal: 10,
+                paddingVertical: 3,
+              }}
+            >
+              <Feather name="map-pin" size={11} color="#fff" />
+              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }}>
+                {photo.room_tag}
+              </Small>
+            </View>
+          ) : null}
+        </View>
 
-        {/* Metadata: room pill + "· Today · shared by contractor" */}
+        {/* Attribution row — icon-led, calm. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            flexWrap: 'wrap',
             gap: SPACE.xs,
             paddingHorizontal: SPACE.lg,
             paddingTop: SPACE.sm,
             paddingBottom: SPACE.xs,
           }}
         >
-          {photo.room_tag ? (
-            <View
-              style={{
-                height: 24,
-                paddingHorizontal: 10,
-                borderRadius: theme.radii.pill,
-                backgroundColor: c.paper,
-                borderWidth: 1,
-                borderColor: c.line,
-                justifyContent: 'center',
-              }}
-            >
-              <Small color={c.text} style={{ fontWeight: '600', fontSize: 12 }}>
-                {photo.room_tag}
-              </Small>
-            </View>
-          ) : null}
-          <Small muted style={{ fontSize: 12 }}>
-            {[
-              photo.published_at ? shortDate(photo.published_at, lang) : null,
-              s.sharedBy,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </Small>
+          <Feather name="check-circle" size={13} color={c.accent} />
+          <Small muted style={{ fontSize: 12 }}>{s.sharedBy}</Small>
         </View>
 
         {/* Caption */}
