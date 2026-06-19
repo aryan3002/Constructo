@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
-import { authApi, type Role } from '../../api/auth'
+import { type Role } from '../../api/auth'
+import { useMeRole } from '../../auth/useCan'
 import { DprReview } from '../../features/dpr/DprReview'
 import { EmptyState } from '../../components/states'
 import { AppShell, H1, Small, useRoleTabs, type Role as ShellRole } from '../../ui'
@@ -15,8 +15,7 @@ import { useT } from '../../i18n'
 export function DprPage() {
   const t = useT()
   const sites = useSites()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = me.data?.role === 'owner' ? 'owner' : 'pm'
+  const role: Role = useMeRole() === 'owner' ? 'owner' : 'pm'
   const tabs = useRoleTabs(role as ShellRole)
 
   const siteOptions = sites.data?.items ?? []

@@ -144,3 +144,31 @@ export const DotsIcon = (p: IconProps) =>
     <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
     <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
   </>) })
+
+/** Currency / cash — Indian rupee symbol outline. */
+export const CashIcon = (p: IconProps) =>
+  base({ ...p, children: (<>
+    <path d="M6 5h12M6 9h12M10 9l2 10M8 5a4 4 0 0 0 0 4h3a4 4 0 0 0 0-4" />
+  </>) })
+
+/** Settings — a simple gear / cog. */
+export const SettingsIcon = (p: IconProps) =>
+  base({ ...p, children: (<>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+  </>) })
+
+/** Sign out — arrow exiting a door. */
+export const SignOutIcon = (p: IconProps) =>
+  base({ ...p, children: (<>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </>) })
+
+/** Lock — padlock closed (distinct shape for the 'done' status tone). */
+export const LockIcon = (p: IconProps) =>
+  base({ ...p, children: (<>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </>) })

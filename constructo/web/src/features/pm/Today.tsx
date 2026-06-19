@@ -49,7 +49,7 @@ const RISK_KIND_KEY: Record<string, TranslationKey> = {
   data_quality: 'brief.risk.data_quality',
 }
 
-const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3 }
+const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3, done: 3 }
 
 /** Worst-status-first, then busiest; only sites that actually need attention. */
 function rankExceptionSites(sites: SiteCard[]): SiteCard[] {

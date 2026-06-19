@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { EvidenceCard, StatusPill, Button, Mono } from '../../ui'
 import type { Status } from '../../ui'
 import { useT } from '../../i18n'
@@ -87,9 +88,23 @@ export function ApprovalRow({
   const detail = (
     <span className="flex flex-wrap items-center gap-2">
       <Mono className="text-micro text-text-mute">{t(KIND_KEY[d.kind])}</Mono>
+      {d.spec_id ? (
+        <span className="inline-flex items-center rounded-pill border border-primary/30 bg-primary/10 px-2 py-0.5 font-body text-micro font-semibold text-primary">
+          {t('approvals.from_selection')}
+        </span>
+      ) : null}
       {d.detail ? <span>· {d.detail}</span> : null}
       {d.assigned_to ? (
         <span className="text-text-mute">· {t('approvals.assigned_to')}</span>
+      ) : null}
+      {d.spec_id ? (
+        <Link
+          to="/designer?tab=selections"
+          className="font-body text-micro font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          data-testid="view-selection-link"
+        >
+          {t('approvals.view_selection')}
+        </Link>
       ) : null}
     </span>
   )

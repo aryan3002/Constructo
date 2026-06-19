@@ -22,6 +22,25 @@ describe('StatusPill', () => {
     const dot = screen.getByRole('img', { name: 'Needs attention' })
     expect(dot).toHaveAttribute('data-status', 'warn')
   })
+
+  // Fix 2 — distinct 5th tone
+  it('Fix 2: "done" tone exists and renders with data-status="done"', () => {
+    render(<StatusPill status="done" label="Released" />)
+    const pill = screen.getByRole('status')
+    expect(pill).toHaveAttribute('data-status', 'done')
+    expect(pill).toHaveTextContent('Released')
+  })
+
+  it('Fix 2: "done" pill has a different chip class than "ok" pill', () => {
+    const { rerender } = render(<StatusPill status="ok" label="Approved" />)
+    const okPill = screen.getByRole('status')
+    const okClass = okPill.className
+
+    rerender(<StatusPill status="done" label="Released" />)
+    const donePill = screen.getByRole('status')
+    // Different chip appearance — classes must differ
+    expect(donePill.className).not.toBe(okClass)
+  })
 })
 
 describe('severityToStatus', () => {

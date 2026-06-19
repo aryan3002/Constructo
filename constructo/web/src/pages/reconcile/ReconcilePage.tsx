@@ -2,7 +2,8 @@ import { useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
-import { authApi, type Role } from '../../api/auth'
+import { type Role } from '../../api/auth'
+import { useMeRole } from '../../auth/useCan'
 import { reconcileApi, type ReconcileItem } from '../../api/reconcile'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import {
@@ -38,9 +39,8 @@ function useReconcile(siteId: string | null) {
 export function ReconcilePage() {
   const t = useT()
   const sites = useSites()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
   // Reconcile is home for accountant + procurement; default to accountant tabs.
-  const role: Role = me.data?.role === 'procurement' ? 'procurement' : 'accountant'
+  const role: Role = useMeRole() === 'procurement' ? 'procurement' : 'accountant'
   const tabs = useRoleTabs(role as ShellRole)
 
   // URL-as-state (04 §4.1): /reconcile?site=…&status=mismatch&sel=… restores the

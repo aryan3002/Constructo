@@ -33,21 +33,6 @@ export interface Permit {
   created_at: string
 }
 
-export interface CreatePermitRequest {
-  site_id: string
-  permit_type: string
-  authority: string
-  status?: PermitStatus
-  applied_on?: string | null
-  expected_on?: string | null
-  decided_on?: string | null
-  expiry_on?: string | null
-  reference_no?: string | null
-  notes?: string | null
-}
-
-export type UpdatePermitRequest = Partial<Omit<CreatePermitRequest, 'site_id'>>
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
@@ -97,25 +82,4 @@ export const permitsApi = {
     )
   },
 
-  get(id: string): Promise<Permit> {
-    return request<Permit>(`/api/v1/permits/${id}`)
-  },
-
-  create(body: CreatePermitRequest): Promise<Permit> {
-    return request<Permit>('/api/v1/permits', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    })
-  },
-
-  update(id: string, body: UpdatePermitRequest): Promise<Permit> {
-    return request<Permit>(`/api/v1/permits/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    })
-  },
-
-  remove(id: string): Promise<void> {
-    return request<void>(`/api/v1/permits/${id}`, { method: 'DELETE' })
-  },
 }

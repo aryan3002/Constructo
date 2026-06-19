@@ -60,8 +60,9 @@ class Decision(Base):
     site_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True
     )
-    # Nullable FK to specs.id — set when a Decision is auto-created by spec routing.
-    # ON DELETE SET NULL keeps the audit trail intact if the spec is deleted.
+    # Link to the Spec that triggered this approval (nullable — most decisions are not
+    # spec-linked). Used by route_spec to create an owner-visible approval and by
+    # approve_spec to sync the decision state when the spec is committed or returned.
     spec_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("specs.id", ondelete="SET NULL"), nullable=True
     )

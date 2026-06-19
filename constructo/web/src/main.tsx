@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { LanguageProvider } from './i18n'
 import { ThemeModeProvider } from './ui/ThemeModeProvider'
+import { ToastProvider } from './ui/Toast'
 import './ui/fonts.css'
 import './index.css'
 
@@ -23,9 +24,11 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeModeProvider>
         <LanguageProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <ToastProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </ToastProvider>
         </LanguageProvider>
       </ThemeModeProvider>
     </QueryClientProvider>

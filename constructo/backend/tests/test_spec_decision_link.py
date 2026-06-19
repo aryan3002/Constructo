@@ -1,170 +1,202 @@
-"""Spec↔Decision wiring (Elev-A Part A).
+"""Spec-Decision bridge tests.
 
-Routing a spec must create a Decision that appears in /approvals (owner inbox).
-Re-routing the same spec must reuse the same Decision (idempotent).
-Approving/rejecting the spec must keep the linked Decision in sync.
-Approving a spec that was never routed (no linked Decision) must not error.
+Verifies the "designer proposes → owner commits" flow end-to-end at the API
+layer using the real test DB and the shared factory/client fixtures.
+
+Coverage:
+  (a) routing a spec creates a Decision(kind=approval, spec_id=...) that
+      appears in GET /api/v1/approvals.
+  (b) re-routing the SAME spec does NOT create a 2nd Decision (idempotent)
+      and reopens it to pending if it was already resolved/rejected.
+  (c) approving the spec → linked Decision resolved.
+  (d) rejecting the spec → linked Decision rejected.
+  (e) approving a never-routed spec doesn't error.
 """
 import pytest_asyncio
 
 from app.auth.jwt import create_access_token
-from app.models import (
-    Component,
-    ComponentStatus,
-    Decision,
-    Space,
-    SpaceKind,
-    Spec,
-    UserRole,
-)
+from app.models import Component, ComponentStatus, Space, SpaceKind, Spec, UserRole
 
 
 def auth(user) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(str(user.id), user.role.value)}"}
 
 
+# ---------------------------------------------------------------------------
+# Shared fixture: company, architect (router), owner (approver), site, spec
+# ---------------------------------------------------------------------------
+
+
 @pytest_asyncio.fixture
-async def spec_world(factory, db_session):
+async def world(factory, db_session):
+    """A minimal world: company, architect, owner, site, space, component, spec."""
     company = await factory.company()
-    arch = await factory.user(company=company, role=UserRole.architect, name="Anamika Sharma")
-    owner = await factory.user(company=company, role=UserRole.owner, name="Rajesh Owner")
+    arch = await factory.user(company=company, role=UserRole.architect, name="Anamika")
+    owner = await factory.user(company=company, role=UserRole.owner, name="Ramesh")
     site = await factory.site(company, name="Kutumb Nivaas")
-    space = Space(site_id=site.id, name="Living Room", kind=SpaceKind.room, order=0)
+
+    space = Space(site_id=site.id, name="Living Room", kind=SpaceKind.room)
     db_session.add(space)
     await db_session.flush()
+
     comp = Component(
         space_id=space.id,
         name="Feature Wall",
-        kind="finish",
+        location="North wall",
         status=ComponentStatus.in_progress,
     )
     db_session.add(comp)
     await db_session.flush()
+
     spec = Spec(
         company_id=company.id,
         site_id=site.id,
         component_id=comp.id,
-        label="Italian Marble 24×24",
+        label="Fluted Marble Panel",
     )
     db_session.add(spec)
     await db_session.flush()
+
     return company, arch, owner, site, spec
 
 
-async def test_routing_creates_decision_in_approvals_inbox(client, spec_world):
-    """POST /specs/{id}/route → a Decision appears in GET /approvals."""
-    company, arch, owner, site, spec = spec_world
+# ---------------------------------------------------------------------------
+# (a) routing creates a Decision that appears in /approvals
+# ---------------------------------------------------------------------------
 
-    # Route the spec
-    r = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-    assert r.status_code == 200, r.text
-    assert r.json()["routing_status"] == "out_for_approval"
 
-    # Decision must appear in the owner's approvals inbox
+async def test_route_creates_approval_decision(client, world):
+    _company, arch, owner, _site, spec = world
+
+    # Route the spec as the architect.
+    route_resp = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
+    assert route_resp.status_code == 200, route_resp.text
+    assert route_resp.json()["routing_status"] == "out_for_approval"
+
+    # The owner should see exactly one approval decision in their inbox.
     inbox = await client.get("/api/v1/approvals", headers=auth(owner))
     assert inbox.status_code == 200, inbox.text
     items = inbox.json()["items"]
     spec_decisions = [d for d in items if d.get("spec_id") == str(spec.id)]
-    assert len(spec_decisions) == 1
+    assert len(spec_decisions) == 1, f"expected 1 spec decision, got {spec_decisions}"
+
     d = spec_decisions[0]
-    assert d["state"] == "pending"
     assert d["kind"] == "approval"
-    assert "Italian Marble" in d["title"]
+    assert d["state"] == "pending"
+    assert "Fluted Marble Panel" in d["title"]
+    assert d["spec_id"] == str(spec.id)
 
 
-async def test_re_routing_same_spec_is_idempotent(client, db_session, spec_world):
-    """POST /specs/{id}/route twice → only ONE Decision row in the DB."""
-    company, arch, owner, site, spec = spec_world
-
-    await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-    await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-
-    # Count Decision rows for this spec
-    from sqlalchemy import select
-    rows = (
-        await db_session.execute(
-            select(Decision).where(
-                Decision.company_id == company.id,
-                Decision.spec_id == spec.id,
-            )
-        )
-    ).scalars().all()
-    assert len(rows) == 1, f"Expected 1 Decision, got {len(rows)}"
+# ---------------------------------------------------------------------------
+# (b) re-routing is idempotent — one Decision, reopened to pending
+# ---------------------------------------------------------------------------
 
 
-async def test_re_routing_reopens_rejected_decision(client, spec_world):
-    """If the owner rejects the spec, re-routing reopens the Decision to pending."""
-    company, arch, owner, site, spec = spec_world
+async def test_reroute_is_idempotent_and_reopens(client, world):
+    _company, arch, owner, _site, spec = world
 
-    # Route → reject
-    await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
+    # Route once.
+    r1 = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
+    assert r1.status_code == 200, r1.text
+
+    # Owner rejects the spec (simulates returned selection).
     await client.post(
         f"/api/v1/specs/{spec.id}/approve",
         json={"status": "rejected"},
-        headers=auth(arch),
+        headers=auth(owner),
     )
 
-    # Get the Decision — should be rejected now
-    inbox = await client.get("/api/v1/approvals", headers=auth(owner))
-    items = inbox.json()["items"]
-    d = next(i for i in items if i.get("spec_id") == str(spec.id))
-    assert d["state"] == "rejected"
+    # The decision should now be rejected.
+    inbox_after_reject = await client.get("/api/v1/approvals", headers=auth(owner))
+    spec_decisions = [
+        d for d in inbox_after_reject.json()["items"] if d.get("spec_id") == str(spec.id)
+    ]
+    # Rejected decisions are still returned in the inbox (no state filter set).
+    assert len(spec_decisions) == 1
+    assert spec_decisions[0]["state"] == "rejected"
 
-    # Re-route
-    r = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-    assert r.status_code == 200
+    # Architect re-routes (revised proposal).
+    r2 = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["routing_status"] == "out_for_approval"
 
-    # Decision should be back to pending
-    inbox2 = await client.get("/api/v1/approvals", headers=auth(owner))
-    items2 = inbox2.json()["items"]
-    d2 = next(i for i in items2 if i.get("spec_id") == str(spec.id))
-    assert d2["state"] == "pending"
+    # Still only ONE decision row.
+    inbox_after_reroute = await client.get("/api/v1/approvals", headers=auth(owner))
+    spec_decisions_after = [
+        d for d in inbox_after_reroute.json()["items"] if d.get("spec_id") == str(spec.id)
+    ]
+    assert len(spec_decisions_after) == 1, "must not create a 2nd decision on re-route"
+    # Reopened to pending.
+    assert spec_decisions_after[0]["state"] == "pending"
 
 
-async def test_approving_spec_resolves_linked_decision(client, spec_world):
-    """POST /specs/{id}/approve status=approved → linked Decision becomes resolved."""
-    company, arch, owner, site, spec = spec_world
+# ---------------------------------------------------------------------------
+# (c) approving the spec resolves the linked Decision
+# ---------------------------------------------------------------------------
 
+
+async def test_approve_spec_resolves_decision(client, world):
+    _company, arch, owner, _site, spec = world
+
+    # Route then approve.
     await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-    await client.post(
+    approve_resp = await client.post(
         f"/api/v1/specs/{spec.id}/approve",
-        json={"status": "approved"},
-        headers=auth(arch),
+        json={"status": "approved", "client_final_code": "FM-001"},
+        headers=auth(owner),
     )
+    assert approve_resp.status_code == 200, approve_resp.text
+    assert approve_resp.json()["approval_status"] == "approved"
 
+    # Linked Decision should be resolved.
     inbox = await client.get("/api/v1/approvals", headers=auth(owner))
-    items = inbox.json()["items"]
-    d = next(i for i in items if i.get("spec_id") == str(spec.id))
-    assert d["state"] == "resolved"
-    assert d["resolved_at"] is not None
+    spec_decisions = [d for d in inbox.json()["items"] if d.get("spec_id") == str(spec.id)]
+    assert len(spec_decisions) == 1
+    assert spec_decisions[0]["state"] == "resolved"
+    assert spec_decisions[0]["resolved_at"] is not None
 
 
-async def test_rejecting_spec_rejects_linked_decision(client, spec_world):
-    """POST /specs/{id}/approve status=rejected → linked Decision becomes rejected."""
-    company, arch, owner, site, spec = spec_world
+# ---------------------------------------------------------------------------
+# (d) rejecting the spec rejects the linked Decision
+# ---------------------------------------------------------------------------
+
+
+async def test_reject_spec_rejects_decision(client, world):
+    _company, arch, owner, _site, spec = world
 
     await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(arch))
-    await client.post(
+    reject_resp = await client.post(
         f"/api/v1/specs/{spec.id}/approve",
         json={"status": "rejected"},
-        headers=auth(arch),
+        headers=auth(owner),
     )
+    assert reject_resp.status_code == 200, reject_resp.text
+    assert reject_resp.json()["routing_status"] == "returned"
 
     inbox = await client.get("/api/v1/approvals", headers=auth(owner))
-    items = inbox.json()["items"]
-    d = next(i for i in items if i.get("spec_id") == str(spec.id))
-    assert d["state"] == "rejected"
+    spec_decisions = [d for d in inbox.json()["items"] if d.get("spec_id") == str(spec.id)]
+    assert len(spec_decisions) == 1
+    assert spec_decisions[0]["state"] == "rejected"
 
 
-async def test_approving_unrouted_spec_does_not_error(client, spec_world):
-    """Approving a spec that was never routed (no Decision) must return 200, not error."""
-    company, arch, owner, site, spec = spec_world
+# ---------------------------------------------------------------------------
+# (e) approving a never-routed spec does NOT error
+# ---------------------------------------------------------------------------
 
-    # Approve without ever routing
-    r = await client.post(
+
+async def test_approve_never_routed_spec_does_not_error(client, world):
+    _company, arch, owner, _site, spec = world
+
+    # Approve directly without routing first.
+    resp = await client.post(
         f"/api/v1/specs/{spec.id}/approve",
         json={"status": "approved"},
-        headers=auth(arch),
+        headers=auth(owner),
     )
-    assert r.status_code == 200, r.text
-    assert r.json()["approval_status"] == "approved"
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["approval_status"] == "approved"
+
+    # No Decision should have been created (spec was never routed).
+    inbox = await client.get("/api/v1/approvals", headers=auth(owner))
+    spec_decisions = [d for d in inbox.json()["items"] if d.get("spec_id") == str(spec.id)]
+    assert len(spec_decisions) == 0, "should not create a decision for an unrouted spec"

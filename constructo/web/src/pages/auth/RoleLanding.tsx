@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
 import { authApi, type Role } from '../../api/auth'
+import { useMe } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import { Spinner } from '../../components/states'
 import { ThemeProvider } from '../../ui'
@@ -20,14 +21,16 @@ const LANDING_ROUTE: Record<string, string> = {
   orders: '/reconcile',
   approvals: '/approvals',
   search: '/search',
-  spec_desk: '/spec-desk',
+  // spec_desk landing key now maps to the unified /designer workspace (D4)
+  spec_desk: '/designer',
 }
 
 /** Fallback landing derived purely from the role, used if /me/landing fails. */
 const ROLE_FALLBACK: Record<Role, string> = {
   owner: '/owner',
   pm: '/pm',
-  architect: '/spec-desk',
+  // Architect lands on the unified /designer workspace (D4)
+  architect: '/designer',
   supervisor: '/supervisor/capture',
   accountant: '/reconcile',
   procurement: '/reconcile',
@@ -72,7 +75,7 @@ export function RoleLanding() {
 /** Fallback path: resolve the home from GET /me when /me/landing is unavailable. */
 function LandingFromRole() {
   const t = useT()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
+  const me = useMe()
 
   if (me.isLoading) {
     return (

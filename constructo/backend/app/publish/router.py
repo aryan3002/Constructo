@@ -11,7 +11,8 @@ the model drafts, the human approves.
 """
 from __future__ import annotations
 
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -61,6 +62,9 @@ from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    DrawingPresignIn,
+    DrawingPresignOut,
+    DrawingRegisterOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
     PropertyCreateIn,
@@ -568,6 +572,100 @@ async def list_drawings(
         )
     ).scalars().all()
     return [_drawing_out(d) for d in rows]
+
+
+# ---- drawings register (S2a-E1) --------------------------------------------
+
+
+async def _site_name_map(session: AsyncSession, site_ids: list[UUID]) -> dict[UUID, str]:
+    """Return {site_id: name} for the given site ids (single query)."""
+    from app.models import Site
+
+    if not site_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Site.id, Site.name).where(Site.id.in_(site_ids))
+        )
+    ).all()
+    return {row.id: row.name for row in rows}
+
+
+@router.get("/drawings/register", response_model=list[DrawingRegisterOut])
+async def drawings_register(
+    site_id: UUID | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[DrawingRegisterOut]:
+    """Company-wide drawings register: all drawings across the caller's visible sites.
+
+    Resolves bare R2 keys to presigned GET URLs via the process-wide storage backend.
+    Computes ``is_current`` within the returned set (a drawing is current iff no
+    other returned row's ``supersedes_id`` points at it).
+
+    Optional ``site_id`` filter narrows to a single site; 403 if not in scope.
+    """
+    from app.sites.router import effective_visible_site_ids
+
+    visible = await effective_visible_site_ids(session, user)
+    if site_id is not None and site_id not in visible:
+        raise AppError(403, "forbidden", "Site not in scope")
+    target = [site_id] if site_id is not None else visible
+    if not target:
+        return []
+
+    rows = (
+        await session.execute(
+            select(PublishedDrawing)
+            .where(PublishedDrawing.site_id.in_(target))
+            .order_by(PublishedDrawing.published_at.desc())
+        )
+    ).scalars().all()
+
+    superseded = {r.supersedes_id for r in rows if r.supersedes_id is not None}
+    names = await _site_name_map(session, target)
+    storage = get_storage()
+
+    return [
+        DrawingRegisterOut(
+            id=r.id,
+            site_id=r.site_id,
+            title=r.title,
+            version=r.version,
+            kind=r.kind,
+            change_note=r.change_note,
+            published_at=r.published_at,
+            supersedes_id=r.supersedes_id,
+            site_name=names.get(r.site_id, ""),
+            is_current=(r.id not in superseded),
+            file_url=(storage.url_for(r.file_url) or r.file_url),
+        )
+        for r in rows
+    ]
+
+
+@router.post("/drawings/presign", response_model=DrawingPresignOut)
+async def drawings_presign(
+    body: DrawingPresignIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DrawingPresignOut:
+    """Mint a short-lived direct-to-R2 upload ticket for a new drawing revision.
+
+    When the storage backend is local (dev / tests) ``presigned_put`` raises
+    ``NotImplementedError``; we return ``mode="unavailable"`` with ``put_url=None``
+    and status 200 so the web app can gracefully fall back to the server-side
+    upload path.
+    """
+    await _assert_site(session, user, body.site_id)
+    suffix = Path(body.filename).suffix
+    key = f"drawings/{body.site_id}/{uuid4().hex}{suffix}"
+    storage = get_storage()
+    try:
+        ticket = storage.presigned_put(key, body.content_type)
+        return DrawingPresignOut(key=ticket["key"], put_url=ticket["url"], mode="presigned")
+    except NotImplementedError:
+        return DrawingPresignOut(key=key, put_url=None, mode="unavailable")
 
 
 # ---- members (contractor view) ---------------------------------------------

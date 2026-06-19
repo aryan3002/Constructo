@@ -135,6 +135,9 @@ export default function Settings() {
   function toggleLanguage() {
     const next: Language = lang === 'en' ? 'hi' : 'en'
     setLang(next)
+    // Regenerate the AI design profile summary in the new language.
+    // Fire-and-forget — UI will refresh on next visit to the Design tab.
+    void homeowner.saveDesignProfile({}).catch(() => undefined)
   }
 
   return (

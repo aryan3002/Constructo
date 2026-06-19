@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../api/hooks'
-import { authApi, type Role } from '../api/auth'
+import { type Role } from '../api/auth'
+import { useMeRole } from '../auth/useCan'
 import { EmptyState, ErrorState, Spinner } from '../components/states'
 import { useT, type TranslationKey } from '../i18n'
 import {
@@ -37,8 +37,7 @@ const STATUS_KEY: Record<string, TranslationKey> = {
 export function Sites() {
   const t = useT()
   const { data, isLoading, isError, error, refetch } = useSites()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = me.data?.role ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
 

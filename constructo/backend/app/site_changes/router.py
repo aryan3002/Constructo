@@ -41,43 +41,14 @@ async def _scoped_or_404(session: AsyncSession, user: User, change_id: UUID) -> 
     return change
 
 
-async def _resolve_reporter_names(
-    session: AsyncSession, changes: list[SiteChange]
-) -> dict[UUID, str]:
-    """Batched single-query lookup of User.name for all reported_by ids.
-
-    Returns a dict {user_id: name} with only the ids that exist in the DB.
-    Avoids N+1 regardless of list length.
-    """
-    reporter_ids = {c.reported_by for c in changes if c.reported_by is not None}
-    if not reporter_ids:
+async def _reporter_names(session: AsyncSession, ids: set[UUID]) -> dict[UUID, str | None]:
+    """Batch-fetch User.name for a set of reporter ids (one DB query, no N+1)."""
+    if not ids:
         return {}
     rows = (
-        await session.execute(
-            select(User.id, User.name).where(User.id.in_(reporter_ids))
-        )
+        await session.execute(select(User.id, User.name).where(User.id.in_(ids)))
     ).all()
-    return {row.id: row.name for row in rows if row.name}
-
-
-def _out_with_name(change: SiteChange, names: dict[UUID, str]) -> SiteChangeOut:
-    name = names.get(change.reported_by) if change.reported_by is not None else None
-    return SiteChangeOut(
-        id=change.id,
-        company_id=change.company_id,
-        site_id=change.site_id,
-        room=change.room,
-        title=change.title,
-        note=change.note,
-        impact=change.impact,
-        photo_url=change.photo_url,
-        reported_by=change.reported_by,
-        reported_by_name=name,
-        status=change.status,
-        linked_drawing_id=change.linked_drawing_id,
-        created_at=change.created_at,
-        resolved_at=change.resolved_at,
-    )
+    return {row.id: row.name for row in rows}
 
 
 @router.get("", response_model=list[SiteChangeOut])
@@ -99,9 +70,33 @@ async def list_site_changes(
     if status is not None:
         stmt = stmt.where(SiteChange.status == status)
     stmt = stmt.order_by(SiteChange.created_at.desc())
-    rows = list((await session.execute(stmt)).scalars().all())
-    names = await _resolve_reporter_names(session, rows)
-    return [_out_with_name(c, names) for c in rows]
+    rows = (await session.execute(stmt)).scalars().all()
+
+    # Batch-resolve reporter names in ONE query — no N+1.
+    reporter_ids = {c.reported_by for c in rows if c.reported_by is not None}
+    names = await _reporter_names(session, reporter_ids)
+
+    result = []
+    for c in rows:
+        out = SiteChangeOut.model_validate(c)
+        out.reported_by_name = names.get(c.reported_by) if c.reported_by else None
+        result.append(out)
+    return result
+
+
+def _with_name(change: SiteChange, name: str | None) -> SiteChangeOut:
+    """Attach reported_by_name to a validated SiteChangeOut."""
+    out = SiteChangeOut.model_validate(change)
+    out.reported_by_name = name
+    return out
+
+
+async def _resolve_reporter_name(session: AsyncSession, change: SiteChange) -> str | None:
+    """Single-row reporter name lookup for POST/GET/PATCH endpoints."""
+    if change.reported_by is None:
+        return None
+    name_map = await _reporter_names(session, {change.reported_by})
+    return name_map.get(change.reported_by)
 
 
 @router.post("", response_model=SiteChangeOut, status_code=201)
@@ -126,8 +121,7 @@ async def report_site_change(
     session.add(change)
     await session.commit()
     await session.refresh(change)
-    names = await _resolve_reporter_names(session, [change])
-    return _out_with_name(change, names)
+    return _with_name(change, user.name)
 
 
 @router.get("/{change_id}", response_model=SiteChangeOut)
@@ -137,8 +131,7 @@ async def get_site_change(
     session: AsyncSession = Depends(get_session),
 ) -> SiteChangeOut:
     change = await _scoped_or_404(session, user, change_id)
-    names = await _resolve_reporter_names(session, [change])
-    return _out_with_name(change, names)
+    return _with_name(change, await _resolve_reporter_name(session, change))
 
 
 @router.patch("/{change_id}", response_model=SiteChangeOut)
@@ -168,5 +161,4 @@ async def update_site_change(
         )
     await session.commit()
     await session.refresh(change)
-    names = await _resolve_reporter_names(session, [change])
-    return _out_with_name(change, names)
+    return _with_name(change, await _resolve_reporter_name(session, change))

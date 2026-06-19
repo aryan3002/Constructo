@@ -2,9 +2,11 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useSites } from '../../api/hooks'
-import { authApi, type Role } from '../../api/auth'
+import { type Role } from '../../api/auth'
+import { useMeRole } from '../../auth/useCan'
 import { specsApi, type DeskLine, type DeskOut } from '../../api/specs'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
+import { useT } from '../../i18n'
 import {
   AppShell,
   H1,
@@ -20,11 +22,6 @@ const STATUS: Record<DeskLine['approval_status'], 'ok' | 'warn' | 'risk'> = {
   approved: 'ok',
   pending: 'warn',
   rejected: 'risk',
-}
-const STATUS_LABEL: Record<DeskLine['approval_status'], string> = {
-  approved: 'Approved',
-  pending: 'Pending',
-  rejected: 'Rejected',
 }
 
 /** ₹ with Indian (lakh/crore) grouping; em-dash for a missing value. */
@@ -49,9 +46,14 @@ function useDesk(siteId: string | null) {
  * lines are shown honestly (never invented). Mirrors the Reconcile cockpit IA.
  */
 export function SpecDesk() {
+  const t = useT()
+  const STATUS_LABEL: Record<DeskLine['approval_status'], string> = {
+    approved: t('specdesk.status.approved'),
+    pending: t('specdesk.status.pending'),
+    rejected: t('specdesk.status.rejected'),
+  }
   const sites = useSites()
-  const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => authApi.me(), retry: false })
-  const role: Role = (me.data?.role as Role) ?? 'owner'
+  const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
 
   const [params, setParams] = useSearchParams()
@@ -77,12 +79,12 @@ export function SpecDesk() {
       <div className="space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <H1>Spec schedule</H1>
-            <Small>Materials by room — proposed by AI, confirmed by you.</Small>
+            <H1>{t('specdesk.title')}</H1>
+            <Small>{t('specdesk.subtitle')}</Small>
           </div>
           {siteOptions.length > 0 && (
             <label className="flex items-center gap-2">
-              <Small className="font-semibold !text-text">Site</Small>
+              <Small className="font-semibold !text-text">{t('specdesk.site_label')}</Small>
               <select
                 value={effectiveSiteId ?? ''}
                 onChange={(e) => patchSite(e.target.value)}
@@ -98,20 +100,20 @@ export function SpecDesk() {
           )}
         </header>
 
-        {sites.isLoading && <Spinner label="Loading…" />}
+        {sites.isLoading && <Spinner label={t('specdesk.sites_loading')} />}
         {sites.isError && (
-          <ErrorState message="Could not load sites." onRetry={() => sites.refetch()} />
+          <ErrorState message={t('specdesk.sites_error')} onRetry={() => sites.refetch()} />
         )}
         {!sites.isLoading && !sites.isError && siteOptions.length === 0 && (
-          <EmptyState title="No sites yet" hint="Create a site to start a spec schedule." />
+          <EmptyState title={t('specdesk.empty_title')} hint={t('specdesk.empty_hint')} />
         )}
 
         {effectiveSiteId && (
           <>
-            {desk.isLoading && <Spinner label="Loading spec schedule…" />}
+            {desk.isLoading && <Spinner label={t('specdesk.loading')} />}
             {desk.isError && (
               <ErrorState
-                message="Could not load the spec schedule."
+                message={t('specdesk.error')}
                 onRetry={() => desk.refetch()}
               />
             )}
@@ -123,19 +125,19 @@ export function SpecDesk() {
                   className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-card px-4 py-3"
                   role="status"
                 >
-                  <Small className="font-semibold !text-text">Estimated material cost</Small>
+                  <Small className="font-semibold !text-text">{t('specdesk.cost_label')}</Small>
                   <Mono className="text-h2 font-semibold text-text">{inr(data.grand_total)}</Mono>
                   {data.excluded_total > 0 ? (
-                    <StatusPill status="warn" label={`${data.excluded_total} awaiting a rate`} />
+                    <StatusPill status="warn" label={t('specdesk.awaiting_rate', { count: data.excluded_total })} />
                   ) : (
-                    <StatusPill status="ok" label="All priced" />
+                    <StatusPill status="ok" label={t('specdesk.all_priced')} />
                   )}
                 </div>
 
                 {data.rooms.length === 0 ? (
                   <EmptyState
-                    title="No specs yet"
-                    hint="Import a schedule, or add a material from a photo."
+                    title={t('specdesk.no_specs_title')}
+                    hint={t('specdesk.no_specs_hint')}
                   />
                 ) : (
                   <div className="space-y-6">
@@ -148,7 +150,7 @@ export function SpecDesk() {
                           <H2 className="!text-text">{room.room}</H2>
                           <div className="flex items-center gap-3">
                             {room.excluded > 0 && (
-                              <Small className="text-text-mute">{room.excluded} unpriced</Small>
+                              <Small className="text-text-mute">{t('specdesk.unpriced', { count: room.excluded })}</Small>
                             )}
                             <Mono className="font-semibold text-text">{inr(room.total)}</Mono>
                           </div>
@@ -158,22 +160,22 @@ export function SpecDesk() {
                             <thead>
                               <tr className="border-b border-line text-text-mute">
                                 <th className="px-4 py-2 font-body text-micro font-semibold uppercase tracking-wide">
-                                  Element
+                                  {t('specdesk.col.element')}
                                 </th>
                                 <th className="px-4 py-2 font-body text-micro font-semibold uppercase tracking-wide">
-                                  Material
+                                  {t('specdesk.col.material')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-body text-micro font-semibold uppercase tracking-wide">
-                                  Qty
+                                  {t('specdesk.col.qty')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-body text-micro font-semibold uppercase tracking-wide">
-                                  Rate
+                                  {t('specdesk.col.rate')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-body text-micro font-semibold uppercase tracking-wide">
-                                  Total
+                                  {t('specdesk.col.total')}
                                 </th>
                                 <th className="px-4 py-2 font-body text-micro font-semibold uppercase tracking-wide">
-                                  Status
+                                  {t('specdesk.col.status')}
                                 </th>
                               </tr>
                             </thead>

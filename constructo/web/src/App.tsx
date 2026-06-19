@@ -46,9 +46,20 @@ const DprPage = lazy(() =>
 )
 // === search ===
 import { Search } from './pages/search/Search'
-// === spec-desk (Architect's Material Specification schedule) === lazy: a dense desk grid
-const SpecDesk = lazy(() =>
-  import('./pages/specs/SpecDesk').then((m) => ({ default: m.SpecDesk })),
+// === designer workspace shell (D4) === lazy: keeps the D2+D3 surface out of
+// the entry chunk — only the architect who opens /designer pays for it
+const DesignerWorkspace = lazy(() =>
+  import('./features/designer/DesignerWorkspace').then((m) => ({
+    default: m.DesignerWorkspace,
+  })),
+)
+// === reports (W5 Slice 1) === lazy: PDF workers + preview surface kept out of entry chunk
+const ReportsPage = lazy(() =>
+  import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+)
+// === documents register (W5 Slice 2a) === lazy: keeps register UI out of entry chunk
+const DocumentsPage = lazy(() =>
+  import('./features/documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
 )
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
@@ -113,8 +124,11 @@ export function App() {
       {/* Accountant / Procurement. */}
       <Route path="/reconcile" element={<Guarded><ReconcilePage /></Guarded>} />
 
-      {/* Spec schedule — the Architect's Material Specification desk. */}
-      <Route path="/spec-desk" element={<Guarded><SpecDesk /></Guarded>} />
+      {/* Designer workspace shell (D4) — the architect's unified cockpit. */}
+      <Route path="/designer" element={<Guarded><DesignerWorkspace /></Guarded>} />
+
+      {/* Spec schedule — legacy route; redirect to the /designer?tab=selections cockpit. */}
+      <Route path="/spec-desk" element={<Navigate to="/designer?tab=selections" replace />} />
 
       {/* Approval Inbox (Site-themed full screen). */}
       <Route path="/approvals" element={<Guarded><ApprovalInbox /></Guarded>} />
@@ -136,6 +150,12 @@ export function App() {
 
       {/* WhatsApp group mapping. */}
       <Route path="/groups" element={<Guarded><Groups /></Guarded>} />
+
+      {/* Reports & exports (W5 Slice 1). */}
+      <Route path="/reports" element={<Guarded><ReportsPage /></Guarded>} />
+
+      {/* Drawings register (W5 Slice 2a). */}
+      <Route path="/settings/documents" element={<Guarded><DocumentsPage /></Guarded>} />
 
       {/* Per-role overflow hub. */}
       <Route path="/more" element={<Guarded><More /></Guarded>} />
