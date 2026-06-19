@@ -57,10 +57,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   // by the explicit allowlist of the four tab routes (the `TAB_ICONS` keys).
   const routes = state.routes.filter((r) => r.name in TAB_ICONS)
 
-  // On a pushed full-screen detail — the chat thread has its OWN back button and
-  // a bottom composer — hide the floating bar so it never covers the composer.
-  // (Returning to the inbox tab brings the bar back.)
-  if (state.routes[state.index]?.name === 'messages/[id]') return null
+  // On ANY pushed full-screen route (chat thread, markup canvas, issue report,
+  // settings…) hide the floating bar: those have their own back button and often
+  // bottom tools/composers the bar would otherwise cover. The bar returns when
+  // one of the 5 top-level tabs is focused again.
+  const activeName = state.routes[state.index]?.name
+  if (!activeName || !(activeName in TAB_ICONS)) return null
 
   return (
     <View
