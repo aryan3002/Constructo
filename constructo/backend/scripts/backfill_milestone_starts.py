@@ -35,13 +35,28 @@ async def main() -> None:
                     .order_by(Milestone.order, Milestone.id)
                 )
             ).scalars().all()
-            prev_end = None
+            prev_end = None  # completion watermark of the last STARTED phase
             for m in rows:
+                status = str(m.status)
+                if status == "upcoming":
+                    # A future phase hasn't started — its bucket starts at its
+                    # expected date (or stays empty), and it must NOT inherit the
+                    # current phase's start (that would vacuum up live photos).
+                    want = m.expected_on
+                    if m.started_on != want:
+                        m.started_on = want
+                        filled += 1
+                    continue  # don't advance the watermark past an unstarted phase
+                # done / now: fill a missing start from the prior phase's end.
                 if m.started_on is None and prev_end is not None:
                     m.started_on = prev_end
                     filled += 1
-                # The watermark the NEXT phase starts from.
-                prev_end = m.completed_on or m.started_on or m.expected_on or prev_end
+                # Only a COMPLETED phase advances the watermark (a "now" phase is
+                # ongoing — the next phase doesn't start until it completes).
+                if m.completed_on is not None:
+                    prev_end = m.completed_on
+                elif prev_end is None:
+                    prev_end = m.started_on
         await s.commit()
     await engine.dispose()
     print(f"filled started_on for {filled} milestone(s)")
