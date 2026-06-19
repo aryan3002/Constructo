@@ -1174,7 +1174,43 @@ async def photos(
         session, stmt, cursor, limit, PublishedPhoto.id, _photo_out
     )
     items = [await _render_photo(session, translation, user.language, p) for p in items]
+    if view == "milestone":
+        items = await _bucket_photos_by_milestone(session, sid, items)
     return Page[PhotoOut](items=items, next_cursor=next_cursor)
+
+
+async def _bucket_photos_by_milestone(
+    session: AsyncSession, sid: UUID, items: list[PhotoOut]
+) -> list[PhotoOut]:
+    """Tag each photo with the construction phase active when it was taken.
+
+    Deterministic — no per-photo tagging: a photo belongs to the latest milestone
+    whose start date (``started_on``, falling back to ``expected_on``) is on or
+    before the photo's day. Photos taken before the first milestone started keep
+    ``milestone_label=None`` (the client groups those as "Early work").
+    """
+    rows = (
+        await session.execute(select(Milestone).where(Milestone.site_id == sid))
+    ).scalars().all()
+    # (start_date, name) for milestones that have a usable start, earliest first.
+    windows = sorted(
+        ((m.started_on or m.expected_on, m.name) for m in rows if (m.started_on or m.expected_on)),
+        key=lambda w: w[0],
+    )
+    if not windows:
+        return items
+
+    def _label_for(when: datetime) -> str | None:
+        d = when.date()
+        label = None
+        for start, name in windows:
+            if start <= d:
+                label = name
+            else:
+                break
+        return label
+
+    return [p.model_copy(update={"milestone_label": _label_for(p.published_at)}) for p in items]
 
 
 HOMEOWNER_MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 12 MB — generous for a phone photo

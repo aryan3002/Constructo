@@ -282,8 +282,10 @@ function groupPhotos(
       key = p.room_tag ?? '__unsorted__'
       label = p.room_tag ?? s.unsorted
     } else if (view === 'milestone') {
-      key = p.milestone_id ?? '__general__'
-      label = p.milestone_id ? `${s.milestoneHeader} ${p.milestone_id}` : s.general
+      // Group by the construction phase the photo belongs to (resolved
+      // server-side by date window). Photos before the first phase → "general".
+      key = p.milestone_label ?? '__general__'
+      label = p.milestone_label ?? s.general
     } else {
       // "all" — group by the date (day) of publication.
       const day = (p.published_at ?? '').slice(0, 10)
@@ -831,7 +833,9 @@ export default function Photos() {
       items = items.filter(
         (p) =>
           (p.caption ?? '').toLowerCase().includes(q) ||
-          (p.room_tag ?? '').toLowerCase().includes(q),
+          (p.room_tag ?? '').toLowerCase().includes(q) ||
+          (p.milestone_label ?? '').toLowerCase().includes(q) ||
+          (p.published_at ?? '').slice(0, 10).includes(q),
       )
     }
     return items
