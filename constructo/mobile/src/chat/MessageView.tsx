@@ -359,6 +359,8 @@ export function MessageBubble({
   deliveryState,
   onLongPress,
   nivaan,
+  showSenderName,
+  senderName,
 }: {
   body: string | null
   mine: boolean
@@ -369,6 +371,11 @@ export function MessageBubble({
   /** (2) When true, renders a small "✦ Nivaan" caption above the body to
    *  visually distinguish AI-generated answer rows from human messages. */
   nivaan?: boolean
+  /** When true and a senderName is provided, renders a small name label above
+   *  the bubble for non-mine messages — used in multi-sender site/group threads. */
+  showSenderName?: boolean
+  /** The author's display name (from sender_name on the message). */
+  senderName?: string | null
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -413,6 +420,11 @@ export function MessageBubble({
       {nivaan ? (
         <Micro style={{ color: c.warn, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 }}>
           ✦ Nivaan
+        </Micro>
+      ) : null}
+      {showSenderName && !mine && senderName ? (
+        <Micro style={{ color: c.textMute, fontWeight: '600', marginBottom: 2 }}>
+          {senderName}
         </Micro>
       ) : null}
       {attachmentUrl ? (

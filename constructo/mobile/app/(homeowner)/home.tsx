@@ -17,6 +17,7 @@
  * Keeps the file's existing STR en/hi table, data hooks, and loading/error handling.
  */
 import {
+  Image,
   Pressable,
   ScrollView,
   View,
@@ -766,20 +767,34 @@ export default function Home() {
                     opacity: pressed ? 0.8 : 1,
                   })}
                 >
-                  {/* Photo thumbnail placeholder (warm tile) */}
-                  <View
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: theme.radii.chip,
-                      backgroundColor: AP.surfaceContainer,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Feather name="camera" size={20} color={c.textMute} />
-                  </View>
+                  {/* Photo thumbnail — the real site photo when present, else a warm placeholder */}
+                  {item.thumbnail_url ? (
+                    <Image
+                      source={{ uri: item.thumbnail_url }}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: theme.radii.chip,
+                        flexShrink: 0,
+                        backgroundColor: AP.surfaceContainer,
+                      }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: theme.radii.chip,
+                        backgroundColor: AP.surfaceContainer,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Feather name="camera" size={20} color={c.textMute} />
+                    </View>
+                  )}
 
                   {/* Text */}
                   <View style={{ flex: 1, minWidth: 0 }}>

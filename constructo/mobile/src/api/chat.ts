@@ -32,6 +32,10 @@ export interface ChatMessage {
   conversation_id: string
   sender_id: string | null
   sender_side: MessageSide
+  /** Human-readable author name — resolved server-side; null for system/nivaan rows. */
+  sender_name?: string | null
+  /** Author's role string (owner|supervisor|etc.) — null for system/nivaan rows. */
+  sender_role?: string | null
   seq: number
   body: string | null
   reply_to_id: string | null

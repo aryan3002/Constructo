@@ -39,15 +39,24 @@ import argparse
 import asyncio
 import zipfile
 from collections import Counter
-from datetime import UTC, date, datetime
+from datetime import date
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import delete, func, select
 
 from app.db import SessionLocal
+from app.extraction.llm import get_llm_client
 from app.extraction.worker import handle_ingested
+from app.ingestion.chat_seed import (
+    classify_channel,
+    get_or_create_conversations,
+    seed_chat_message,
+)
 from app.models import (
+    ChatMessage,
     Company,
+    Conversation,
+    ConversationRead,
     EventEmbedding,
     HomeownerMember,
     HomeownerSubRole,
@@ -90,9 +99,9 @@ SENDER_ROLES: dict[str, str] = {
     # --- CivilArch / CADS firm ---
     "Saurabh Pandey": "owner",          # created the group → firm principal
     "Saurabh CivilArchGroup": "pm",
-    "Anamika Civilarc": "pm",           # architect/designer (designer role not in enum yet)
-    "Vikas Civilarch": "pm",
-    "Mansi Kanojia": "pm",
+    "Anamika Civilarc": "architect",    # design team → architect role
+    "Vikas Civilarch": "architect",
+    "Mansi Kanojia": "architect",
     "prabha Civilarch": "accountant",
     "Civilarch Group": "pm",
     # --- on-site ---
@@ -103,13 +112,13 @@ SENDER_ROLES: dict[str, str] = {
     "+91 77040 02004": "labor_contractor",
     "+91 77030 04001": "supervisor",
     # --- homeowner family (Tripathi) ---
-    "Ashok": "homeowner",               # MR. ASHOK TRIPATHI — primary owner
-    "Anil Tripathi": "homeowner",
+    "Ashok": "homeowner",               # MR. ASHOK TRIPATHI — co-owner
+    "Anil Tripathi": "homeowner",       # most active homeowner → primary owner
     "Aryan": "homeowner",
 }
 DEFAULT_ROLE = "supervisor"  # any participant not listed above
 
-HOMEOWNER_PRIMARY = "Ashok"  # who is the primary_owner; others become co_owner
+HOMEOWNER_PRIMARY = "Anil Tripathi"  # who is the primary_owner; others become co_owner
 
 # Media kinds we upload + run extraction on. Videos are skipped (the app doesn't
 # use them and they are the bulk of the 3.3 GB). Voice has none in this export.
@@ -201,12 +210,30 @@ async def build_world(session, participants: dict[str, str]) -> dict:
     for i, (sender, role) in enumerate(participants.items()):
         phone = _phone_for(i)
         phones[sender] = phone
-        users[sender] = await _upsert(
-            session, User, _id("user", sender),
-            company_id=company.id, phone=phone, role=UserRole(role),
-            name=sender, language="hi",
-        )
+        # Phone is the unique login key. Reuse any pre-existing user with this
+        # phone (e.g. an auto-login-minted owner from earlier testing, or a prior
+        # import) instead of inserting a colliding new uuid5 id — then re-home it
+        # to this company + real role. Keeps the import idempotent on phone.
+        existing = (
+            await session.execute(select(User).where(User.phone == phone))
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.company_id = company.id
+            existing.role = UserRole(role)
+            existing.name = sender
+            existing.language = "hi"
+            existing.is_active = True
+            users[sender] = existing
+        else:
+            users[sender] = await _upsert(
+                session, User, _id("user", sender),
+                company_id=company.id, phone=phone, role=UserRole(role),
+                name=sender, language="en",  # English-first; homeowner API translates per-user
+            )
     await session.flush()
+    # Capture the ACTUAL persisted ids (a reused user keeps its original id, which
+    # differs from _id("user", sender)) so downstream stages resolve the right rows.
+    user_ids: dict[str, UUID] = {s: users[s].id for s in participants}
 
     # Field/finance roles only see sites they are assigned to.
     for sender, role in participants.items():
@@ -235,19 +262,29 @@ async def build_world(session, participants: dict[str, str]) -> dict:
             status=MemberStatus.active,
         )
 
-    # WhatsApp group mapping so extraction resolves messages → this site.
+    # WhatsApp group mapping kept for forward-compat (live bridging), even though
+    # imported messages now flow in as in-app chat (source="app_chat"), not as
+    # bare "whatsapp_export" raw rows.
     await _upsert(
         session, WhatsappGroup, _id("group"),
         company_id=company.id, site_id=site.id,
         external_group_id=EXTERNAL_GROUP_ID, source=SOURCE,
         label="Tripathi Dream Home — WhatsApp",
     )
+
+    # The two per-site chat threads the history is seeded into: the crew "site"
+    # thread (Blueprint) and the curated "homeowner" thread (Calm Cockpit).
+    site_conv, homeowner_conv = await get_or_create_conversations(
+        session, company_id=company.id, site_id=site.id
+    )
     await session.commit()
     # Return plain, deterministic values — never ORM objects across sessions.
     return {
         "company_id": _id("company"),
         "site_id": _id("site"),
-        "users": {s: {"id": _id("user", s), "phone": phones[s]} for s in participants},
+        "site_conv_id": site_conv.id,
+        "homeowner_conv_id": homeowner_conv.id,
+        "users": {s: {"id": user_ids[s], "phone": phones[s]} for s in participants},
     }
 
 
@@ -262,11 +299,42 @@ def _media_member_map(zf: zipfile.ZipFile) -> dict[str, str]:
     return out
 
 
+# Firm roles whose messages are ambiguous (could be client-facing OR crew-only),
+# so they get one cheap LLM call to decide the channel. Homeowner/crew roles are
+# routed deterministically by classify_channel and never need a call.
+_LLM_CHANNEL_ROLES = {"owner", "pm", "architect", "accountant"}
+
+_CHANNEL_SCHEMA = {"channel": "homeowner_facing | crew_internal"}
+_CHANNEL_SYSTEM = (
+    "Is this WhatsApp message from a construction firm directed at the "
+    "client/homeowner (design choices, approvals, updates to the owner) or "
+    "internal crew coordination? Return JSON."
+)
+
+
+async def _llm_channel_label(text: str | None) -> str | None:
+    """One cheap classification call → "homeowner_facing"/"crew_internal" (or None).
+
+    Used only for ambiguous firm-role messages. Any error returns None so the
+    deterministic ``classify_channel`` fallback (crew "site") still applies.
+    """
+    if not text or not text.strip():
+        return None
+    try:
+        out = await get_llm_client("cheap").complete(
+            _CHANNEL_SYSTEM, text, _CHANNEL_SCHEMA
+        )
+        label = (out or {}).get("channel")
+        return label if label in {"homeowner_facing", "crew_internal"} else None
+    except Exception:
+        return None
+
+
 async def import_messages(
     world: dict, messages: list[ParsedMessage], zf: zipfile.ZipFile | None,
     *, opts: argparse.Namespace,
 ) -> dict[str, int]:
-    users = world["users"]
+    users = world["users"]  # sender → {"id", "phone"}
     storage = get_storage()
     members = _media_member_map(zf) if zf is not None else {}
     counts = Counter()
@@ -283,15 +351,29 @@ async def import_messages(
         if opts.limit and ingested >= opts.limit:
             break
 
-        msg_id = _id("msg", str(m.line_no))
-        # Idempotency: already imported → skip (cheap re-run safety).
+        client_msg_id = _id("cmsg", str(m.line_no))
+        # Idempotency (channel-independent): a ChatMessage already seeded for THIS
+        # site with this client_msg_id → skip entirely (no re-seed, no re-extract),
+        # even if channel routing differs across runs.
         async with SessionLocal() as s:
-            if await s.get(RawMessageModel, msg_id) is not None:
+            existing = (
+                await s.execute(
+                    select(ChatMessage.id)
+                    .join(Conversation, ChatMessage.conversation_id == Conversation.id)
+                    .where(
+                        Conversation.site_id == world["site_id"],
+                        ChatMessage.client_msg_id == client_msg_id,
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if existing is not None:
                 counts["already_imported"] += 1
                 ingested += 1
                 continue
 
-        user = users[m.sender]  # {"id", "phone"}
+        user_info = users[m.sender]  # {"id", "phone"}
+        role = SENDER_ROLES.get(m.sender, DEFAULT_ROLE)
         media_url: str | None = None
         media_mime: str | None = None
         media_type = _media_type_str(m.media_kind)
@@ -314,26 +396,59 @@ async def import_messages(
                 counts["media_failed"] += 1
                 print(f"  ! media upload failed for {m.media_filename}: {exc}")
 
-        async with SessionLocal() as s:
-            s.add(RawMessageModel(
-                id=msg_id, source=SOURCE, external_group_id=EXTERNAL_GROUP_ID,
-                sender_id=user["phone"], sender_name=m.sender,
-                media_type=media_type, text=m.text,
-                media_url=media_url, media_mime=media_mime,
-                sent_at=m.sent_at, received_at=datetime.now(UTC),
-                raw={"line_no": m.line_no, "media_filename": m.media_filename},
-            ))
-            await s.commit()
-        counts["raw_messages"] += 1
+        # Channel routing: ambiguous firm roles get one cheap LLM label so the
+        # homeowner↔firm design thread routes correctly. Runs even under
+        # --skip-extraction (the decoupled fast-seed path) so channel quality is
+        # preserved; only the heavier per-message event extraction is deferred.
+        llm_label: str | None = None
+        if role in _LLM_CHANNEL_ROLES and m.text and m.text.strip():
+            llm_label = await _llm_channel_label(m.text)
+        channel = classify_channel(
+            sender_role=role, text=m.text, media_kind=m.media_kind, llm_label=llm_label,
+        )
+        sender_side = "homeowner" if role == "homeowner" else "contractor"
 
-        # Run real extraction when there is text or a document to read.
+        conv_id = world["site_conv_id"] if channel == "site" else world["homeowner_conv_id"]
+        raw_id = None
+        async with SessionLocal() as s:
+            conv = await s.get(Conversation, conv_id)
+            user = await s.get(User, user_info["id"])
+            msg = await seed_chat_message(
+                s, conv=conv, user=user, text=m.text,
+                media_url=media_url, media_mime=media_mime, media_type=media_type,
+                sent_at=m.sent_at, client_msg_id=client_msg_id, sender_side=sender_side,
+            )
+            raw_id = msg.raw_message_id
+
+            # Light up the homeowner feed: every image becomes a published photo
+            # (vision captions arrive in a later pass).
+            if m.media_kind == "image" and media_url is not None:
+                pid = _id("photo", str(m.line_no))
+                if await s.get(PublishedPhoto, pid) is None:
+                    s.add(PublishedPhoto(
+                        id=pid, site_id=world["site_id"], image_url=media_url,
+                        caption=m.text, room_tag=None, milestone_id=None,
+                        is_starred=False, published_by=user_info["id"],
+                        published_at=m.sent_at,  # real message date, not import time
+                    ))
+                    counts["photos_published"] += 1
+            await s.commit()
+        counts["chat_messages"] += 1
+        counts["site_channel" if channel == "site" else "homeowner_channel"] += 1
+
+        # Run real extraction off the bridged RawMessage when there is a human
+        # caption OR a document (PDF) to read — the SAME pipeline, no double
+        # extraction. A CAPTIONLESS photo is deliberately NOT text-extracted (it
+        # would only yield a "no message provided" guess); the vision pass
+        # (enrich_photos) captions it and creates its event with real content.
         should_extract = (
             not opts.skip_extraction
-            and (bool(m.text) or m.media_kind in EXTRACT_KINDS)
+            and raw_id is not None
+            and (bool(m.text and m.text.strip()) or m.media_kind in EXTRACT_KINDS)
         )
         if should_extract:
             try:
-                event_ids = await handle_ingested(msg_id)
+                event_ids = await handle_ingested(raw_id)
                 counts["events"] += len(event_ids)
             except Exception as exc:
                 counts["extract_failed"] += 1
@@ -633,13 +748,21 @@ async def purge() -> dict[str, int]:
     company_id = _id("company")
     site_id = _id("site")
 
+    # Imported messages now bridge in as app_chat raw rows scoped to the site
+    # ("app:{site_id}"); the legacy whatsapp_export id is kept so older imports
+    # purge cleanly too.
+    app_group_id = f"app:{site_id}"
+
     async with SessionLocal() as s:
-        # R2/local objects first (keys from raw messages + published photos).
+        # Collect media keys IN MEMORY first, then do every DB delete in this one
+        # fast transaction. The slow per-object R2 delete loop runs AFTER the
+        # session closes (below) — holding a DB connection idle across thousands
+        # of R2 deletes is what made Neon's pooler drop it mid-purge.
         keys = set(
             (
                 await s.execute(
                     select(RawMessageModel.media_url).where(
-                        RawMessageModel.external_group_id == EXTERNAL_GROUP_ID,
+                        RawMessageModel.external_group_id.in_([EXTERNAL_GROUP_ID, app_group_id]),
                         RawMessageModel.media_url.is_not(None),
                     )
                 )
@@ -652,17 +775,25 @@ async def purge() -> dict[str, int]:
                 )
             ).scalars().all()
         )
-        if hasattr(storage, "delete"):
-            for key in keys:
-                if not key or key.lower().startswith(("http://", "https://")):
-                    continue
-                try:
-                    storage.delete(key)
-                    out["media_deleted"] += 1
-                except Exception:
-                    out["media_delete_failed"] += 1
 
         await s.execute(delete(PublishedPhoto).where(PublishedPhoto.site_id == site_id))
+
+        # Seeded in-app chat (Messages tab). Delete children → parent before the
+        # Site/RawMessage deletes below: chat_messages → conversation_reads →
+        # conversations. (The bridged RawMessage rows are caught by the
+        # external_group_id="app:{site_id}" + whatsapp_export deletes further down.)
+        conv_ids = (
+            await s.execute(select(Conversation.id).where(Conversation.site_id == site_id))
+        ).scalars().all()
+        if conv_ids:
+            await s.execute(
+                delete(ChatMessage).where(ChatMessage.conversation_id.in_(conv_ids))
+            )
+            await s.execute(
+                delete(ConversationRead).where(ConversationRead.conversation_id.in_(conv_ids))
+            )
+            await s.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
+        out["conversations"] = len(conv_ids)
 
         # Homeowner scaffold (property / rooms / milestones / timeline). Spaces
         # cascade their components; delete before the Site goes.
@@ -680,7 +811,9 @@ async def purge() -> dict[str, int]:
         out["events"] = len(ev_ids)
         await s.execute(delete(SiteEventModel).where(SiteEventModel.site_id == site_id))
         r = await s.execute(
-            delete(RawMessageModel).where(RawMessageModel.external_group_id == EXTERNAL_GROUP_ID)
+            delete(RawMessageModel).where(
+                RawMessageModel.external_group_id.in_([EXTERNAL_GROUP_ID, app_group_id])
+            )
         )
         out["raw_messages"] = r.rowcount or 0
         await s.execute(delete(HomeownerMember).where(HomeownerMember.site_id == site_id))
@@ -703,6 +836,19 @@ async def purge() -> dict[str, int]:
         await s.execute(delete(User).where(User.company_id == company_id))
         await s.execute(delete(Company).where(Company.id == company_id))
         await s.commit()
+
+    # DB is fully purged + committed. Now delete the storage objects — slow on R2
+    # (thousands of objects, sequential), but holds NO DB connection so a long
+    # loop can't trip the Neon idle timeout.
+    if hasattr(storage, "delete"):
+        for key in keys:
+            if not key or key.lower().startswith(("http://", "https://")):
+                continue
+            try:
+                storage.delete(key)
+                out["media_deleted"] += 1
+            except Exception:
+                out["media_delete_failed"] += 1
 
     return dict(out)
 
@@ -731,6 +877,24 @@ def dry_run_report(messages: list[ParsedMessage], participants: dict[str, str]) 
     print("Media   : " + " · ".join(f"{k}:{v}" for k, v in by_kind.items()))
     est_extract = text_msgs + by_kind.get("document", 0)
     print(f"≈ extraction calls: {est_extract}   (images-with-caption included via text)")
+
+    # Per-channel projection — the deterministic split (no LLM label) of which
+    # thread each real message seeds into. The live --run may move some firm-role
+    # messages to "homeowner" via the cheap LLM label; this is the floor.
+    channel_split = Counter()
+    for m in messages:
+        if m.is_system or _is_group_pseudo_sender(m.sender):
+            continue
+        role = SENDER_ROLES.get(m.sender, DEFAULT_ROLE)
+        ch = classify_channel(
+            sender_role=role, text=m.text, media_kind=m.media_kind, llm_label=None,
+        )
+        channel_split[ch] += 1
+    print(
+        f"Channels (deterministic): site channel: {channel_split['site']} / "
+        f"homeowner channel: {channel_split['homeowner']}"
+    )
+
     print(f"\nParticipants → role  ({len(participants)} users, all login phone + OTP 000000):")
     for i, (sender, role) in enumerate(participants.items()):
         print(f"  {_phone_for(i)}  {role:16} {sender}  ({per_sender.get(sender, 0)} msgs)")
@@ -794,6 +958,13 @@ async def _run(opts: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # Load .env into os.environ so the extraction clients (get_llm_client/OCR/STT,
+    # which read os.environ directly) see the real Azure creds. Done here in the
+    # CLI entry — NOT at import — so tests that import this module stay on the
+    # network-free FakeLLM. CLI/prod env vars already set are NOT overridden.
+    from scripts._bootstrap_env import load as _load_env
+
+    _load_env()
     p = argparse.ArgumentParser(description="Import a WhatsApp export into Constructo.")
     p.add_argument("--zip", help="Path to the WhatsApp 'Export Chat' .zip")
     p.add_argument("--run", action="store_true", help="Actually import (default: dry-run only)")

@@ -30,6 +30,7 @@ from app.extraction.stt import transcribe as run_transcribe
 from app.storage import get_storage
 
 CLARIFY_THRESHOLD = 0.6
+ESCALATE_BELOW = 0.6
 
 _SYSTEM_PROMPT = (
     "You are an extraction engine for an Indian construction-site WhatsApp feed. "
@@ -389,7 +390,22 @@ async def _build_event(
         confidence = classifier_conf
     confidence = max(0.0, min(1.0, confidence))
 
-    # 5) Low confidence -> ask a human.
+    # 5) Escalate weak reads (low confidence or still-unknown) to the smart tier once.
+    if forced_type is None and (confidence < ESCALATE_BELOW or event_type is EventType.unknown):
+        smart = get_llm_client("smart")
+        smart_out = await smart.complete(
+            system=_SYSTEM_PROMPT,
+            user=_with_reply_context(text, raw),
+            json_schema=_llm_schema(event_type),
+        )
+        smart_type = _coerce_event_type(smart_out.get("event_type"))
+        smart_conf = smart_out.get("confidence")
+        if isinstance(smart_conf, (int, float)) and float(smart_conf) >= confidence:
+            if smart_type is not None and smart_type is not EventType.unknown:
+                event_type = smart_type
+            fields = smart_out.get("fields") or fields
+            summary = (smart_out.get("summary") or summary).strip()[:500] or summary
+            confidence = max(0.0, min(1.0, float(smart_conf)))
     needs_clarification = confidence < CLARIFY_THRESHOLD
 
     return SiteEvent(

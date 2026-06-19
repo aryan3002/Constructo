@@ -326,11 +326,13 @@ export default function OwnerConversation() {
             return (
               <MessageBubble
                 body={item.body}
-                mine={item.sender_side === 'contractor'}
+                mine={!!me && item.sender_id === me.id}
                 attachmentUrl={item.attachment_url}
                 timestamp={new Date(item.created_at).toLocaleTimeString()}
                 deliveryState={thread.deliveryState(item)}
                 onLongPress={() => thread.setReply(item)}
+                showSenderName
+                senderName={item.sender_name}
               />
             )
           }}

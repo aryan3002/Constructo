@@ -873,10 +873,30 @@ async def home(
         total = sum(float(c.cost_delta) for c in changes if c.cost_delta is not None)
         spend = SpendSummary(total_change_cost_delta=total, change_count=len(changes))
 
-    recent_activity = [
-        await _render_update(session, translation, user.language, _update_out(u))
-        for u in recent
-    ]
+    # Thumbnail per recent item: the first published photo on that update's day
+    # (presigned), so the feed shows the real site photo, not a placeholder icon.
+    thumb_by_date: dict = {}
+    recent_dates = {u.published_at.date() for u in recent}
+    if recent_dates:
+        storage = get_storage()
+        photo_rows = (
+            await session.execute(
+                select(PublishedPhoto.published_at, PublishedPhoto.image_url)
+                .where(PublishedPhoto.site_id == sid)
+                .order_by(PublishedPhoto.published_at.desc())
+                .limit(300)
+            )
+        ).all()
+        for pa, key in photo_rows:
+            d = pa.date()
+            if key and d in recent_dates and d not in thumb_by_date:
+                thumb_by_date[d] = storage.url_for(key) or key
+
+    recent_activity = []
+    for u in recent:
+        out = await _render_update(session, translation, user.language, _update_out(u))
+        thumb = thumb_by_date.get(u.published_at.date())
+        recent_activity.append(out.model_copy(update={"thumbnail_url": thumb}) if thumb else out)
     quiet_out = None
     if quiet_window:
         quiet_out = await _render_quiet(
@@ -1575,7 +1595,10 @@ def _drawing_out(d: PublishedDrawing) -> DrawingOut:
         site_id=d.site_id,
         title=d.title,
         version=d.version,
-        file_url=d.file_url,
+        # Resolve bare storage keys (the importer stores PDFs as R2 keys) to a
+        # fetchable URL; full http(s) URLs pass through url_for unchanged. Without
+        # this the app's Linking.openURL throws ("Could not open the file").
+        file_url=get_storage().url_for(d.file_url) or d.file_url,
         kind=d.kind,
         published_by=d.published_by,
         published_at=d.published_at,
