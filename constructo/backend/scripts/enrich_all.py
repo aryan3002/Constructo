@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import delete, select
 
@@ -50,6 +49,7 @@ import scripts.enrich_quiet_periods as enrich_quiet_periods
 import scripts.enrich_site_changes as enrich_site_changes
 import scripts.enrich_specs as enrich_specs
 from app.db import SessionLocal
+from scripts.import_whatsapp_export import _id as _import_id
 
 # (label, module) in dependency order. Run sequentially — see module docstring.
 _STEPS = [
@@ -67,8 +67,10 @@ _STEPS = [
 ]
 
 
-_NS = uuid5(NAMESPACE_URL, "constructo.wa-import.tripathi-dream-home")
-_SITE_ID = uuid5(_NS, "site")
+# Derive the site id from the importer's shared namespace helper so it can never
+# drift from the seed (was a hardcoded literal that would silently prune nothing
+# if EXTERNAL_GROUP_ID ever changed).
+_SITE_ID = _import_id("site")
 
 
 async def prune_noise_events(session_factory=SessionLocal) -> dict:

@@ -130,7 +130,18 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
         # when a floor-plan PDF actually yields rooms) and reused thereafter.
         floor_id: UUID | None = None
 
+        # Commit every N PDFs so the DB connection isn't held idle across the
+        # slow read_pdf() vision round-trips — Neon's pooler drops a long-idle
+        # connection (same mitigation as enrich_photos). uuid5 upserts make a
+        # partial run safely re-runnable.
+        COMMIT_EVERY = 10
+
         for msg in rows:
+            # Flush+release before the next slow read_pdf so the connection is
+            # never held idle across a vision round-trip (runs regardless of the
+            # `continue`s below, which skip non-roomy PDFs).
+            if pdfs_read and pdfs_read % COMMIT_EVERY == 0:
+                await s.commit()
             info = await read_pdf(msg.attachment_key, llm=llm)
             pdfs_read += 1
 

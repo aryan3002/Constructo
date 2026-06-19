@@ -230,6 +230,14 @@ def _safe_attachment_url(key: str | None, storage=None) -> str | None:
         return None
 
 
+def _stamp_sender(out: ChatMessageOut, user: User) -> ChatMessageOut:
+    """Attach the sender's name/role to an optimistic response so the bubble shows
+    attribution immediately (the next list_messages refetch backfills it anyway)."""
+    out.sender_name = user.name
+    out.sender_role = user.role.value
+    return out
+
+
 def _side_for(user: User) -> MessageSide:
     return (
         MessageSide.homeowner
@@ -716,7 +724,7 @@ async def send_message(
         await session.refresh(msg)
         out = ChatMessageOut.model_validate(msg)
         out.attachment_url = _safe_attachment_url(msg.attachment_key)
-        return out
+        return _stamp_sender(out, user)
 
     # Reply-to-Card (1.4): a deterministic correction ("45 nahi 54") acts on the
     # parent card — it supersedes the value (authority) or raises a dispute — and
@@ -727,7 +735,7 @@ async def send_message(
             msg.meta = {"blocked": {"reason": "contested", "event_id": correction["event_id"]}}
         await session.commit()
         await session.refresh(msg)
-        return ChatMessageOut.model_validate(msg)
+        return _stamp_sender(ChatMessageOut.model_validate(msg), user)
 
     # Reply-to-Card (1.4): "haan theek hai" under an approval card commits the
     # approval (authority-gated) and is not itself re-extracted.
@@ -737,7 +745,7 @@ async def send_message(
             msg.meta = {"blocked": {"reason": "contested", "event_id": approval["event_id"]}}
         await session.commit()
         await session.refresh(msg)
-        return ChatMessageOut.model_validate(msg)
+        return _stamp_sender(ChatMessageOut.model_validate(msg), user)
 
     # AI-detected Action Item (2.7): a plain-text assignment ("Ramesh ko Friday
     # tak bolo") spawns a badged, dismissable to-do. Only on free text (a typed
