@@ -16,6 +16,7 @@ and then confirmed/edited — it never decides. See :mod:`app.homeowner.ai`.
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -2187,7 +2188,41 @@ async def create_request(
     session.add(req)
     await session.commit()
     await session.refresh(req)
+    await _alert_site_leads(session, sid, user, req)
     return _request_out(req)
+
+
+async def _alert_site_leads(
+    session: AsyncSession, sid: UUID, raiser: User, req: HomeownerRequest
+) -> None:
+    """Best-effort push to the site's leads (company owner/PM) so a homeowner
+    report reaches the team. Never raises — a notify hiccup must not fail the
+    report (the in-app contractor inbox for these is a follow-up)."""
+    try:
+        from app.push.sender import notify_user
+
+        site = await session.get(Site, sid)
+        if site is None:
+            return
+        lead_ids = (
+            await session.execute(
+                select(User.id).where(
+                    User.company_id == site.company_id,
+                    User.role.in_([UserRole.owner, UserRole.pm]),
+                )
+            )
+        ).scalars().all()
+        who = (raiser.name or "A homeowner").strip()
+        for uid in lead_ids:
+            await notify_user(
+                session,
+                uid,
+                "New homeowner report",
+                f"{who}: {req.title}",
+                data={"type": "homeowner_request", "request_id": str(req.id), "site_id": str(sid)},
+            )
+    except Exception:  # pragma: no cover - defensive
+        logging.getLogger(__name__).exception("alert_site_leads failed for %s", req.id)
 
 
 @router.get("/requests", response_model=list[RequestOut])

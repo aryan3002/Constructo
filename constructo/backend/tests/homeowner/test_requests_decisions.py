@@ -142,6 +142,28 @@ async def test_respond_to_decision_resolves_it(client, ctx, db_session):
     assert all(d["id"] != str(decision.id) for d in after.json())
 
 
+async def test_create_request_alerts_site_leads(client, ctx, db_session):
+    """A homeowner report must actively reach the site team — the company's
+    owner/PM get a push so it doesn't sit unseen."""
+    from app.models import PushToken
+    from app.push import sender
+
+    sender.reset_dry_run_log()
+    db_session.add(
+        PushToken(user_id=ctx.owner.id, token="ExponentPushToken[lead]", platform="ios")
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        "/api/v1/homeowner/requests",
+        json={"title": "Crack in the stair wall", "detail": "near the landing"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code in (200, 201), resp.text
+    tos = {m["to"] for m in sender.dry_run_log()}
+    assert "ExponentPushToken[lead]" in tos
+
+
 async def test_comment_does_not_change_decision_state(client, ctx, db_session):
     """A comment is upward voice, NOT a decision. It must leave the decision
     ``pending`` so it stays on the homeowner's Home "needs your input" — and the
