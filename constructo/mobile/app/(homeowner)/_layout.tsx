@@ -22,10 +22,11 @@ function HomeownerTabs() {
   const { t } = useT()
   const { theme } = useTheme()
   const askLabel = t('nav.ask')
-  // Hide the Ask pill on the pushed chat thread — it has its own composer, and
-  // the thread covers the bar full-screen (the bar is hidden there too).
+  // Show the Ask pill ONLY on the 5 top-level tabs. On every pushed full-screen
+  // route (chat thread, markup canvas, issue report, settings…) it would collide
+  // with that screen's own bottom tools/composer, so hide it there.
   const pathname = usePathname()
-  const onThread = /^\/messages\/[^/]+$/.test(pathname ?? '')
+  const onMainTab = /^\/(home|photos|updates|messages|design)?$/.test(pathname ?? '')
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -78,7 +79,7 @@ function HomeownerTabs() {
         {/* Wave 1b — dedicated storage-management screen */}
         <Tabs.Screen name="storage" options={{ href: null }} />
       </Tabs>
-      {!onThread ? <AskPill label={askLabel} /> : null}
+      {onMainTab ? <AskPill label={askLabel} /> : null}
     </View>
   )
 }

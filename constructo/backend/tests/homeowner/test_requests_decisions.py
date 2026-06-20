@@ -142,6 +142,66 @@ async def test_respond_to_decision_resolves_it(client, ctx, db_session):
     assert all(d["id"] != str(decision.id) for d in after.json())
 
 
+async def test_create_request_alerts_site_leads(client, ctx, db_session):
+    """A homeowner report must actively reach the site team — the company's
+    owner/PM get a push so it doesn't sit unseen."""
+    from app.models import PushToken
+    from app.push import sender
+
+    sender.reset_dry_run_log()
+    db_session.add(
+        PushToken(user_id=ctx.owner.id, token="ExponentPushToken[lead]", platform="ios")
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        "/api/v1/homeowner/requests",
+        json={"title": "Crack in the stair wall", "detail": "near the landing"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code in (200, 201), resp.text
+    tos = {m["to"] for m in sender.dry_run_log()}
+    assert "ExponentPushToken[lead]" in tos
+
+
+async def test_comment_does_not_change_decision_state(client, ctx, db_session):
+    """A comment is upward voice, NOT a decision. It must leave the decision
+    ``pending`` so it stays on the homeowner's Home "needs your input" — and the
+    typed note must be preserved (regression: comment used to flip it to
+    ``acknowledged``, dropping it off Home)."""
+    decision = Decision(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        kind=DecisionKind.homeowner_question,
+        title="Approve the tile sample?",
+        state=DecisionState.pending,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/api/v1/homeowner/decisions/{decision.id}/respond",
+        json={"action": "comment", "note": "Can we see a warmer shade?"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 200, resp.text
+    # State unchanged — still pending, NOT acknowledged.
+    assert resp.json()["state"] == "pending"
+
+    # Still listed as a pending decision (i.e. still on Home).
+    after = await client.get("/api/v1/homeowner/decisions", headers=auth(ctx.homeowner))
+    assert any(d["id"] == str(decision.id) for d in after.json())
+
+    # And it still surfaces on Home's needs_attention.
+    home = await client.get("/api/v1/homeowner/home", headers=auth(ctx.homeowner))
+    assert home.status_code == 200, home.text
+    assert any(a["id"] == str(decision.id) for a in home.json()["needs_attention"])
+
+    # The note was preserved.
+    await db_session.refresh(decision)
+    assert decision.resolution_note == "Can we see a warmer shade?"
+
+
 async def test_cannot_respond_to_other_sites_decision(client, ctx, factory, db_session):
     other_site = await factory.site(ctx.company, name="Not Mine")
     decision = Decision(

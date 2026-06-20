@@ -140,6 +140,10 @@ class PhotoOut(BaseModel):
     caption: str | None
     room_tag: str | None
     milestone_id: UUID | None
+    # The construction phase active when the photo was taken — resolved
+    # deterministically from milestone date windows (only populated for the
+    # by-milestone view). None when the photo predates the first milestone.
+    milestone_label: str | None = None
     is_starred: bool
     published_at: datetime
     # Honest-AI review gate (Slice V): an AI-drafted caption is returned here for

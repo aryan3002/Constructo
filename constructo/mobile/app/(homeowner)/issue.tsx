@@ -215,6 +215,7 @@ export default function IssueScreen() {
   // ---- voice note ----
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
   const [recording, setRecording] = useState(false)
+  const [preparing, setPreparing] = useState(false) // mic permission + prepare (~1-2s)
   const [voiceBusy, setVoiceBusy] = useState(false) // uploading + transcribing
   const [voiceKey, setVoiceKey] = useState<string | null>(null)
   const [voiceUrl, setVoiceUrl] = useState<string | null>(null)
@@ -231,6 +232,11 @@ export default function IssueScreen() {
   )
 
   async function startRecording() {
+    // Re-entrancy guard: prepare takes ~1-2s, during which the button still reads
+    // "record". Without this, rapid taps fire multiple record() calls and stack
+    // the iOS start-recording chime (the reported "plays the sound multiple times").
+    if (preparing || recording) return
+    setPreparing(true)
     try {
       const perm = await requestRecordingPermissionsAsync()
       if (!perm.granted) {
@@ -243,6 +249,8 @@ export default function IssueScreen() {
       setRecording(true)
     } catch {
       toast(t.voiceError, 'alert-circle')
+    } finally {
+      setPreparing(false)
     }
   }
 
@@ -345,7 +353,11 @@ export default function IssueScreen() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
       toast(t.successToast)
-      router.back()
+      // Land on "My reports" so the homeowner SEES the report arrived and can
+      // track its status — instead of bouncing back to the photo (the reported
+      // "I don't see it anywhere after sending"). replace() avoids a dangling
+      // markup/issue back-stack.
+      router.replace('/(homeowner)/requests')
     },
     onError: () => setFormError(t.submitError),
   })
@@ -401,7 +413,11 @@ export default function IssueScreen() {
       <SubHeader
         title={t.title}
         subtitle={t.subtitle}
-        onBack={step === 1 ? () => router.back() : () => setStep(1)}
+        onBack={
+          step === 1
+            ? () => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/photos'))
+            : () => setStep(1)
+        }
         right={<StepDots step={step} />}
       />
 
@@ -527,6 +543,7 @@ export default function IssueScreen() {
                 borderWidth: 1,
                 borderColor: recording ? c.risk : c.line,
                 backgroundColor: recording ? `${c.risk}14` : 'transparent',
+                opacity: preparing ? 0.5 : 1,
                 transform: [{ scale: pressed ? 0.97 : 1 }],
               })}
             >

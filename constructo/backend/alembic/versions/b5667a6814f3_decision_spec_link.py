@@ -19,17 +19,32 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("decisions", sa.Column("spec_id", sa.UUID(), nullable=True))
-    op.create_foreign_key(
-        "fk_decisions_spec_id",
-        "decisions",
-        "specs",
-        ["spec_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    # Idempotent: prod had spec_id applied out-of-band (via the now-deleted
+    # parallel migration 599a72bc7902), so guard the column/FK so this is a safe
+    # no-op where they already exist.
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    cols = {c["name"] for c in insp.get_columns("decisions")}
+    if "spec_id" not in cols:
+        op.add_column("decisions", sa.Column("spec_id", sa.UUID(), nullable=True))
+    fks = {fk["name"] for fk in insp.get_foreign_keys("decisions")}
+    if "fk_decisions_spec_id" not in fks:
+        op.create_foreign_key(
+            "fk_decisions_spec_id",
+            "decisions",
+            "specs",
+            ["spec_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_decisions_spec_id", "decisions", type_="foreignkey")
-    op.drop_column("decisions", "spec_id")
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    fks = {fk["name"] for fk in insp.get_foreign_keys("decisions")}
+    if "fk_decisions_spec_id" in fks:
+        op.drop_constraint("fk_decisions_spec_id", "decisions", type_="foreignkey")
+    cols = {c["name"] for c in insp.get_columns("decisions")}
+    if "spec_id" in cols:
+        op.drop_column("decisions", "spec_id")

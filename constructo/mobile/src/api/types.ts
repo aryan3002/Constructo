@@ -158,6 +158,9 @@ export interface Photo {
   caption: string | null
   room_tag: string | null
   milestone_id: string | null
+  /** Construction phase active when the photo was taken (by-milestone view only,
+   *  resolved deterministically from milestone date windows). */
+  milestone_label?: string | null
   is_starred: boolean
   published_at: string
 }

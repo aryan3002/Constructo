@@ -16,6 +16,7 @@ and then confirmed/edited — it never decides. See :mod:`app.homeowner.ai`.
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -859,7 +860,7 @@ async def home(
                 _quiet_visible_filter(visible_quiet),
             )
             .order_by(Update.published_at.desc())
-            .limit(5)
+            .limit(8)
         )
     ).scalars().all()
 
@@ -873,29 +874,39 @@ async def home(
         total = sum(float(c.cost_delta) for c in changes if c.cost_delta is not None)
         spend = SpendSummary(total_change_cost_delta=total, change_count=len(changes))
 
-    # Thumbnail per recent item: the first published photo on that update's day
-    # (presigned), so the feed shows the real site photo, not a placeholder icon.
-    thumb_by_date: dict = {}
-    recent_dates = {u.published_at.date() for u in recent}
-    if recent_dates:
-        storage = get_storage()
-        photo_rows = (
-            await session.execute(
-                select(PublishedPhoto.published_at, PublishedPhoto.image_url)
-                .where(PublishedPhoto.site_id == sid)
-                .order_by(PublishedPhoto.published_at.desc())
-                .limit(300)
-            )
-        ).all()
-        for pa, key in photo_rows:
-            d = pa.date()
-            if key and d in recent_dates and d not in thumb_by_date:
-                thumb_by_date[d] = storage.url_for(key) or key
+    # Thumbnail per recent item: a DISTINCT real published photo for each update
+    # (presigned), preferring one from the update's own day, else the newest
+    # unused photo — so no two rows show the same image (regression: keying by
+    # day alone made every same-day update collapse to one photo).
+    storage = get_storage()
+    photo_rows = (
+        await session.execute(
+            select(PublishedPhoto.published_at, PublishedPhoto.image_url)
+            .where(PublishedPhoto.site_id == sid, PublishedPhoto.image_url.is_not(None))
+            .order_by(PublishedPhoto.published_at.desc())
+            .limit(300)
+        )
+    ).all()
+    photo_pool = [(pa.date(), key) for pa, key in photo_rows if key]
+    used_keys: set[str] = set()
+
+    def _take_thumb(update_date) -> str | None:
+        # Prefer an unused photo from the same day, else the newest unused photo.
+        for d, key in photo_pool:
+            if key not in used_keys and d == update_date:
+                used_keys.add(key)
+                return key
+        for _d, key in photo_pool:
+            if key not in used_keys:
+                used_keys.add(key)
+                return key
+        return None
 
     recent_activity = []
     for u in recent:
         out = await _render_update(session, translation, user.language, _update_out(u))
-        thumb = thumb_by_date.get(u.published_at.date())
+        key = _take_thumb(u.published_at.date())
+        thumb = (storage.url_for(key) or key) if key else None
         recent_activity.append(out.model_copy(update={"thumbnail_url": thumb}) if thumb else out)
     quiet_out = None
     if quiet_window:
@@ -1164,7 +1175,44 @@ async def photos(
         session, stmt, cursor, limit, PublishedPhoto.id, _photo_out
     )
     items = [await _render_photo(session, translation, user.language, p) for p in items]
+    # Tag every published photo with the construction phase active when it was
+    # taken — powers the By-Milestone grouping AND the phase chip on the feed card.
+    items = await _bucket_photos_by_milestone(session, sid, items)
     return Page[PhotoOut](items=items, next_cursor=next_cursor)
+
+
+async def _bucket_photos_by_milestone(
+    session: AsyncSession, sid: UUID, items: list[PhotoOut]
+) -> list[PhotoOut]:
+    """Tag each photo with the construction phase active when it was taken.
+
+    Deterministic — no per-photo tagging: a photo belongs to the latest milestone
+    whose start date (``started_on``, falling back to ``expected_on``) is on or
+    before the photo's day. Photos taken before the first milestone started keep
+    ``milestone_label=None`` (the client groups those as "Early work").
+    """
+    rows = (
+        await session.execute(select(Milestone).where(Milestone.site_id == sid))
+    ).scalars().all()
+    # (start_date, name) for milestones that have a usable start, earliest first.
+    windows = sorted(
+        ((m.started_on or m.expected_on, m.name) for m in rows if (m.started_on or m.expected_on)),
+        key=lambda w: w[0],
+    )
+    if not windows:
+        return items
+
+    def _label_for(when: datetime) -> str | None:
+        d = when.date()
+        label = None
+        for start, name in windows:
+            if start <= d:
+                label = name
+            else:
+                break
+        return label
+
+    return [p.model_copy(update={"milestone_label": _label_for(p.published_at)}) for p in items]
 
 
 HOMEOWNER_MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 12 MB — generous for a phone photo
@@ -2141,7 +2189,41 @@ async def create_request(
     session.add(req)
     await session.commit()
     await session.refresh(req)
+    await _alert_site_leads(session, sid, user, req)
     return _request_out(req)
+
+
+async def _alert_site_leads(
+    session: AsyncSession, sid: UUID, raiser: User, req: HomeownerRequest
+) -> None:
+    """Best-effort push to the site's leads (company owner/PM) so a homeowner
+    report reaches the team. Never raises — a notify hiccup must not fail the
+    report (the in-app contractor inbox for these is a follow-up)."""
+    try:
+        from app.push.sender import notify_user
+
+        site = await session.get(Site, sid)
+        if site is None:
+            return
+        lead_ids = (
+            await session.execute(
+                select(User.id).where(
+                    User.company_id == site.company_id,
+                    User.role.in_([UserRole.owner, UserRole.pm]),
+                )
+            )
+        ).scalars().all()
+        who = (raiser.name or "A homeowner").strip()
+        for uid in lead_ids:
+            await notify_user(
+                session,
+                uid,
+                "New homeowner report",
+                f"{who}: {req.title}",
+                data={"type": "homeowner_request", "request_id": str(req.id), "site_id": str(sid)},
+            )
+    except Exception:  # pragma: no cover - defensive
+        logging.getLogger(__name__).exception("alert_site_leads failed for %s", req.id)
 
 
 @router.get("/requests", response_model=list[RequestOut])
@@ -2194,9 +2276,9 @@ async def update_request_status(
 
 # ---- decisions -------------------------------------------------------------
 
+# "comment" is handled separately (it never changes state) — see respond_to_decision.
 _RESPOND_ACTION: dict[str, DecisionAction] = {
     "approve": DecisionAction.resolve,
-    "comment": DecisionAction.acknowledge,
     "request_change": DecisionAction.reject,
 }
 
@@ -2259,8 +2341,20 @@ async def respond_to_decision(
                 "Only a property owner can approve this. You can add a comment.",
                 extra={"can_comment": True},
             )
-    action = _RESPOND_ACTION[body.action]
-    updated = await apply_action(session, decision, action, note=body.note)
+    if body.action == "comment":
+        # A comment is upward voice, NOT authorization — it must NOT change the
+        # decision's state. It stays pending so it remains on the homeowner's
+        # Home "needs your input" (regression: comment used to flip it to
+        # acknowledged and drop it off Home). The note is preserved; Phase 2
+        # routes it to the site team thread + a "My reports" list.
+        if body.note and not decision.resolution_note:
+            decision.resolution_note = body.note
+            await session.commit()
+            await session.refresh(decision)
+        updated = decision
+    else:
+        action = _RESPOND_ACTION[body.action]
+        updated = await apply_action(session, decision, action, note=body.note)
     return HomeownerDecisionOut(
         id=updated.id, site_id=updated.site_id, kind=str(updated.kind),
         title=_strip_tag(updated.title), detail=updated.detail, state=str(updated.state),

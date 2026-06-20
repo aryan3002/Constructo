@@ -46,10 +46,10 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as MediaLibrary from 'expo-media-library'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { homeowner } from '../../src/api/client'
-import type { HomeownerDecision, Photo, QuietPeriod } from '../../src/api/types'
+import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../src/theme/tokens'
@@ -61,7 +61,6 @@ import {
   Button,
   CalmCard,
   Card,
-  DecisionCard,
   Display,
   Eyebrow,
   FadeInUp,
@@ -283,8 +282,10 @@ function groupPhotos(
       key = p.room_tag ?? '__unsorted__'
       label = p.room_tag ?? s.unsorted
     } else if (view === 'milestone') {
-      key = p.milestone_id ?? '__general__'
-      label = p.milestone_id ? `${s.milestoneHeader} ${p.milestone_id}` : s.general
+      // Group by the construction phase the photo belongs to (resolved
+      // server-side by date window). Photos before the first phase → "general".
+      key = p.milestone_label ?? '__general__'
+      label = p.milestone_label ?? s.general
     } else {
       // "all" — group by the date (day) of publication.
       const day = (p.published_at ?? '').slice(0, 10)
@@ -475,6 +476,19 @@ function StandardCard({
   const { theme } = useTheme()
   const c = theme.colors
 
+  const when = shortDate(photo.published_at, lang)
+  const phase = photo.milestone_label
+  const glassChip = {
+    position: 'absolute' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    bottom: SPACE.sm,
+    backgroundColor: 'rgba(20,17,12,0.5)',
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  }
   return (
     <FadeInUp>
       <View
@@ -487,68 +501,106 @@ function StandardCard({
           ...theme.shadowCard,
         }}
       >
-        {/* Large photo (hero aspect ratio, flush — no inner radius) */}
-        <PhotoTile
-          photo={{
-            id: photo.id,
-            imageUri: photo.image_url,
-            caption: photo.caption,
-            date: shortDate(photo.published_at, lang),
-            room: photo.room_tag,
-            starred: photo.is_starred,
-          }}
-          variant="hero"
-          labels={tileLabels}
-          onPress={() => onPress(photo)}
-          onTranslate={onTranslate}
-          style={{ borderRadius: 0, borderWidth: 0 }}
-        />
-
-        {/* Metadata: room pill + "· Today · shared by contractor" */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: SPACE.xs,
-            paddingHorizontal: SPACE.lg,
-            paddingTop: SPACE.sm,
-            paddingBottom: SPACE.xs,
-          }}
-        >
+        {/* Photo only (its caption strip is suppressed) + glass date/room chips
+            overlaid along the bottom edge — photo-forward (direction B). */}
+        <View style={{ position: 'relative' }}>
+          <PhotoTile
+            photo={{
+              id: photo.id,
+              imageUri: photo.image_url,
+              caption: photo.caption,
+              date: when,
+              room: photo.room_tag,
+              starred: photo.is_starred,
+            }}
+            variant="hero"
+            hideCaption
+            labels={tileLabels}
+            onPress={() => onPress(photo)}
+            style={{ borderRadius: 0, borderWidth: 0 }}
+          />
           {photo.room_tag ? (
-            <View
-              style={{
-                height: 24,
-                paddingHorizontal: 10,
-                borderRadius: theme.radii.pill,
-                backgroundColor: c.paper,
-                borderWidth: 1,
-                borderColor: c.line,
-                justifyContent: 'center',
-              }}
-            >
-              <Small color={c.text} style={{ fontWeight: '600', fontSize: 12 }}>
+            <View style={{ ...glassChip, left: SPACE.sm }}>
+              <Feather name="map-pin" size={11} color="#fff" />
+              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }} numberOfLines={1}>
                 {photo.room_tag}
               </Small>
             </View>
           ) : null}
-          <Small muted style={{ fontSize: 12 }}>
-            {[
-              photo.published_at ? shortDate(photo.published_at, lang) : null,
-              s.sharedBy,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </Small>
+          {when ? (
+            <View style={{ ...glassChip, right: SPACE.sm }}>
+              <Small style={{ color: '#fff', fontWeight: '600', fontSize: 11 }}>{when}</Small>
+            </View>
+          ) : null}
         </View>
 
-        {/* Caption */}
-        {photo.caption ? (
-          <View style={{ paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm }}>
-            <Body style={{ fontSize: 14 }}>{photo.caption}</Body>
+        {/* Clay phase-rail body (direction C): phase chip + editorial caption +
+            attribution, hung off a clay accent rail that ties the photo to the
+            construction phase it belongs to. */}
+        <View style={{ paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, paddingBottom: SPACE.sm }}>
+          <View
+            style={{
+              borderLeftWidth: 3,
+              borderLeftColor: c.secondary,
+              borderRadius: 0,
+              paddingLeft: SPACE.md,
+              gap: SPACE.sm,
+            }}
+          >
+            {phase ? (
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: c.secondaryContainer,
+                  borderRadius: theme.radii.pill,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                }}
+              >
+                <Small style={{ color: AP.clay, fontWeight: '600', fontSize: 11.5 }} numberOfLines={1}>
+                  {phase}
+                </Small>
+              </View>
+            ) : null}
+
+            {photo.caption ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+                <Body style={{ flex: 1, fontSize: 15, fontWeight: '500', lineHeight: 21 }}>
+                  {photo.caption}
+                </Body>
+                {onTranslate ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={tileLabels.translate}
+                    onPress={() => onTranslate()}
+                    hitSlop={8}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 1 })}
+                  >
+                    <Feather name="info" size={16} color={c.accent} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Attribution — avatar + "shared by builder". */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: AP.chip,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="tool" size={11} color={AP.onChip} />
+              </View>
+              <Small muted style={{ fontSize: 12, flex: 1 }}>{s.sharedBy}</Small>
+              <Feather name="check-circle" size={13} color={c.accent} />
+            </View>
           </View>
-        ) : null}
+        </View>
 
         {/* Action bar — sits on a top hairline */}
         <ActionBar
@@ -566,30 +618,6 @@ function StandardCard({
 }
 
 /**
- * DecisionFeedCard — wraps the kit DecisionCard with real data from
- * homeowner.decisions(). Routes to /(homeowner)/decisions/[id] on "Review".
- */
-interface DecisionFeedCardProps {
-  decision: HomeownerDecision
-  s: Strings
-}
-
-function DecisionFeedCard({ decision, s }: DecisionFeedCardProps) {
-  const router = useRouter()
-  return (
-    <FadeInUp>
-      <DecisionCard
-        title={decision.title}
-        eyebrow={s.decisionEyebrow}
-        whenLabel={decision.detail ?? undefined}
-        reviewLabel={s.decisionReview}
-        onReview={() => router.push(`/(homeowner)/decisions/${decision.id}`)}
-      />
-    </FadeInUp>
-  )
-}
-
-/**
  * FeedView — the chronological feed of real photos + real decisions + quiet
  * state. No importance ranking, no fake progress-confirmation cards (no data
  * source exists for that pattern — skipped honestly per spec).
@@ -599,7 +627,6 @@ function DecisionFeedCard({ decision, s }: DecisionFeedCardProps) {
  */
 interface FeedViewProps {
   photos: Photo[]
-  decisions: HomeownerDecision[]
   activeQuiet: QuietPeriod | null
   hidden: Set<string>
   pinnedIds: Set<string>
@@ -620,7 +647,6 @@ interface FeedViewProps {
 
 function FeedView({
   photos,
-  decisions,
   activeQuiet,
   hidden,
   pinnedIds,
@@ -662,12 +688,16 @@ function FeedView({
     )
   }
 
-  // Visible photos: not hidden, ordered newest-first (API returns DESC)
-  const visiblePhotos = photos.filter((p) => !hidden.has(p.id))
-  // Pending decisions only
-  const pendingDecisions = decisions.filter((d) => d.state !== 'approved')
+  // Visible photos: not hidden, pinned floated to the top (stable within group
+  // so newest-first is preserved), de-duped by id so a repeated row never
+  // paints twice.
+  const seenIds = new Set<string>()
+  const visiblePhotos = photos
+    .filter((p) => !hidden.has(p.id))
+    .filter((p) => (seenIds.has(p.id) ? false : (seenIds.add(p.id), true)))
+    .sort((a, b) => Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)))
 
-  if (visiblePhotos.length === 0 && pendingDecisions.length === 0 && !activeQuiet) {
+  if (visiblePhotos.length === 0 && !activeQuiet) {
     return (
       <FadeInUp rise={false} linear>
         <CalmCard status="quiet" title={s.feedEmpty} body={s.feedEmptyBody} />
@@ -724,11 +754,6 @@ function FeedView({
         </FadeInUp>
       ) : null}
 
-      {/* Decision cards — real data, interleaved at top (they need action) */}
-      {pendingDecisions.map((d) => (
-        <DecisionFeedCard key={d.id} decision={d} s={s} />
-      ))}
-
       {/* Chronological photo cards */}
       {visiblePhotos.map((photo) => (
         <StandardCard
@@ -748,6 +773,11 @@ function FeedView({
   )
 }
 
+// Local-only persistence (no backend): pinned floats a photo to the top, hidden
+// removes it. Both survive refresh + relaunch so the user's curation sticks.
+const PINNED_KEY = 'homeowner.photos.pinned.v1'
+const HIDDEN_KEY = 'homeowner.photos.hidden.v1'
+
 export default function Photos() {
   const { theme } = useTheme()
   const c = theme.colors
@@ -757,10 +787,14 @@ export default function Photos() {
   const insets = useSafeAreaInsets()
 
   const router = useRouter()
+  // "View photos" from Updates → Property passes ?tab=&room= so we land on the
+  // right segment (filtered to the room) instead of wherever the persistent tab
+  // was last left (which was landing users on "My visits").
+  const params = useLocalSearchParams<{ tab?: string; room?: string }>()
   const [tab, setTab] = useState<FilterTab>('feed')
   const [search, setSearch] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set())
-  // Feed-only: locally pinned photo ids (no backend — per spec)
+  // Feed-only: locally pinned photo ids (persisted locally, no backend)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -805,18 +839,34 @@ export default function Photos() {
     })
   }, [])
 
-  // Photos query — feed uses 'all' view, grid tabs use their own view.
+  // Hydrate locally-persisted pinned + hidden ids once on mount.
+  useEffect(() => {
+    void AsyncStorage.getItem(PINNED_KEY).then((raw) => {
+      if (raw) try { setPinnedIds(new Set(JSON.parse(raw) as string[])) } catch { /* ignore */ }
+    })
+    void AsyncStorage.getItem(HIDDEN_KEY).then((raw) => {
+      if (raw) try { setHidden(new Set(JSON.parse(raw) as string[])) } catch { /* ignore */ }
+    })
+  }, [])
+
+  // Honor ?tab/?room from "View photos" each time the screen gains focus (the
+  // tab screen stays mounted, so a plain push can't reset the inner segment).
+  useFocusEffect(
+    useCallback(() => {
+      const wanted = params.tab as FilterTab | undefined
+      if (wanted && (['feed', 'all', 'room', 'milestone', 'mine'] as const).includes(wanted)) {
+        setTab(wanted)
+      }
+      if (params.room) setSearch(String(params.room))
+    }, [params.tab, params.room]),
+  )
+
+  // Photos query — feed gets its own cache slot so it never interleaves with the
+  // "All" grid; grid tabs use their own view.
   const queryView = tab === 'feed' ? 'all' : tab
   const query = useQuery({
-    queryKey: ['photos', queryView],
+    queryKey: ['photos', tab === 'feed' ? 'feed' : queryView],
     queryFn: () => homeowner.photos(undefined, queryView),
-  })
-
-  // Decisions query — only needed for the Feed tab.
-  const decisionsQ = useQuery({
-    queryKey: ['homeowner', 'decisions'],
-    queryFn: () => homeowner.decisions(),
-    enabled: tab === 'feed',
   })
 
   const quietQ = useQuery({
@@ -834,7 +884,9 @@ export default function Photos() {
       items = items.filter(
         (p) =>
           (p.caption ?? '').toLowerCase().includes(q) ||
-          (p.room_tag ?? '').toLowerCase().includes(q),
+          (p.room_tag ?? '').toLowerCase().includes(q) ||
+          (p.milestone_label ?? '').toLowerCase().includes(q) ||
+          (p.published_at ?? '').slice(0, 10).includes(q),
       )
     }
     return items
@@ -869,6 +921,7 @@ export default function Photos() {
     setHidden((prev) => {
       const next = new Set(prev)
       next.add(id)
+      void AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
       return next
     })
     setActive(null)
@@ -882,6 +935,7 @@ export default function Photos() {
       } else {
         next.add(id)
       }
+      void AsyncStorage.setItem(PINNED_KEY, JSON.stringify([...next]))
       return next
     })
   }, [])
@@ -1088,7 +1142,6 @@ export default function Photos() {
       {tab === 'feed' ? (
         <FeedView
           photos={query.data?.items ?? []}
-          decisions={decisionsQ.data ?? []}
           activeQuiet={activeQuiet}
           hidden={hidden}
           pinnedIds={pinnedIds}
