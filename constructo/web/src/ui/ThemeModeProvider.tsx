@@ -133,3 +133,13 @@ export function useThemeMode(): ThemeModeContextValue {
   }
   return ctx
 }
+
+/**
+ * Safe skin reader. Unlike `useThemeMode`, this does NOT throw outside a
+ * provider — it returns `'blueprint'`. Shared chrome (AppShell) is rendered
+ * bare in many unit tests; this lets it read the skin without forcing every
+ * such test to wrap in a `<ThemeModeProvider>`.
+ */
+export function useSkin(): ThemeSkin {
+  return useContext(ThemeModeContext)?.skin ?? 'blueprint'
+}
