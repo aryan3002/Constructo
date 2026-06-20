@@ -3,15 +3,17 @@
  * the architect settles (keep one side / compromise), and a link to the full
  * brief. Wired to /api/v1/design; the architect is a full edit-role.
  */
-import { Pressable, ScrollView, View } from 'react-native'
+import { Alert, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../../src/theme/tokens'
 import { design, profileStatusLabel, type Conflict, type ConflictResolution } from '../../../../src/api/ownerDesign'
+import { chatApi } from '../../../../src/api/chat'
 import { supervisorApi } from '../../../../src/api/supervisor'
 import { Body, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from '../_components'
@@ -43,6 +45,40 @@ export default function DesignerSite() {
     mutationFn: ({ cid, resolution }: { cid: string; resolution: ConflictResolution }) =>
       design.resolveConflict(cid, resolution),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['architect', 'design', 'site', id] }),
+  })
+
+  // "Add inspiration" — the designer uploads a reference image to an area; it's
+  // stored via the media path, then attached to the area where the vision
+  // pipeline folds it into the taste model. Reuses chat media + /design/references.
+  const addRef = useMutation({
+    mutationFn: async (areaId: string) => {
+      const siteId = q.data?.profile.site_id
+      if (!siteId) throw new Error('not_ready')
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) throw new Error('perm')
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+      if (result.canceled || !result.assets[0]) throw new Error('canceled')
+      const a = result.assets[0]
+      const name = a.fileName ?? a.uri.split('/').pop() ?? 'reference.jpg'
+      const up = await chatApi.uploadMedia(
+        { siteId },
+        { uri: a.uri, name, type: a.mimeType ?? 'image/jpeg' },
+        'image',
+      )
+      return design.addReference({ area_id: areaId, image_r2_key: up.key })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['architect', 'design', 'site', id] })
+      Alert.alert('✓', 'Inspiration added — it’ll shape this area’s design direction.')
+    },
+    onError: (e) => {
+      if (e instanceof Error && e.message === 'canceled') return
+      const msg =
+        e instanceof Error && e.message === 'perm'
+          ? 'Photo access is needed to add inspiration.'
+          : 'Could not add the reference. Please try again.'
+      Alert.alert('•', msg)
+    },
   })
 
   if (q.isLoading) return <Pad><LoadingBlock /></Pad>
@@ -78,6 +114,16 @@ export default function DesignerSite() {
                   <Small muted>{cap(a.status)}</Small>
                 </View>
                 {a.has_conflict ? <StatusPill status="warn" size="sm" label="Conflict" /> : <StatusPill status={at} size="sm" />}
+                <Pressable
+                  onPress={() => addRef.mutate(a.id)}
+                  disabled={addRef.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add inspiration to ${cap(a.area_key)}`}
+                  hitSlop={8}
+                  style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.paper }}
+                >
+                  <Ionicons name="image-outline" size={17} color={theme.colors.accentDeep} />
+                </Pressable>
               </View>
             )
           })
