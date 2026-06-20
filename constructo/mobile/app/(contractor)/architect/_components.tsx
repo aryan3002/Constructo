@@ -226,7 +226,7 @@ export function StatTile({ value, label, tone = 'quiet' }: { value: number | str
   const color = tone === 'quiet' ? theme.colors.text : theme.colors[tone]
   return (
     <Card style={{ flex: 1, alignItems: 'flex-start', gap: 2, paddingVertical: SPACE.md }}>
-      <H2 style={{ fontSize: 26, color }}>{value}</H2>
+      <H2 style={{ fontSize: 26, lineHeight: 34, color }}>{value}</H2>
       <Micro muted style={{ letterSpacing: 0.5 }}>
         {label.toUpperCase()}
       </Micro>
