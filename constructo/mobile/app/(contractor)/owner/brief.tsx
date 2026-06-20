@@ -245,12 +245,11 @@ function OwnerDecisionCard({
 }) {
   const { theme } = useTheme()
   const c = theme.colors
-  const tone: Status = overdue ? 'risk' : 'warn'
   const accent = overdue ? c.risk : c.warn
   const dueToday = !overdue && !!d.sla_due_at && new Date(d.sla_due_at).toDateString() === new Date().toDateString()
   const proofN = d.evidence_event_ids?.length ?? 0
   return (
-    <Card flag={tone}>
+    <Card>
       {/* Header: kind icon chip + eyebrow, with a soft due pill on the right. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
         <View

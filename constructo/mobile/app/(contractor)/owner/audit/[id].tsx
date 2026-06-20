@@ -115,7 +115,7 @@ function FindingCard({ f, pending, onAssign }: { f: AuditFinding; pending: boole
   const { theme } = useTheme()
   const meta = SEVERITY_META[f.severity] ?? SEVERITY_META.minor
   return (
-    <Card flag={meta.status}>
+    <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
         <StatusPill status={meta.status} size="sm" label={meta.label} icon={undefined} />
         {f.room || f.location ? (

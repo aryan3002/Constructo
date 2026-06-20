@@ -185,7 +185,7 @@ function SiteCardView({ r, t, onPress }: { r: SiteRow; t: Txt; onPress: () => vo
 
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <Card flag={r.status === 'ok' ? undefined : r.status}>
+      <Card>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
           <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: theme.colors.paper, alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name="home" size={20} color={theme.colors.textMute} />
