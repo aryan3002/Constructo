@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { LanguageProvider } from './i18n'
 import { ThemeModeProvider } from './ui/ThemeModeProvider'
+import { OwnerSkinSync } from './ui/OwnerSkinSync'
 import { ToastProvider } from './ui/Toast'
 import './ui/fonts.css'
 import './index.css'
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeModeProvider>
+        <OwnerSkinSync />
         <LanguageProvider>
           <ToastProvider>
             <BrowserRouter>
