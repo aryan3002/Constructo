@@ -49,6 +49,18 @@ def _decode(cursor: str | None) -> str | None:
         raise AppError(400, "invalid_cursor", "Malformed pagination cursor") from exc
 
 
+def _strip_tag(title: str) -> str:
+    """Hide internal sweep tags from owner-facing titles, e.g.
+    '[permit-alert][<uuid>][stale_review] Permit X…' -> 'Permit X…' and
+    '[SENTINEL] "…" is N days overdue' -> '"…" is N days overdue'. These tags are
+    routing/dedup keys, never meant for the UI."""
+    if title.startswith("["):
+        idx = title.rfind("] ")
+        if idx != -1:
+            return title[idx + 2 :]
+    return title
+
+
 def _out(d: Decision) -> DecisionOut:
     return DecisionOut(
         id=d.id,
@@ -56,7 +68,7 @@ def _out(d: Decision) -> DecisionOut:
         site_id=d.site_id,
         spec_id=d.spec_id,
         kind=d.kind,
-        title=d.title,
+        title=_strip_tag(d.title),
         detail=d.detail,
         raised_by=d.raised_by,
         assigned_to=d.assigned_to,
