@@ -59,7 +59,7 @@ export default function TaskReply() {
     })
     if (online) void flush()
     Alert.alert('✓', 'Reply queued — will sync when online.')
-    router.back()
+    router.replace('/(contractor)/supervisor/tasks')
   }
 
   return (
@@ -67,7 +67,7 @@ export default function TaskReply() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Reply" sub={site || undefined} onBack={() => router.back()} />
+      <SubHeader title="Reply" sub={site || undefined} onBack={() => router.replace('/(contractor)/supervisor/tasks')} />
 
       {asksQ.isLoading ? (
         <LoadingBlock />

@@ -5,7 +5,7 @@
  * resolves latest/superseded from the chain.
  */
 import { useMemo } from 'react'
-import { ScrollView, View } from 'react-native'
+import { Alert, Linking, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -25,6 +25,19 @@ const TRADE_LABEL: Record<DrawingKind, string> = {
   electrical: 'Electrical',
   plumbing: 'Plumbing',
   other: 'Other',
+}
+
+/** Open a released sheet's presigned file URL in the device's system viewer. */
+async function openSheet(url: string | null | undefined): Promise<void> {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    Alert.alert('Sheet unavailable', 'This drawing file isn’t available to open right now.')
+    return
+  }
+  try {
+    await Linking.openURL(url)
+  } catch {
+    Alert.alert('Could not open', 'We couldn’t open this sheet on your device.')
+  }
 }
 
 export default function DrawingDetail() {
@@ -64,7 +77,7 @@ export default function DrawingDetail() {
       <SubHeader
         title={d.title}
         sub={`Rev ${d.version}`}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/supervisor/drawings')}
         right={<StatusPill status={d.superseded ? 'quiet' : 'ok'} size="sm" label={d.superseded ? 'Superseded' : 'Latest'} />}
       />
 
@@ -91,22 +104,28 @@ export default function DrawingDetail() {
         </Card>
       ) : null}
 
-      {/* Sheet preview placeholder (the file_url opens externally; no inline
-          PDF render in the app shell yet). */}
-      <Card
-        style={{
-          height: 200,
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: SPACE.sm,
-          backgroundColor: theme.colors.paper,
-        }}
-      >
-        <Ionicons name="document-text-outline" size={34} color={theme.colors.textMute} />
-        <Small muted>
-          {d.title} · Rev {d.version}
-        </Small>
-      </Card>
+      {/* Sheet preview — tap to open the released file in the device's system
+          viewer (PDF reader / browser). No inline render in the app shell yet. */}
+      <Pressable onPress={() => void openSheet(d.file_url)} accessibilityRole="button" accessibilityLabel={`Open ${d.title}`}>
+        <Card
+          style={{
+            height: 200,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: SPACE.sm,
+            backgroundColor: theme.colors.paper,
+          }}
+        >
+          <Ionicons name="document-text-outline" size={34} color={theme.colors.accent} />
+          <Small muted>
+            {d.title} · Rev {d.version}
+          </Small>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs }}>
+            <Ionicons name="open-outline" size={14} color={theme.colors.accent} />
+            <Small style={{ color: theme.colors.accent }}>Tap to open the sheet</Small>
+          </View>
+        </Card>
+      </Pressable>
 
       {d.change_note ? (
         <Card style={{ gap: SPACE.xs }}>

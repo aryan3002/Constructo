@@ -34,7 +34,7 @@ export default function EngProfile() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Profile" onBack={() => router.back()} />
+      <SubHeader title="Profile" onBack={() => router.replace('/(contractor)/supervisor/more')} />
 
       {/* Identity */}
       <Card style={{ gap: SPACE.md }}>

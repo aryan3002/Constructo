@@ -104,7 +104,7 @@ export default function RunAudit() {
       void qc.invalidateQueries({ queryKey: ['eng', 'audits'] })
       void qc.invalidateQueries({ queryKey: ['eng', 'audit', id] })
       Alert.alert('✓', `Audit submitted · score ${detail.score ?? '—'} sent to the owner.`)
-      router.back()
+      router.replace('/(contractor)/supervisor/audit')
     },
     onError: () => Alert.alert('•', 'Could not submit the audit. Please try again.'),
   })
@@ -123,7 +123,7 @@ export default function RunAudit() {
   let lastSection: string | null = null
   return (
     <Pad>
-      <SubHeader title="Run audit" sub={`${done}/${total} checks`} onBack={() => router.back()} />
+      <SubHeader title="Run audit" sub={`${done}/${total} checks`} onBack={() => router.replace('/(contractor)/supervisor/audit')} />
 
       {/* progress */}
       <View style={{ height: 8, borderRadius: 9999, backgroundColor: theme.colors.paper, overflow: 'hidden' }}>

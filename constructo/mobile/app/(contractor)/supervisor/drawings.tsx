@@ -62,7 +62,7 @@ export default function EngDrawings() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
-      <SubHeader title="Drawings" sub="Latest released for your sites" onBack={() => router.back()} />
+      <SubHeader title="Drawings" sub="Latest released for your sites" onBack={() => router.replace('/(contractor)/supervisor/more')} />
 
       {/* site chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACE.sm }}>

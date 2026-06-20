@@ -44,7 +44,7 @@ export default function SiteChanges() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
-      <SubHeader title="Site changes" sub="Conditions reported from site" onBack={() => router.back()} />
+      <SubHeader title="Site changes" sub="Conditions reported from site" onBack={() => router.replace('/(contractor)/architect/more')} />
 
       {changesQ.isLoading ? (
         <LoadingBlock />

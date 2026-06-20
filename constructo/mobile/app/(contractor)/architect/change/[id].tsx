@@ -39,7 +39,7 @@ export default function SiteChangeDetail() {
       void qc.invalidateQueries({ queryKey: ['architect', 'changes'] })
       if (status === 'resolved') {
         Alert.alert('✓', 'Marked resolved and logged.')
-        router.back()
+        router.replace('/(contractor)/architect/changes')
       } else {
         Alert.alert('✓', 'Linked to a drawing revision.')
       }
@@ -60,7 +60,7 @@ export default function SiteChangeDetail() {
       <SubHeader
         title="Site change"
         sub={`${siteName}${change.room ? ` · ${change.room}` : ''}`}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/architect/changes')}
         right={<StatusPill status={meta.status} size="sm" label={meta.label} />}
       />
 

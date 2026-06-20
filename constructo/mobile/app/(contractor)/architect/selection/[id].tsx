@@ -75,7 +75,7 @@ export default function SelectionDetail() {
       <SubHeader
         title={spec.label}
         sub={siteName}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/architect/selections')}
         right={<StatusPill status={meta.status} size="sm" label={meta.label} />}
       />
 

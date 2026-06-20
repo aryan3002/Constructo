@@ -49,7 +49,7 @@ export default function EngAuditHub() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Site audit" sub="Inspections requested by owners" onBack={() => router.back()} />
+      <SubHeader title="Site audit" sub="Inspections requested by owners" onBack={() => router.replace('/(contractor)/supervisor/more')} />
 
       {/* Intro */}
       <Card style={{ gap: SPACE.sm, backgroundColor: theme.colors.accentWarm }}>
