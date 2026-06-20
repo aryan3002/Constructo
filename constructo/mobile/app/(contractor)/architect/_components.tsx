@@ -13,7 +13,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import type { RoutingStatus } from '../../../src/api/specs'
 import type { SiteChange, SiteChangeStatus } from '../../../src/api/siteChanges'
-import { Body, Button, Card, H2, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
+import { Body, Button, Card, H2, Micro, Small, StatusPill, Title } from '../../../src/ui'
 
 // ---------------------------------------------------------------------------
 // Routing + change metadata (tone + label), shared across the designer screens.
@@ -226,7 +226,7 @@ export function StatTile({ value, label, tone = 'quiet' }: { value: number | str
   const color = tone === 'quiet' ? theme.colors.text : theme.colors[tone]
   return (
     <Card style={{ flex: 1, alignItems: 'flex-start', gap: 2, paddingVertical: SPACE.md }}>
-      <Mono style={{ fontSize: 26, color }}>{value}</Mono>
+      <H2 style={{ fontSize: 26, color }}>{value}</H2>
       <Micro muted style={{ letterSpacing: 0.5 }}>
         {label.toUpperCase()}
       </Micro>
