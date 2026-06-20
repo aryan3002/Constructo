@@ -16,6 +16,7 @@
 - **Keep green at every task:** `npx tsc -b --noEmit`, `npx vitest run` (currently 406 passing), `npm run build`, `npm run budget` (entry ≤ 250 KB gz).
 - **All work on branch `feat/web-neev-owner`.** All paths below are relative to `constructo/web/`.
 - **English-first** policy is unaffected (no copy changes in this phase).
+- **File-content tests read files via Vite `?raw` imports (NOT `node:fs`)** so they stay type-checked by `tsc -b` and pull no Node globals into the browser app. Do **NOT** add a test `exclude` to `tsconfig.app.json` — its `include: ["src"]` must keep type-checking all tests.
 
 ---
 
@@ -33,18 +34,17 @@
 
 Create `src/ui/fontsNeev.test.ts`:
 ```ts
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-
-const css = readFileSync(fileURLToPath(new URL('./fonts.css', import.meta.url)), 'utf8')
+// Vite ?raw import → the file's text as a string (typed via vite/client), so
+// this test stays type-checked by tsc and needs no Node globals.
+import fontsCss from './fonts.css?raw'
 
 describe('Neev fonts are loaded', () => {
   it('imports Eczar (serif display) weights', () => {
-    expect(css).toContain('@fontsource/eczar')
+    expect(fontsCss).toContain('@fontsource/eczar')
   })
   it('imports IBM Plex Mono (numerals) weights', () => {
-    expect(css).toContain('@fontsource/ibm-plex-mono')
+    expect(fontsCss).toContain('@fontsource/ibm-plex-mono')
   })
 })
 ```
@@ -181,11 +181,9 @@ git commit -m "refactor(web): bind Tailwind fontFamily to --font-* vars (skin-aw
 
 Create `src/ui/themeNeevTokens.test.ts`:
 ```ts
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-
-const css = readFileSync(fileURLToPath(new URL('./theme.css', import.meta.url)), 'utf8')
+// Vite ?raw import → the file's text as a string (typed via vite/client).
+import css from './theme.css?raw'
 
 describe('Neev token blocks exist', () => {
   it('defines a light neev block with sand canvas + sage brand', () => {
@@ -781,12 +779,9 @@ Avoids a one-frame Blueprint→neev flash on reload for owners by pre-applying t
 
 Create `src/ui/noFoucHint.test.ts`:
 ```ts
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-
-// index.html sits at the web root (two levels up from src/ui).
-const html = readFileSync(fileURLToPath(new URL('../../index.html', import.meta.url)), 'utf8')
+// index.html sits at the web root (two levels up). Vite ?raw → its text.
+import html from '../../index.html?raw'
 
 describe('no-FOUC script honours the neev skin hint', () => {
   it('reads the cstk.skin hint', () => {

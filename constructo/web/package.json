@@ -15,7 +15,9 @@
   "dependencies": {
     "@fontsource/anek-devanagari": "^5.2.7",
     "@fontsource/anek-latin": "^5.2.7",
+    "@fontsource/eczar": "^5.2.8",
     "@fontsource/hind": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/spline-sans-mono": "^5.2.8",
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.59.0",
