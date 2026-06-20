@@ -67,6 +67,14 @@ export function withSupersession(rows: Drawing[]): DrawingView[] {
   }))
 }
 
+/** A direct-to-R2 upload ticket for a new sheet. `mode === 'presigned'` → PUT the
+ *  bytes to `put_url`; `'unavailable'` (local/dev storage) → no upload path. */
+export interface DrawingPresign {
+  key: string
+  put_url: string | null
+  mode: 'presigned' | 'unavailable'
+}
+
 export const drawingsApi = {
   /** Released drawings for a site, newest first. */
   list(siteId: string): Promise<Drawing[]> {
@@ -74,4 +82,74 @@ export const drawingsApi = {
       `/api/v1/publish/drawings?site_id=${encodeURIComponent(siteId)}`,
     )
   },
+
+  /** Mint a direct-to-R2 upload ticket for a new sheet (site-scoped). */
+  presign(body: { site_id: string; filename: string; content_type: string }): Promise<DrawingPresign> {
+    return request<DrawingPresign>('/api/v1/publish/drawings/presign', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /** Publish a sheet row once its file is uploaded (file_url = the stored key). */
+  create(body: {
+    site_id: string
+    title: string
+    version: string
+    file_url: string
+    kind?: DrawingKind
+    change_note?: string
+    supersedes_id?: string
+  }): Promise<Drawing> {
+    return request<Drawing>('/api/v1/publish/drawings', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+}
+
+/** A picked local file (from expo-image-picker / -document-picker). */
+export interface PickedFile {
+  uri: string
+  name: string
+  contentType: string
+}
+
+/**
+ * Upload a local file to R2 and publish it as a drawing/plan sheet. Two-step,
+ * mirroring the chat media path: presign → PUT the bytes → create the row.
+ * Throws 'uploads_unavailable' when the backend has no cloud storage (local
+ * dev), so the caller can show an honest message instead of a silent failure.
+ */
+export async function uploadDrawing(opts: {
+  siteId: string
+  file: PickedFile
+  title: string
+  version: string
+  kind?: DrawingKind
+  changeNote?: string
+}): Promise<Drawing> {
+  const presign = await drawingsApi.presign({
+    site_id: opts.siteId,
+    filename: opts.file.name,
+    content_type: opts.file.contentType,
+  })
+  if (presign.mode !== 'presigned' || !presign.put_url) {
+    throw new Error('uploads_unavailable')
+  }
+  const blob = await (await fetch(opts.file.uri)).blob()
+  const putRes = await fetch(presign.put_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': opts.file.contentType },
+    body: blob,
+  })
+  if (!putRes.ok) throw new Error('upload_failed')
+  return drawingsApi.create({
+    site_id: opts.siteId,
+    title: opts.title,
+    version: opts.version,
+    file_url: presign.key,
+    kind: opts.kind,
+    change_note: opts.changeNote,
+  })
 }
