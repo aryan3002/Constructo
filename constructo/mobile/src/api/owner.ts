@@ -233,6 +233,15 @@ export interface SiteEvent {
   created_at: string
 }
 
+export interface SitePhoto {
+  id: string
+  site_id: string
+  image_url: string
+  caption: string | null
+  room_tag: string | null
+  published_at: string
+}
+
 // ============================================================================
 // Search — POST /search. Ported from web/src/api/search.ts.
 // ============================================================================
@@ -507,6 +516,9 @@ export const owner = {
 
   siteEvents: (id: string) =>
     request<Paginated<SiteEvent>>(`/api/v1/sites/${id}/events`),
+
+  sitePhotos: (id: string) =>
+    request<SitePhoto[]>(`/api/v1/sites/${id}/photos`),
 
   // --- Search ---
   search: (body: SearchRequest) =>

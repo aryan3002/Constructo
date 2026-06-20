@@ -21,6 +21,7 @@ from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor,
 from app.db import get_session
 from app.models import (
     Company,
+    PublishedPhoto,
     Site,
     SiteBaseline,
     SiteEventModel,
@@ -39,6 +40,7 @@ from app.sites.schemas import (
     SiteCreate,
     SiteEventOut,
     SiteOut,
+    SitePhotoOut,
     SiteUpdate,
     UserCreate,
     UserOut,
@@ -46,6 +48,7 @@ from app.sites.schemas import (
     WhatsappGroupCreate,
     WhatsappGroupOut,
 )
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1", tags=["sites"])
 
@@ -350,6 +353,44 @@ async def list_site_events(
         next_cursor = encode_cursor(str(rows[-1].id))
 
     return Page[SiteEventOut](items=[_event_out(e) for e in rows], next_cursor=next_cursor)
+
+
+@router.get("/sites/{site_id}/photos", response_model=list[SitePhotoOut])
+async def list_site_photos(
+    site_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    limit: int = Query(24),
+) -> list[SitePhotoOut]:
+    """A site's recent published photos (newest first), for the owner 'Latest
+    from site' strip. Scoped by site visibility; image_url is presigned."""
+    visible = await effective_visible_site_ids(session, user)
+    if site_id not in visible:
+        site = await session.get(Site, site_id)
+        if site is None:
+            raise AppError(404, "not_found", "Site not found")
+        raise AppError(403, "forbidden", "Site not in scope")
+
+    rows = (
+        await session.execute(
+            select(PublishedPhoto)
+            .where(PublishedPhoto.site_id == site_id, PublishedPhoto.image_url.is_not(None))
+            .order_by(PublishedPhoto.published_at.desc(), PublishedPhoto.id)
+            .limit(max(1, min(limit, 60)))
+        )
+    ).scalars().all()
+    storage = get_storage()
+    return [
+        SitePhotoOut(
+            id=p.id,
+            site_id=p.site_id,
+            image_url=storage.url_for(p.image_url) or p.image_url,
+            caption=p.caption,
+            room_tag=p.room_tag,
+            published_at=p.published_at,
+        )
+        for p in rows
+    ]
 
 
 def _event_out(e: SiteEventModel) -> SiteEventOut:
