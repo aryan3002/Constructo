@@ -123,7 +123,7 @@ Add two blocks mirroring the `daylight` pattern. Concrete light values (ported f
 
 - Add `@fontsource/eczar` + `@fontsource/ibm-plex-mono`; import their weights in `src/ui/fonts.css` (offline, matches the existing @fontsource approach — no Google CDN).
 - The neev blocks override `--font-display` (Eczar) and `--font-mono` (IBM Plex Mono); body stays Hind.
-- **`src/ui/Typography.tsx`**: ensure the heading components (`H1`/`H2`/`H3`/display) bind to `var(--font-display)` rather than a hardcoded Anek family, so serif appears on neev surfaces while Blueprint roles keep Anek sans. (Audit Typography.tsx during build; switch any hardcoded family to the token.)
+- **Mechanism:** `tailwind.config.js` currently maps `fontFamily.display` to the *literal* `['Anek Latin', …]`, so overriding `--font-display` alone does nothing. Repoint `fontFamily` to the CSS vars (`display → ['var(--font-display)']`, etc.). This keeps Blueprint identical (`:root` already sets the vars to Anek/Hind/Spline) and lets the neev block swap in Eczar. `Typography.tsx` needs **no change** — it uses the `font-display` utility, which now resolves to the var.
 
 ### 3.3 Theme selection — `src/ui/ThemeModeProvider.tsx`
 
@@ -154,6 +154,7 @@ Re-skin to the prototype chrome: warm sand sidebar (sage active state, serif/sec
 
 ## 5. Non-goals (YAGNI)
 
+- **HARD CONSTRAINT: zero changes under `constructo/backend/`.** This is a presentation-layer re-skin only. No endpoint, schema, migration, or backend behaviour is touched; the web calls the same API contract it does today. Any task that would require a backend change is out of scope and must be flagged, not implemented.
 - No changes to other roles' Blueprint skin (they migrate later by flipping their theme).
 - No new backend, no new endpoints, no routing changes.
 - No "viewing as another person" capability (scope switcher = site filter only).
