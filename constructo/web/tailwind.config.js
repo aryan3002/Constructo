@@ -76,9 +76,11 @@ export default {
         brand: 'var(--ring)',
       },
       fontFamily: {
-        display: ['Anek Latin', 'Anek Devanagari', 'system-ui', 'sans-serif'],
-        body: ['Hind', 'Anek Devanagari', 'system-ui', 'sans-serif'],
-        mono: ['Spline Sans Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Bind to the CSS vars so the active theme/skin controls the face:
+        // Blueprint (:root) = Anek/Hind/Spline; neev = Eczar/Hind/IBM Plex Mono.
+        display: ['var(--font-display)'],
+        body: ['var(--font-body)'],
+        mono: ['var(--font-mono)'],
       },
       fontSize: {
         // Constructo scale (size / line-height). Never below 14px for on-site content;
