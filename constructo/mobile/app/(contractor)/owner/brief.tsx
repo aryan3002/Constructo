@@ -64,6 +64,13 @@ const KIND_EYEBROW: Record<string, string> = {
   approval: 'Material spec', hold_payment: 'Payment hold', homeowner_question: 'Client question', generic: 'Decision',
 }
 
+const KIND_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  approval: 'color-palette-outline',
+  hold_payment: 'cash-outline',
+  homeowner_question: 'help-buoy-outline',
+  generic: 'alert-circle-outline',
+}
+
 interface Row {
   spec: { id: string; site_id: string; approval_status: 'pending' | 'approved' | 'rejected' }
 }
@@ -237,24 +244,48 @@ function OwnerDecisionCard({
   onReview: () => void
 }) {
   const { theme } = useTheme()
+  const c = theme.colors
   const tone: Status = overdue ? 'risk' : 'warn'
+  const accent = overdue ? c.risk : c.warn
   const dueToday = !overdue && !!d.sla_due_at && new Date(d.sla_due_at).toDateString() === new Date().toDateString()
   const proofN = d.evidence_event_ids?.length ?? 0
   return (
     <Card flag={tone}>
+      {/* Header: kind icon chip + eyebrow, with a soft due pill on the right. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-        <StatusPill status={tone} size="sm" label={KIND_EYEBROW[d.kind] ?? 'Decision'} uppercase />
-        {overdue ? (
-          <Micro style={{ color: theme.colors.risk, marginLeft: 'auto' }}>{t.overdue}</Micro>
-        ) : dueToday ? (
-          <Micro style={{ color: theme.colors.warn, marginLeft: 'auto' }}>{t.dueToday}</Micro>
+        <View
+          style={{
+            width: 34, height: 34, borderRadius: 17,
+            backgroundColor: `${accent}1A`, alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={KIND_ICON[d.kind] ?? 'alert-circle-outline'} size={17} color={accent} />
+        </View>
+        <Micro style={{ color: accent, letterSpacing: 0.8, flex: 1 }}>
+          {(KIND_EYEBROW[d.kind] ?? 'Decision').toUpperCase()}
+        </Micro>
+        {overdue || dueToday ? (
+          <View
+            style={{
+              backgroundColor: `${accent}1A`, borderRadius: theme.radii.pill,
+              paddingHorizontal: 9, paddingVertical: 3,
+            }}
+          >
+            <Micro style={{ color: accent, fontWeight: '700' }}>{overdue ? t.overdue : t.dueToday}</Micro>
+          </View>
         ) : null}
       </View>
-      <Title style={{ marginTop: SPACE.sm }}>{d.title}</Title>
-      {d.detail ? <Body muted style={{ marginTop: 2 }}>{d.detail}</Body> : null}
+      <Title style={{ marginTop: SPACE.md }}>{d.title}</Title>
+      {d.detail ? <Body muted style={{ marginTop: 4, lineHeight: 20 }}>{d.detail}</Body> : null}
       {proofN > 0 ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: SPACE.sm }}>
-          <Ionicons name="image-outline" size={14} color={theme.colors.textMute} />
+        <View
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+            backgroundColor: c.paper, borderRadius: theme.radii.pill,
+            paddingHorizontal: 9, paddingVertical: 3, marginTop: SPACE.sm,
+          }}
+        >
+          <Ionicons name="image-outline" size={13} color={c.textMute} />
           <Micro muted>{t.proof(proofN)}</Micro>
         </View>
       ) : null}
