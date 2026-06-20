@@ -13,7 +13,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
-import { Body, BodyStrong, Button, EmptyState, H1, Small } from '../../../src/ui'
+import { Body, BodyStrong, Button, EmptyState, H1, Small, useToast } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from './_components'
 
 const STR = {
@@ -36,6 +36,10 @@ const STR = {
     assignEmpty: 'No team members to assign yet.',
     assignLoading: 'Loading team…',
     cancel: 'Cancel',
+    approveToast: 'Approved · released to site',
+    holdToast: 'Held · sent back to the team to revise',
+    assignToast: 'Assigned · the team is notified',
+    batchToast: (n: number) => `${n} approved · released to site`,
   },
   hi: {
     title: 'मंज़ूरी',
@@ -56,6 +60,10 @@ const STR = {
     assignEmpty: 'अभी सौंपने के लिए कोई टीम सदस्य नहीं।',
     assignLoading: 'टीम लोड हो रही है…',
     cancel: 'रद्द करें',
+    approveToast: 'मंज़ूर · साइट पर भेजा',
+    holdToast: 'रोका · टीम को संशोधन हेतु वापस',
+    assignToast: 'सौंपा · टीम को सूचित किया',
+    batchToast: (n: number) => `${n} मंज़ूर · साइट पर भेजे`,
   },
 } as const
 
@@ -84,6 +92,7 @@ export default function Approvals() {
   const { lang } = useT()
   const { theme } = useTheme()
   const qc = useQueryClient()
+  const toast = useToast()
   const t = STR[lang]
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -98,7 +107,10 @@ export default function Approvals() {
   const act = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'approve' | 'hold' }) =>
       action === 'approve' ? owner.approve(id) : owner.reject(id),
-    onSuccess: () => void invalidate(),
+    onSuccess: (_d, { action }) => {
+      toast(action === 'approve' ? t.approveToast : t.holdToast, 'check-circle')
+      void invalidate()
+    },
   })
 
   const assignMut = useMutation({
@@ -106,13 +118,15 @@ export default function Approvals() {
       owner.assign(id, assignedTo),
     onSuccess: () => {
       setAssigningId(null)
+      toast(t.assignToast, 'user-check')
       void invalidate()
     },
   })
 
   const batch = useMutation({
     mutationFn: (ids: string[]) => owner.batch('approve', ids),
-    onSuccess: () => {
+    onSuccess: (_d, ids) => {
+      toast(t.batchToast(ids.length), 'check-circle')
       setSelected(new Set())
       void invalidate()
     },

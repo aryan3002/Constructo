@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import { audit, type AuditFinding, type AuditSection } from '../../../../src/api/ownerAudit'
-import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
+import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title, useToast } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
 import { ITEM_META, SEVERITY_META, ScoreDial, SubHeader, scoreStatus } from '../_audit.components'
 
@@ -22,12 +22,16 @@ export default function AuditSite() {
   const { theme } = useTheme()
   const router = useRouter()
   const qc = useQueryClient()
+  const toast = useToast()
 
   const q = useQuery({ queryKey: ['owner', 'audit', id], queryFn: () => audit.get(id), enabled: !!id })
 
   const assign = useMutation({
     mutationFn: (findingId: string) => audit.assignFinding(findingId, { status: 'assigned' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['owner', 'audit', id] }),
+    onSuccess: () => {
+      toast('Assigned for fix · the site team is notified', 'check-circle')
+      void qc.invalidateQueries({ queryKey: ['owner', 'audit', id] })
+    },
   })
 
   if (q.isLoading) {
