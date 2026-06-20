@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { resolveDataTheme, type ThemeSkin } from './themeSkin'
 
 /**
  * Root theme-MODE controller for the contractor web console.
@@ -24,11 +25,14 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
 const STORAGE_KEY = 'cstk.theme'
+const SKIN_KEY = 'cstk.skin'
 
 interface ThemeModeContextValue {
   mode: ThemeMode
   resolved: ResolvedTheme
+  skin: ThemeSkin
   setMode: (mode: ThemeMode) => void
+  setSkin: (skin: ThemeSkin) => void
 }
 
 const ThemeModeContext = createContext<ThemeModeContextValue | null>(null)
@@ -41,6 +45,16 @@ function readStored(): ThemeMode {
     /* localStorage unavailable — fall through to default */
   }
   return 'system'
+}
+
+function readStoredSkin(): ThemeSkin {
+  try {
+    const v = localStorage.getItem(SKIN_KEY)
+    if (v === 'neev' || v === 'blueprint') return v
+  } catch {
+    /* localStorage unavailable — fall through to default */
+  }
+  return 'blueprint'
 }
 
 function systemPrefersDark(): boolean {
@@ -56,22 +70,23 @@ function resolveMode(mode: ThemeMode): ResolvedTheme {
   return mode
 }
 
-function apply(resolved: ResolvedTheme): void {
-  document.documentElement.setAttribute('data-theme', resolved)
+function apply(skin: ThemeSkin, resolved: ResolvedTheme): void {
+  document.documentElement.setAttribute('data-theme', resolveDataTheme(skin, resolved))
 }
 
 export function ThemeModeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(() => readStored())
+  const [skin, setSkinState] = useState<ThemeSkin>(() => readStoredSkin())
   const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveMode(mode))
 
-  // Apply the resolved theme to <html> whenever the chosen mode changes.
+  // Apply the resolved theme to <html> whenever mode OR skin changes.
   useEffect(() => {
     const r = resolveMode(mode)
     setResolved(r)
-    apply(r)
-  }, [mode])
+    apply(skin, r)
+  }, [mode, skin])
 
-  // While in 'system', follow live OS-preference changes.
+  // While in 'system', follow live OS-preference changes (re-using the skin).
   useEffect(() => {
     if (mode !== 'system' || typeof window === 'undefined' || !window.matchMedia) {
       return
@@ -80,11 +95,11 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
     const onChange = () => {
       const r: ResolvedTheme = mq.matches ? 'dark' : 'light'
       setResolved(r)
-      apply(r)
+      apply(skin, r)
     }
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
-  }, [mode])
+  }, [mode, skin])
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next)
@@ -95,8 +110,17 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const setSkin = useCallback((next: ThemeSkin) => {
+    setSkinState(next)
+    try {
+      localStorage.setItem(SKIN_KEY, next)
+    } catch {
+      /* localStorage unavailable — runtime-only change */
+    }
+  }, [])
+
   return (
-    <ThemeModeContext.Provider value={{ mode, resolved, setMode }}>
+    <ThemeModeContext.Provider value={{ mode, resolved, skin, setMode, setSkin }}>
       {children}
     </ThemeModeContext.Provider>
   )
