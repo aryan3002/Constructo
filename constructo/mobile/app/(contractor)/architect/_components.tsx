@@ -38,19 +38,6 @@ export const CHANGE_META: Record<SiteChangeStatus, { status: Status; label: stri
   resolved: { status: 'ok', label: 'Resolved' },
 }
 
-/** A site change's status → the icon inside its tinted chip. */
-const CHANGE_ICON: Record<SiteChangeStatus, keyof typeof Ionicons.glyphMap> = {
-  new: 'alert-circle',
-  linked: 'link',
-  resolved: 'checkmark-circle',
-}
-
-/** Hex + alpha → rgba tint (mirrors the StatusPill soft-tint look). */
-function statusTint(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
-}
-
 /** Only render an <Image> for a real openable URL (photo_url is stored raw —
  *  a bare R2 key would 404, so we skip it rather than show a broken tile). */
 export const isHttpUrl = (u: string | null | undefined): u is string => !!u && /^https?:\/\//i.test(u)
@@ -76,77 +63,75 @@ export function SiteChangeCard({
   const meta = CHANGE_META[change.status]
   const tone = c[meta.status]
   const reporter = change.reported_by_name?.split(' ')[0]
+  const eyebrow = change.room ? `SITE CHANGE · ${change.room.toUpperCase()}` : 'SITE CHANGE'
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <Card flag={change.status === 'new' ? 'warn' : undefined} style={{ gap: SPACE.sm }}>
-        {/* What + where, fronted by a status-tinted icon chip; status pill right. */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
-          <View
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 11,
-              backgroundColor: statusTint(tone, 0.14),
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name={CHANGE_ICON[change.status]} size={19} color={tone} />
+      <Card padded={false} style={{ flexDirection: 'row' }}>
+        {/* Status spine — the change's state as colour + position, paired with the
+            pill so it reads even without colour. */}
+        <View
+          style={{
+            width: 5,
+            backgroundColor: tone,
+            borderTopLeftRadius: theme.radii.card,
+            borderBottomLeftRadius: theme.radii.card,
+          }}
+        />
+        <View style={{ flex: 1, minWidth: 0, padding: SPACE.lg, gap: SPACE.sm }}>
+          {/* Eyebrow (what + where) · status pill */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Micro style={{ color: tone, letterSpacing: 0.6, flex: 1 }} numberOfLines={1}>
+              {eyebrow}
+            </Micro>
+            <StatusPill status={meta.status} size="sm" label={meta.label} />
           </View>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Micro style={{ color: tone, letterSpacing: 0.6 }}>SITE CHANGE</Micro>
-            <Title style={{ fontSize: 15 }} numberOfLines={2}>
-              {change.title}
-            </Title>
-            <Small muted numberOfLines={1}>
-              {site}
-              {change.room ? ` · ${change.room}` : ''}
-            </Small>
-          </View>
-          <StatusPill status={meta.status} size="sm" label={meta.label} />
-        </View>
 
-        {/* The designer's actual concern: the design impact, at a glance. */}
-        {change.impact ? (
-          <View
-            style={{
-              flexDirection: 'row',
-              gap: SPACE.sm,
-              padding: SPACE.sm,
-              borderRadius: theme.radii.chip,
-              backgroundColor: c.paper,
-            }}
-          >
-            <Ionicons name="color-palette-outline" size={15} color={c.warn} style={{ marginTop: 1 }} />
-            <Small style={{ flex: 1, color: c.text }} numberOfLines={2}>
-              <Small style={{ color: c.warn }}>Design impact · </Small>
-              {change.impact}
-            </Small>
-          </View>
-        ) : null}
+          {/* The change itself — the editorial line. */}
+          <Title style={{ fontSize: 18, lineHeight: 24 }} numberOfLines={3}>
+            {change.title}
+          </Title>
 
-        {/* Photo evidence — only when the stored URL is actually openable. */}
-        {isHttpUrl(change.photo_url) ? (
-          <Image
-            source={{ uri: change.photo_url }}
-            style={{ width: '100%', height: 144, borderRadius: theme.radii.chip, backgroundColor: c.paper }}
-            resizeMode="cover"
-          />
-        ) : null}
-
-        {/* Who flagged it + when · linked-revision hint. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs }}>
-          <Ionicons name="person-circle-outline" size={15} color={c.textMute} />
-          <Small muted numberOfLines={1} style={{ flex: 1 }}>
-            {reporter ? `${reporter} · ` : ''}
-            {timeAgo(change.created_at)}
-          </Small>
-          {change.linked_drawing_id ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Ionicons name="link-outline" size={13} color={c.info} />
-              <Micro style={{ color: c.info }}>Linked</Micro>
+          {/* Design impact at a glance — the designer's actual concern. */}
+          {change.impact ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+              <Ionicons name="color-palette-outline" size={14} color={c.warn} style={{ marginTop: 2 }} />
+              <Small style={{ flex: 1, color: c.text }} numberOfLines={2}>
+                <Small style={{ color: c.warn }}>Design impact · </Small>
+                {change.impact}
+              </Small>
             </View>
           ) : null}
+
+          {/* Photo evidence — only when the stored URL is actually openable. */}
+          {isHttpUrl(change.photo_url) ? (
+            <Image
+              source={{ uri: change.photo_url }}
+              style={{ width: '100%', height: 144, borderRadius: theme.radii.chip, backgroundColor: c.paper }}
+              resizeMode="cover"
+            />
+          ) : null}
+
+          {/* Meta footer — where · who flagged it · when · linked hint. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <Ionicons name="location-outline" size={13} color={c.textMute} />
+            <Small muted numberOfLines={1}>{site}</Small>
+            {reporter ? (
+              <>
+                <Small muted style={{ opacity: 0.5 }}>·</Small>
+                <Ionicons name="person-outline" size={12} color={c.textMute} />
+                <Small muted>{reporter}</Small>
+              </>
+            ) : null}
+            <Small muted style={{ opacity: 0.5 }}>·</Small>
+            <Small muted>{timeAgo(change.created_at)}</Small>
+            {change.linked_drawing_id ? (
+              <>
+                <Small muted style={{ opacity: 0.5 }}>·</Small>
+                <Ionicons name="link-outline" size={12} color={c.info} />
+                <Small style={{ color: c.info }}>Linked</Small>
+              </>
+            ) : null}
+          </View>
         </View>
       </Card>
     </Pressable>
