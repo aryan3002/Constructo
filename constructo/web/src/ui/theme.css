@@ -227,7 +227,7 @@
 
   --text-primary: #2A2519;     /* warm ink */
   --text-secondary: #6A6047;   /* ink-600 (5.4:1) */
-  --text-muted: #9A9176;       /* ink-400 */
+  --text-muted: #787052;       /* darkened ink — AA 4.7:1 on sand (was #9A9176 @ 3.1) */
   --text-on-brand: #FFFFFF;
 
   --border: rgba(42, 37, 25, 0.14);
@@ -243,8 +243,9 @@
   --ring-offset: var(--surface);
   --scrim: rgba(42, 37, 25, 0.4);
 
-  --celebrate: #BE6A41;        /* terracotta clay — milestones / eyebrows */
+  --celebrate: #BE6A41;        /* terracotta clay — milestones / eyebrows (fills) */
   --celebrate-subtle: #F6E7DB;
+  --celebrate-text: #9A4E2C;   /* clay-700 — eyebrow TEXT, AA 5.7:1 on sand */
 
   --ok-solid: #3E7D58;  --ok-bg: #E5EDE3;  --ok-fg: #2C6243;   /* sage = on-track */
   --warn-solid: #B98318; --warn-bg: #FAF1D9; --warn-fg: #946410; /* amber = needs you */
@@ -286,8 +287,8 @@
   --text-muted: #9A9176;
   --text-on-brand: #1C1A14;
 
-  --border: rgba(242, 236, 221, 0.12);
-  --border-strong: rgba(242, 236, 221, 0.2);
+  --border: rgba(242, 236, 221, 0.2);  /* lifted — dark shadows barely read, so edges carry card/input separation */
+  --border-strong: rgba(242, 236, 221, 0.3);
   --divider: rgba(242, 236, 221, 0.08);
 
   --brand: #6BA585;            /* sage lifts in dark */
@@ -301,6 +302,7 @@
 
   --celebrate: #D98A5C;
   --celebrate-subtle: rgba(190, 106, 65, 0.2);
+  --celebrate-text: #D98A5C;   /* already AA 6.4:1 on warm-dark surface */
 
   --ok-solid: #6BA585;  --ok-bg: #14271C;  --ok-fg: #8FC0A4;
   --warn-solid: #DFAE4E; --warn-bg: #2A2008; --warn-fg: #DFAE4E;

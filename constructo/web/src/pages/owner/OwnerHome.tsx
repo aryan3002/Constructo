@@ -69,7 +69,7 @@ export function OwnerHome() {
       {neev ? (
         // Neev: editorial hero — clay eyebrow + a larger Eczar serif headline.
         <header>
-          <p className="font-body text-micro font-semibold uppercase tracking-[0.14em] text-[var(--celebrate)]">
+          <p className="font-body text-micro font-semibold uppercase tracking-[0.14em] text-[var(--celebrate-text)]">
             {t('owner.home.title')} · {formatDate(date)}
           </p>
           <Display className="mt-2 !text-[2.1rem] !leading-[1.1]">{headline}</Display>
