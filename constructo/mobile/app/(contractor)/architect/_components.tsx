@@ -4,7 +4,7 @@
  * internals); built on the shared src/ui kit + daylight tokens.
  */
 import type { ReactNode } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import type { RoutingStatus } from '../../../src/api/specs'
-import type { SiteChangeStatus } from '../../../src/api/siteChanges'
-import { Body, Button, Card, H2, Micro, Mono, Small } from '../../../src/ui'
+import type { SiteChange, SiteChangeStatus } from '../../../src/api/siteChanges'
+import { Body, Button, Card, H2, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
 
 // ---------------------------------------------------------------------------
 // Routing + change metadata (tone + label), shared across the designer screens.
@@ -36,6 +36,121 @@ export const CHANGE_META: Record<SiteChangeStatus, { status: Status; label: stri
   new: { status: 'warn', label: 'Review' },
   linked: { status: 'info', label: 'Linked to revision' },
   resolved: { status: 'ok', label: 'Resolved' },
+}
+
+/** A site change's status → the icon inside its tinted chip. */
+const CHANGE_ICON: Record<SiteChangeStatus, keyof typeof Ionicons.glyphMap> = {
+  new: 'alert-circle',
+  linked: 'link',
+  resolved: 'checkmark-circle',
+}
+
+/** Hex + alpha → rgba tint (mirrors the StatusPill soft-tint look). */
+function statusTint(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}
+
+/** Only render an <Image> for a real openable URL (photo_url is stored raw —
+ *  a bare R2 key would 404, so we skip it rather than show a broken tile). */
+export const isHttpUrl = (u: string | null | undefined): u is string => !!u && /^https?:\/\//i.test(u)
+
+// ---------------------------------------------------------------------------
+// SiteChangeCard — a field condition routed to the designer. Surfaces who
+// flagged it, the design impact at a glance, photo evidence (when present), a
+// linked-revision hint, and a clear status. Shared by Home's "needs you" feed
+// AND the Site changes list, so the two never drift.
+// ---------------------------------------------------------------------------
+
+export function SiteChangeCard({
+  change,
+  site,
+  onPress,
+}: {
+  change: SiteChange
+  site: string
+  onPress: () => void
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const meta = CHANGE_META[change.status]
+  const tone = c[meta.status]
+  const reporter = change.reported_by_name?.split(' ')[0]
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      <Card flag={change.status === 'new' ? 'warn' : undefined} style={{ gap: SPACE.sm }}>
+        {/* What + where, fronted by a status-tinted icon chip; status pill right. */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
+          <View
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 11,
+              backgroundColor: statusTint(tone, 0.14),
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={CHANGE_ICON[change.status]} size={19} color={tone} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Micro style={{ color: tone, letterSpacing: 0.6 }}>SITE CHANGE</Micro>
+            <Title style={{ fontSize: 15 }} numberOfLines={2}>
+              {change.title}
+            </Title>
+            <Small muted numberOfLines={1}>
+              {site}
+              {change.room ? ` · ${change.room}` : ''}
+            </Small>
+          </View>
+          <StatusPill status={meta.status} size="sm" label={meta.label} />
+        </View>
+
+        {/* The designer's actual concern: the design impact, at a glance. */}
+        {change.impact ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: SPACE.sm,
+              padding: SPACE.sm,
+              borderRadius: theme.radii.chip,
+              backgroundColor: c.paper,
+            }}
+          >
+            <Ionicons name="color-palette-outline" size={15} color={c.warn} style={{ marginTop: 1 }} />
+            <Small style={{ flex: 1, color: c.text }} numberOfLines={2}>
+              <Small style={{ color: c.warn }}>Design impact · </Small>
+              {change.impact}
+            </Small>
+          </View>
+        ) : null}
+
+        {/* Photo evidence — only when the stored URL is actually openable. */}
+        {isHttpUrl(change.photo_url) ? (
+          <Image
+            source={{ uri: change.photo_url }}
+            style={{ width: '100%', height: 144, borderRadius: theme.radii.chip, backgroundColor: c.paper }}
+            resizeMode="cover"
+          />
+        ) : null}
+
+        {/* Who flagged it + when · linked-revision hint. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs }}>
+          <Ionicons name="person-circle-outline" size={15} color={c.textMute} />
+          <Small muted numberOfLines={1} style={{ flex: 1 }}>
+            {reporter ? `${reporter} · ` : ''}
+            {timeAgo(change.created_at)}
+          </Small>
+          {change.linked_drawing_id ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="link-outline" size={13} color={c.info} />
+              <Micro style={{ color: c.info }}>Linked</Micro>
+            </View>
+          ) : null}
+        </View>
+      </Card>
+    </Pressable>
+  )
 }
 
 /** ISO datetime → "5h ago" / "Yesterday" / "12 Jun" (compact relative). */

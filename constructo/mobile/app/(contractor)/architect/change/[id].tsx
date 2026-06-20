@@ -3,7 +3,7 @@
  * the report + the design impact, then links it to a revision or resolves it.
  * Wired to /api/v1/site-changes (PATCH status).
  */
-import { Alert, ScrollView, View } from 'react-native'
+import { Alert, Image, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -14,7 +14,7 @@ import { SPACE } from '../../../../src/theme/tokens'
 import { siteChangesApi, type SiteChangeStatus } from '../../../../src/api/siteChanges'
 import { supervisorApi } from '../../../../src/api/supervisor'
 import { Body, Button, Card, Eyebrow, Small, StatusPill, Title } from '../../../../src/ui'
-import { CHANGE_META, ErrorBlock, LoadingBlock, SubHeader, timeAgo } from '../_components'
+import { CHANGE_META, ErrorBlock, isHttpUrl, LoadingBlock, SubHeader, timeAgo } from '../_components'
 
 export default function SiteChangeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -74,6 +74,19 @@ export default function SiteChangeDetail() {
         </View>
         <Title style={{ fontSize: 17 }}>{change.title}</Title>
         <Body muted>{change.note}</Body>
+        {isHttpUrl(change.photo_url) ? (
+          <Image
+            source={{ uri: change.photo_url }}
+            style={{ width: '100%', height: 200, borderRadius: theme.radii.chip, backgroundColor: theme.colors.paper }}
+            resizeMode="cover"
+          />
+        ) : null}
+        {change.reported_by_name ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="person-circle-outline" size={16} color={theme.colors.textMute} />
+            <Small muted>Flagged by {change.reported_by_name}</Small>
+          </View>
+        ) : null}
       </Card>
 
       {change.impact ? (
