@@ -29,3 +29,7 @@ constructo/backend/media/
 # local junk / backups
 tmp/
 *.env.bak*
+
+# Vercel build output (generated)
+.vercel/
+**/.vercel/
