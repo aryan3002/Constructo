@@ -114,9 +114,14 @@ export default function AuditSite() {
 function FindingCard({ f, pending, onAssign }: { f: AuditFinding; pending: boolean; onAssign: () => void }) {
   const { theme } = useTheme()
   const meta = SEVERITY_META[f.severity] ?? SEVERITY_META.minor
+  const accent = meta.status === 'risk' ? theme.colors.risk : meta.status === 'warn' ? theme.colors.warn : theme.colors.accent
+  const sevIcon = f.severity === 'critical' ? 'warning' : f.severity === 'major' ? 'flash' : 'information-circle-outline'
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: `${accent}1A`, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={sevIcon} size={16} color={accent} />
+        </View>
         <StatusPill status={meta.status} size="sm" label={meta.label} icon={undefined} />
         {f.room || f.location ? (
           <Small muted style={{ marginLeft: 'auto' }}>

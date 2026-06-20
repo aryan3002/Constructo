@@ -381,6 +381,7 @@ export function ApprovalRow({
 
       <View style={{ flex: 1, gap: SPACE.xs }}>
         <NeedsYouCard
+          hideFlag
           status={status}
           statusLabel={status === 'risk' ? 'Escalated' : status === 'info' ? 'Homeowner' : 'Pending'}
           title={title}

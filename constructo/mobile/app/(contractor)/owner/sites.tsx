@@ -178,6 +178,7 @@ export default function Sites() {
 function SiteCardView({ r, t, onPress }: { r: SiteRow; t: Txt; onPress: () => void }) {
   const { theme } = useTheme()
   const { card } = r
+  const accent = r.status === 'risk' ? theme.colors.risk : r.status === 'warn' ? theme.colors.warn : theme.colors.accent
   const statusLabel = r.status === 'ok' ? t.onTrack : r.status === 'risk' ? t.delayed : r.status === 'warn' ? t.needsYou : undefined
   const stage = (card.counts?.attendance ?? 0) > 0
     ? `${card.counts.attendance} present today`
@@ -187,8 +188,8 @@ function SiteCardView({ r, t, onPress }: { r: SiteRow; t: Txt; onPress: () => vo
     <Pressable onPress={onPress} accessibilityRole="button">
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
-          <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: theme.colors.paper, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="home" size={20} color={theme.colors.textMute} />
+          <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: `${accent}1A`, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="home" size={20} color={accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Title style={{ fontSize: 16 }} numberOfLines={1}>{card.name}</Title>

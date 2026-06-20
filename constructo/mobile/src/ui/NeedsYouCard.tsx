@@ -49,6 +49,8 @@ export interface NeedsYouCardProps {
   onPrimary?: () => void
   onSecondary?: () => void
   onEvidence?: (e: EvidenceChipProps, index: number) => void
+  /** Hide the folded-corner status flag (the owner app opts out of it). */
+  hideFlag?: boolean
   style?: ViewStyle
 }
 
@@ -73,6 +75,7 @@ export function NeedsYouCard({
   onPrimary,
   onSecondary,
   onEvidence,
+  hideFlag = false,
   style,
 }: NeedsYouCardProps) {
   const { theme } = useTheme()
@@ -80,7 +83,10 @@ export function NeedsYouCard({
   const showLock = !canApprove && !!proposedBy
 
   return (
-    <Card flag={status} flagSize={38} style={[{ paddingRight: SPACE.lg + 12 }, style as ViewStyle]}>
+    <Card
+      {...(hideFlag ? {} : { flag: status, flagSize: 38 })}
+      style={hideFlag ? (style as ViewStyle) : [{ paddingRight: SPACE.lg + 12 }, style as ViewStyle]}
+    >
       {/* head: rank · status · sla */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingRight: 24 }}>
         {rank != null ? <MonoSm color={c.textMute}>#{rank}</MonoSm> : null}
