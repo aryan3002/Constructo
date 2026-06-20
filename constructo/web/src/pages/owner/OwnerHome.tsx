@@ -16,6 +16,7 @@ import {
   type SiteSummary,
   type Status,
 } from '../../ui'
+import { useSkin } from '../../ui/ThemeModeProvider'
 
 /**
  * OwnerHome — the Owner Command Center shell (W1). A cold start routes to the
@@ -36,6 +37,7 @@ export function OwnerHome() {
   const date = todayIso()
   const { data: home, isLoading, isError, error, refetch } = useOwnerHome(date)
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
+  const neev = useSkin() === 'neev'
 
   const sites = home?.sites ?? []
   const siteSummaries = useMemo<SiteSummary[]>(
@@ -64,11 +66,21 @@ export function OwnerHome() {
       onSelectSite={setSelectedSiteId}
       roleBadge={{ name: 'Owner', initials: 'OW' }}
     >
-      <header>
-        <Small className="!text-text-mute">{t('owner.home.title')}</Small>
-        <Display className="mt-1">{headline}</Display>
-        <Mono className="mt-1 block text-small text-text-mute">{formatDate(date)}</Mono>
-      </header>
+      {neev ? (
+        // Neev: editorial hero — clay eyebrow + a larger Eczar serif headline.
+        <header>
+          <p className="font-body text-micro font-semibold uppercase tracking-[0.14em] text-[var(--celebrate)]">
+            {t('owner.home.title')} · {formatDate(date)}
+          </p>
+          <Display className="mt-2 !text-[2.1rem] !leading-[1.1]">{headline}</Display>
+        </header>
+      ) : (
+        <header>
+          <Small className="!text-text-mute">{t('owner.home.title')}</Small>
+          <Display className="mt-1">{headline}</Display>
+          <Mono className="mt-1 block text-small text-text-mute">{formatDate(date)}</Mono>
+        </header>
+      )}
 
       <div className="mt-6">
         {isLoading && <Spinner label={t('owner.home.loading')} />}
