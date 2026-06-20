@@ -6,6 +6,7 @@
  */
 import { useCallback, useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -21,6 +22,7 @@ type Filter = 'open' | 'answered' | 'all'
 export default function EngTasks() {
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [filter, setFilter] = useState<Filter>('open')
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
@@ -54,7 +56,7 @@ export default function EngTasks() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="Asks for you" sub="Clarifications from owners & designer" />
       <SegmentedTabs tabs={tabs} active={filter} onChange={(k) => setFilter(k as Filter)} />

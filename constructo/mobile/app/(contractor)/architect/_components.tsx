@@ -4,7 +4,7 @@
  * internals); built on the shared src/ui kit + daylight tokens.
  */
 import type { ReactNode } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import type { RoutingStatus } from '../../../src/api/specs'
-import type { SiteChangeStatus } from '../../../src/api/siteChanges'
-import { Body, Button, Card, H2, Micro, Mono, Small } from '../../../src/ui'
+import type { SiteChange, SiteChangeStatus } from '../../../src/api/siteChanges'
+import { Body, Button, Card, H2, Micro, Small, StatusPill, Title } from '../../../src/ui'
 
 // ---------------------------------------------------------------------------
 // Routing + change metadata (tone + label), shared across the designer screens.
@@ -36,6 +36,106 @@ export const CHANGE_META: Record<SiteChangeStatus, { status: Status; label: stri
   new: { status: 'warn', label: 'Review' },
   linked: { status: 'info', label: 'Linked to revision' },
   resolved: { status: 'ok', label: 'Resolved' },
+}
+
+/** Only render an <Image> for a real openable URL (photo_url is stored raw —
+ *  a bare R2 key would 404, so we skip it rather than show a broken tile). */
+export const isHttpUrl = (u: string | null | undefined): u is string => !!u && /^https?:\/\//i.test(u)
+
+// ---------------------------------------------------------------------------
+// SiteChangeCard — a field condition routed to the designer. Surfaces who
+// flagged it, the design impact at a glance, photo evidence (when present), a
+// linked-revision hint, and a clear status. Shared by Home's "needs you" feed
+// AND the Site changes list, so the two never drift.
+// ---------------------------------------------------------------------------
+
+export function SiteChangeCard({
+  change,
+  site,
+  onPress,
+}: {
+  change: SiteChange
+  site: string
+  onPress: () => void
+}) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const meta = CHANGE_META[change.status]
+  const tone = c[meta.status]
+  const reporter = change.reported_by_name?.split(' ')[0]
+  const eyebrow = change.room ? `SITE CHANGE · ${change.room.toUpperCase()}` : 'SITE CHANGE'
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      <Card padded={false} style={{ flexDirection: 'row' }}>
+        {/* Status spine — the change's state as colour + position, paired with the
+            pill so it reads even without colour. */}
+        <View
+          style={{
+            width: 5,
+            backgroundColor: tone,
+            borderTopLeftRadius: theme.radii.card,
+            borderBottomLeftRadius: theme.radii.card,
+          }}
+        />
+        <View style={{ flex: 1, minWidth: 0, padding: SPACE.lg, gap: SPACE.sm }}>
+          {/* Eyebrow (what + where) · status pill */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Micro style={{ color: tone, letterSpacing: 0.6, flex: 1 }} numberOfLines={1}>
+              {eyebrow}
+            </Micro>
+            <StatusPill status={meta.status} size="sm" label={meta.label} />
+          </View>
+
+          {/* The change itself — the editorial line. */}
+          <Title style={{ fontSize: 18, lineHeight: 24 }} numberOfLines={3}>
+            {change.title}
+          </Title>
+
+          {/* Design impact at a glance — the designer's actual concern. */}
+          {change.impact ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+              <Ionicons name="color-palette-outline" size={14} color={c.warn} style={{ marginTop: 2 }} />
+              <Small style={{ flex: 1, color: c.text }} numberOfLines={2}>
+                <Small style={{ color: c.warn }}>Design impact · </Small>
+                {change.impact}
+              </Small>
+            </View>
+          ) : null}
+
+          {/* Photo evidence — only when the stored URL is actually openable. */}
+          {isHttpUrl(change.photo_url) ? (
+            <Image
+              source={{ uri: change.photo_url }}
+              style={{ width: '100%', height: 144, borderRadius: theme.radii.chip, backgroundColor: c.paper }}
+              resizeMode="cover"
+            />
+          ) : null}
+
+          {/* Meta footer — where · who flagged it · when · linked hint. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <Ionicons name="location-outline" size={13} color={c.textMute} />
+            <Small muted numberOfLines={1}>{site}</Small>
+            {reporter ? (
+              <>
+                <Small muted style={{ opacity: 0.5 }}>·</Small>
+                <Ionicons name="person-outline" size={12} color={c.textMute} />
+                <Small muted>{reporter}</Small>
+              </>
+            ) : null}
+            <Small muted style={{ opacity: 0.5 }}>·</Small>
+            <Small muted>{timeAgo(change.created_at)}</Small>
+            {change.linked_drawing_id ? (
+              <>
+                <Small muted style={{ opacity: 0.5 }}>·</Small>
+                <Ionicons name="link-outline" size={12} color={c.info} />
+                <Small style={{ color: c.info }}>Linked</Small>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Card>
+    </Pressable>
+  )
 }
 
 /** ISO datetime → "5h ago" / "Yesterday" / "12 Jun" (compact relative). */
@@ -126,7 +226,7 @@ export function StatTile({ value, label, tone = 'quiet' }: { value: number | str
   const color = tone === 'quiet' ? theme.colors.text : theme.colors[tone]
   return (
     <Card style={{ flex: 1, alignItems: 'flex-start', gap: 2, paddingVertical: SPACE.md }}>
-      <Mono style={{ fontSize: 26, color }}>{value}</Mono>
+      <H2 style={{ fontSize: 26, lineHeight: 34, color }}>{value}</H2>
       <Micro muted style={{ letterSpacing: 0.5 }}>
         {label.toUpperCase()}
       </Micro>

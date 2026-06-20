@@ -13,6 +13,7 @@
  */
 import { useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -40,6 +41,7 @@ export default function EngHome() {
   const { theme } = useTheme()
   const router = useRouter()
   const qc = useQueryClient()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = useMemo(() => sitesQ.data?.items ?? [], [sitesQ.data])
@@ -77,7 +79,7 @@ export default function EngHome() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       {/* Hero */}
       <View style={{ gap: SPACE.xs }}>

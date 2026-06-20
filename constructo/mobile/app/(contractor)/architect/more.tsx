@@ -3,6 +3,7 @@
  * selections) + Account (profile).
  */
 import { ScrollView } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -17,6 +18,7 @@ export default function DesignerMore() {
   const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const newChangesQ = useQuery({
     queryKey: ['architect', 'changes', 'new'],
@@ -27,7 +29,7 @@ export default function DesignerMore() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="More" />
 

@@ -18,6 +18,8 @@ export interface SiteChange {
   impact: string | null
   photo_url: string | null
   reported_by: string | null
+  /** Display name of the field engineer who flagged it (resolved server-side). */
+  reported_by_name: string | null
   status: SiteChangeStatus
   linked_drawing_id: string | null
   created_at: string

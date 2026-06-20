@@ -18,7 +18,6 @@ import {
   Card,
   H2,
   Micro,
-  Mono,
   ProgressRing,
   Small,
   StatusPill,
@@ -210,7 +209,7 @@ export function ScoreDial({
       trackColor={AP.ringTrack}
     >
       <View style={{ alignItems: 'center' }}>
-        <Mono style={{ fontSize: size >= 72 ? 22 : 17, color }}>{value == null ? '—' : value}</Mono>
+        <H2 style={{ fontSize: size >= 72 ? 22 : 17, lineHeight: size >= 72 ? 28 : 22, color }}>{value == null ? '—' : value}</H2>
         {label ? <Small muted style={{ fontSize: 10, marginTop: -2 }}>{label}</Small> : null}
       </View>
     </ProgressRing>
@@ -234,7 +233,7 @@ export function StatTile({
   const color = tone === 'quiet' ? theme.colors.text : STATUS_COLOR(tone, theme)
   return (
     <Card style={{ flex: 1, alignItems: 'flex-start', gap: 2, paddingVertical: SPACE.md }}>
-      <Mono style={{ fontSize: 26, color }}>{value}</Mono>
+      <H2 style={{ fontSize: 26, lineHeight: 34, color }}>{value}</H2>
       <Micro muted style={{ letterSpacing: 0.5 }}>
         {label.toUpperCase()}
       </Micro>

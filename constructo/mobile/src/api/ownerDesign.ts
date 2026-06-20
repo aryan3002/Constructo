@@ -98,6 +98,18 @@ export const design = {
       method: 'POST',
       body: JSON.stringify({ resolution, note: note ?? null }),
     }),
+
+  /**
+   * Attach an inspiration/reference image to an area (the designer uploads a
+   * marked-up or found image; the vision pipeline extracts its attributes and
+   * folds them into the area's taste model). `image_r2_key` is the stored key
+   * from a prior media upload. contributor_id is omitted for a role-level add.
+   */
+  addReference: (body: { area_id: string; image_r2_key?: string; source_url?: string }) =>
+    request<{ id: string }>('/api/v1/design/references', {
+      method: 'POST',
+      body: JSON.stringify({ source_type: 'upload', ...body }),
+    }),
 }
 
 // ---- shared label/tone helpers --------------------------------------------

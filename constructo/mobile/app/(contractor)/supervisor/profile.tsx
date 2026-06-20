@@ -4,6 +4,7 @@
  * status rather than a fake toggle. Assigned sites are read server-side scoped.
  */
 import { ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -18,6 +19,7 @@ export default function EngProfile() {
   const { me, signOut } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = sitesQ.data?.items ?? []
@@ -30,9 +32,9 @@ export default function EngProfile() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Profile" onBack={() => router.back()} />
+      <SubHeader title="Profile" onBack={() => router.replace('/(contractor)/supervisor/more')} />
 
       {/* Identity */}
       <Card style={{ gap: SPACE.md }}>

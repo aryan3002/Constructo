@@ -8,8 +8,10 @@
  * Wired to /api/v1/specs route/release. Determinism: a named human commits.
  */
 import { Alert, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useTheme } from '../../../../src/theme/ThemeProvider'
@@ -54,6 +56,40 @@ export default function SelectionDetail() {
     onError: () => Alert.alert('•', 'Could not update this selection. Please try again.'),
   })
 
+  // "Upload a revised photo" (returned selections) — the designer marks up a
+  // better material and snaps it; the AI extracts it into a NEW draft spec on
+  // the same component to re-propose. Reuses /specs/extract (no new backend).
+  const revise = useMutation({
+    mutationFn: async () => {
+      const spec = q.data?.spec
+      if (!spec) throw new Error('not_ready')
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) throw new Error('perm')
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+      if (result.canceled || !result.assets[0]) throw new Error('canceled')
+      const a = result.assets[0]
+      const name = a.fileName ?? a.uri.split('/').pop() ?? 'revision.jpg'
+      return specsApi.extract({
+        siteId: spec.site_id,
+        componentId: spec.component_id,
+        image: { uri: a.uri, name, contentType: a.mimeType ?? 'image/jpeg' },
+      })
+    },
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['architect', 'specs'] })
+      Alert.alert('✓', 'Revised material drafted from your photo — review and re-send it.')
+      router.replace(`/(contractor)/architect/selection/${res.spec.id}`)
+    },
+    onError: (e) => {
+      if (e instanceof Error && e.message === 'canceled') return
+      const msg =
+        e instanceof Error && e.message === 'perm'
+          ? 'Photo access is needed to attach a revision.'
+          : 'Could not read the photo. Please try again.'
+      Alert.alert('•', msg)
+    },
+  })
+
   if (q.isLoading) return <Pad><LoadingBlock /></Pad>
   if (q.error || !q.data) {
     return <Pad><ErrorBlock message="We could not load this selection." retryLabel="Try again" onRetry={() => void q.refetch()} /></Pad>
@@ -74,7 +110,7 @@ export default function SelectionDetail() {
       <SubHeader
         title={spec.label}
         sub={siteName}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/architect/selections')}
         right={<StatusPill status={meta.status} size="sm" label={meta.label} />}
       />
 
@@ -85,12 +121,19 @@ export default function SelectionDetail() {
       </Card>
 
       {spec.routing_status === 'returned' ? (
-        <Card flag="risk" style={{ gap: SPACE.xs }}>
+        <Card flag="risk" style={{ gap: SPACE.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
             <Ionicons name="hand-left-outline" size={18} color={theme.colors.risk} />
             <Title style={{ fontSize: 14.5, color: theme.colors.risk }}>Returned by owner</Title>
           </View>
           <Body muted>{spec.notes ?? 'Revise the selection and re-send for approval.'}</Body>
+          <Button
+            title={revise.isPending ? 'Reading photo…' : 'Upload a revised photo'}
+            variant="secondary"
+            size="md"
+            disabled={revise.isPending}
+            onPress={() => revise.mutate()}
+          />
         </Card>
       ) : null}
 
@@ -147,10 +190,11 @@ export default function SelectionDetail() {
 
 function Pad({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       {children}
     </ScrollView>

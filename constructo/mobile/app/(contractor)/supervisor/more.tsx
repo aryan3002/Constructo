@@ -3,6 +3,7 @@
  * off-tab tools), then an Account group (profile / assigned sites / asks).
  */
 import { ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -18,6 +19,7 @@ export default function EngMore() {
   const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
   const requestedQ = useQuery({
@@ -30,7 +32,7 @@ export default function EngMore() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="More" />
 

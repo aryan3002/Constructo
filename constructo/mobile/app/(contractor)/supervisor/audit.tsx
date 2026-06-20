@@ -8,6 +8,7 @@
  */
 import { useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -22,6 +23,7 @@ import { ErrorBlock, LoadingBlock, ScoreDial, SectionLabel, SubHeader, formatWhe
 export default function EngAuditHub() {
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
   const auditsQ = useQuery({ queryKey: ['eng', 'audits'], queryFn: () => audit.list() })
@@ -45,9 +47,9 @@ export default function EngAuditHub() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Site audit" sub="Inspections requested by owners" onBack={() => router.back()} />
+      <SubHeader title="Site audit" sub="Inspections requested by owners" onBack={() => router.replace('/(contractor)/supervisor/more')} />
 
       {/* Intro */}
       <Card style={{ gap: SPACE.sm, backgroundColor: theme.colors.accentWarm }}>

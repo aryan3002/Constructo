@@ -7,6 +7,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Alert, ScrollView, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -26,6 +27,7 @@ export default function TaskReply() {
   const { theme } = useTheme()
   const router = useRouter()
   const { online, flush } = useOutbox()
+  const insets = useSafeAreaInsets()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -57,15 +59,15 @@ export default function TaskReply() {
     })
     if (online) void flush()
     Alert.alert('✓', 'Reply queued — will sync when online.')
-    router.back()
+    router.replace('/(contractor)/supervisor/tasks')
   }
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Reply" sub={site || undefined} onBack={() => router.back()} />
+      <SubHeader title="Reply" sub={site || undefined} onBack={() => router.replace('/(contractor)/supervisor/tasks')} />
 
       {asksQ.isLoading ? (
         <LoadingBlock />

@@ -12,6 +12,7 @@
  */
 import { useState } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -140,10 +141,11 @@ function Wrap({
   refreshing?: boolean
 }) {
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.lg, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.lg, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
       refreshControl={
         onRefresh ? (
           <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />

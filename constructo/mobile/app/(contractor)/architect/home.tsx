@@ -8,6 +8,7 @@
  */
 import { useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,16 +17,17 @@ import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { specsApi, type Spec } from '../../../src/api/specs'
-import { siteChangesApi, type SiteChange } from '../../../src/api/siteChanges'
+import { siteChangesApi } from '../../../src/api/siteChanges'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Body, Button, Card, Display, Eyebrow, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, StatTile, timeAgo } from './_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, SiteChangeCard, StatTile } from './_components'
 
 export default function DesignerHome() {
   const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
   const qc = useQueryClient()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
   const siteName = useMemo(() => {
@@ -81,7 +83,7 @@ export default function DesignerHome() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <View style={{ gap: SPACE.xs }}>
         <Eyebrow>STUDIO · {firstName.toUpperCase()}’S DESK</Eyebrow>
@@ -120,7 +122,7 @@ export default function DesignerHome() {
                 {newChanges.map((c) => (
                   <SiteChangeCard
                     key={c.id}
-                    c={c}
+                    change={c}
                     site={siteName.get(c.site_id) ?? 'Site'}
                     onPress={() => router.push(`/(contractor)/architect/change/${c.id}`)}
                   />
@@ -198,23 +200,6 @@ export default function DesignerHome() {
         </>
       )}
     </ScrollView>
-  )
-}
-
-function SiteChangeCard({ c, site, onPress }: { c: SiteChange; site: string; onPress: () => void }) {
-  const { theme } = useTheme()
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button">
-      <Card flag="warn" style={{ gap: SPACE.xs }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name="warning-outline" size={14} color={theme.colors.warn} />
-          <Small style={{ color: theme.colors.warn, letterSpacing: 0.5, fontSize: 12 }}>SITE CHANGE</Small>
-          <Small muted style={{ marginLeft: 'auto' }}>{timeAgo(c.created_at)}</Small>
-        </View>
-        <Title style={{ fontSize: 15 }}>{c.title}</Title>
-        <Small muted>{site}{c.room ? ` · ${c.room}` : ''}</Small>
-      </Card>
-    </Pressable>
   )
 }
 

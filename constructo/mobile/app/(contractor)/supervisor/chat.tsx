@@ -191,10 +191,13 @@ export default function CrewChat() {
   const [recapOpen, setRecapOpen] = useState(false)
   const [radarOpen, setRadarOpen] = useState(false)
 
-  // The supervisor's assigned site(s); v1 chats the first one.
+  // The supervisor's assigned site(s). They're often on more than one, so the
+  // crew chat lets them switch which site's thread they're in (chip row below
+  // the header); we default to the first until they pick another.
   const sitesQ = useQuery({ queryKey: ['supervisor', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = sitesQ.data?.items ?? []
-  const site = sites[0]
+  const [activeSiteId, setActiveSiteId] = useState<string | undefined>(undefined)
+  const site = sites.find((s) => s.id === activeSiteId) ?? sites[0]
 
   // The offline-first thread spine (durable outbox, live socket, ticks). Called
   // unconditionally (hooks rules); disabled until a site resolves (empty addr).
@@ -426,6 +429,48 @@ export default function CrewChat() {
           </Pressable>
         ))}
       </View>
+
+      {/* Site switcher — the engineer is often on more than one site, so let
+          them flip which site's crew chat they're reading. Hidden when there's
+          only one site (nothing to switch). */}
+      {sites.length > 1 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: SPACE.xs,
+            paddingHorizontal: SPACE.lg,
+            paddingTop: SPACE.sm,
+            backgroundColor: c.card,
+            borderBottomColor: c.line,
+            borderBottomWidth: 1,
+            paddingBottom: SPACE.sm,
+          }}
+        >
+          {sites.map((s) => {
+            const active = s.id === site.id
+            return (
+              <Pressable
+                key={s.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={s.name}
+                onPress={() => setActiveSiteId(s.id)}
+                style={{
+                  paddingHorizontal: SPACE.md,
+                  paddingVertical: 6,
+                  borderRadius: 9999,
+                  borderWidth: 1,
+                  borderColor: active ? c.accentDeep : c.line,
+                  backgroundColor: active ? c.accentDeep : c.card,
+                }}
+              >
+                <Small style={{ color: active ? c.card : c.text }}>{s.name}</Small>
+              </Pressable>
+            )
+          })}
+        </View>
+      ) : null}
 
       {/* Pinned brief — exceptions-first; shown only when something needs
           attention (empty = calm = good). */}

@@ -5,6 +5,7 @@
  */
 import { useCallback, useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -29,6 +30,7 @@ function inFilter(f: Filter, r: RoutingStatus): boolean {
 export default function Selections() {
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [filter, setFilter] = useState<Filter>('all')
 
   const q = useQuery({
@@ -79,7 +81,7 @@ export default function Selections() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       <SubHeader title="Selections" sub={`${counts.all} material${counts.all === 1 ? '' : 's'} across your projects`} />
 

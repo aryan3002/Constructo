@@ -170,7 +170,7 @@ export default function ActionItems() {
           gap: SPACE.md,
         }}
       >
-        <Pressable onPress={() => router.back()} accessibilityLabel={t.back} hitSlop={10}>
+        <Pressable onPress={() => router.replace('/(contractor)/supervisor/chat')} accessibilityLabel={t.back} hitSlop={10}>
           <Feather name="chevron-left" size={26} color={c.text} />
         </Pressable>
         <View style={{ flex: 1 }}>

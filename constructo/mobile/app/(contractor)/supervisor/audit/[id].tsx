@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Alert, Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -103,7 +104,7 @@ export default function RunAudit() {
       void qc.invalidateQueries({ queryKey: ['eng', 'audits'] })
       void qc.invalidateQueries({ queryKey: ['eng', 'audit', id] })
       Alert.alert('✓', `Audit submitted · score ${detail.score ?? '—'} sent to the owner.`)
-      router.back()
+      router.replace('/(contractor)/supervisor/audit')
     },
     onError: () => Alert.alert('•', 'Could not submit the audit. Please try again.'),
   })
@@ -122,7 +123,7 @@ export default function RunAudit() {
   let lastSection: string | null = null
   return (
     <Pad>
-      <SubHeader title="Run audit" sub={`${done}/${total} checks`} onBack={() => router.back()} />
+      <SubHeader title="Run audit" sub={`${done}/${total} checks`} onBack={() => router.replace('/(contractor)/supervisor/audit')} />
 
       {/* progress */}
       <View style={{ height: 8, borderRadius: 9999, backgroundColor: theme.colors.paper, overflow: 'hidden' }}>
@@ -204,10 +205,11 @@ export default function RunAudit() {
 
 function Pad({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       {children}
     </ScrollView>

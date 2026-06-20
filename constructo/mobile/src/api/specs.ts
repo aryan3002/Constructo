@@ -7,7 +7,7 @@
  * set by a named human via `approve` (architect/owner are the approve roles);
  * the AI only drafts via `/specs/extract` (not used here).
  */
-import { request } from './client'
+import { request, uploadMultipart } from './client'
 
 export type SpecApprovalStatus = 'pending' | 'approved' | 'rejected'
 
@@ -21,6 +21,8 @@ export type RoutingStatus = 'draft' | 'out_for_approval' | 'approved' | 'returne
 export interface Spec {
   id: string
   site_id: string
+  /** The room→component this spec belongs to; needed to attach a revised photo. */
+  component_id: string
   label: string
   qty: string | null
   unit: string | null
@@ -30,6 +32,19 @@ export interface Spec {
   sent_at: string | null
   released_at: string | null
   routing_status: RoutingStatus
+}
+
+/** A picked local image (from expo-image-picker). */
+export interface PickedImage {
+  uri: string
+  name: string
+  contentType: string
+}
+
+/** The AI-extracted draft a revised photo produces (a new pending Spec). */
+export interface ExtractedSpec {
+  spec: Spec
+  extracted: Record<string, unknown>
 }
 
 export const specsApi = {
@@ -58,5 +73,22 @@ export const specsApi = {
   /** Release an APPROVED selection to site (→ released). 409 if not approved. */
   release(id: string): Promise<Spec> {
     return request<Spec>(`/api/v1/specs/${id}/release`, { method: 'POST' })
+  },
+
+  /**
+   * Propose a revised material from a photo: the AI extracts the material and
+   * creates a NEW pending Spec on the same component (a draft to re-send). Used
+   * when the owner returns a selection and the designer marks up a better option.
+   */
+  extract(opts: { siteId: string; componentId: string; image: PickedImage }): Promise<ExtractedSpec> {
+    const form = new FormData()
+    form.append('site_id', opts.siteId)
+    form.append('component_id', opts.componentId)
+    form.append('image', {
+      uri: opts.image.uri,
+      name: opts.image.name,
+      type: opts.image.contentType,
+    } as unknown as Blob)
+    return uploadMultipart<ExtractedSpec>('/api/v1/specs/extract', form)
   },
 }
