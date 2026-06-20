@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -33,6 +34,7 @@ const TRADE_LABEL: Record<DrawingKind, string> = {
 export default function EngDrawings() {
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [siteId, setSiteId] = useState<string | null>(null)
   const [trade, setTrade] = useState<DrawingKind | 'all'>('all')
 
@@ -58,7 +60,7 @@ export default function EngDrawings() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       <SubHeader title="Drawings" sub="Latest released for your sites" onBack={() => router.back()} />
 

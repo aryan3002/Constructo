@@ -8,6 +8,7 @@
  */
 import { useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -26,6 +27,7 @@ export default function DesignerHome() {
   const { theme } = useTheme()
   const router = useRouter()
   const qc = useQueryClient()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
   const siteName = useMemo(() => {
@@ -81,7 +83,7 @@ export default function DesignerHome() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <View style={{ gap: SPACE.xs }}>
         <Eyebrow>STUDIO · {firstName.toUpperCase()}’S DESK</Eyebrow>

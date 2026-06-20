@@ -2,6 +2,7 @@
  * Profile — the designer's identity + projects + sign-out.
  */
 import { ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
@@ -16,6 +17,7 @@ export default function DesignerProfile() {
   const { me, signOut } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = sitesQ.data?.items ?? []
@@ -28,7 +30,7 @@ export default function DesignerProfile() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="Profile" onBack={() => router.back()} />
 

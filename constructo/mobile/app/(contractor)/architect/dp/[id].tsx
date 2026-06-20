@@ -4,6 +4,7 @@
  * actions (approve / adjust / reject). Wired to /api/v1/design theme decisions.
  */
 import { ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -143,10 +144,11 @@ function PaletteChip({ label }: { label: string }) {
 
 function Pad({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       {children}
     </ScrollView>

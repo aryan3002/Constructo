@@ -4,6 +4,7 @@
  */
 import { useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -18,6 +19,7 @@ import { CHANGE_META, ErrorBlock, LoadingBlock, SubHeader, timeAgo } from './_co
 export default function SiteChanges() {
   const { theme } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
   const changesQ = useQuery({ queryKey: ['architect', 'changes'], queryFn: () => siteChangesApi.list() })
@@ -40,7 +42,7 @@ export default function SiteChanges() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       <SubHeader title="Site changes" sub="Conditions reported from site" onBack={() => router.back()} />
 
