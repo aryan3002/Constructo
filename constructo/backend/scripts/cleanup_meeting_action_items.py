@@ -52,6 +52,24 @@ async def run(session_factory=SessionLocal, *, apply: bool = False) -> dict:
         ).all()
         junk_items = [ai for (ai, body) in rows if is_meeting_chatter(ai.title, body)]
 
+        # Self-correct: re-open AI items that were cancelled by an earlier (looser)
+        # run but no longer match the tightened filter (e.g. a real "connect the
+        # drain" / "zoom in on the crack" task). Only AI-created cancelled rows are
+        # touched (the seed/enrich never cancels; only this script does).
+        cancelled_rows = (
+            await s.execute(
+                select(ActionItem, ChatMessage.body)
+                .outerjoin(ChatMessage, ActionItem.source_message_id == ChatMessage.id)
+                .where(
+                    ActionItem.created_by_ai.is_(True),
+                    ActionItem.status == ActionItemStatus.cancelled,
+                )
+            )
+        ).all()
+        restore_items = [
+            ai for (ai, body) in cancelled_rows if not is_meeting_chatter(ai.title, body)
+        ]
+
         # 2) Pending [SENTINEL] decisions whose text is meeting chatter.
         decisions = (
             await s.execute(
@@ -66,26 +84,39 @@ async def run(session_factory=SessionLocal, *, apply: bool = False) -> dict:
         print(f"meeting action items to cancel : {len(junk_items)}")
         for ai in junk_items[:8]:
             print(f"    - {ai.title[:80]}")
+        print(f"false-positive items to RESTORE: {len(restore_items)}")
+        for ai in restore_items[:8]:
+            print(f"    + {ai.title[:80]}")
         print(f"[SENTINEL] decisions to resolve: {len(junk_decisions)}")
         for d in junk_decisions[:8]:
             print(f"    - {d.title[:80]}")
 
         if not apply:
             print("\n(dry-run — re-run with --apply to write)")
-            return {"would_cancel": len(junk_items), "would_resolve": len(junk_decisions)}
+            return {
+                "would_cancel": len(junk_items),
+                "would_restore": len(restore_items),
+                "would_resolve": len(junk_decisions),
+            }
 
         from datetime import UTC, datetime
 
         now = datetime.now(UTC)
         for ai in junk_items:
             ai.status = ActionItemStatus.cancelled
+        for ai in restore_items:
+            ai.status = ActionItemStatus.open
         for d in junk_decisions:
             d.state = DecisionState.resolved
             d.resolved_at = now
             if not d.resolution_note:
                 d.resolution_note = "Auto-cleared: meeting/scheduling noise (not a decision)."
         await s.commit()
-        return {"cancelled": len(junk_items), "resolved": len(junk_decisions)}
+        return {
+            "cancelled": len(junk_items),
+            "restored": len(restore_items),
+            "resolved": len(junk_decisions),
+        }
 
 
 def main() -> None:

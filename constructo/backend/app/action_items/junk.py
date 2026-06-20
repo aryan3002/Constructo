@@ -14,13 +14,12 @@ import re
 
 _MEETING_RE = re.compile(
     r"\b("
-    r"google\s*meet|meet\.google\.com|zoom|video\s*call|"
+    r"google\s*meet|meet\.google\.com|zoom\s*(call|meeting|link)|zoom\.us|video\s*call|"
     r"meeting\s*(link|notes|platform|id|invite|room)|"
-    r"join\s+(the\s+)?(meeting|google\s*meet|call|session|link)|"
-    r"schedule\s+(a\s+)?(google\s*meet|meeting|call|session)|"
-    r"connect\s+(via|to|join)|"
+    r"join\s+(the\s+)?(meeting|google\s*meet|video\s*call|session)|"
+    r"schedule\s+(a\s+)?(google\s*meet|meeting|video\s*call|session)|"
     r"meeting\s+(scheduled|invite|request|platform)|"
-    r"(re)?schedule(d)?\s+(the\s+)?(meet|call|session)|"
+    r"(re)?schedule(d)?\s+(the\s+)?(google\s*meet|meeting)|"
     r"verify\s+meeting\s+notes"
     r")\b",
     re.IGNORECASE,
