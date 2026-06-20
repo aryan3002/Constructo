@@ -30,6 +30,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select
 
+from app.action_items.junk import is_meeting_chatter
 from app.db import SessionLocal
 from app.extraction.llm import get_llm_client
 from app.models import (
@@ -142,6 +143,10 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
             body = (msg.body or "").strip()
             if not body:
                 return msg, None, False
+            # Meeting/call-scheduling chatter is never a construction to-do — skip
+            # before spending an LLM call (and as a hard guarantee below).
+            if is_meeting_chatter(body):
+                return msg, None, True
             async with sem:
                 try:
                     return msg, (await llm.complete(_SYSTEM, body, _SCHEMA) or {}), True
@@ -159,6 +164,10 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
                     continue
                 title = (out.get("title") or (msg.body or "").strip()).strip()
                 if not title:
+                    continue
+                # Hard guarantee: never let meeting/call chatter become a to-do,
+                # even if the LLM phrased the title without the trigger words.
+                if is_meeting_chatter(msg.body, title):
                     continue
 
                 item_id = _id("action_item", str(msg.id))

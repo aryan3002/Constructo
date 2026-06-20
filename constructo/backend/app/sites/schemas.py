@@ -141,3 +141,14 @@ class SiteEventOut(BaseModel):
     version: int
     supersedes_event_id: UUID | None
     created_at: datetime
+
+
+class SitePhotoOut(BaseModel):
+    """A site photo for the owner 'Latest from site' strip (presigned URL)."""
+
+    id: UUID
+    site_id: UUID
+    image_url: str
+    caption: str | None
+    room_tag: str | None
+    published_at: datetime

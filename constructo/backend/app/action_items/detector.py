@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from app.action_items.junk import is_meeting_chatter
+
 # Explicit assignment cues — an imperative directed at someone / a deadline'd task.
 _ASSIGN_CUES = (
     "bolo", "bol do", "boldo", "keh do", "kehdo", "kehna", "kah do",
@@ -59,6 +61,10 @@ def detect_action_item(text: str | None, *, today: date | None = None) -> Action
     if len(n) < 6:
         return None
     if not any(cue in n for cue in _ASSIGN_CUES):
+        return None
+    # Meeting/call-scheduling chatter is never a construction to-do (e.g. a
+    # "call karo … google meet" line) — don't propose it.
+    if is_meeting_chatter(text):
         return None
     # Avoid firing on a pure capture sentence (a number-led delivery/attendance).
     title = text.strip()

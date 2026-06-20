@@ -17,6 +17,7 @@ import { Tabs } from 'expo-router'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
+import { ToastProvider } from '../../../src/ui'
 
 const LABELS = {
   en: { brief: 'Brief', sites: 'Sites', chat: 'Chat', specs: 'Specs', approvals: 'Approvals', more: 'More', search: 'Search' },
@@ -87,7 +88,9 @@ export default function OwnerLayout() {
   // Override the parent (contractor) neev theme with daylight for the owner subtree.
   return (
     <ThemeProvider initial="daylight">
-      <OwnerTabs />
+      <ToastProvider>
+        <OwnerTabs />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

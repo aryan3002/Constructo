@@ -184,7 +184,7 @@ export default function OwnerConversation() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={str.back}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(contractor)/owner/chat')}
           hitSlop={10}
           style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
         >

@@ -5,7 +5,7 @@
  * altitude from Owner.md §6.2 — the owner sometimes does want the activity
  * stream once they're inside one site.
  */
-import { View } from 'react-native'
+import { Image, ScrollView, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -29,6 +29,7 @@ const STR = {
     radar: 'Radar',
     forecastClear: 'Nothing needs ordering; cash-flow steady.',
     radarClear: 'All clear — nothing’s slipping.',
+    latest: 'Latest from site',
     disputePack: 'Dispute pack',
   },
   hi: {
@@ -42,6 +43,7 @@ const STR = {
     radar: 'रडार',
     forecastClear: 'कुछ मँगाने की ज़रूरत नहीं; नकदी ठीक।',
     radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
+    latest: 'साइट से ताज़ा',
     disputePack: 'विवाद फ़ाइल',
   },
 } as const
@@ -76,6 +78,7 @@ export default function SiteDetail() {
   const eventsQ = useQuery({ queryKey: ['owner', 'site', siteId, 'events'], queryFn: () => owner.siteEvents(siteId), enabled: !!siteId })
   const forecastQ = useQuery({ queryKey: ['owner', 'site', siteId, 'forecast'], queryFn: () => owner.forecast(siteId), enabled: !!siteId })
   const radarQ = useQuery({ queryKey: ['owner', 'site', siteId, 'sentinel'], queryFn: () => owner.sentinel(siteId), enabled: !!siteId })
+  const photosQ = useQuery({ queryKey: ['owner', 'site', siteId, 'photos'], queryFn: () => owner.sitePhotos(siteId), enabled: !!siteId })
 
   if (siteQ.isLoading) {
     return (
@@ -88,7 +91,7 @@ export default function SiteDetail() {
   if (siteQ.error || !siteQ.data) {
     return (
       <Screen>
-        <Button title={t.back} variant="ghost" onPress={() => router.back()} />
+        <Button title={t.back} variant="ghost" onPress={() => router.replace('/(contractor)/owner/sites')} />
         <ErrorBlock message={t.errorLine} retryLabel={t.tryAgain} onRetry={() => void siteQ.refetch()} />
       </Screen>
     )
@@ -99,7 +102,7 @@ export default function SiteDetail() {
 
   return (
     <Screen>
-      <Button title={t.back} variant="ghost" onPress={() => router.back()} style={{ marginLeft: -SPACE.lg }} />
+      <Button title={t.back} variant="ghost" onPress={() => router.replace('/(contractor)/owner/sites')} style={{ marginLeft: -SPACE.lg }} />
       <View style={{ gap: SPACE.sm }}>
         <H1>{site.name}</H1>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
@@ -148,6 +151,31 @@ export default function SiteDetail() {
             )
           })}
         </Card>
+      ) : null}
+
+      {/* Latest from site — real published photos (horizontal strip). */}
+      {photosQ.data && photosQ.data.length > 0 ? (
+        <View>
+          <Small muted style={{ letterSpacing: 1, marginBottom: SPACE.sm }}>{t.latest.toUpperCase()}</Small>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: SPACE.sm, paddingRight: SPACE.lg }}
+          >
+            {photosQ.data.map((p) => (
+              <View key={p.id} style={{ width: 150 }}>
+                <Image
+                  source={{ uri: p.image_url }}
+                  style={{ width: 150, height: 110, borderRadius: theme.radii.chip, backgroundColor: theme.colors.line }}
+                  resizeMode="cover"
+                />
+                {p.caption ? (
+                  <Small muted numberOfLines={2} style={{ fontSize: 11, marginTop: 4 }}>{p.caption}</Small>
+                ) : null}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
       ) : null}
 
       {/* Tamper-evident dispute pack (3.6) — per-counterparty advance case. */}

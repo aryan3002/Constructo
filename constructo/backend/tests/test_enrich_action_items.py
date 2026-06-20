@@ -132,6 +132,32 @@ async def test_enrich_action_items_creates_one_for_the_task(db_session):
     assert n_events == 1
 
 
+async def test_enrich_skips_meeting_chatter(db_session, monkeypatch):
+    """Meeting/call-scheduling chatter must NEVER become an action item — even
+    when the LLM flags every message as a task. This is what was flooding the
+    owner Brief/Radar with '"join the Google Meet" is 985 days overdue'."""
+    monkeypatch.setattr(ea, "get_llm_client", lambda tier="cheap": _MarkerLLM(flag_all=True))
+    site = await _seed(
+        db_session,
+        [
+            "Kindly join us via the Google Meet link for the review.",   # junk
+            "We would like to schedule a Google Meet session tomorrow.",  # junk
+            "Please verify the meeting notes shared above.",              # junk
+            "Ramesh ko bolo cement order kare.",                         # a REAL task
+        ],
+    )
+    counts = await ea.run(session_factory=_session_factory(db_session))
+    assert counts["scanned"] == 4
+
+    rows = (
+        await db_session.execute(select(ActionItem).where(ActionItem.site_id == site.id))
+    ).scalars().all()
+    titles = [r.title.lower() for r in rows]
+    assert not any(("meet" in t or "meeting" in t) for t in titles), titles
+    assert any("cement" in t for t in titles)
+    assert len(rows) == 1
+
+
 async def test_enrich_action_items_is_idempotent(db_session):
     site = await _seed(
         db_session,

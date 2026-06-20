@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import { audit, type AuditFinding, type AuditSection } from '../../../../src/api/ownerAudit'
-import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
+import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title, useToast } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
 import { ITEM_META, SEVERITY_META, ScoreDial, SubHeader, scoreStatus } from '../_audit.components'
 
@@ -22,12 +22,16 @@ export default function AuditSite() {
   const { theme } = useTheme()
   const router = useRouter()
   const qc = useQueryClient()
+  const toast = useToast()
 
   const q = useQuery({ queryKey: ['owner', 'audit', id], queryFn: () => audit.get(id), enabled: !!id })
 
   const assign = useMutation({
     mutationFn: (findingId: string) => audit.assignFinding(findingId, { status: 'assigned' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['owner', 'audit', id] }),
+    onSuccess: () => {
+      toast('Assigned for fix · the site team is notified', 'check-circle')
+      void qc.invalidateQueries({ queryKey: ['owner', 'audit', id] })
+    },
   })
 
   if (q.isLoading) {
@@ -51,7 +55,7 @@ export default function AuditSite() {
       <SubHeader
         title="Site audit"
         sub={a.status === 'completed' ? 'Scored quality report' : 'Inspection in progress'}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/owner/audit')}
         right={a.score != null ? <StatusPill status={tone} size="sm" label={`${a.score}/100`} /> : undefined}
       />
 
@@ -110,9 +114,14 @@ export default function AuditSite() {
 function FindingCard({ f, pending, onAssign }: { f: AuditFinding; pending: boolean; onAssign: () => void }) {
   const { theme } = useTheme()
   const meta = SEVERITY_META[f.severity] ?? SEVERITY_META.minor
+  const accent = meta.status === 'risk' ? theme.colors.risk : meta.status === 'warn' ? theme.colors.warn : theme.colors.accent
+  const sevIcon = f.severity === 'critical' ? 'warning' : f.severity === 'major' ? 'flash' : 'information-circle-outline'
   return (
-    <Card flag={meta.status}>
+    <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: `${accent}1A`, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={sevIcon} size={16} color={accent} />
+        </View>
         <StatusPill status={meta.status} size="sm" label={meta.label} icon={undefined} />
         {f.room || f.location ? (
           <Small muted style={{ marginLeft: 'auto' }}>
