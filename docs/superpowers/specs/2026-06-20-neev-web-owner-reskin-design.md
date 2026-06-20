@@ -167,9 +167,14 @@ Re-skin to the prototype chrome: warm sand sidebar (sage active state, serif/sec
 |---|---|
 | Re-skinning Tier-A cards breaks tests that assert on DOM/roles | Preserve `role`/`aria`/`data-testid`/text the tests use; run `vitest` after each surface |
 | Serif/contrast fails AA on sand | AA-validate every pair during build; adjust token values if a pair misses |
-| Flash of Blueprint before neev upgrades for owners | `localStorage` hint (`cstk.neev`) read by the no-FOUC script |
+| Flash of Blueprint before neev upgrades for owners | `localStorage` hint (`cstk.skin`) read by the no-FOUC script |
 | Dense desk tools look "half-skinned" | Accept warm-but-dense as the deliberate design; don't over-rounded tables |
 | Scope creep into other roles | `VITE_NEEV_OWNER` + role gate keep blast radius to owner only |
+
+**Known limitations (accepted for the flagged pilot — from the Phase-1 whole-branch review):**
+- **Cross-account pre-paint flash.** The `cstk.skin` hint is read pre-paint without knowing *who* will log in. A **non-owner** logging in on a browser where an **owner** previously set `cstk.skin='neev'` gets a one-frame warm (neev) paint, then `OwnerSkinSync` corrects to Blueprint after `/auth/me` resolves. Transient and self-correcting; the final state is always correct.
+- **Post-rollback flash.** Because the inline script can't read the build-time flag, after shipping with `VITE_NEEV_OWNER` off (rollback), an owner who previously had neev sees a one-frame neev paint per reload until `OwnerSkinSync` overwrites the hint to `blueprint`. Self-correcting on settle.
+- **Phase-2 hardening (deferred):** clear or per-user-namespace `cstk.skin` on logout to close both flash windows cleanly.
 
 ## 7. Verification
 
