@@ -61,7 +61,7 @@ export default function DesignSite() {
       <SubHeader
         title={siteName}
         sub={cap(profile.scope_type)}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/owner/design')}
         right={<StatusPill status={tone} size="sm" label={profileStatusLabel(profile.status)} />}
       />
 

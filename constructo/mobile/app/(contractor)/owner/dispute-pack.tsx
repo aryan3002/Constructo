@@ -109,7 +109,7 @@ export default function DisputePack() {
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
-      <Pressable onPress={() => router.back()} accessibilityLabel={t.back} hitSlop={10} style={{ marginBottom: SPACE.xs }}>
+      <Pressable onPress={() => router.replace('/(contractor)/owner/brief')} accessibilityLabel={t.back} hitSlop={10} style={{ marginBottom: SPACE.xs }}>
         <Feather name="chevron-left" size={26} color={c.text} />
       </Pressable>
       <H1>{t.title}</H1>

@@ -55,7 +55,7 @@ export default function DesignBrief() {
 
   return (
     <Pad>
-      <SubHeader title="Design brief" sub="AI-drafted directions · you commit" onBack={() => router.back()} />
+      <SubHeader title="Design brief" sub="AI-drafted directions · you commit" onBack={() => router.replace('/(contractor)/owner/design')} />
 
       {totalThemes === 0 ? (
         <Card variant="quiet">

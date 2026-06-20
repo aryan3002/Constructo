@@ -54,7 +54,7 @@ export default function DesignHub() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
-      <SubHeader title="Design briefs" sub="Per-site design direction" onBack={() => router.back()} />
+      <SubHeader title="Design briefs" sub="Per-site design direction" onBack={() => router.replace('/(contractor)/owner/brief')} />
 
       <View style={{ backgroundColor: AP.chip, borderRadius: theme.radii.hero, padding: SPACE.lg, gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>

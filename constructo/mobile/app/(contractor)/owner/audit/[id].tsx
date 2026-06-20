@@ -51,7 +51,7 @@ export default function AuditSite() {
       <SubHeader
         title="Site audit"
         sub={a.status === 'completed' ? 'Scored quality report' : 'Inspection in progress'}
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/owner/audit')}
         right={a.score != null ? <StatusPill status={tone} size="sm" label={`${a.score}/100`} /> : undefined}
       />
 

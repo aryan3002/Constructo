@@ -59,7 +59,7 @@ export default function AuditHub() {
       <SubHeader
         title="Site audit"
         sub="AI-powered quality inspections"
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(contractor)/owner/brief')}
         right={
           <Pressable
             accessibilityRole="button"

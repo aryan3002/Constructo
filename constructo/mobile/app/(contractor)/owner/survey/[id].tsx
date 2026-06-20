@@ -47,7 +47,7 @@ export default function SurveyScreen() {
 
   return (
     <Pad>
-      <SubHeader title="Site survey" sub={[s.name, s.code].filter(Boolean).join(' · ')} onBack={() => router.back()} />
+      <SubHeader title="Site survey" sub={[s.name, s.code].filter(Boolean).join(' · ')} onBack={() => router.replace('/(contractor)/owner/audit')} />
 
       {/* Risk hero */}
       <View style={{ backgroundColor: theme.colors.secondaryContainer, borderRadius: theme.radii.hero, padding: SPACE.lg, gap: SPACE.md }}>

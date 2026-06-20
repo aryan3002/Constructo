@@ -16,7 +16,8 @@
  *   • Bilingual en/hi; English defaults.
  */
 import { useState } from 'react'
-import { Modal, Pressable, TextInput, View, type ViewStyle } from 'react-native'
+import { Modal, Pressable, ScrollView, TextInput, View, type ViewStyle } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { Feather } from '@expo/vector-icons'
 import { Stack } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -186,18 +187,39 @@ function Sheet({
           }}
           onPress={() => undefined}
         >
-          {/* Handle */}
-          <View
-            style={{
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: theme.colors.line,
-              alignSelf: 'center',
-              marginBottom: SPACE.xs,
-            }}
-          />
-          {children}
+          {/* Handle + explicit close (the form has a focused input that can hide
+              the scrim, so a tap-target close is essential). */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.xs }}>
+            <View style={{ flex: 1 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: theme.colors.line,
+                  alignSelf: 'center',
+                  marginLeft: 32,
+                }}
+              />
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+            >
+              <Ionicons name="close" size={24} color={theme.colors.textMute} />
+            </Pressable>
+          </View>
+          {/* Scrollable body — the permit form is taller than the sheet. */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: SPACE.md, paddingBottom: SPACE.md }}
+          >
+            {children}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>

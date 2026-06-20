@@ -88,7 +88,7 @@ export default function SiteDetail() {
   if (siteQ.error || !siteQ.data) {
     return (
       <Screen>
-        <Button title={t.back} variant="ghost" onPress={() => router.back()} />
+        <Button title={t.back} variant="ghost" onPress={() => router.replace('/(contractor)/owner/sites')} />
         <ErrorBlock message={t.errorLine} retryLabel={t.tryAgain} onRetry={() => void siteQ.refetch()} />
       </Screen>
     )
@@ -99,7 +99,7 @@ export default function SiteDetail() {
 
   return (
     <Screen>
-      <Button title={t.back} variant="ghost" onPress={() => router.back()} style={{ marginLeft: -SPACE.lg }} />
+      <Button title={t.back} variant="ghost" onPress={() => router.replace('/(contractor)/owner/sites')} style={{ marginLeft: -SPACE.lg }} />
       <View style={{ gap: SPACE.sm }}>
         <H1>{site.name}</H1>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
