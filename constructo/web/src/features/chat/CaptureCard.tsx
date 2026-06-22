@@ -205,7 +205,7 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
   const meta = EVENT_META[event.event_type] ?? EVENT_META.unknown
   const Icon = G[meta.icon]
   const fieldsLine = keyFields(event.event_type, event.fields)
-  const pct = Math.round(event.confidence * 100)
+  const pct = event.confidence == null ? null : Math.round(event.confidence * 100)
   const time = message.created_at ? fmtTime(message.created_at) : ''
 
   // "approved" status lives in event.fields.status
@@ -231,7 +231,7 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
           {meta.en}
         </span>
 
-        {/* Disputed */}
+        {/* Status pills — mutually exclusive (priority: Disputed > Approved > Check this) */}
         {event.contested ? (
           <span
             role="status"
@@ -240,10 +240,7 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
           >
             Disputed
           </span>
-        ) : null}
-
-        {/* Approved */}
-        {fieldsStatus === 'approved' ? (
+        ) : fieldsStatus === 'approved' ? (
           <span
             role="status"
             data-testid="pill-approved"
@@ -251,10 +248,7 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
           >
             Approved
           </span>
-        ) : null}
-
-        {/* Check this — only when needs_clarification AND not contested */}
-        {event.needs_clarification && !event.contested ? (
+        ) : event.needs_clarification ? (
           <span
             role="status"
             data-testid="pill-check-this"
@@ -325,12 +319,12 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
             </p>
           ) : null}
 
-          {/* Footer: time · pct% sure */}
+          {/* Footer: time · pct% sure (pct omitted when confidence is null) */}
           <span
             data-testid="proof-footer"
             className="cstk-mono text-micro text-text-muted"
           >
-            {[time, `${pct}% sure`].filter(Boolean).join('  ·  ')}
+            {[time, pct != null ? `${pct}% sure` : null].filter(Boolean).join('  ·  ')}
           </span>
         </div>
       ) : null}

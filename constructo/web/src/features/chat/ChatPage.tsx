@@ -109,6 +109,8 @@ export function ChatPage() {
       >
         {/* ── Left pane: inbox ─────────────────────────────────────────────── */}
         <div
+          role="region"
+          aria-label="Conversation list"
           data-testid="chat-inbox-pane"
           className={`
             w-full shrink-0 border-r border-edge
@@ -124,6 +126,8 @@ export function ChatPage() {
 
         {/* ── Right pane: thread or empty state ────────────────────────────── */}
         <div
+          role="region"
+          aria-label="Conversation thread"
           data-testid="chat-thread-pane"
           className={`
             min-w-0 flex-1 flex-col

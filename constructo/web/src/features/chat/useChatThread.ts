@@ -195,8 +195,9 @@ export function useChatThread(address: ChatAddress) {
           body,
           reply_to_id: reply?.id ?? undefined,
         })
-        .then(() => {
-          // Drop pending — the real row arrives via socket or refetch merge
+        .then((saved) => {
+          // Merge the returned row immediately (idempotent with socket echo — same seq dedupes)
+          setMessages((prev) => mergeMessages(prev, [saved]))
           setPending((prev) => prev.filter((p) => p.clientMsgId !== cid))
           setReply(null)
         })
@@ -262,7 +263,8 @@ export function useChatThread(address: ChatAddress) {
           media_type: mediaType,
           reply_to_id: reply?.id ?? undefined,
         })
-        .then(() => {
+        .then((saved) => {
+          setMessages((prev) => mergeMessages(prev, [saved]))
           setPending((prev) => prev.filter((p) => p.clientMsgId !== cid))
           setReply(null)
         })
@@ -292,7 +294,8 @@ export function useChatThread(address: ChatAddress) {
           fields,
           reply_to_id: reply?.id ?? undefined,
         })
-        .then(() => {
+        .then((saved) => {
+          setMessages((prev) => mergeMessages(prev, [saved]))
           setPending((prev) => prev.filter((p) => p.clientMsgId !== cid))
           setReply(null)
         })

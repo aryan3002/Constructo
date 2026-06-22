@@ -135,7 +135,7 @@ export function ChatThread({ address, title, hasHomeowner }: ChatThreadProps) {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="shrink-0 border-b border-edge bg-surface-card px-4 py-3">
         {title ? (
-          <h2 className="font-body text-heading font-semibold text-text-primary truncate">
+          <h2 className="font-body text-h2 font-semibold text-text-primary truncate">
             {title}
           </h2>
         ) : null}
