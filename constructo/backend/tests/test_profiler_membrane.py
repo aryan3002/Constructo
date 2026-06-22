@@ -167,6 +167,33 @@ async def test_cross_company_and_cross_site_get_404(client, factory, db_session)
         app.dependency_overrides.pop(get_llm, None)
 
 
+async def test_list_profiles_homeowner_scoped_to_their_sites(client, factory, db_session):
+    """GET /design/profiles must not leak other clients' profiles to a homeowner.
+
+    Homeowners share the contractor's company_id, so company-scope alone is too
+    permissive (Vuln 3). A homeowner who is a member of a DIFFERENT site (same
+    company) must see no rows; the profiled site's own owner still sees it.
+    """
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        pid = w["pid"]
+        # the profiled site's primary owner is a legitimate member
+        owner_list = await client.get("/api/v1/design/profiles", headers=auth(w["owner"]))
+        assert owner_list.status_code == 200
+        assert {p["id"] for p in owner_list.json()} == {pid}
+
+        # a homeowner of a DIFFERENT site in the SAME company must see nothing
+        other_site = await factory.site(w["company"], name="Other")
+        stranger = await factory.user(company=w["company"], role=UserRole.homeowner)
+        await _member(db_session, other_site.id, stranger.id, HomeownerSubRole.primary_owner)
+        stranger_list = await client.get("/api/v1/design/profiles", headers=auth(stranger))
+        assert stranger_list.status_code == 200
+        assert stranger_list.json() == []
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
 async def test_cross_site_homeowner_cannot_act_on_brief(client, factory, db_session):
     """A primary_owner of a DIFFERENT site (same company) cannot even load the
     brief to act on it — the loader 404s before any authority check."""
