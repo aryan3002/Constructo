@@ -10,6 +10,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { type ReactElement } from 'react'
+import { ToastProvider } from '../../ui/Toast'
 import { ChatThread } from './ChatThread'
 import type { ChatMessage } from '../../api/chat'
 
@@ -145,9 +148,22 @@ vi.mock('./ChatComposer', () => ({
   ChatComposer: () => <div data-testid="chat-composer" />,
 }))
 
+// Phase D — shallow-mock the command surfaces (tested separately); capture
+// open-state so the command-bar wiring is assertable.
+vi.mock('./insights/BriefPin', () => ({ BriefPin: () => null }))
+vi.mock('./insights/RadarDrawer', () => ({ RadarDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="radar-drawer" /> : null) }))
+vi.mock('./insights/RecapDrawer', () => ({ RecapDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="recap-drawer" /> : null) }))
+vi.mock('./actionitems/ActionItemsDrawer', () => ({ ActionItemsDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="todos-drawer" /> : null) }))
+vi.mock('./disputes/DisputeModal', () => ({ DisputeModal: ({ open }: { open: boolean }) => (open ? <div data-testid="dispute-modal" /> : null) }))
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+function renderThread(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={qc}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>)
+}
 
 describe('ChatThread', () => {
   beforeEach(() => {
@@ -157,61 +173,61 @@ describe('ChatThread', () => {
   const address = { siteId: 'site-1' }
 
   it('renders a MessageBubble for a plain text message', () => {
-    render(<ChatThread address={address} title="Site Chat" />)
+    renderThread(<ChatThread address={address} title="Site Chat" />)
     // MessageBubble renders data-testid="bubble-other" (not mine, since me.id ≠ sender_id)
     expect(screen.getByTestId('bubble-other')).toBeInTheDocument()
   })
 
   it('renders a CaptureCard for a message with a known event type', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     // CaptureCard renders data-testid="capture-card"
     expect(screen.getByTestId('capture-card')).toBeInTheDocument()
   })
 
   it('renders a SystemNotice for a system-kind message', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     // SystemNotice renders data-testid="system-notice"
     expect(screen.getByTestId('system-notice')).toBeInTheDocument()
     expect(screen.getByTestId('system-notice')).toHaveTextContent('Aryan joined the thread')
   })
 
   it('inserts a day separator between messages on different calendar days', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     // The separator appears before msg-3 (DAY2 vs DAY1)
     const separators = screen.getAllByTestId('day-separator')
     expect(separators.length).toBeGreaterThanOrEqual(1)
   })
 
   it('does NOT insert a day separator between messages on the same day', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     // msg-1 and msg-2 share DAY1 — only one separator total (before msg-3)
     const separators = screen.getAllByTestId('day-separator')
     expect(separators.length).toBe(1)
   })
 
   it('renders the title in the header', () => {
-    render(<ChatThread address={address} title="Test Thread Title" />)
+    renderThread(<ChatThread address={address} title="Test Thread Title" />)
     expect(screen.getByText('Test Thread Title')).toBeInTheDocument()
   })
 
   it('shows the client banner when hasHomeowner is true', () => {
-    render(<ChatThread address={address} hasHomeowner={true} />)
+    renderThread(<ChatThread address={address} hasHomeowner={true} />)
     expect(screen.getByTestId('client-banner')).toBeInTheDocument()
     expect(screen.getByTestId('client-banner')).toHaveTextContent('Client is in this thread')
   })
 
   it('hides the client banner when hasHomeowner is false', () => {
-    render(<ChatThread address={address} hasHomeowner={false} />)
+    renderThread(<ChatThread address={address} hasHomeowner={false} />)
     expect(screen.queryByTestId('client-banner')).not.toBeInTheDocument()
   })
 
   it('renders the ChatComposer', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     expect(screen.getByTestId('chat-composer')).toBeInTheDocument()
   })
 
   it('renders a NivaanProposalCard for a message with meta.proposal', () => {
-    render(<ChatThread address={address} />)
+    renderThread(<ChatThread address={address} />)
     // NivaanProposalCard renders data-testid="nivaan-proposal-card"
     expect(screen.getByTestId('nivaan-proposal-card')).toBeInTheDocument()
     // Also verify the proposal summary is visible
@@ -220,13 +236,27 @@ describe('ChatThread', () => {
 
   it('shows a Members button when onManageGroup is provided and calls it on click', () => {
     const onManageGroup = vi.fn()
-    render(<ChatThread address={address} title="All Hands" onManageGroup={onManageGroup} />)
+    renderThread(<ChatThread address={address} title="All Hands" onManageGroup={onManageGroup} />)
     fireEvent.click(screen.getByRole('button', { name: /members/i }))
     expect(onManageGroup).toHaveBeenCalledOnce()
   })
 
   it('hides the Members button when onManageGroup is absent', () => {
-    render(<ChatThread address={address} title="Site" />)
+    renderThread(<ChatThread address={address} title="Site" />)
     expect(screen.queryByRole('button', { name: /members/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the command bar and opens Radar on a site thread (Phase D)', () => {
+    renderThread(<ChatThread address={{ siteId: 's1' }} title="Site" siteId="s1" />)
+    expect(screen.getByRole('button', { name: /^radar$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^recap$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^to-dos$/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^radar$/i }))
+    expect(screen.getByTestId('radar-drawer')).toBeInTheDocument()
+  })
+
+  it('hides the command bar when there is no siteId (Phase D)', () => {
+    renderThread(<ChatThread address={{ conversationId: 'g1' }} title="Group" />)
+    expect(screen.queryByRole('button', { name: /^radar$/i })).toBeNull()
   })
 })

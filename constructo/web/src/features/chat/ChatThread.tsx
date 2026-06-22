@@ -12,15 +12,23 @@
  * Semantic tokens only — no hardcoded hex.  Neev light + neev-dark aware.
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChatThread } from './useChatThread'
 import { MessageBubble } from './MessageBubble'
 import { CaptureCard } from './CaptureCard'
 import { NivaanProposalCard } from './NivaanProposalCard'
 import { SystemNotice } from './SystemNotice'
 import { ChatComposer } from './ChatComposer'
+import { BriefPin } from './insights/BriefPin'
+import { RadarDrawer } from './insights/RadarDrawer'
+import { RecapDrawer } from './insights/RecapDrawer'
+import { ActionItemsDrawer } from './actionitems/ActionItemsDrawer'
+import { DisputeModal } from './disputes/DisputeModal'
 import { useMe } from '../../auth/useCan'
-import type { ChatAddress, ChatMessage } from '../../api/chat'
+import { useToast } from '../../ui/Toast'
+import { chatApi, type ChatAddress, type ChatEvent, type ChatMessage } from '../../api/chat'
+import { actionItemsApi } from '../../api/actionItems'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,14 +72,18 @@ export interface ChatThreadProps {
   hasHomeowner?: boolean
   /** When set (group threads), shows a "Members" button that opens the manage drawer. */
   onManageGroup?: () => void
+  /** The thread's site (Phase D) — enables the brief pin + Radar/Recap/To-dos + card dispute/to-do. */
+  siteId?: string
 }
 
 // ---------------------------------------------------------------------------
 // ChatThread
 // ---------------------------------------------------------------------------
 
-export function ChatThread({ address, title, hasHomeowner, onManageGroup }: ChatThreadProps) {
+export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId }: ChatThreadProps) {
   const { data: me } = useMe()
+  const { show } = useToast()
+  const queryClient = useQueryClient()
 
   const {
     messages,
@@ -126,6 +138,39 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup }: Chat
   const showClientBanner = hasHomeowner === true
 
   // -------------------------------------------------------------------------
+  // Phase D — command tools (site threads only)
+  // -------------------------------------------------------------------------
+  const [radarOpen, setRadarOpen] = useState(false)
+  const [recapOpen, setRecapOpen] = useState(false)
+  const [todosOpen, setTodosOpen] = useState(false)
+  const [disputeFor, setDisputeFor] = useState<{ eventId: string; contested: boolean } | null>(null)
+
+  const briefQuery = useQuery({
+    queryKey: ['chat', 'brief', siteId],
+    queryFn: () => chatApi.brief(siteId!),
+    enabled: !!siteId,
+  })
+
+  const addrKey = 'siteId' in address ? address.siteId : address.conversationId
+
+  const makeTodo = useCallback(
+    async (message: ChatMessage, ev: ChatEvent) => {
+      if (!siteId) return
+      try {
+        await actionItemsApi.create({
+          site_id: siteId,
+          title: ev.summary || 'Follow up',
+          source_message_id: message.id,
+        })
+        show({ status: 'ok', message: 'Added to to-dos' })
+      } catch (e) {
+        show({ status: 'risk', message: e instanceof Error ? e.message : 'Could not add the to-do' })
+      }
+    },
+    [siteId, show],
+  )
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
@@ -144,15 +189,26 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup }: Chat
           ) : (
             <span />
           )}
-          {onManageGroup ? (
-            <button
-              type="button"
-              onClick={onManageGroup}
-              className="shrink-0 rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover"
-            >
-              Members
-            </button>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {siteId ? (
+              <>
+                <button type="button" onClick={() => setRadarOpen(true)} className="rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover">
+                  Radar
+                </button>
+                <button type="button" onClick={() => setRecapOpen(true)} className="rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover">
+                  Recap
+                </button>
+                <button type="button" onClick={() => setTodosOpen(true)} className="rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover">
+                  To-dos
+                </button>
+              </>
+            ) : null}
+            {onManageGroup ? (
+              <button type="button" onClick={onManageGroup} className="rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover">
+                Members
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {/* Client-present banner */}
@@ -173,6 +229,9 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup }: Chat
         className="flex-1 overflow-y-auto px-4 py-3"
         onScroll={handleScroll}
       >
+        {/* Pinned brief (Phase D) — site threads with risks only */}
+        {siteId ? <BriefPin brief={briefQuery.data} /> : null}
+
         {/* Loading state */}
         {isLoading ? (
           <p
@@ -242,6 +301,8 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup }: Chat
                       key={ev.id}
                       event={ev}
                       message={message}
+                      onDispute={siteId ? () => setDisputeFor({ eventId: ev.id, contested: ev.contested }) : undefined}
+                      onMakeTodo={siteId ? () => makeTodo(message, ev) : undefined}
                     />
                   ))
               } else if (isSystemNotice(message)) {
@@ -334,6 +395,24 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup }: Chat
         sending={sending}
         address={address}
       />
+
+      {/* ── Phase D command tools (site threads only) ─────────────────────── */}
+      {siteId ? (
+        <>
+          <RadarDrawer open={radarOpen} onClose={() => setRadarOpen(false)} siteId={siteId} />
+          <RecapDrawer open={recapOpen} onClose={() => setRecapOpen(false)} siteId={siteId} />
+          <ActionItemsDrawer open={todosOpen} onClose={() => setTodosOpen(false)} siteId={siteId} />
+        </>
+      ) : null}
+      {disputeFor ? (
+        <DisputeModal
+          open
+          onClose={() => setDisputeFor(null)}
+          eventId={disputeFor.eventId}
+          contested={disputeFor.contested}
+          onChanged={() => queryClient.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })}
+        />
+      ) : null}
     </div>
   )
 }
