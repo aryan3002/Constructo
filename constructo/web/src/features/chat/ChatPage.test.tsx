@@ -99,18 +99,34 @@ vi.mock('./ChatThread', () => ({
       address,
       title,
       hasHomeowner,
+      onManageGroup,
     }: {
       address: unknown
       title?: string
       hasHomeowner?: boolean
+      onManageGroup?: () => void
     }) => (
       <div
         data-testid="mock-chat-thread"
         data-address={JSON.stringify(address)}
         data-title={title ?? ''}
         data-has-homeowner={String(hasHomeowner ?? false)}
-      />
+        data-has-manage={String(!!onManageGroup)}
+      >
+        {onManageGroup ? (
+          <button type="button" data-testid="thread-manage-btn" onClick={onManageGroup}>
+            Members
+          </button>
+        ) : null}
+      </div>
     ),
+  ),
+}))
+
+// --- GroupManageDrawer (shallow; the real one needs ToastProvider) ---
+vi.mock('./groups/GroupManageDrawer', () => ({
+  GroupManageDrawer: vi.fn(({ open, groupId }: { open: boolean; groupId: string }) =>
+    open ? <div data-testid="mock-manage-drawer" data-group={groupId} /> : null,
   ),
 }))
 
@@ -223,5 +239,26 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByTestId('select-site-conv'))
 
     expect(screen.queryByTestId('chat-empty-state')).not.toBeInTheDocument()
+  })
+
+  it('offers group management for a group thread and opens the drawer', () => {
+    render(<ChatPage />, { wrapper: makeWrapper() })
+
+    fireEvent.click(screen.getByTestId('select-group-conv'))
+    const thread = screen.getByTestId('mock-chat-thread')
+    expect(thread.getAttribute('data-has-manage')).toBe('true')
+
+    fireEvent.click(screen.getByTestId('thread-manage-btn'))
+    const drawer = screen.getByTestId('mock-manage-drawer')
+    expect(drawer).toBeInTheDocument()
+    expect(drawer.getAttribute('data-group')).toBe('conv-grp-1')
+  })
+
+  it('does not offer group management for a site thread', () => {
+    render(<ChatPage />, { wrapper: makeWrapper() })
+
+    fireEvent.click(screen.getByTestId('select-site-conv'))
+    expect(screen.getByTestId('mock-chat-thread').getAttribute('data-has-manage')).toBe('false')
+    expect(screen.queryByTestId('mock-manage-drawer')).not.toBeInTheDocument()
   })
 })

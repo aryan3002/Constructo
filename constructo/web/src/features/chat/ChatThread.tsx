@@ -62,13 +62,15 @@ export interface ChatThreadProps {
   title?: string
   /** True when a homeowner client has joined this thread. */
   hasHomeowner?: boolean
+  /** When set (group threads), shows a "Members" button that opens the manage drawer. */
+  onManageGroup?: () => void
 }
 
 // ---------------------------------------------------------------------------
 // ChatThread
 // ---------------------------------------------------------------------------
 
-export function ChatThread({ address, title, hasHomeowner }: ChatThreadProps) {
+export function ChatThread({ address, title, hasHomeowner, onManageGroup }: ChatThreadProps) {
   const { data: me } = useMe()
 
   const {
@@ -134,11 +136,24 @@ export function ChatThread({ address, title, hasHomeowner }: ChatThreadProps) {
     >
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="shrink-0 border-b border-edge bg-surface-card px-4 py-3">
-        {title ? (
-          <h2 className="font-body text-h2 font-semibold text-text-primary truncate">
-            {title}
-          </h2>
-        ) : null}
+        <div className="flex items-center justify-between gap-2">
+          {title ? (
+            <h2 className="min-w-0 truncate font-body text-h2 font-semibold text-text-primary">
+              {title}
+            </h2>
+          ) : (
+            <span />
+          )}
+          {onManageGroup ? (
+            <button
+              type="button"
+              onClick={onManageGroup}
+              className="shrink-0 rounded-full border border-edge bg-surface-card px-3 py-1 font-body text-small font-medium text-text-primary hover:bg-surface-hover"
+            >
+              Members
+            </button>
+          ) : null}
+        </div>
 
         {/* Client-present banner */}
         {showClientBanner ? (

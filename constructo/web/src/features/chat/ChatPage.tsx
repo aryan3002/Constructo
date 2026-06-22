@@ -12,10 +12,12 @@
  */
 
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AppShell } from '../../ui/AppShell'
 import { useMeRole, useMe } from '../../auth/useCan'
 import { ChatInbox } from './ChatInbox'
 import { ChatThread } from './ChatThread'
+import { GroupManageDrawer } from './groups/GroupManageDrawer'
 import type { ConversationSummary, ChatAddress } from '../../api/chat'
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,10 @@ export function ChatPage() {
 
   /** On narrow screens: once a conversation is selected, flip to thread view. */
   const [mobileShowThread, setMobileShowThread] = useState(false)
+
+  /** Group-management drawer (only meaningful for group threads). */
+  const [manageOpen, setManageOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   // Build the ChatAddress from the selected conversation — memoized so the
   // identity is stable across re-renders as long as the selected conversation
@@ -153,6 +159,9 @@ export function ChatPage() {
                 address={chatAddress}
                 title={threadTitle}
                 hasHomeowner={hasHomeowner}
+                onManageGroup={
+                  selectedConv.kind === 'group' ? () => setManageOpen(true) : undefined
+                }
               />
             </>
           ) : (
@@ -168,6 +177,21 @@ export function ChatPage() {
           )}
         </div>
       </div>
+
+      {selectedConv?.kind === 'group' ? (
+        <GroupManageDrawer
+          open={manageOpen}
+          onClose={() => setManageOpen(false)}
+          groupId={selectedConv.id}
+          groupTitle={threadTitle ?? 'Group'}
+          onLeft={() => {
+            setManageOpen(false)
+            setSelectedConv(null)
+            setMobileShowThread(false)
+            void queryClient.invalidateQueries({ queryKey: ['chat', 'conversations'] })
+          }}
+        />
+      ) : null}
     </AppShell>
   )
 }
