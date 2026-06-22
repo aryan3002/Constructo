@@ -15,8 +15,8 @@
  *  11. raw_status=failed shows "couldn't process" cue.
  *  12. Proof panel shows attachment image when message.attachment_url is set.
  */
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ChatEvent, ChatMessage } from '../../api/chat'
 import { CaptureCard } from './CaptureCard'
@@ -331,5 +331,32 @@ describe('keyFields()', () => {
   })
   it('unknown type returns empty string', () => {
     expect(keyFields('progress_update', {})).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase D — dispute / make-to-do actions (callback props)
+// ---------------------------------------------------------------------------
+
+describe('CaptureCard — Phase D actions', () => {
+  it('renders no action row when no handlers are provided', () => {
+    render(<CaptureCard event={makeEvent()} message={makeMsg()} />)
+    expect(screen.queryByRole('button', { name: /^dispute$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /make a to-do/i })).toBeNull()
+  })
+
+  it('shows Dispute + Make a to-do and fires the handlers', () => {
+    const onDispute = vi.fn()
+    const onMakeTodo = vi.fn()
+    render(<CaptureCard event={makeEvent()} message={makeMsg()} onDispute={onDispute} onMakeTodo={onMakeTodo} />)
+    fireEvent.click(screen.getByRole('button', { name: /^dispute$/i }))
+    expect(onDispute).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: /make a to-do/i }))
+    expect(onMakeTodo).toHaveBeenCalledOnce()
+  })
+
+  it('labels the dispute action "Resolve" when the event is contested', () => {
+    render(<CaptureCard event={makeEvent({ contested: true })} message={makeMsg()} onDispute={() => {}} />)
+    expect(screen.getByRole('button', { name: /^resolve$/i })).toBeInTheDocument()
   })
 })
