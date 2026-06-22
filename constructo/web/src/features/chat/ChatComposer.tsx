@@ -14,12 +14,16 @@
 import {
   useRef,
   useState,
+  useMemo,
   useCallback,
   type ChangeEvent,
   type KeyboardEvent,
   type DragEvent,
 } from 'react'
 import { chatApi, type ChatAddress, type ChatMessage, type MediaKind } from '../../api/chat'
+import { parseSlash, isSlash, SLASH_MENU, type SlashMenuItem } from './slash'
+import { suggestCapture } from './suggest'
+import { SlashMenu } from './SlashMenu'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +41,8 @@ export interface ChatComposerProps {
   onSend: (body: string) => void
   /** Called after the media upload completes, with the upload receipt. */
   onSendMedia: (m: MediaPayload) => void
+  /** Called when a slash-command or smart-suggest chip resolves to a capture. */
+  onSendProposal: (captureType: string, fields: Record<string, unknown>) => void
   /** When set, a reply-banner renders above the textarea. */
   reply?: ChatMessage | null
   /** Called when the user dismisses the reply banner (×). */
@@ -107,6 +113,7 @@ function replySnippet(msg: ChatMessage): string {
 export function ChatComposer({
   onSend,
   onSendMedia,
+  onSendProposal,
   reply,
   onCancelReply,
   sending = false,
@@ -116,11 +123,28 @@ export function ChatComposer({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  // Phase B — slash menu + smart-suggest state
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [menuDismissed, setMenuDismissed] = useState(false)
+  const [usageHint, setUsageHint] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const canSend = text.trim().length > 0 && !sending && !uploading
+
+  // Slash menu: open while the text is a bare `/command` (no space typed yet).
+  const slashMenuItems = useMemo<SlashMenuItem[]>(() => {
+    const m = /^\/(\w*)$/.exec(text)
+    if (!m) return []
+    const prefix = m[1].toLowerCase()
+    return SLASH_MENU.filter((c) => c.cmd.startsWith(prefix))
+  }, [text])
+  const showMenu = slashMenuItems.length > 0 && !menuDismissed
+  const clampedActive = Math.min(activeIndex, Math.max(0, slashMenuItems.length - 1))
+
+  // Smart-suggest: one chip for free text (never while typing a slash command).
+  const suggestion = useMemo(() => (isSlash(text) ? null : suggestCapture(text)), [text])
 
   // Auto-grow the textarea up to ~6 rows (8px × 24 ≈ 192px)
   const autoGrow = useCallback(() => {
@@ -134,25 +158,75 @@ export function ChatComposer({
   // Text send
   // -------------------------------------------------------------------------
 
+  const clearText = useCallback(() => {
+    setText('')
+    setUsageHint(null)
+    setActiveIndex(0)
+    setMenuDismissed(false)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+  }, [])
+
+  const completeCommand = useCallback((item: SlashMenuItem) => {
+    setText(`/${item.cmd} `)
+    setActiveIndex(0)
+    setUsageHint(null)
+    textareaRef.current?.focus()
+  }, [])
+
   const handleSend = useCallback(() => {
     const body = text.trim()
     if (!body || sending || uploading) return
-    onSend(body)
-    setText('')
-    // Reset height after clearing
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
+    const parsed = parseSlash(body)
+    if (parsed && 'error' in parsed) {
+      const item = SLASH_MENU.find((c) => c.cmd === parsed.command)
+      setUsageHint(item ? `Try: ${item.usage}` : 'Check the command format')
+      return
     }
-  }, [text, sending, uploading, onSend])
+    if (parsed) {
+      onSendProposal(parsed.capture_type, parsed.fields)
+      clearText()
+      return
+    }
+    onSend(body)
+    clearText()
+  }, [text, sending, uploading, onSend, onSendProposal, clearText])
+
+  const acceptSuggestion = useCallback(() => {
+    if (!suggestion) return
+    onSendProposal(suggestion.capture_type, suggestion.fields)
+    clearText()
+  }, [suggestion, onSendProposal, clearText])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (showMenu) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setActiveIndex((i) => Math.min(i + 1, slashMenuItems.length - 1))
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setActiveIndex((i) => Math.max(i - 1, 0))
+          return
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault()
+          completeCommand(slashMenuItems[clampedActive])
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setMenuDismissed(true)
+          return
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         handleSend()
       }
     },
-    [handleSend],
+    [showMenu, slashMenuItems, clampedActive, completeCommand, handleSend],
   )
 
   // -------------------------------------------------------------------------
@@ -301,11 +375,17 @@ export function ChatComposer({
       {/* ------------------------------------------------------------------ */}
       {/* Input row: media button · textarea · send button                    */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex items-end gap-2 px-3 py-2">
+      <div className="relative flex items-end gap-2 px-3 py-2">
 
-        {/* --- PHASE B SLOT: slash-command trigger (not implemented yet) --- */}
-        {/* PHASE_B_SLASH_COMMANDS: a "/" button that opens the slash-command
-            picker will be inserted here in Phase B. */}
+        {/* Slash-command menu (Phase B) — anchored above the input row */}
+        {showMenu ? (
+          <SlashMenu
+            items={slashMenuItems}
+            activeIndex={clampedActive}
+            onHoverIndex={setActiveIndex}
+            onSelect={completeCommand}
+          />
+        ) : null}
 
         {/* Media button */}
         <button
@@ -366,6 +446,8 @@ export function ChatComposer({
           value={text}
           onChange={(e) => {
             setText(e.target.value)
+            setMenuDismissed(false)
+            if (usageHint) setUsageHint(null)
             autoGrow()
           }}
           onKeyDown={handleKeyDown}
@@ -375,10 +457,8 @@ export function ChatComposer({
           style={{ minHeight: '40px', maxHeight: '192px' }}
         />
 
-        {/* --- PHASE B SLOT: voice-record button (not implemented yet) --- */}
-        {/* PHASE_B_VOICE_RECORDER: mic button → voice recording → onSendMedia
-            will be inserted here in Phase B. When no text is typed, this
-            button replaces the send button. */}
+        {/* Voice recording is intentionally deferred this pass (web Phase B):
+            desk users + MediaRecorder webm/STT friction. See the Phase B spec. */}
 
         {/* Send button */}
         <button
@@ -392,12 +472,33 @@ export function ChatComposer({
         </button>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* PHASE B SLOT: smart-suggest chip row                                */}
-      {/* PHASE_B_SMART_SUGGEST: a horizontally scrollable row of AI-suggested
-          quick-reply chips will be inserted here (below the input row) in
-          Phase B.                                                            */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Smart-suggest chip / usage hint (Phase B) — below the input row */}
+      {usageHint ? (
+        <p className="px-3 pb-2 font-body text-small text-text-muted">{usageHint}</p>
+      ) : suggestion && !showMenu ? (
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={acceptSuggestion}
+            className="inline-flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand-subtle px-3 py-1 font-body text-small font-medium text-brand-text hover:bg-surface-hover"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            {suggestion.label}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
