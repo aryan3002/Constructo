@@ -14,6 +14,9 @@ import {
 import { SiteSwitcher, type SiteSummary } from './SiteSwitcher'
 import { NotificationsPanel } from '../features/notifications/NotificationsPanel'
 import { useUnreadCount } from '../features/notifications/useUnreadCount'
+import { useSkin } from './ThemeModeProvider'
+import { NeevSidebar } from './NeevSidebar'
+import { NeevTopBar } from './NeevTopBar'
 
 /**
  * Every backend role gets a role-shaped tab bar. Mirrors the six roles the auth
@@ -150,6 +153,9 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const tabSet = tabs ?? ROLE_TABS[role]
+  // Owner "Neev" skin swaps the desktop chrome (sidebar + topbar). Safe outside
+  // a provider (returns 'blueprint'), so the many bare-AppShell tests are unaffected.
+  const neev = useSkin() === 'neev'
   // The header (and thus the bell) only renders with site context; gate the
   // unread poll on that so headerless surfaces never hit the network.
   const showHeader = Boolean(sites && onSelectSite)
@@ -165,10 +171,19 @@ export function AppShell({
 
   return (
     <div className="cstk-root flex min-h-screen flex-col bg-bg md:flex-row">
-      {/* SINGLE responsive nav: fixed bottom-bar on phone, static left sidebar on desktop. */}
+      {/* Neev (owner) Command Center sidebar — desktop only. */}
+      {neev ? <NeevSidebar tabs={tabSet} roleBadge={roleBadge} /> : null}
+
+      {/* Primary nav: phone bottom-bar always; Blueprint also uses it as the
+          desktop left sidebar. In neev the desktop sidebar is NeevSidebar, so
+          this nav is phone-only (md:hidden). */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:static md:z-auto md:flex md:min-h-screen md:w-60 md:shrink-0 md:flex-col md:border-r md:border-t-0 md:bg-card md:backdrop-blur-none"
+        className={
+          neev
+            ? 'fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:hidden'
+            : 'fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:static md:z-auto md:flex md:min-h-screen md:w-60 md:shrink-0 md:flex-col md:border-r md:border-t-0 md:bg-card md:backdrop-blur-none'
+        }
       >
         {/* Desktop sidebar header: brand + ⌘K. Hidden on phone. */}
         <div className="hidden md:block">
@@ -227,17 +242,41 @@ export function AppShell({
       {/* Content column: SiteSwitcher top bar (once) + roomy canvas. */}
       <div className="flex min-w-0 flex-1 flex-col">
         {showHeader && sites && onSelectSite ? (
-          <div className="sticky top-0 z-20">
-            <SiteSwitcher
-              sites={sites}
-              selectedId={selectedSiteId}
-              onSelect={onSelectSite}
-              notificationCount={bellCount}
-              onNotificationsClick={onNotificationsClick}
-              notificationsPanel={<NotificationsPanel />}
-              role={roleBadge}
-            />
-          </div>
+          neev ? (
+            <>
+              <NeevTopBar
+                sites={sites}
+                selectedSiteId={selectedSiteId}
+                onSelectSite={onSelectSite}
+                notificationCount={bellCount}
+                roleBadge={roleBadge}
+              />
+              {/* Phone keeps the shared context header (neev has no phone chrome). */}
+              <div className="sticky top-0 z-20 md:hidden">
+                <SiteSwitcher
+                  sites={sites}
+                  selectedId={selectedSiteId}
+                  onSelect={onSelectSite}
+                  notificationCount={bellCount}
+                  onNotificationsClick={onNotificationsClick}
+                  notificationsPanel={<NotificationsPanel />}
+                  role={roleBadge}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="sticky top-0 z-20">
+              <SiteSwitcher
+                sites={sites}
+                selectedId={selectedSiteId}
+                onSelect={onSelectSite}
+                notificationCount={bellCount}
+                onNotificationsClick={onNotificationsClick}
+                notificationsPanel={<NotificationsPanel />}
+                role={roleBadge}
+              />
+            </div>
+          )
         ) : null}
 
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 pb-24 md:max-w-5xl md:px-8 md:py-8 md:pb-10">

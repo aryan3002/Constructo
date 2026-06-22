@@ -18,7 +18,10 @@
             (mode === 'system' &&
               window.matchMedia &&
               window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+          var skin = localStorage.getItem('cstk.skin') === 'neev' ? 'neev' : 'blueprint'
+          var attr =
+            skin === 'neev' ? (dark ? 'neev-dark' : 'neev') : dark ? 'dark' : 'light'
+          document.documentElement.setAttribute('data-theme', attr)
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'light')
         }

@@ -7,6 +7,10 @@ export const API_BASE: string =
 export const USE_MOCKS: boolean =
   String(import.meta.env.VITE_USE_MOCKS).toLowerCase() === 'true'
 
+/** Neev "Calm Cockpit" owner skin — opt-in, reversible. Default OFF. */
+export const NEEV_OWNER_ENABLED: boolean =
+  String(import.meta.env.VITE_NEEV_OWNER).toLowerCase() === 'true'
+
 export function todayIso(): string {
   // Local calendar date (NOT UTC). Using toISOString() here would return the
   // UTC date, which is a day ahead for users behind UTC in the evening, so the

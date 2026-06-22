@@ -212,6 +212,120 @@
 }
 
 /* ============================================================================
+ * Neev "Calm Cockpit" — owner skin. LIGHT. Warm sand canvas, sage primary,
+ * terracotta celebration, amber = "needs you", red = delay only. Eczar serif
+ * headlines / IBM Plex Mono numerals. Applied when role=owner + VITE_NEEV_OWNER.
+ * ========================================================================== */
+[data-theme='neev'] {
+  --surface: #FCFAF3;          /* sand-50 — app canvas */
+  --surface-card: #FFFFFF;     /* white cards on sand (crisp elevation) */
+  --surface-elevated: #FFFFFF;
+  --surface-overlay: #FFFFFF;
+  --surface-sunken: #F3EFE6;   /* sand-200 — wells, grid header */
+  --surface-hover: #E9E3D5;    /* sand-300 */
+  --surface-selected: #E5EDE3; /* green-tint */
+
+  --text-primary: #2A2519;     /* warm ink */
+  --text-secondary: #6A6047;   /* ink-600 (5.4:1) */
+  --text-muted: #787052;       /* darkened ink — AA 4.7:1 on sand (was #9A9176 @ 3.1) */
+  --text-on-brand: #FFFFFF;
+
+  --border: rgba(42, 37, 25, 0.14);
+  --border-strong: rgba(42, 37, 25, 0.22);
+  --divider: rgba(42, 37, 25, 0.09);
+
+  --brand: #3E7D58;            /* sage-600 — the one primary action */
+  --brand-hover: #4E8A68;
+  --brand-pressed: #2C6243;
+  --brand-subtle: #E5EDE3;
+  --brand-text: #2C6243;
+  --ring: #2C6243;
+  --ring-offset: var(--surface);
+  --scrim: rgba(42, 37, 25, 0.4);
+
+  --celebrate: #BE6A41;        /* terracotta clay — milestones / eyebrows (fills) */
+  --celebrate-subtle: #F6E7DB;
+  --celebrate-text: #9A4E2C;   /* clay-700 — eyebrow TEXT, AA 5.7:1 on sand */
+
+  --ok-solid: #3E7D58;  --ok-bg: #E5EDE3;  --ok-fg: #2C6243;   /* sage = on-track */
+  --warn-solid: #B98318; --warn-bg: #FAF1D9; --warn-fg: #946410; /* amber = needs you */
+  --risk-solid: #BC4836; --risk-bg: #F6E2DC; --risk-fg: #99372A; /* red = delay ONLY */
+  --info-solid: #3F6E96; --info-bg: #E2E8EE; --info-fg: #3F6E96;
+
+  --done-solid: #837A5F; --done-bg: #F3EFE6; --done-fg: #433D2C;
+
+  --chart-1: #3F6E96; --chart-2: #B98318; --chart-3: #3E7D58; --chart-4: #7A5AF8; --chart-5: #BE6A41;
+
+  --radius-card: 22px;
+  --radius-sheet: 28px;
+  --radius-control: 14px;
+
+  --shadow-card: 0 1px 2px rgba(42, 37, 25, 0.04), 0 8px 20px -12px rgba(42, 37, 25, 0.18);
+  --shadow-sheet: 0 -8px 24px rgba(42, 37, 25, 0.16);
+  --shadow-pop: 0 4px 10px rgba(42, 37, 25, 0.06), 0 18px 40px -16px rgba(42, 37, 25, 0.26);
+
+  --font-display: 'Eczar', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ============================================================================
+ * Neev — owner skin. DARK (warm-toned, designed fresh — NOT the cold Blueprint
+ * dark). Sibling [data-theme] blocks do NOT inherit, so radii + fonts repeat.
+ * Contrast pairs validated to AA in Task 7 (the dark/a11y polish phase).
+ * ========================================================================== */
+[data-theme='neev-dark'] {
+  --surface: #1C1A14;          /* warm near-black */
+  --surface-card: #26231B;
+  --surface-elevated: #2E2A20;
+  --surface-overlay: #2E2A20;
+  --surface-sunken: #161410;
+  --surface-hover: #322E23;
+  --surface-selected: rgba(78, 138, 104, 0.22);
+
+  --text-primary: #F2ECDD;     /* warm sand text */
+  --text-secondary: #C4BBA3;
+  --text-muted: #9A9176;
+  --text-on-brand: #1C1A14;
+
+  --border: rgba(242, 236, 221, 0.2);  /* lifted — dark shadows barely read, so edges carry card/input separation */
+  --border-strong: rgba(242, 236, 221, 0.3);
+  --divider: rgba(242, 236, 221, 0.08);
+
+  --brand: #6BA585;            /* sage lifts in dark */
+  --brand-hover: #7DB596;
+  --brand-pressed: #4E8A68;
+  --brand-subtle: rgba(78, 138, 104, 0.2);
+  --brand-text: #8FC0A4;
+  --ring: #8FC0A4;
+  --ring-offset: var(--surface);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --celebrate: #D98A5C;
+  --celebrate-subtle: rgba(190, 106, 65, 0.2);
+  --celebrate-text: #D98A5C;   /* already AA 6.4:1 on warm-dark surface */
+
+  --ok-solid: #6BA585;  --ok-bg: #14271C;  --ok-fg: #8FC0A4;
+  --warn-solid: #DFAE4E; --warn-bg: #2A2008; --warn-fg: #DFAE4E;
+  --risk-solid: #E07A66; --risk-bg: #2A1310; --risk-fg: #E07A66;
+  --info-solid: #6FA0C8; --info-bg: #0F1E2A; --info-fg: #6FA0C8;
+
+  --done-solid: #9A9176; --done-bg: #211E17; --done-fg: #C4BBA3;
+
+  --chart-1: #6FA0C8; --chart-2: #DFAE4E; --chart-3: #6BA585; --chart-4: #9B82FF; --chart-5: #D98A5C;
+
+  --radius-card: 22px;
+  --radius-sheet: 28px;
+  --radius-control: 14px;
+
+  --shadow-card: 0 0 0 1px rgba(242, 236, 221, 0.05), 0 8px 22px rgba(0, 0, 0, 0.5);
+  --shadow-sheet: 0 0 0 1px rgba(242, 236, 221, 0.06), 0 -10px 30px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 0 0 1px rgba(242, 236, 221, 0.06), 0 12px 34px rgba(0, 0, 0, 0.55);
+
+  --font-display: 'Eczar', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ============================================================================
  * Base helpers (unchanged surface API).
  * ========================================================================== */
 
