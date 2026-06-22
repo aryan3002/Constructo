@@ -8,8 +8,14 @@ would:
   * ``POST /api/v1/bot/deliver-brief`` {company_id, date?}         → deliver a brief
   * ``POST /api/v1/bot/reply``         {chat_jid, text}            → apply a brief reply
 
-Auth: gated behind the existing bearer dependency (:func:`app.auth.deps.get_current_user`)
-so they aren't open. The bridge calls these server-to-server with a service token.
+Auth: these are SERVER-TO-SERVER seams the WhatsApp bridge drives, NOT client
+endpoints — no web/mobile caller exists. They are gated on the shared
+``X-Ingest-Key`` service key (the same credential the bridge already sends to
+``/ingest``), never a user JWT. Gating them on ``get_current_user`` was a
+cross-tenant hole: any authenticated user could pass another company's
+``company_id`` / ``chat_jid`` and read that company's decisions + owner phone
+(deliver-brief) or approve/reject its decisions (reply). The service key carries
+no tenant identity, so the caller must name the target company/chat explicitly.
 """
 from __future__ import annotations
 
@@ -17,16 +23,24 @@ import datetime as dt
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user
 from app.bot import brief_delivery, handle, reply_actions
+from app.common.errors import AppError
+from app.config import settings
 from app.db import get_session
-from app.models import User
 
 router = APIRouter(prefix="/api/v1/bot", tags=["bot"])
+
+
+def require_service_key(
+    x_ingest_key: str | None = Header(default=None, alias="X-Ingest-Key"),
+) -> None:
+    """Gate a bridge-only seam on the shared service key (mirrors ``/ingest``)."""
+    if x_ingest_key != settings.ingest_api_key:
+        raise AppError(401, "invalid_ingest_key", "Missing or invalid X-Ingest-Key")
 
 
 class HandleIn(BaseModel):
@@ -83,7 +97,7 @@ def _send_summary(result: Any) -> dict[str, Any] | None:
 @router.post("/handle", response_model=HandleOut)
 async def handle_message(
     body: HandleIn,
-    _: User = Depends(get_current_user),
+    _: None = Depends(require_service_key),
     session: AsyncSession = Depends(get_session),
 ) -> HandleOut:
     result = await handle.handle_inbound(session, body.raw_message_id)
@@ -98,10 +112,12 @@ async def handle_message(
 @router.post("/deliver-brief", response_model=DeliverBriefOut)
 async def deliver_brief_endpoint(
     body: DeliverBriefIn,
-    user: User = Depends(get_current_user),
+    _: None = Depends(require_service_key),
     session: AsyncSession = Depends(get_session),
 ) -> DeliverBriefOut:
-    company_id = body.company_id or user.company_id
+    if body.company_id is None:
+        raise AppError(400, "company_id_required", "company_id is required")
+    company_id = body.company_id
     brief_date = body.brief_date or (dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1))
     result = await brief_delivery.deliver_brief(session, company_id, brief_date)
     return DeliverBriefOut(
@@ -115,7 +131,7 @@ async def deliver_brief_endpoint(
 @router.post("/reply", response_model=ReplyOut)
 async def reply_endpoint(
     body: ReplyIn,
-    _: User = Depends(get_current_user),
+    _: None = Depends(require_service_key),
     session: AsyncSession = Depends(get_session),
 ) -> ReplyOut:
     result = await reply_actions.apply_brief_reply(session, body.chat_jid, body.text)

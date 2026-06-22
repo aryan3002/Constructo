@@ -26,6 +26,8 @@ from __future__ import annotations
 import os
 from typing import Protocol, runtime_checkable
 
+from app.extraction.url_guard import assert_safe_media_url
+
 
 @runtime_checkable
 class STTClient(Protocol):
@@ -63,6 +65,7 @@ class OpenAISTT:
         except ImportError as exc:
             raise RuntimeError("openai/httpx not installed; use FakeSTT in tests") from exc
 
+        assert_safe_media_url(audio_url)  # SSRF guard before any server-side fetch
         async with httpx.AsyncClient() as http:
             audio = (await http.get(audio_url)).content
         client = AsyncOpenAI(api_key=self.api_key)
@@ -103,6 +106,7 @@ class AzureWhisperSTT:
         except ImportError as exc:
             raise RuntimeError("openai/httpx not installed; use FakeSTT in tests") from exc
 
+        assert_safe_media_url(audio_url)  # SSRF guard before any server-side fetch
         async with httpx.AsyncClient() as http:
             audio = (await http.get(audio_url)).content
         client = AsyncAzureOpenAI(
@@ -144,6 +148,7 @@ class SarvamSTT:
 
         import httpx
 
+        assert_safe_media_url(audio_url)  # SSRF guard before any server-side fetch
         ext = (os.path.splitext(urlparse(audio_url).path)[1] or ".wav").lower()
         async with httpx.AsyncClient(timeout=30) as http:
             audio = (await http.get(audio_url)).content

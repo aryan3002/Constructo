@@ -399,10 +399,16 @@ async def list_profiles(
 ) -> list[ProfileOut]:
     """List design profiles for the company (optionally filtered to one site).
 
-    Powers the owner Design hub — there is no per-site lookup otherwise. Read is
-    open to any authenticated member; everything stays company-scoped.
+    Powers the owner Design hub. Contractor-side roles stay company-scoped, but
+    homeowners share the contractor's company_id, so company-scope alone would
+    leak other clients' profiles — they are restricted to the sites they hold an
+    active membership on (mirrors ``_load_accessible_profile``).
     """
     stmt = select(ProfilerProfile).where(ProfilerProfile.company_id == user.company_id)
+    if user.role is UserRole.homeowner:
+        stmt = stmt.where(
+            ProfilerProfile.site_id.in_(await homeowner_site_ids(session, user))
+        )
     if site_id is not None:
         stmt = stmt.where(ProfilerProfile.site_id == site_id)
     stmt = stmt.order_by(ProfilerProfile.created_at.desc())
