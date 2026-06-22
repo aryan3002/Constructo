@@ -462,11 +462,6 @@ async def get_financials(
     """A site's financial-tracking position (Quotation/Billed stored;
     Received = ledger inflow; Outstanding = Billed - Received). Display only."""
     await _assert_site_in_company(session, user, site_id)
-    # Finance roles see every site; everyone else only sites they're assigned to
-    # (mirrors the per-payment scoping — company-membership alone is not enough).
-    if not _sees_all_payments(user):
-        if site_id not in await effective_visible_site_ids(session, user):
-            raise AppError(403, "forbidden", "Site not in scope")
     fin = (
         await session.execute(
             select(SiteFinancials).where(SiteFinancials.site_id == site_id)

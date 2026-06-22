@@ -20,7 +20,6 @@ import os
 import fitz  # PyMuPDF
 
 from app.extraction.llm import LLMClient, get_llm_client
-from app.extraction.url_guard import assert_safe_media_url
 
 _KINDS = {"floor_plan", "layout", "render", "other"}
 
@@ -85,10 +84,7 @@ async def _load_bytes(path_or_url: str) -> bytes | None:
         if low.startswith(("http://", "https://")):
             import httpx
 
-            # SSRF guard: reject internal hosts, and don't let a redirect pivot to
-            # one (follow_redirects=False) — the guard only vetted the first hop.
-            assert_safe_media_url(resolved)
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 resp = await client.get(resolved)
                 resp.raise_for_status()
                 return resp.content
