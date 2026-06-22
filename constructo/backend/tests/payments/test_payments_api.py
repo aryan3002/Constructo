@@ -288,3 +288,27 @@ async def test_financials_site_scoped_404(client, factory, db_session, owner):
         f"/api/v1/payments/financials/{other_site.id}", headers=auth(owner)
     )
     assert resp.status_code == 404
+
+
+async def test_financials_read_blocked_for_unassigned_site(
+    client, factory, db_session, owner
+):
+    """A non-finance role may read financials only for sites it is assigned to
+    (Vuln 4). A supervisor on site A cannot read site B's financials, even though
+    both are in the same company; their own assigned site stays readable."""
+    company = await _company(db_session, owner.company_id)
+    site_a = await factory.site(company=company, name="A")
+    site_b = await factory.site(company=company, name="B")
+    supervisor = await factory.user(company=company, role=UserRole.supervisor)
+    db_session.add(SiteAssignment(site_id=site_a.id, user_id=supervisor.id))
+    await db_session.flush()
+
+    blocked = await client.get(
+        f"/api/v1/payments/financials/{site_b.id}", headers=auth(supervisor)
+    )
+    assert blocked.status_code == 403
+
+    allowed = await client.get(
+        f"/api/v1/payments/financials/{site_a.id}", headers=auth(supervisor)
+    )
+    assert allowed.status_code == 200
