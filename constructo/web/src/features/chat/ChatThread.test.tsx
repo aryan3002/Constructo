@@ -9,11 +9,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement } from 'react'
 import { ToastProvider } from '../../ui/Toast'
 import { ChatThread } from './ChatThread'
+import { actionItemsApi } from '../../api/actionItems'
 import type { ChatMessage } from '../../api/chat'
 
 // ---------------------------------------------------------------------------
@@ -155,6 +156,7 @@ vi.mock('./insights/RadarDrawer', () => ({ RadarDrawer: ({ open }: { open: boole
 vi.mock('./insights/RecapDrawer', () => ({ RecapDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="recap-drawer" /> : null) }))
 vi.mock('./actionitems/ActionItemsDrawer', () => ({ ActionItemsDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="todos-drawer" /> : null) }))
 vi.mock('./disputes/DisputeModal', () => ({ DisputeModal: ({ open }: { open: boolean }) => (open ? <div data-testid="dispute-modal" /> : null) }))
+vi.mock('../../api/actionItems', () => ({ actionItemsApi: { create: vi.fn().mockResolvedValue({ id: 'a1' }) } }))
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -164,6 +166,8 @@ function renderThread(ui: ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(<QueryClientProvider client={qc}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>)
 }
+
+const mockCreateTodo = actionItemsApi.create as ReturnType<typeof vi.fn>
 
 describe('ChatThread', () => {
   beforeEach(() => {
@@ -258,5 +262,15 @@ describe('ChatThread', () => {
   it('hides the command bar when there is no siteId (Phase D)', () => {
     renderThread(<ChatThread address={{ conversationId: 'g1' }} title="Group" />)
     expect(screen.queryByRole('button', { name: /^radar$/i })).toBeNull()
+  })
+
+  it('creates a to-do from a capture card (Phase D)', async () => {
+    renderThread(<ChatThread address={{ siteId: 's1' }} title="Site" siteId="s1" />)
+    fireEvent.click(screen.getByRole('button', { name: /make a to-do/i }))
+    await waitFor(() =>
+      expect(mockCreateTodo).toHaveBeenCalledWith(
+        expect.objectContaining({ site_id: 's1', source_message_id: 'msg-2' }),
+      ),
+    )
   })
 })

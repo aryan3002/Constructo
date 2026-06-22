@@ -149,6 +149,7 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     queryKey: ['chat', 'brief', siteId],
     queryFn: () => chatApi.brief(siteId!),
     enabled: !!siteId,
+    staleTime: 30_000,
   })
 
   const addrKey = 'siteId' in address ? address.siteId : address.conversationId
@@ -162,12 +163,13 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
           title: ev.summary || 'Follow up',
           source_message_id: message.id,
         })
+        await queryClient.invalidateQueries({ queryKey: ['chat', 'actionItems', siteId] })
         show({ status: 'ok', message: 'Added to to-dos' })
       } catch (e) {
         show({ status: 'risk', message: e instanceof Error ? e.message : 'Could not add the to-do' })
       }
     },
-    [siteId, show],
+    [siteId, show, queryClient],
   )
 
   // -------------------------------------------------------------------------

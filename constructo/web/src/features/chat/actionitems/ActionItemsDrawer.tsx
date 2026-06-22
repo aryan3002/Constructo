@@ -88,7 +88,7 @@ export function ActionItemsDrawer({ open, onClose, siteId }: ActionItemsDrawerPr
                     aria-label={`${done ? 'Reopen' : 'Complete'} ${it.title}`}
                     onClick={() => toggle(it)}
                     className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
-                      done ? 'border-ok bg-ok text-white' : 'border-edge text-transparent hover:border-brand'
+                      done ? 'border-ok bg-ok-bg text-ok-fg' : 'border-edge text-transparent hover:border-brand'
                     }`}
                   >
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
