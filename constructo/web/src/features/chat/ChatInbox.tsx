@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { chatApi, type ConversationSummary } from '../../api/chat'
 import { Spinner, ErrorState } from '../../components/states'
 import { ConversationRow } from './ConversationRow'
+import { NewGroupButton } from './groups/NewGroupButton'
 
 // ---------------------------------------------------------------------------
 // ChatInbox
@@ -37,10 +38,16 @@ export function ChatInbox({ selectedId, onSelect }: ChatInboxProps) {
     >
       {/* Header */}
       <div className="shrink-0 border-b border-edge px-4 pb-3 pt-4">
-        <h2 className="font-display text-h1 font-bold text-text-primary">Chat</h2>
-        <p className="mt-0.5 font-body text-small text-text-muted">
-          Your site crew threads
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="font-display text-h1 font-bold text-text-primary">Chat</h2>
+            <p className="mt-0.5 font-body text-small text-text-muted">
+              Your site crew threads
+            </p>
+          </div>
+          {/* Owner-only "+ New group" (renders null otherwise) */}
+          <NewGroupButton />
+        </div>
       </div>
 
       {/* Body */}
