@@ -313,6 +313,7 @@ export function ChatThread({ address, title, hasHomeowner }: ChatThreadProps) {
       <ChatComposer
         onSend={send}
         onSendMedia={sendMedia}
+        onSendProposal={sendProposal}
         reply={reply}
         onCancelReply={() => setReply(null)}
         sending={sending}
