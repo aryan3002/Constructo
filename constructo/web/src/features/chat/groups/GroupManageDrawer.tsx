@@ -290,7 +290,7 @@ export function GroupManageDrawer({ open, onClose, groupId, groupTitle, onLeft }
           )
         }
         title="Archive group?"
-        message="The group is hidden from everyone's inbox. This can be undone from the backend."
+        message="The group is hidden from everyone's inbox. An admin can restore it later."
         confirmLabel="Archive"
         variant="danger"
         busy={busy}

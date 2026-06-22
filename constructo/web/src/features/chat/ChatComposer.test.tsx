@@ -368,8 +368,13 @@ describe('ChatComposer — media affordance', () => {
 describe('ChatComposer — slash commands (Phase B)', () => {
   it('shows the slash menu when the text is a bare command', () => {
     renderComposer()
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '/at' } })
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: '/at' } })
     expect(screen.getByRole('listbox', { name: /slash commands/i })).toBeInTheDocument()
+    // a11y: the textarea announces the open popup + the active option
+    expect(ta).toHaveAttribute('aria-expanded', 'true')
+    expect(ta).toHaveAttribute('aria-controls', 'slash-cmd-listbox')
+    expect(ta).toHaveAttribute('aria-activedescendant', 'slash-cmd-att')
   })
 
   it('parses a slash command on send → onSendProposal, not onSend', () => {

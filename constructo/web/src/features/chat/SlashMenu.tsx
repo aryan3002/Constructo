@@ -28,6 +28,7 @@ export function SlashMenu({ items, activeIndex, onHoverIndex, onSelect }: SlashM
   return (
     <div className="absolute bottom-full left-0 z-30 mb-1 w-full max-w-md px-3">
       <div
+        id="slash-cmd-listbox"
         role="listbox"
         aria-label="Slash commands"
         className="overflow-hidden rounded-sheet border border-edge bg-surface-card shadow-pop"
@@ -35,6 +36,7 @@ export function SlashMenu({ items, activeIndex, onHoverIndex, onSelect }: SlashM
         {items.map((item, i) => (
           <button
             key={item.cmd}
+            id={`slash-cmd-${item.cmd}`}
             type="button"
             role="option"
             aria-selected={i === activeIndex}

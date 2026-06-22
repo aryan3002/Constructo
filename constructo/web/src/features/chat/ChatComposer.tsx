@@ -142,6 +142,11 @@ export function ChatComposer({
   }, [text])
   const showMenu = slashMenuItems.length > 0 && !menuDismissed
   const clampedActive = Math.min(activeIndex, Math.max(0, slashMenuItems.length - 1))
+  // a11y: the textarea points aria-activedescendant at the highlighted option id.
+  const activeOptionId =
+    showMenu && slashMenuItems[clampedActive]
+      ? `slash-cmd-${slashMenuItems[clampedActive].cmd}`
+      : undefined
 
   // Smart-suggest: one chip for free text (never while typing a slash command).
   const suggestion = useMemo(() => (isSlash(text) ? null : suggestCapture(text)), [text])
@@ -451,6 +456,10 @@ export function ChatComposer({
             autoGrow()
           }}
           onKeyDown={handleKeyDown}
+          aria-autocomplete="list"
+          aria-expanded={showMenu}
+          aria-controls={showMenu ? 'slash-cmd-listbox' : undefined}
+          aria-activedescendant={activeOptionId}
           placeholder="Message…"
           rows={1}
           className="flex-1 resize-none overflow-hidden rounded-control border border-edge bg-surface-card px-3 py-2 font-body text-body text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-brand"
@@ -480,7 +489,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={acceptSuggestion}
-            className="inline-flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand-subtle px-3 py-1 font-body text-small font-medium text-brand-text hover:bg-surface-hover"
+            className="inline-flex items-center gap-1.5 rounded-full border border-celebrate/40 bg-celebrate-subtle px-3 py-1 font-body text-small font-medium text-celebrate-text hover:bg-surface-hover"
           >
             <svg
               viewBox="0 0 24 24"

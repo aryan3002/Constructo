@@ -180,6 +180,7 @@ export function ChatPage() {
 
       {selectedConv?.kind === 'group' ? (
         <GroupManageDrawer
+          key={selectedConv.id}
           open={manageOpen}
           onClose={() => setManageOpen(false)}
           groupId={selectedConv.id}

@@ -13,6 +13,10 @@ export default {
         brand: 'var(--brand)',
         'brand-subtle': 'var(--brand-subtle)',
         'brand-text': 'var(--brand-text)',
+        // --- Celebrate (terracotta clay): milestones / eyebrows / capture-suggest accent. ---
+        celebrate: 'var(--celebrate)',
+        'celebrate-subtle': 'var(--celebrate-subtle)',
+        'celebrate-text': 'var(--celebrate-text)',
 
         // --- Status spine (solids) ---
         ok: 'var(--c-ok)',
