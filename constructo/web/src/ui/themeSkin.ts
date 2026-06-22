@@ -13,7 +13,8 @@ export function resolveDataTheme(skin: ThemeSkin, resolved: 'light' | 'dark'): D
   return resolved
 }
 
-/** The Neev skin is owner-only and gated by the VITE_NEEV_OWNER flag. */
+const NEEV_ROLES = new Set(['owner', 'supervisor', 'architect'])
+/** The Neev skin is gated by VITE_NEEV_OWNER and applies to the roles that have it. */
 export function skinForRole(role: string | undefined, enabled: boolean): ThemeSkin {
-  return enabled && role === 'owner' ? 'neev' : 'blueprint'
+  return enabled && role !== undefined && NEEV_ROLES.has(role) ? 'neev' : 'blueprint'
 }

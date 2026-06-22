@@ -9,6 +9,7 @@ import {
   DotsIcon,
   GridIcon,
   ListIcon,
+  MessageIcon,
   SearchIcon,
 } from './icons'
 import { SiteSwitcher, type SiteSummary } from './SiteSwitcher'
@@ -58,6 +59,7 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
     { to: '/', labelKey: 'nav.brief', label: 'Brief', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
     { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
     { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
@@ -77,12 +79,14 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
   architect: [
     { to: '/designer', labelKey: 'nav.designer', label: 'Designer', icon: <ListIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
   supervisor: [
     { to: '/supervisor/capture', labelKey: 'nav.capture', label: 'Capture', icon: <CameraIcon />, end: true },
     { to: '/sites', labelKey: 'nav.my_sites', label: 'My Sites', icon: <ListIcon /> },
+    { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
