@@ -31,6 +31,7 @@ export const en = {
   'nav.reports': 'Reports',
   'nav.documents': 'Documents',
   'nav.settings': 'Settings',
+  'nav.chat': 'Chat',
   'nav.more': 'More',
 
   // "More" hub (overflow menu of secondary destinations)

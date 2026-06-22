@@ -27,6 +27,7 @@ export const hi: Record<TranslationKey, string> = {
   'nav.reports': 'रिपोर्ट',
   'nav.documents': 'दस्तावेज़',
   'nav.settings': 'सेटिंग्स',
+  'nav.chat': 'चैट',
   'nav.more': 'और',
 
   'more.title': 'और',

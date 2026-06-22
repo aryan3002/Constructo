@@ -61,6 +61,10 @@ const ReportsPage = lazy(() =>
 const DocumentsPage = lazy(() =>
   import('./features/documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
 )
+// === chat (T13) === lazy: keeps socket + thread out of entry chunk
+const ChatPage = lazy(() =>
+  import('./features/chat/ChatPage').then((m) => ({ default: m.ChatPage })),
+)
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -156,6 +160,9 @@ export function App() {
 
       {/* Drawings register (W5 Slice 2a). */}
       <Route path="/settings/documents" element={<Guarded><DocumentsPage /></Guarded>} />
+
+      {/* Chat inbox (T13). */}
+      <Route path="/chat" element={<Guarded><ChatPage /></Guarded>} />
 
       {/* Per-role overflow hub. */}
       <Route path="/more" element={<Guarded><More /></Guarded>} />
