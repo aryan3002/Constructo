@@ -60,14 +60,18 @@ const mockDrawingsPresign = vi.fn()
 const mockDrawingsPutToR2 = vi.fn()
 const mockPublish = vi.fn()
 
-vi.mock('../../../api/drawings', () => ({
-  drawingsApi: {
-    listRegister: (...a: unknown[]) => mockListRegister(...a),
-    presign: (...a: unknown[]) => mockDrawingsPresign(...a),
-    putToR2: (...a: unknown[]) => mockDrawingsPutToR2(...a),
-    publish: (...a: unknown[]) => mockPublish(...a),
-  },
-}))
+vi.mock('../../../api/drawings', async (orig) => {
+  const actual = await orig<typeof import('../../../api/drawings')>()
+  return {
+    ...actual, // keep real DRAWING_KINDS + describeUploadError
+    drawingsApi: {
+      listRegister: (...a: unknown[]) => mockListRegister(...a),
+      presign: (...a: unknown[]) => mockDrawingsPresign(...a),
+      putToR2: (...a: unknown[]) => mockDrawingsPutToR2(...a),
+      publish: (...a: unknown[]) => mockPublish(...a),
+    },
+  }
+})
 
 vi.mock('../../../api/siteChanges', () => ({
   siteChangesApi: {

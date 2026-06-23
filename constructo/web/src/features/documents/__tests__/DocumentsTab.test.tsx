@@ -54,14 +54,18 @@ vi.mock('../../../api/documents', () => ({
 }))
 
 // Mock drawingsApi as well (DocumentsPage imports it for the Drawings tab).
-vi.mock('../../../api/drawings', () => ({
-  drawingsApi: {
-    listRegister: () => Promise.resolve([]),
-    presign: vi.fn(),
-    putToR2: vi.fn(),
-    publish: vi.fn(),
-  },
-}))
+vi.mock('../../../api/drawings', async (orig) => {
+  const actual = await orig<typeof import('../../../api/drawings')>()
+  return {
+    ...actual, // keep real DRAWING_KINDS + describeUploadError
+    drawingsApi: {
+      listRegister: () => Promise.resolve([]),
+      presign: vi.fn(),
+      putToR2: vi.fn(),
+      publish: vi.fn(),
+    },
+  }
+})
 
 // useMeRole → 'owner' so the gate passes.
 vi.mock('../../../auth/useCan', () => ({

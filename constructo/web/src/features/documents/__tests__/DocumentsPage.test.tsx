@@ -15,14 +15,18 @@ const mockPresign = vi.fn()
 const mockPutToR2 = vi.fn()
 const mockPublish = vi.fn()
 
-vi.mock('../../../api/drawings', () => ({
-  drawingsApi: {
-    listRegister: (...a: unknown[]) => mockListRegister(...a),
-    presign: (...a: unknown[]) => mockPresign(...a),
-    putToR2: (...a: unknown[]) => mockPutToR2(...a),
-    publish: (...a: unknown[]) => mockPublish(...a),
-  },
-}))
+vi.mock('../../../api/drawings', async (orig) => {
+  const actual = await orig<typeof import('../../../api/drawings')>()
+  return {
+    ...actual, // keep real DRAWING_KINDS + describeUploadError + types
+    drawingsApi: {
+      listRegister: (...a: unknown[]) => mockListRegister(...a),
+      presign: (...a: unknown[]) => mockPresign(...a),
+      putToR2: (...a: unknown[]) => mockPutToR2(...a),
+      publish: (...a: unknown[]) => mockPublish(...a),
+    },
+  }
+})
 
 // Mock useMeRole → 'owner' so the gate passes.
 vi.mock('../../../auth/useCan', () => ({
@@ -399,7 +403,7 @@ describe('DocumentsPage', () => {
           title: 'Roof Plan',
           version: 'v1',
           file_url: 'new-key/roof-plan-v1.pdf',
-          kind: 'other',
+          kind: 'plan', // default Type for a new drawing (was hardcoded 'other')
         }),
       )
     })
@@ -407,5 +411,63 @@ describe('DocumentsPage', () => {
     // Critical: supersedes_id must not be present (or must be undefined/absent).
     const publishCall = mockPublish.mock.calls[0][0] as Record<string, unknown>
     expect(publishCall.supersedes_id).toBeUndefined()
+  })
+
+  it('new drawing: the chosen Type is published (not a hardcoded kind)', async () => {
+    mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
+    mockPresign.mockResolvedValue({
+      key: 'new-key/east-elev-v1.pdf',
+      put_url: 'https://r2/put-elev',
+      mode: 'presigned',
+    })
+    mockPutToR2.mockResolvedValue(undefined)
+    mockPublish.mockResolvedValue({ ...rowElevation, id: 'drw-new-elev' })
+
+    renderPage()
+    await screen.findByRole('heading', { name: /Ground Floor Plan/i })
+    await userEvent.click(screen.getByRole('button', { name: /new drawing/i }))
+
+    const titleInput = await screen.findByLabelText(/drawing title/i)
+    await userEvent.type(titleInput, 'East Elevation')
+    // Pick a Type other than the default.
+    await userEvent.selectOptions(screen.getByLabelText(/^type$/i), 'elevation')
+    await userEvent.type(screen.getByLabelText(/^version$/i), 'v1')
+    const fakeFile = new File(['pdf'], 'east-elev-v1.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText(/^file$/i), fakeFile)
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => {
+      expect(mockPublish).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'East Elevation', kind: 'elevation' }),
+      )
+    })
+  })
+
+  it('upload failure shows a specific reason, not the generic "Something went wrong"', async () => {
+    mockListRegister.mockResolvedValue([rowV1, rowV2, rowElevation])
+    mockPresign.mockResolvedValue({
+      key: 'new-key/roof.pdf',
+      put_url: 'https://r2/put',
+      mode: 'presigned',
+    })
+    // Simulate a CORS / offline failure on the direct R2 PUT (fetch rejects with TypeError).
+    mockPutToR2.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    renderPage()
+    await screen.findByRole('heading', { name: /Ground Floor Plan/i })
+    await userEvent.click(screen.getByRole('button', { name: /new drawing/i }))
+
+    await userEvent.type(await screen.findByLabelText(/drawing title/i), 'Roof Plan')
+    await userEvent.type(screen.getByLabelText(/^version$/i), 'v1')
+    await userEvent.upload(
+      screen.getByLabelText(/^file$/i),
+      new File(['pdf'], 'roof.pdf', { type: 'application/pdf' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    // The honest upload error appears; the generic message does NOT.
+    expect(await screen.findByText(/couldn't upload the file/i)).toBeInTheDocument()
+    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+    expect(mockPublish).not.toHaveBeenCalled()
   })
 })

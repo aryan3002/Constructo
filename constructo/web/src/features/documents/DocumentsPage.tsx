@@ -18,7 +18,13 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { drawingsApi, type DrawingRegisterRow, type DrawingKind } from '../../api/drawings'
+import {
+  drawingsApi,
+  describeUploadError,
+  DRAWING_KINDS,
+  type DrawingRegisterRow,
+  type DrawingKind,
+} from '../../api/drawings'
 import { qk } from '../../api/queryKeys'
 import { useCan, useMeRole } from '../../auth/useCan'
 import { useSites } from '../../api/hooks'
@@ -76,6 +82,7 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
 
   const [siteId, setSiteId] = useState(sites[0]?.id ?? '')
   const [title, setTitle] = useState('')
+  const [kind, setKind] = useState<DrawingKind>('plan')
   const [version, setVersion] = useState('')
   const [changeNote, setChangeNote] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -96,23 +103,34 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
         setPhase('unavailable')
         return
       }
+      if (!ticket.put_url) {
+        // 'presigned' without a URL shouldn't happen, but never PUT to null.
+        setPhase('error')
+        setErrorMsg(t('drawings.error_upload'))
+        return
+      }
 
-      await drawingsApi.putToR2(ticket.put_url!, file)
+      await drawingsApi.putToR2(ticket.put_url, file)
       await drawingsApi.publish({
         site_id: siteId,
         title: title.trim(),
         version: version.trim(),
         file_url: ticket.key,
-        kind: 'other',
+        kind,
         change_note: changeNote.trim() || null,
         // No supersedes_id — brand-new drawing.
       })
 
       setPhase('idle')
       onDone()
-    } catch {
+    } catch (err) {
       setPhase('error')
-      setErrorMsg(t('common.error'))
+      const info = describeUploadError(err)
+      setErrorMsg(
+        info.kind === 'save'
+          ? t('drawings.error_save', { detail: info.detail })
+          : t('drawings.error_upload'),
+      )
     }
   }
 
@@ -179,6 +197,28 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
             placeholder="e.g. Ground Floor Plan"
             className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
+        </div>
+
+        {/* Type (drawing kind) */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="new-drawing-kind"
+            className="font-body text-small font-semibold text-text-mute"
+          >
+            {t('documents.kind_label')}
+          </label>
+          <select
+            id="new-drawing-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as DrawingKind)}
+            className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {DRAWING_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {t(`drawings.kind.${k}` as Parameters<typeof t>[0])}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Version */}
