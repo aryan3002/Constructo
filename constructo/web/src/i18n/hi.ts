@@ -22,6 +22,8 @@ export const hi: Record<TranslationKey, string> = {
   'nav.approvals': 'मंज़ूरी',
   'nav.search': 'खोज',
   'nav.payments': 'भुगतान',
+  'nav.finance': 'वित्त',
+  'nav.admin': 'एडमिन',
   'nav.permits': 'परमिट',
   'nav.groups': 'व्हाट्सऐप ग्रुप',
   'nav.reports': 'रिपोर्ट',

@@ -26,6 +26,8 @@ export const en = {
   'nav.approvals': 'Approvals',
   'nav.search': 'Search',
   'nav.payments': 'Payments',
+  'nav.finance': 'Finance',
+  'nav.admin': 'Admin',
   'nav.permits': 'Permits',
   'nav.groups': 'WhatsApp Groups',
   'nav.reports': 'Reports',
