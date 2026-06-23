@@ -90,6 +90,14 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
+  // The sites list loads asynchronously; if it arrives AFTER this form mounted,
+  // `siteId` would stay '' (the initializer ran with an empty list) while the
+  // <select> visually shows the first site — leaving Save disabled. Default the
+  // site once the list is available and nothing is chosen yet.
+  useEffect(() => {
+    if (!siteId && sites.length > 0) setSiteId(sites[0].id)
+  }, [siteId, sites])
+
   async function handleSave() {
     if (!file || !siteId || !title.trim() || !version.trim()) return
 
