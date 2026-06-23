@@ -54,7 +54,7 @@ function NavRow({ item, role, collapsed, t }: {
 /**
  * NeevSidebar — the Command Center desktop sidebar (neev skin only).
  * Brand · PRIMARY ▸ SHARED zones (top) · ADMIN zone pinned bottom · profile card.
- * Capability-grouped via navModel; collapses to a 56px icon rail. Desktop-only.
+ * Capability-grouped via navModel; collapses to a 64px icon rail. Desktop-only.
  */
 export function NeevSidebar({ zones, role, roleBadge, collapsed }: NeevSidebarProps) {
   const t = useT()
