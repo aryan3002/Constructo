@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useT, type TranslationKey } from '../i18n'
 import { useUiStore } from '../store/ui'
+import { navForRole } from './navModel'
+import type { Role as CanonicalRole } from '../api/auth'
 import {
   CameraIcon,
   CheckIcon,
@@ -164,6 +166,11 @@ export function AppShell({
   // Owner "Neev" skin swaps the desktop chrome (sidebar + topbar). Safe outside
   // a provider (returns 'blueprint'), so the many bare-AppShell tests are unaffected.
   const neev = useSkin() === 'neev'
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
+  // 'contractor' is a legacy alias for 'labor_contractor' in AppShell; navModel
+  // uses the canonical api/auth Role which doesn't carry the alias.
+  const canonicalRole: CanonicalRole = role === 'contractor' ? 'labor_contractor' : role
+  const neevZones = navForRole(canonicalRole)
   // The header (and thus the bell) only renders with site context; gate the
   // unread poll on that so headerless surfaces never hit the network.
   const showHeader = Boolean(sites && onSelectSite)
@@ -180,7 +187,9 @@ export function AppShell({
   return (
     <div className="cstk-root flex min-h-screen flex-col bg-bg md:flex-row">
       {/* Neev (owner) Command Center sidebar — desktop only. */}
-      {neev ? <NeevSidebar tabs={tabSet} roleBadge={roleBadge} /> : null}
+      {neev ? (
+        <NeevSidebar zones={neevZones} role={canonicalRole} roleBadge={roleBadge} collapsed={sidebarCollapsed} />
+      ) : null}
 
       {/* Primary nav: phone bottom-bar always; Blueprint also uses it as the
           desktop left sidebar. In neev the desktop sidebar is NeevSidebar, so
