@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { ChatThread } from './ChatThread'
 import type { ChatMessage } from '../../api/chat'
 
@@ -216,5 +216,17 @@ describe('ChatThread', () => {
     expect(screen.getByTestId('nivaan-proposal-card')).toBeInTheDocument()
     // Also verify the proposal summary is visible
     expect(screen.getByTestId('proposal-summary')).toHaveTextContent('Log 12 workers?')
+  })
+
+  it('shows a Members button when onManageGroup is provided and calls it on click', () => {
+    const onManageGroup = vi.fn()
+    render(<ChatThread address={address} title="All Hands" onManageGroup={onManageGroup} />)
+    fireEvent.click(screen.getByRole('button', { name: /members/i }))
+    expect(onManageGroup).toHaveBeenCalledOnce()
+  })
+
+  it('hides the Members button when onManageGroup is absent', () => {
+    render(<ChatThread address={address} title="Site" />)
+    expect(screen.queryByRole('button', { name: /members/i })).not.toBeInTheDocument()
   })
 })

@@ -76,6 +76,7 @@ function makeMsg(overrides: Partial<ChatMessage> = {}): ChatMessage {
 interface MakeProps {
   onSend?: ReturnType<typeof vi.fn>
   onSendMedia?: ReturnType<typeof vi.fn>
+  onSendProposal?: ReturnType<typeof vi.fn>
   reply?: ChatMessage | null
   onCancelReply?: ReturnType<typeof vi.fn>
   sending?: boolean
@@ -84,12 +85,14 @@ interface MakeProps {
 function renderComposer(overrides: MakeProps = {}) {
   const onSend = overrides.onSend ?? vi.fn()
   const onSendMedia = overrides.onSendMedia ?? vi.fn()
+  const onSendProposal = overrides.onSendProposal ?? vi.fn()
   const onCancelReply = overrides.onCancelReply ?? vi.fn()
 
   render(
     <ChatComposer
       onSend={onSend}
       onSendMedia={onSendMedia}
+      onSendProposal={onSendProposal}
       reply={overrides.reply}
       onCancelReply={onCancelReply}
       sending={overrides.sending}
@@ -97,7 +100,7 @@ function renderComposer(overrides: MakeProps = {}) {
     />,
   )
 
-  return { onSend, onSendMedia, onCancelReply }
+  return { onSend, onSendMedia, onSendProposal, onCancelReply }
 }
 
 // ---------------------------------------------------------------------------
@@ -355,5 +358,72 @@ describe('ChatComposer — media affordance', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
     expect(screen.getByRole('alert')).toHaveTextContent('Network timeout')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Slash commands (Phase B)
+// ---------------------------------------------------------------------------
+
+describe('ChatComposer — slash commands (Phase B)', () => {
+  it('shows the slash menu when the text is a bare command', () => {
+    renderComposer()
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: '/at' } })
+    expect(screen.getByRole('listbox', { name: /slash commands/i })).toBeInTheDocument()
+    // a11y: the textarea announces the open popup + the active option
+    expect(ta).toHaveAttribute('aria-expanded', 'true')
+    expect(ta).toHaveAttribute('aria-controls', 'slash-cmd-listbox')
+    expect(ta).toHaveAttribute('aria-activedescendant', 'slash-cmd-att')
+  })
+
+  it('parses a slash command on send → onSendProposal, not onSend', () => {
+    const { onSend, onSendProposal } = renderComposer()
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: '/att 24' } })
+    fireEvent.keyDown(ta, { key: 'Enter' })
+    expect(onSendProposal).toHaveBeenCalledWith('attendance', { headcount: 24 })
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('shows a usage hint for an incomplete command and does not send', () => {
+    const { onSend, onSendProposal } = renderComposer()
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: '/del cement' } })
+    fireEvent.keyDown(ta, { key: 'Enter' })
+    expect(onSend).not.toHaveBeenCalled()
+    expect(onSendProposal).not.toHaveBeenCalled()
+    expect(screen.getByText(/try:/i)).toBeInTheDocument()
+  })
+
+  it('sends ordinary text via onSend', () => {
+    const { onSend, onSendProposal } = renderComposer()
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: 'good morning' } })
+    fireEvent.keyDown(ta, { key: 'Enter' })
+    expect(onSend).toHaveBeenCalledWith('good morning')
+    expect(onSendProposal).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Smart-suggest (Phase B)
+// ---------------------------------------------------------------------------
+
+describe('ChatComposer — smart-suggest (Phase B)', () => {
+  it('offers a suggestion chip and sends it as a capture', () => {
+    const { onSendProposal } = renderComposer()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'cement 50 bori aaya' } })
+    fireEvent.click(screen.getByRole('button', { name: /log delivery/i }))
+    expect(onSendProposal).toHaveBeenCalledWith(
+      'delivery',
+      expect.objectContaining({ material: 'cement', quantity: 50 }),
+    )
+  })
+
+  it('shows no chip for a negation', () => {
+    renderComposer()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'cement khatam' } })
+    expect(screen.queryByRole('button', { name: /log delivery/i })).toBeNull()
   })
 })
