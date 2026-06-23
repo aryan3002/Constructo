@@ -23,6 +23,34 @@ const NAV_ICONS: Record<NavIconName, ReactNode> = {
   chart: <ChartBarIcon />, search: <SearchIcon />, users: <UsersIcon />, settings: <SettingsIcon />,
 }
 
+function NavRow({ item, role, collapsed, t }: {
+  item: NavItem
+  role: Role
+  collapsed: boolean
+  t: ReturnType<typeof useT>
+}) {
+  const label = t(labelKeyFor(item, role))
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        `relative flex min-h-tap items-center gap-3 rounded-[13px] border px-3 py-2.5 font-body text-small font-semibold cstk-animate transition ${
+          collapsed ? 'justify-center' : ''
+        } ${
+          isActive
+            ? 'border-edge bg-surface-card text-brand-text shadow-card before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand'
+            : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+        }`
+      }
+    >
+      <span className="text-[1.15em] leading-none" aria-hidden>{NAV_ICONS[item.iconName]}</span>
+      {collapsed ? null : <span className="flex-1">{label}</span>}
+    </NavLink>
+  )
+}
+
 /**
  * NeevSidebar — the Command Center desktop sidebar (neev skin only).
  * Brand · PRIMARY ▸ SHARED zones (top) · ADMIN zone pinned bottom · profile card.
@@ -30,29 +58,6 @@ const NAV_ICONS: Record<NavIconName, ReactNode> = {
  */
 export function NeevSidebar({ zones, role, roleBadge, collapsed }: NeevSidebarProps) {
   const t = useT()
-
-  function Row({ item }: { item: NavItem }) {
-    const label = t(labelKeyFor(item, role))
-    return (
-      <NavLink
-        to={item.to}
-        end={item.end}
-        title={collapsed ? label : undefined}
-        className={({ isActive }) =>
-          `relative flex min-h-tap items-center gap-3 rounded-[13px] border px-3 py-2.5 font-body text-small font-semibold cstk-animate transition ${
-            collapsed ? 'justify-center' : ''
-          } ${
-            isActive
-              ? 'border-edge bg-surface-card text-brand-text shadow-card before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand'
-              : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-          }`
-        }
-      >
-        <span className="text-[1.15em] leading-none" aria-hidden>{NAV_ICONS[item.iconName]}</span>
-        {collapsed ? null : <span className="flex-1">{label}</span>}
-      </NavLink>
-    )
-  }
 
   return (
     <aside
@@ -76,12 +81,12 @@ export function NeevSidebar({ zones, role, roleBadge, collapsed }: NeevSidebarPr
       </div>
 
       <nav aria-label="Primary" className="flex flex-1 flex-col gap-1">
-        {zones.primary.map((i) => <Row key={i.to} item={i} />)}
+        {zones.primary.map((i) => <NavRow key={i.to} item={i} role={role} collapsed={collapsed} t={t} />)}
         {zones.shared.length ? <div data-zone-divider className="my-2 border-t border-edge" /> : null}
-        {zones.shared.map((i) => <Row key={i.to} item={i} />)}
+        {zones.shared.map((i) => <NavRow key={i.to} item={i} role={role} collapsed={collapsed} t={t} />)}
         <div className="flex-1" />
         {zones.admin.length ? <div data-zone-divider className="my-2 border-t border-edge" /> : null}
-        {zones.admin.map((i) => <Row key={i.to} item={i} />)}
+        {zones.admin.map((i) => <NavRow key={i.to} item={i} role={role} collapsed={collapsed} t={t} />)}
       </nav>
 
       {/* Profile card → settings */}
