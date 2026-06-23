@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUiStore } from '../store/ui'
+import { useT } from '../i18n'
 import { NotificationsPanel } from '../features/notifications/NotificationsPanel'
-import { BellIcon, ChevronDownIcon, SearchIcon } from './icons'
+import { BellIcon, ChevronDownIcon, SearchIcon, PanelLeftIcon } from './icons'
 import { StatusDot } from './StatusPill'
+import { AvatarMenu } from './AvatarMenu'
+import { ThemeControl } from './ThemeControl'
 import type { SiteSummary } from './SiteSwitcher'
 
 export interface NeevTopBarProps {
@@ -27,13 +30,30 @@ export function NeevTopBar({
   notificationCount = 0,
   roleBadge,
 }: NeevTopBarProps) {
+  const t = useT()
   const [scopeOpen, setScopeOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const scopeRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
   const toggleCommand = useUiStore((s) => s.toggleCommand)
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
   const selected = sites.find((s) => s.id === selectedSiteId) ?? null
   const scopeLabel = selected ? selected.name : `All sites (${sites.length})`
+
+  // ⌘\ global shortcut to collapse/expand sidebar (ignore when typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+      if (!typing && (e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault()
+        toggleSidebar()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleSidebar])
 
   // Close popovers on Escape / outside click.
   useEffect(() => {
@@ -62,6 +82,17 @@ export function NeevTopBar({
 
   return (
     <header className="sticky top-0 z-30 hidden items-center gap-3.5 border-b border-edge bg-surface/80 px-8 py-3 backdrop-blur md:flex">
+      {/* Collapse toggle */}
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        aria-pressed={sidebarCollapsed}
+        aria-label={sidebarCollapsed ? t('shell.expand_sidebar') : t('shell.collapse_sidebar')}
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-control text-text-primary cstk-animate transition hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
+        <PanelLeftIcon />
+      </button>
+
       {/* Scope button */}
       <div ref={scopeRef} className="relative">
         <button
@@ -164,16 +195,9 @@ export function NeevTopBar({
         ) : null}
       </div>
 
-      {/* Avatar */}
-      {roleBadge ? (
-        <span
-          aria-label={`Role: ${roleBadge.name}`}
-          title={roleBadge.name}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-subtle font-display text-small font-bold text-brand-text ring-2 ring-surface-card"
-        >
-          {roleBadge.initials}
-        </span>
-      ) : null}
+      {/* Theme control + Avatar */}
+      <ThemeControl />
+      {roleBadge ? <AvatarMenu roleBadge={roleBadge} /> : null}
     </header>
   )
 }
