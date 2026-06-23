@@ -29,7 +29,7 @@ export const en = {
   'nav.permits': 'Permits',
   'nav.groups': 'WhatsApp Groups',
   'nav.reports': 'Reports',
-  'nav.documents': 'Documents',
+  'nav.documents': 'Drawings',
   'nav.settings': 'Settings',
   'nav.chat': 'Chat',
   'nav.more': 'More',

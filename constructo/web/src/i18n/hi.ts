@@ -25,7 +25,7 @@ export const hi: Record<TranslationKey, string> = {
   'nav.permits': 'परमिट',
   'nav.groups': 'व्हाट्सऐप ग्रुप',
   'nav.reports': 'रिपोर्ट',
-  'nav.documents': 'दस्तावेज़',
+  'nav.documents': 'ड्रॉइंग',
   'nav.settings': 'सेटिंग्स',
   'nav.chat': 'चैट',
   'nav.more': 'और',
