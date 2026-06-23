@@ -211,6 +211,9 @@ export const hi: Record<TranslationKey, string> = {
   'settings.team.invite': 'साथी को बुलाएँ',
   'settings.signout': 'साइन आउट',
   'shell.profile_settings': 'प्रोफ़ाइल और सेटिंग्स',
+  'shell.collapse_sidebar': 'साइडबार छोटा करें',
+  'shell.expand_sidebar': 'साइडबार बड़ा करें',
+  'shell.appearance': 'दिखावट',
   // === brief/owner ===
   'owner.home.title': 'मालिक ब्रीफ़',
   'owner.home.needs_you_one': 'आज {sites} साइटों में {count} काम आपके ध्यान का इंतज़ार',

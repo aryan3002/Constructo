@@ -234,6 +234,9 @@ export const en = {
   'settings.team.invite': 'Invite a teammate',
   'settings.signout': 'Sign out',
   'shell.profile_settings': 'Profile & settings',
+  'shell.collapse_sidebar': 'Collapse sidebar',
+  'shell.expand_sidebar': 'Expand sidebar',
+  'shell.appearance': 'Appearance',
   // === brief/owner ===
   'owner.home.title': 'Owner Brief',
   'owner.home.needs_you_one': '{count} thing needs you today across {sites} sites',
