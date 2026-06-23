@@ -27,6 +27,17 @@ export type DrawingKind =
   | 'plumbing'
   | 'other'
 
+/** Canonical ordered list of drawing kinds — drives the upload Type selector. */
+export const DRAWING_KINDS: DrawingKind[] = [
+  'plan',
+  'elevation',
+  'section',
+  'structural',
+  'electrical',
+  'plumbing',
+  'other',
+]
+
 export interface DrawingRegisterRow {
   id: string
   site_id: string
@@ -59,6 +70,25 @@ export interface PublishDrawingBody {
   plain_summary_en?: string | null
   plain_summary_hi?: string | null
   supersedes_id?: string | null
+}
+
+/**
+ * Classify an upload-flow error so the UI can show the real reason instead of a
+ * generic message. `putToR2` throws an `ApiError` whose message starts with
+ * "R2 upload failed" (R2 returned non-2xx); a CORS / offline failure on the
+ * direct browser PUT (or presign) surfaces as a `TypeError` ("Failed to fetch").
+ * Anything else is a backend rejection (presign / publish) whose `detail` we surface.
+ *
+ * - `kind: 'upload'` → the file never reached storage (connection / CORS / R2).
+ * - `kind: 'save'`   → storage was fine but the server rejected the record; `detail` has why.
+ */
+export function describeUploadError(err: unknown): { kind: 'upload' | 'save'; detail: string } {
+  if (err instanceof ApiError && !err.message.startsWith('R2 upload failed')) {
+    return { kind: 'save', detail: err.message }
+  }
+  // R2 PUT non-2xx (ApiError "R2 upload failed"), a fetch network/CORS TypeError,
+  // or any unknown throwable → treat as an upload-side failure.
+  return { kind: 'upload', detail: '' }
 }
 
 // ---------------------------------------------------------------------------

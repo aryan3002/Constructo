@@ -809,6 +809,7 @@ export const hi: Record<TranslationKey, string> = {
   'documents.version_label': 'संस्करण',
   'documents.site_label': 'साइट',
   'documents.title_label': 'ड्रॉइंग शीर्षक',
+  'documents.kind_label': 'प्रकार',
   'documents.save': 'सहेजें',
   'documents.cancel': 'रद्द करें',
   'documents.open': 'खोलें',
@@ -860,6 +861,9 @@ export const hi: Record<TranslationKey, string> = {
   'drawings.kind.electrical': 'विद्युत',
   'drawings.kind.plumbing': 'प्लम्बिंग',
   'drawings.kind.other': 'अन्य',
+  'drawings.error_upload':
+    'फ़ाइल अपलोड नहीं हो सकी। अपना कनेक्शन या स्टोरेज सेटिंग जाँचें और फिर से प्रयास करें।',
+  'drawings.error_save': 'ड्रॉइंग सहेजी नहीं जा सकी: {detail}',
   // Drawing detail drawer
   'drawings.detail_drawer.title': 'ड्रॉइंग विवरण',
   'drawings.detail_drawer.version_history': 'संस्करण इतिहास',

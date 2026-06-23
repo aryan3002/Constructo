@@ -11,8 +11,8 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DrawingRegisterRow } from '../../api/drawings'
-import { drawingsApi } from '../../api/drawings'
+import type { DrawingRegisterRow, DrawingKind } from '../../api/drawings'
+import { drawingsApi, describeUploadError, DRAWING_KINDS } from '../../api/drawings'
 import { siteChangesApi } from '../../api/siteChanges'
 import { qk } from '../../api/queryKeys'
 import { useT } from '../../i18n'
@@ -81,6 +81,7 @@ function RevisionUploadPanel({ current, onDone, onCancel }: RevisionUploadPanelP
   const t = useT()
   const [file, setFile] = useState<File | null>(null)
   const [version, setVersion] = useState('')
+  const [kind, setKind] = useState<DrawingKind>(current.kind)
   const [changeNote, setChangeNote] = useState('')
   const [phase, setPhase] = useState<UploadPhase>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -103,23 +104,34 @@ function RevisionUploadPanel({ current, onDone, onCancel }: RevisionUploadPanelP
         setPhase('unavailable')
         return
       }
+      if (!ticket.put_url) {
+        // 'presigned' without a URL shouldn't happen, but never PUT to null.
+        setPhase('error')
+        setErrorMsg(t('drawings.error_upload'))
+        return
+      }
 
-      await drawingsApi.putToR2(ticket.put_url!, file)
+      await drawingsApi.putToR2(ticket.put_url, file)
       await drawingsApi.publish({
         site_id: current.site_id,
         title: current.title,
         version: version.trim(),
         file_url: ticket.key,
-        kind: current.kind,
+        kind,
         change_note: changeNote.trim() || null,
         supersedes_id: current.id,
       })
 
       setPhase('idle')
       onDone()
-    } catch {
+    } catch (err) {
       setPhase('error')
-      setErrorMsg(t('common.error'))
+      const info = describeUploadError(err)
+      setErrorMsg(
+        info.kind === 'save'
+          ? t('drawings.error_save', { detail: info.detail })
+          : t('drawings.error_upload'),
+      )
     }
   }
 
@@ -198,6 +210,28 @@ function RevisionUploadPanel({ current, onDone, onCancel }: RevisionUploadPanelP
               placeholder="e.g. v3"
               className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
+          </div>
+
+          {/* Type (drawing kind) */}
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={`drawer-upload-kind-${current.id}`}
+              className="font-body text-small font-semibold text-text-mute"
+            >
+              {t('documents.kind_label')}
+            </label>
+            <select
+              id={`drawer-upload-kind-${current.id}`}
+              value={kind}
+              onChange={(e) => setKind(e.target.value as DrawingKind)}
+              className="min-h-tap rounded-control border border-line bg-paper px-3 font-body text-body text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {DRAWING_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`drawings.kind.${k}` as Parameters<typeof t>[0])}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Change note */}

@@ -834,6 +834,7 @@ export const en = {
   'documents.version_label': 'Version',
   'documents.site_label': 'Site',
   'documents.title_label': 'Drawing title',
+  'documents.kind_label': 'Type',
   'documents.save': 'Save',
   'documents.cancel': 'Cancel',
   'documents.open': 'Open',
@@ -885,6 +886,9 @@ export const en = {
   'drawings.kind.electrical': 'Electrical',
   'drawings.kind.plumbing': 'Plumbing',
   'drawings.kind.other': 'Other',
+  'drawings.error_upload':
+    "Couldn't upload the file. Check your connection or storage settings, then try again.",
+  'drawings.error_save': "Couldn't save the drawing: {detail}",
   // Drawing detail drawer
   'drawings.detail_drawer.title': 'Drawing details',
   'drawings.detail_drawer.version_history': 'Version history',
