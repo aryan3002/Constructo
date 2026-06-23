@@ -159,6 +159,7 @@ export function ChatPage() {
                 address={chatAddress}
                 title={threadTitle}
                 hasHomeowner={hasHomeowner}
+                siteId={selectedConv.site_id ?? undefined}
                 onManageGroup={
                   selectedConv.kind === 'group' ? () => setManageOpen(true) : undefined
                 }

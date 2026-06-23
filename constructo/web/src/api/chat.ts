@@ -213,6 +213,42 @@ async function uploadMultipart<T>(path: string, form: FormData): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Insight surfaces (Phase D) — brief / sentinel(radar) / recap
+// ---------------------------------------------------------------------------
+
+export interface ChatBriefRisk {
+  kind: string
+  severity: string
+  message: string
+  evidence_event_ids: string[]
+}
+export interface ChatBrief {
+  site_id: string
+  risk_count: number
+  headline: string
+  risks: ChatBriefRisk[]
+}
+export interface SentinelSignal {
+  kind: string
+  severity: string
+  message: string
+  evidence_event_ids: string[]
+}
+export interface SentinelResult {
+  signals: SentinelSignal[]
+}
+export interface Recap {
+  site_id: string
+  days: number
+  event_counts: Record<string, number>
+  material_totals: Record<string, number>
+  worker_days: number | null
+  amount_total: number | null
+  open_disputes: number
+  summary: string
+}
+
+// ---------------------------------------------------------------------------
 // chatApi — the full Phase-A surface
 // ---------------------------------------------------------------------------
 
@@ -330,5 +366,24 @@ export const chatApi = {
     return request<{ ticket: string }>('/api/v1/chat/ws-ticket', {
       method: 'POST',
     })
+  },
+
+  // ---- Phase D insight surfaces (site-scoped, GET-only) ----
+
+  /** The site's pinned brief — today's ranked risks. */
+  brief(siteId: string): Promise<ChatBrief> {
+    return request<ChatBrief>(`/api/v1/chat/brief?site_id=${encodeURIComponent(siteId)}`)
+  },
+
+  /** Radar: deterministic "what's slipping" signals over a window. */
+  sentinel(siteId: string, windowDays = 1): Promise<SentinelResult> {
+    return request<SentinelResult>(
+      `/api/v1/sentinel?site_id=${encodeURIComponent(siteId)}&window_days=${windowDays}`,
+    )
+  },
+
+  /** Recap: deterministic totals over the last N days. */
+  recap(siteId: string, days = 1): Promise<Recap> {
+    return request<Recap>(`/api/v1/recap?site_id=${encodeURIComponent(siteId)}&days=${days}`)
   },
 }

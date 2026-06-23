@@ -197,9 +197,13 @@ function fmtTime(iso: string): string {
 export interface CaptureCardProps {
   event: ChatEvent
   message: ChatMessage
+  /** Phase D: open the dispute flow for this card's event (parent owns the modal). */
+  onDispute?: () => void
+  /** Phase D: create a to-do linked to this card's message (parent owns the call). */
+  onMakeTodo?: () => void
 }
 
-export function CaptureCard({ event, message }: CaptureCardProps) {
+export function CaptureCard({ event, message, onDispute, onMakeTodo }: CaptureCardProps) {
   const [open, setOpen] = useState(false)
 
   const meta = EVENT_META[event.event_type] ?? EVENT_META.unknown
@@ -346,6 +350,30 @@ export function CaptureCard({ event, message }: CaptureCardProps) {
         >
           couldn't process
         </span>
+      ) : null}
+
+      {/* ── Phase D actions: dispute / make-to-do (rendered only when wired) ── */}
+      {onDispute || onMakeTodo ? (
+        <div className="flex items-center gap-3 border-t border-edge pt-2">
+          {onDispute ? (
+            <button
+              type="button"
+              onClick={onDispute}
+              className="font-body text-small font-medium text-text-secondary hover:text-text-primary hover:underline"
+            >
+              {event.contested ? 'Resolve' : 'Dispute'}
+            </button>
+          ) : null}
+          {onMakeTodo ? (
+            <button
+              type="button"
+              onClick={onMakeTodo}
+              className="font-body text-small font-medium text-text-secondary hover:text-text-primary hover:underline"
+            >
+              Make a to-do
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </article>
   )

@@ -100,11 +100,13 @@ vi.mock('./ChatThread', () => ({
       title,
       hasHomeowner,
       onManageGroup,
+      siteId,
     }: {
       address: unknown
       title?: string
       hasHomeowner?: boolean
       onManageGroup?: () => void
+      siteId?: string
     }) => (
       <div
         data-testid="mock-chat-thread"
@@ -112,6 +114,7 @@ vi.mock('./ChatThread', () => ({
         data-title={title ?? ''}
         data-has-homeowner={String(hasHomeowner ?? false)}
         data-has-manage={String(!!onManageGroup)}
+        data-site={siteId ?? ''}
       >
         {onManageGroup ? (
           <button type="button" data-testid="thread-manage-btn" onClick={onManageGroup}>
@@ -260,5 +263,17 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByTestId('select-site-conv'))
     expect(screen.getByTestId('mock-chat-thread').getAttribute('data-has-manage')).toBe('false')
     expect(screen.queryByTestId('mock-manage-drawer')).not.toBeInTheDocument()
+  })
+
+  it('passes siteId for a site thread but not for a company-wide group (Phase D)', () => {
+    render(<ChatPage />, { wrapper: makeWrapper() })
+    fireEvent.click(screen.getByTestId('select-site-conv'))
+    expect(screen.getByTestId('mock-chat-thread').getAttribute('data-site')).toBe('site-abc')
+  })
+
+  it('omits siteId for a company-wide group (Phase D)', () => {
+    render(<ChatPage />, { wrapper: makeWrapper() })
+    fireEvent.click(screen.getByTestId('select-group-conv'))
+    expect(screen.getByTestId('mock-chat-thread').getAttribute('data-site')).toBe('')
   })
 })
