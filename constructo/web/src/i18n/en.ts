@@ -233,6 +233,7 @@ export const en = {
   'settings.team.title': 'Team',
   'settings.team.invite': 'Invite a teammate',
   'settings.signout': 'Sign out',
+  'shell.profile_settings': 'Profile & settings',
   // === brief/owner ===
   'owner.home.title': 'Owner Brief',
   'owner.home.needs_you_one': '{count} thing needs you today across {sites} sites',

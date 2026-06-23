@@ -210,6 +210,7 @@ export const hi: Record<TranslationKey, string> = {
   'settings.team.title': 'टीम',
   'settings.team.invite': 'साथी को बुलाएँ',
   'settings.signout': 'साइन आउट',
+  'shell.profile_settings': 'प्रोफ़ाइल और सेटिंग्स',
   // === brief/owner ===
   'owner.home.title': 'मालिक ब्रीफ़',
   'owner.home.needs_you_one': 'आज {sites} साइटों में {count} काम आपके ध्यान का इंतज़ार',
