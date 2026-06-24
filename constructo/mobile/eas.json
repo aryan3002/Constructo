@@ -26,6 +26,16 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "production-apk": {
+      "channel": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://constructo-api.wittytree-3a917044.eastus.azurecontainerapps.io"
+      }
     }
   },
   "submit": {
