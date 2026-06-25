@@ -24,6 +24,7 @@ function company(over: Partial<Company> = {}): Company {
     address: null,
     timezone: 'Asia/Kolkata',
     currency: 'INR',
+    logo_url: null,
     ...over,
   }
 }
