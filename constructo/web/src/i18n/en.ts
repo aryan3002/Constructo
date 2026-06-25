@@ -838,6 +838,10 @@ export const en = {
   'documents.save': 'Save',
   'documents.cancel': 'Cancel',
   'documents.open': 'Open',
+  'documents.need_site': 'Choose a site',
+  'documents.need_title': 'Add a title',
+  'documents.need_version': 'Add a version (e.g. v1)',
+  'documents.need_file': 'Choose a file',
 
   // === documents register — company docs tab (W5 Slice 2b) ===
   'documents.tab_drawings': 'Drawings',

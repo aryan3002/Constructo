@@ -14,6 +14,7 @@ import { qk } from '../../api/queryKeys'
 import { useSites } from '../../api/hooks'
 import { useT, type TranslationKey } from '../../i18n'
 import { Button, Small } from '../../ui'
+import { SaveHint } from './SaveHint'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -248,6 +249,14 @@ export function AddDocument({ onDone, onCancel }: AddDocumentProps) {
             {errorMsg}
           </p>
         )}
+
+        <SaveHint
+          hidden={phase === 'saving' || phase === 'error' || phase === 'unavailable'}
+          checks={[
+            { ok: title.trim().length > 0, msg: t('documents.need_title') },
+            { ok: Boolean(file), msg: t('documents.need_file') },
+          ]}
+        />
 
         {/* Actions */}
         <div className="flex items-center gap-2">
