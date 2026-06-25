@@ -59,3 +59,86 @@ async def test_company_out_includes_logo_url(client, logo_ctx, monkeypatch):
         json={"logo_key": None},
     )
     assert r.json()["logo_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# CP-T2: presign endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def presign_ctx(factory):
+    """Owner + supervisor in the same company for presign tests."""
+    company = await factory.company(name="Presign Test Co")
+    owner = await factory.user(company=company, role=UserRole.owner)
+    supervisor = await factory.user(company=company, role=UserRole.supervisor)
+    return {"company": company, "owner": owner, "supervisor": supervisor}
+
+
+@pytest.mark.asyncio
+async def test_logo_presign_owner_ok(client, presign_ctx, monkeypatch):
+    owner = presign_ctx["owner"]
+    owner_headers = auth(owner)
+    monkeypatch.setattr(
+        type(get_storage()),
+        "presigned_put",
+        lambda self, key, ct: {
+            "key": key,
+            "url": f"https://put/{key}",
+            "method": "PUT",
+            "headers": {},
+            "expires_in": 600,
+        },
+    )
+    r = await client.post(
+        "/api/v1/auth/company/logo/presign",
+        headers=owner_headers,
+        json={"content_type": "image/png"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["upload_mode"] == "presigned"
+    assert body["key"].startswith("branding/") and body["key"].endswith(".png")
+    assert body["put_url"].startswith("https://put/")
+
+
+@pytest.mark.asyncio
+async def test_logo_presign_rejects_bad_type(client, presign_ctx):
+    owner = presign_ctx["owner"]
+    owner_headers = auth(owner)
+    r = await client.post(
+        "/api/v1/auth/company/logo/presign",
+        headers=owner_headers,
+        json={"content_type": "image/gif"},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_logo_presign_unavailable_on_local(client, presign_ctx, monkeypatch):
+    owner = presign_ctx["owner"]
+    owner_headers = auth(owner)
+
+    def _raise(self, key, ct):
+        raise NotImplementedError
+
+    monkeypatch.setattr(type(get_storage()), "presigned_put", _raise)
+    r = await client.post(
+        "/api/v1/auth/company/logo/presign",
+        headers=owner_headers,
+        json={"content_type": "image/jpeg"},
+    )
+    assert r.json()["upload_mode"] == "unavailable"
+    assert r.json()["put_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_logo_presign_non_owner_forbidden(client, presign_ctx):
+    supervisor = presign_ctx["supervisor"]
+    member_headers = auth(supervisor)
+    r = await client.post(
+        "/api/v1/auth/company/logo/presign",
+        headers=member_headers,
+        json={"content_type": "image/png"},
+    )
+    assert r.status_code in (401, 403)
