@@ -5,7 +5,7 @@
 //
 // Editable: name, GST number, address, timezone, currency (all tracking-only —
 // no payments rail). Empty optional fields are sent as null, not "".
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -112,6 +112,44 @@ export function CompanyProfile() {
     onError: () => setToast({ status: 'risk', msg: t('admin.company.save_failed') }),
   })
 
+  // -------------------------------------------------------------------------
+  // Logo upload
+  // -------------------------------------------------------------------------
+  const [logoBusy, setLogoBusy] = useState(false)
+  const [logoErr, setLogoErr] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  async function onLogoFile(file: File) {
+    setLogoErr(null)
+    setLogoBusy(true)
+    try {
+      const content_type = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+      const ticket = await authApi.presignCompanyLogo({ content_type })
+      if (ticket.upload_mode !== 'presigned' || !ticket.put_url) {
+        setLogoErr(t('admin.company.logo_unavailable'))
+        return
+      }
+      const put = await fetch(ticket.put_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': content_type },
+      })
+      if (!put.ok) throw new Error(`R2 PUT ${put.status}`)
+      const saved = await authApi.updateCompany({ logo_key: ticket.key })
+      qc.setQueryData(qk.company(), saved)
+    } catch {
+      setLogoErr(t('admin.company.logo_failed'))
+    } finally {
+      setLogoBusy(false)
+      if (logoInputRef.current) logoInputRef.current.value = ''
+    }
+  }
+
+  async function removeLogo() {
+    const saved = await authApi.updateCompany({ logo_key: null })
+    qc.setQueryData(qk.company(), saved)
+  }
+
   if (company.isLoading) return <Spinner label={t('admin.company.loading')} />
   if (company.isError || !company.data) {
     return (
@@ -136,6 +174,75 @@ export function CompanyProfile() {
           <StatusPill status={toast.status} label={toast.msg} />
         </p>
       ) : null}
+
+      {/* Logo block + letterhead preview — shown to all roles; upload controls owner-only. */}
+      {(() => {
+        const logoUrl = company.data?.logo_url ?? null
+        return (
+          <section className="flex flex-col gap-2">
+            <div className="font-body text-small font-semibold text-text">{t('admin.company.logo_label')}</div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-card border border-edge bg-surface-sunken">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <span className="font-body text-micro text-text-mute">—</span>
+                )}
+              </div>
+              {canManage ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    aria-label={t('admin.company.logo_upload')}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) void onLogoFile(f)
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    disabled={logoBusy}
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    {logoBusy ? t('admin.company.logo_uploading') : t('admin.company.logo_upload')}
+                  </Button>
+                  {logoUrl ? (
+                    <Button variant="ghost" onClick={() => void removeLogo()}>
+                      {t('admin.company.logo_remove')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <Small className="!text-text-mute">{t('admin.company.logo_hint')}</Small>
+            {logoErr ? (
+              <Small className="!text-risk" role="alert">
+                {logoErr}
+              </Small>
+            ) : null}
+            {/* Letterhead preview — mirrors the PDF letterhead */}
+            <div className="mt-2 rounded-card border border-edge p-4">
+              <div className="font-body text-micro font-semibold uppercase tracking-wide text-text-mute">
+                {t('admin.company.logo_preview_title')}
+              </div>
+              <div className="mt-2 border-b-2 border-celebrate pb-2">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="mb-1 max-h-10 object-contain" />
+                ) : null}
+                <div className="font-heading text-h3 text-text">{company.data?.name}</div>
+                {company.data?.gstin ? (
+                  <div className="font-body text-micro text-text-mute">
+                    GSTIN: {company.data.gstin}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        )
+      })()}
 
       {canManage ? (
         <form

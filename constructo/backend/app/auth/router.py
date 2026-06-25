@@ -6,7 +6,7 @@ present a real "request code -> enter code" flow (and re-OTP recovery) without
 branching on whether SMS exists yet.
 """
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +22,7 @@ from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
 from app.models import Company, PushToken, User, UserRole
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -82,6 +83,7 @@ class CompanyUpdateIn(BaseModel):
     address: str | None = Field(default=None, max_length=500)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     currency: str | None = Field(default=None, min_length=1, max_length=8)
+    logo_key: str | None = None
 
 
 class CompanyOut(BaseModel):
@@ -93,6 +95,13 @@ class CompanyOut(BaseModel):
     address: str | None = None
     timezone: str
     currency: str
+    logo_url: str | None = None
+
+
+def _company_out(company: Company) -> CompanyOut:
+    out = CompanyOut.model_validate(company)
+    out.logo_url = get_storage().url_for(company.logo_key)
+    return out
 
 
 async def _get_or_create_default_company(session: AsyncSession) -> Company:
@@ -221,7 +230,7 @@ async def get_company(
     company = await session.get(Company, user.company_id)
     if company is None:
         raise AppError(404, "not_found", "Company not found")
-    return CompanyOut.model_validate(company)
+    return _company_out(company)
 
 
 @router.patch("/company", response_model=CompanyOut)
@@ -240,7 +249,43 @@ async def update_company(
         setattr(company, field, value)
     await session.commit()
     await session.refresh(company)
-    return CompanyOut.model_validate(company)
+    return _company_out(company)
+
+
+_LOGO_EXT = {"image/png": "png", "image/jpeg": "jpg"}
+
+
+class LogoPresignIn(BaseModel):
+    content_type: str
+
+
+class LogoPresignOut(BaseModel):
+    key: str
+    put_url: str | None
+    upload_mode: str  # "presigned" | "unavailable"
+
+
+@router.post("/company/logo/presign", response_model=LogoPresignOut)
+async def presign_company_logo(
+    body: LogoPresignIn,
+    owner: User = Depends(require_role(UserRole.owner)),
+) -> LogoPresignOut:
+    """Direct-to-R2 upload ticket for the company logo (owner-only). Local/dev
+    storage has no presigned PUT (NotImplementedError) → upload_mode=unavailable;
+    the UI shows an honest note (there is no multipart fallback for the logo)."""
+    ext = _LOGO_EXT.get(body.content_type)
+    if ext is None:
+        raise AppError(422, "bad_type", "Logo must be a PNG or JPEG image")
+    key = f"branding/{owner.company_id}/logo-{uuid4().hex}.{ext}"
+    put_url: str | None = None
+    try:
+        ticket = get_storage().presigned_put(key, body.content_type)
+        put_url = ticket["url"]
+    except NotImplementedError:
+        put_url = None
+    return LogoPresignOut(
+        key=key, put_url=put_url, upload_mode="presigned" if put_url else "unavailable"
+    )
 
 
 # PATCH /api/v1/users/me — profile + UI language. The web i18n layer

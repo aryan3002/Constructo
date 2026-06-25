@@ -162,12 +162,20 @@ export interface Company {
   address: string | null
   timezone: string
   currency: string
+  logo_url: string | null
 }
 
 /** Fields the owner may patch (partial — only provided ones change). */
 export type CompanyUpdate = Partial<
   Pick<Company, 'name' | 'gstin' | 'address' | 'timezone' | 'currency'>
->
+> & { logo_key?: string | null }
+
+/** Direct-to-R2 logo upload ticket. */
+export interface LogoPresign {
+  key: string
+  put_url: string | null
+  upload_mode: 'presigned' | 'unavailable'
+}
 
 /** Company billing-tracking record (Setup & Admin → Billing, W4.8). Tracking-only. */
 export interface CompanyBilling {
@@ -185,6 +193,7 @@ const mockCompany: Company = {
   address: null,
   timezone: 'Asia/Kolkata',
   currency: 'INR',
+  logo_url: null,
 }
 
 /** Dev-only mutable team so the no-backend Team & roles tour edits in place. */
@@ -352,6 +361,17 @@ export const authApi = {
   /** Owner first-run convenience: name your company (patches just `name`). */
   renameCompany(name: string): Promise<Company> {
     return authApi.updateCompany({ name })
+  },
+
+  /** Mint a direct-to-R2 upload ticket for the company logo (owner-only). */
+  presignCompanyLogo(opts: { content_type: string }): Promise<LogoPresign> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ key: 'branding/mock/logo.png', put_url: null, upload_mode: 'unavailable' })
+    }
+    return call('/api/v1/auth/company/logo/presign', {
+      method: 'POST',
+      body: JSON.stringify(opts),
+    })
   },
 
   /** Read the company billing-tracking record (GET /api/v1/billing). */
