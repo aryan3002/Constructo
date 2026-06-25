@@ -36,6 +36,7 @@ import { DocumentsTab } from './DocumentsTab'
 import { DrawingDetailDrawer } from './DrawingDetailDrawer'
 import { KindFilter, type FilterKind } from './KindFilter'
 import { KindBadge } from './DrawingDetailDrawer'
+import { SaveHint } from './SaveHint'
 
 // ---------------------------------------------------------------------------
 // Upload phase state
@@ -298,6 +299,16 @@ function NewDrawing({ onDone, onCancel }: NewDrawingProps) {
             {errorMsg}
           </p>
         )}
+
+        <SaveHint
+          hidden={phase === 'uploading' || phase === 'error' || phase === 'unavailable'}
+          checks={[
+            { ok: siteId.length > 0, msg: t('documents.need_site') },
+            { ok: title.trim().length > 0, msg: t('documents.need_title') },
+            { ok: version.trim().length > 0, msg: t('documents.need_version') },
+            { ok: Boolean(file), msg: t('documents.need_file') },
+          ]}
+        />
 
         <div className="flex items-center gap-2">
           <Button

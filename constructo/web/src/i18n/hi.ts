@@ -813,6 +813,10 @@ export const hi: Record<TranslationKey, string> = {
   'documents.save': 'सहेजें',
   'documents.cancel': 'रद्द करें',
   'documents.open': 'खोलें',
+  'documents.need_site': 'साइट चुनें',
+  'documents.need_title': 'शीर्षक जोड़ें',
+  'documents.need_version': 'संस्करण जोड़ें (जैसे v1)',
+  'documents.need_file': 'फ़ाइल चुनें',
 
   // === documents register — company docs tab (W5 Slice 2b) ===
   'documents.tab_drawings': 'ड्रॉइंग',

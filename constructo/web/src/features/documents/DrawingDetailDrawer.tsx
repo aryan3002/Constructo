@@ -26,6 +26,7 @@ import {
   TimelineItem,
 } from '../../ui'
 import { DrawingPreview } from './DrawingPreview'
+import { SaveHint } from './SaveHint'
 import { formatDate } from '../../lib/format'
 
 // ---------------------------------------------------------------------------
@@ -262,6 +263,14 @@ function RevisionUploadPanel({ current, onDone, onCancel }: RevisionUploadPanelP
               {errorMsg}
             </p>
           )}
+
+          <SaveHint
+            hidden={phase === 'uploading' || phase === 'error' || phase === 'unavailable'}
+            checks={[
+              { ok: version.trim().length > 0, msg: t('documents.need_version') },
+              { ok: Boolean(file), msg: t('documents.need_file') },
+            ]}
+          />
 
           <div className="flex items-center gap-2">
             <Button
