@@ -41,6 +41,7 @@ from app.models import (
     SiteEventModel,
     SiteFinancials,
 )
+from app.storage import get_storage
 
 # ---------------------------------------------------------------------------
 # internal helpers (replicate the private payment router helpers)
@@ -113,11 +114,12 @@ async def _load_financials_str(
 async def _load_company_dict(session: AsyncSession, company_id: UUID) -> dict:
     company = await session.get(Company, company_id)
     if company is None:
-        return {"name": "", "gstin": None, "address": None}
+        return {"name": "", "gstin": None, "address": None, "logo_url": None}
     return {
         "name": company.name,
         "gstin": company.gstin,
         "address": company.address,
+        "logo_url": get_storage().url_for(company.logo_key),
     }
 
 

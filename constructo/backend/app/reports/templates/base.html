@@ -53,6 +53,11 @@
     color: var(--muted);
     margin-top: 2pt;
   }
+  .letterhead__logo {
+    max-height: 48pt;
+    max-width: 180pt;
+    margin-bottom: 6pt;
+  }
 
   /* ---- section headings ---------------------------------------------------- */
   h2 {
@@ -185,6 +190,9 @@
 
 <!-- letterhead -->
 <div class="letterhead">
+  {% if company.logo_url %}
+  <img class="letterhead__logo" src="{{ company.logo_url }}" alt="{{ company.name }}" />
+  {% endif %}
   <div class="letterhead__name">{{ company.name }}</div>
   {% if company.gstin or company.address %}
   <div class="letterhead__meta">
