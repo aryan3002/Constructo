@@ -43,14 +43,15 @@ async def test_company_out_includes_logo_url(client, logo_ctx, monkeypatch):
     assert r.status_code == 200
     assert r.json()["logo_url"] is None
 
-    # Set the key via PATCH → logo_url resolves
+    # Set the key via PATCH → logo_url resolves (key must be under THIS company)
+    key = f"branding/{owner.company_id}/logo-abc.png"
     r = await client.patch(
         "/api/v1/auth/company",
         headers=owner_headers,
-        json={"logo_key": "branding/x/logo-abc.png"},
+        json={"logo_key": key},
     )
     assert r.status_code == 200
-    assert r.json()["logo_url"] == "https://r2.example/branding/x/logo-abc.png"
+    assert r.json()["logo_url"] == f"https://r2.example/{key}"
 
     # Clear it
     r = await client.patch(
@@ -142,3 +143,26 @@ async def test_logo_presign_non_owner_forbidden(client, presign_ctx):
         json={"content_type": "image/png"},
     )
     assert r.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_logo_key_must_be_own_company(client, logo_ctx, factory):
+    """Tenant isolation: an owner can only set a logo_key under their own
+    company's branding path — not another tenant's."""
+    owner = logo_ctx["owner"]
+    owner_headers = auth(owner)
+    other = await factory.company(name="Other Co")
+    # A key under another company's path is rejected.
+    r = await client.patch(
+        "/api/v1/auth/company",
+        headers=owner_headers,
+        json={"logo_key": f"branding/{other.id}/logo-evil.png"},
+    )
+    assert r.status_code == 422
+    # A key under the caller's own company path is accepted.
+    r = await client.patch(
+        "/api/v1/auth/company",
+        headers=owner_headers,
+        json={"logo_key": f"branding/{owner.company_id}/logo-ok.png"},
+    )
+    assert r.status_code == 200

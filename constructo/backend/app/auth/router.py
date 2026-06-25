@@ -245,7 +245,15 @@ async def update_company(
     company = await session.get(Company, owner.company_id)
     if company is None:
         raise AppError(404, "not_found", "Company not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    # Tenant isolation: a logo_key may only point at THIS company's branding
+    # path (the presign endpoint always mints keys under that prefix). null
+    # clears the logo. This stops an owner pointing logo_url at another
+    # company's object.
+    logo_key = data.get("logo_key")
+    if logo_key is not None and not logo_key.startswith(f"branding/{owner.company_id}/"):
+        raise AppError(422, "bad_logo_key", "logo_key must be under your company's branding path")
+    for field, value in data.items():
         setattr(company, field, value)
     await session.commit()
     await session.refresh(company)
