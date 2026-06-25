@@ -6,7 +6,7 @@ letterhead section is fully evaluated from the 'company' context variable.
 """
 from __future__ import annotations
 
-_LOGO_IMG_MARKER = 'class="letterhead__logo"'
+_LOGO_IMG_MARKER = 'class="lh-logo"'
 
 
 def test_letterhead_renders_logo_when_present():
