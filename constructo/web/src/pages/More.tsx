@@ -27,9 +27,9 @@ interface MoreLink {
  */
 const ROLE_MORE: Record<Role, MoreLink[]> = {
   owner: [
-    { to: '/payments', labelKey: 'nav.payments', icon: <CashIcon /> },
+    // Payments + Reconcile hidden for the pilot (see navModel.ts) — restore by
+    // re-adding { to: '/payments', … } and { to: '/reconcile', … } here.
     { to: '/permits', labelKey: 'nav.permits', icon: <DocIcon /> },
-    { to: '/reconcile', labelKey: 'nav.reconcile', icon: <ListIcon /> },
     { to: '/groups', labelKey: 'nav.groups', icon: <MessageIcon /> },
   ],
   pm: [

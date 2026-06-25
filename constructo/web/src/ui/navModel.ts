@@ -30,8 +30,13 @@ export interface NavZones {
 // --- the destinations (route · cap · icon) ---
 const DASHBOARD: NavItem = { to: '/owner', labelKey: 'nav.brief', iconName: 'grid', end: true }
 const APPROVALS: NavItem = { to: '/approvals', labelKey: 'nav.approvals', iconName: 'check' }
-const RECONCILE: NavItem = { to: '/reconcile', labelKey: 'nav.reconcile', iconName: 'scale' }
-const FINANCE: NavItem = { to: '/payments', labelKey: 'nav.finance', iconName: 'cash' }
+// Reconcile + Finance are HIDDEN from the owner nav for the pilot — they read
+// off AI-extracted chat data that isn't structured enough yet (mostly "Unknown
+// vendor / ₹0 / Missing proof"). The routes + the accountant/procurement nav
+// still work; this only removes them from the owner cockpit. To restore, re-add
+// RECONCILE/FINANCE below to owner's PRIMARY:
+//   const RECONCILE: NavItem = { to: '/reconcile', labelKey: 'nav.reconcile', iconName: 'scale' }
+//   const FINANCE: NavItem = { to: '/payments', labelKey: 'nav.finance', iconName: 'cash' }
 const DESIGNER: NavItem = { to: '/designer', labelKey: 'nav.designer', iconName: 'compass', end: true }
 const CAPTURE: NavItem = { to: '/supervisor/capture', labelKey: 'nav.capture', iconName: 'camera', end: true }
 
@@ -51,7 +56,7 @@ const SETTINGS: NavItem = { to: '/settings', labelKey: 'nav.settings', iconName:
 // PRIMARY is the role's cockpit (curated — the owner holds every cap but must
 // not see "Capture"). SHARED/ADMIN are universal, cap-filtered.
 const PRIMARY_BY_ROLE: Partial<Record<Role, NavItem[]>> = {
-  owner: [DASHBOARD, APPROVALS, RECONCILE, FINANCE],
+  owner: [DASHBOARD, APPROVALS],
   pm: [DASHBOARD, APPROVALS],
   architect: [DESIGNER],
   supervisor: [CAPTURE],

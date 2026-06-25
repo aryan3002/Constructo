@@ -48,9 +48,11 @@ describe('AppShell — Neev (owner) chrome', () => {
     expect(links.some((a) => a.getAttribute('href') === '/approvals')).toBe(true)
     // Profile card uses the role badge
     expect(screen.getByText('Profile & settings')).toBeInTheDocument()
-    // owner neev sidebar now surfaces the grouped desk tools
-    expect(screen.getByRole('link', { name: 'Reconcile' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Finance' })).toBeInTheDocument()
+    // owner neev sidebar surfaces the admin zone (unique to the desktop sidebar)
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument()
+    // Reconcile + Finance are hidden from the owner nav for the pilot.
+    expect(screen.queryByRole('link', { name: 'Reconcile' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Finance' })).toBeNull()
   })
 
   it('renders the Blueprint shell (no Neev chrome) by default', () => {
