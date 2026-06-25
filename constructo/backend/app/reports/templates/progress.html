@@ -1,37 +1,31 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- report title -->
-<h2 style="border-left: none; padding-left: 0; font-size: 13pt; margin-top: 0;">
-  Progress Report
-</h2>
-<div style="font-size: 9pt; color: var(--muted); margin-bottom: 2pt;">
-  <strong>Period:</strong> {{ range.from }} — {{ range.to }}
+<!-- report head -->
+<div class="report-title">Progress Report</div>
+<div class="report-meta">
+  Period <b>{{ range.from }}</b><span class="sep">—</span><b>{{ range.to }}</b>
 </div>
-
-<hr style="border: none; border-top: 0.5pt solid var(--border); margin: 8pt 0;" />
 
 {% if sites %}
   {% for s in sites %}
   <!-- ---- site card ---- -->
-  <div class="site-header">
-    <div class="site-header__name">
-      {{ s.name }}
-      &nbsp;
-      <span class="status status--{{ s.status }}">{{ s.status }}</span>
+  <div class="site-card">
+    <div class="site-card__name">
+      {{ s.name }} &nbsp;<span class="status status--{{ s.status }}">{{ s.status }}</span>
     </div>
 
     <!-- stage line -->
-    <div class="site-header__meta" style="margin-top: 5pt;">
+    <div class="site-card__meta">
       {% if s.stage and s.stage.stage_index is defined %}
         {# Forward-compat: stage_index/stage_total/variance_days light up once
            SiteBaseline gains stage columns. Kept so the template is ready. #}
         Stage {{ s.stage.stage_index }} of {{ s.stage.stage_total }}
         &nbsp;·&nbsp;
         {% if s.stage.variance_days > 0 %}
-          <span style="color: #991B1B;">+{{ s.stage.variance_days }}d vs plan</span>
+          <span style="color: var(--risk);">+{{ s.stage.variance_days }}d vs plan</span>
         {% elif s.stage.variance_days < 0 %}
-          <span style="color: #166534;">{{ s.stage.variance_days }}d vs plan</span>
+          <span style="color: var(--ok);">{{ s.stage.variance_days }}d vs plan</span>
         {% else %}
           <span style="color: var(--muted);">on schedule</span>
         {% endif %}
@@ -43,36 +37,31 @@
         {{ s.stage.issues | default(0) }} issue(s) this period
       {% endif %}
       {% if s.expected_headcount is not none %}
-        &nbsp;·&nbsp; Expected headcount: <strong>{{ s.expected_headcount }}</strong>
+        &nbsp;·&nbsp; Expected headcount: <strong style="color: var(--ink);">{{ s.expected_headcount }}</strong>
       {% endif %}
     </div>
 
     <!-- risks -->
     {% if s.risks %}
-    <div style="margin-top: 6pt;">
+    <div style="margin-top: 7pt;">
       {% for r in s.risks %}
-      <div style="font-size: 8.5pt; margin-bottom: 2pt;">
+      <div style="font-size: 8.5pt; margin-bottom: 3pt;">
         <span class="badge badge--{{ r.severity }}">{{ r.severity }}</span>
-        &nbsp;
-        <span style="color: var(--ink);">{{ r.message }}</span>
+        &nbsp;<span style="color: var(--ink-soft);">{{ r.message }}</span>
       </div>
       {% endfor %}
     </div>
     {% endif %}
 
     <!-- money row: tracking only, no payment is processed here -->
-    <div class="money-row" style="margin-top: 8pt;">
+    <div class="money-row" style="margin-top: 9pt;">
       <div class="money-cell">
         <div class="money-cell__label">Quotation</div>
-        <div class="money-cell__value">
-          {% if s.money.quotation is not none %}₹{{ s.money.quotation|inr }}{% else %}—{% endif %}
-        </div>
+        <div class="money-cell__value">{% if s.money.quotation is not none %}₹{{ s.money.quotation|inr }}{% else %}—{% endif %}</div>
       </div>
       <div class="money-cell">
         <div class="money-cell__label">Billed</div>
-        <div class="money-cell__value">
-          {% if s.money.billed is not none %}₹{{ s.money.billed|inr }}{% else %}—{% endif %}
-        </div>
+        <div class="money-cell__value">{% if s.money.billed is not none %}₹{{ s.money.billed|inr }}{% else %}—{% endif %}</div>
       </div>
       <div class="money-cell">
         <div class="money-cell__label">Received</div>
@@ -82,7 +71,7 @@
         <div class="money-cell__label">Outstanding</div>
         <div class="money-cell__value">₹{{ s.money.outstanding|inr }}</div>
       </div>
-      <div class="money-cell" style="min-width: 30pt;">
+      <div class="money-cell" style="min-width: 34pt;">
         <div class="money-cell__label">Currency</div>
         <div class="money-cell__value" style="font-size: 9pt;">{{ s.money.currency }}</div>
       </div>
@@ -96,6 +85,5 @@
 {% endblock %}
 
 {% block footnote %}
-Tracking record — no payment is processed here.
-Figures reflect Constructo ledger records as of {{ range.to }}.
+Tracking record — no payment is processed here. Figures reflect Neev ledger records as of {{ range.to }}. &nbsp;·&nbsp; app.neev.convoaiservices.com
 {% endblock %}
