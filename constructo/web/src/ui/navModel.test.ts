@@ -4,9 +4,11 @@ import { navForRole, labelKeyFor } from './navModel'
 const routes = (items: { to: string }[]) => items.map((i) => i.to)
 
 describe('navForRole', () => {
-  it('owner gets the full command center across three zones', () => {
+  it('owner gets the command center across three zones (Reconcile + Finance hidden for pilot)', () => {
     const z = navForRole('owner')
-    expect(routes(z.primary)).toEqual(['/owner', '/approvals', '/reconcile', '/payments'])
+    // Reconcile + Finance are intentionally hidden from the owner nav for the
+    // pilot (chat-derived data not structured enough yet); routes still exist.
+    expect(routes(z.primary)).toEqual(['/owner', '/approvals'])
     expect(routes(z.shared)).toEqual([
       '/sites', '/chat', '/settings/documents', '/permits', '/reports', '/search',
     ])

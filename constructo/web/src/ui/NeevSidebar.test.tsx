@@ -20,9 +20,12 @@ describe('NeevSidebar', () => {
   it('owner: renders all three zones with zone dividers and Settings last', () => {
     renderSidebar('owner')
     const nav = screen.getByRole('navigation', { name: /primary/i })
-    for (const label of ['Brief', 'Approvals', 'Reconcile', 'Finance', 'Sites', 'Drawings', 'Reports', 'Admin', 'Settings']) {
+    for (const label of ['Brief', 'Approvals', 'Sites', 'Drawings', 'Reports', 'Admin', 'Settings']) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument()
     }
+    // Reconcile + Finance are hidden from the owner nav for the pilot.
+    expect(within(nav).queryByRole('link', { name: 'Reconcile' })).toBeNull()
+    expect(within(nav).queryByRole('link', { name: 'Finance' })).toBeNull()
     // two dividers separate the three zones
     expect(nav.querySelectorAll('[data-zone-divider]').length).toBe(2)
     // "More" is retired in the desktop sidebar

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { roleCan, type Capability } from '../../auth/permissions'
 import { useMeRole } from '../../auth/useCan'
+import { type Role } from '../../api/auth'
 import { useUiStore } from '../../store/ui'
 import { SearchIcon } from '../../ui/icons'
 import { useThemeMode } from '../../ui/ThemeModeProvider'
@@ -11,6 +12,8 @@ interface Command {
   label: string
   hint?: string
   cap?: Capability
+  /** Roles that should NOT see this command even if they hold the cap. */
+  hideForRoles?: Role[]
   run: () => void
 }
 
@@ -63,8 +66,10 @@ export function CommandPalette() {
       { id: 'brief', label: 'Go to Brief', hint: 'Owner / PM', cap: 'view_brief', run: go('/') },
       { id: 'sites', label: 'Go to Sites', run: go('/sites') },
       { id: 'approvals', label: 'Go to Approvals', run: go('/approvals') },
-      { id: 'reconcile', label: 'Go to Reconcile', cap: 'reconcile', run: go('/reconcile') },
-      { id: 'payments', label: 'Go to Payments', hint: 'Tracking', cap: 'view_payments', run: go('/payments') },
+      // Hidden from owner/pm for the pilot (chat-derived data not structured
+      // enough yet — see navModel.ts). Accountant/procurement still get them.
+      { id: 'reconcile', label: 'Go to Reconcile', cap: 'reconcile', hideForRoles: ['owner', 'pm'], run: go('/reconcile') },
+      { id: 'payments', label: 'Go to Payments', hint: 'Tracking', cap: 'view_payments', hideForRoles: ['owner', 'pm'], run: go('/payments') },
       { id: 'permits', label: 'Go to Permits', cap: 'view_permits', run: go('/permits') },
       { id: 'search', label: 'Search the ledger', cap: 'search', run: go('/search') },
       { id: 'settings', label: 'Open Settings', run: go('/settings') },
@@ -84,6 +89,7 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase()
     return commands.filter((c) => {
       if (c.cap && !roleCan(role, c.cap)) return false
+      if (c.hideForRoles && role && c.hideForRoles.includes(role)) return false
       if (!q) return true
       return (
         c.label.toLowerCase().includes(q) || (c.hint?.toLowerCase().includes(q) ?? false)
