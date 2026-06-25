@@ -22,6 +22,7 @@ from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
 from app.models import Company, PushToken, User, UserRole
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -82,6 +83,7 @@ class CompanyUpdateIn(BaseModel):
     address: str | None = Field(default=None, max_length=500)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     currency: str | None = Field(default=None, min_length=1, max_length=8)
+    logo_key: str | None = None
 
 
 class CompanyOut(BaseModel):
@@ -93,6 +95,13 @@ class CompanyOut(BaseModel):
     address: str | None = None
     timezone: str
     currency: str
+    logo_url: str | None = None
+
+
+def _company_out(company: Company) -> CompanyOut:
+    out = CompanyOut.model_validate(company)
+    out.logo_url = get_storage().url_for(company.logo_key)
+    return out
 
 
 async def _get_or_create_default_company(session: AsyncSession) -> Company:
@@ -221,7 +230,7 @@ async def get_company(
     company = await session.get(Company, user.company_id)
     if company is None:
         raise AppError(404, "not_found", "Company not found")
-    return CompanyOut.model_validate(company)
+    return _company_out(company)
 
 
 @router.patch("/company", response_model=CompanyOut)
@@ -240,7 +249,7 @@ async def update_company(
         setattr(company, field, value)
     await session.commit()
     await session.refresh(company)
-    return CompanyOut.model_validate(company)
+    return _company_out(company)
 
 
 # PATCH /api/v1/users/me — profile + UI language. The web i18n layer
