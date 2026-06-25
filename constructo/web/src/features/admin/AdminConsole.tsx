@@ -29,6 +29,7 @@ import { Billing } from './Billing'
 interface SectionDef {
   key: string
   labelKey: TranslationKey
+  group: TranslationKey
   /** Built sections render a real panel; the rest show the roadmap placeholder. */
   built?: boolean
   /** Optional deep-link to an existing screen that already covers this. */
@@ -37,18 +38,19 @@ interface SectionDef {
 
 // The control-plane IA (vault 11/06). Order = the admin's mental model.
 const SECTIONS: SectionDef[] = [
-  { key: 'company', labelKey: 'admin.section.company', built: true },
-  { key: 'team', labelKey: 'admin.section.team', built: true },
-  { key: 'groups', labelKey: 'admin.section.groups', link: '/groups' },
-  { key: 'baselines', labelKey: 'admin.section.baselines', built: true },
-  { key: 'vendors', labelKey: 'admin.section.vendors', built: true },
-  { key: 'materials', labelKey: 'admin.section.materials', built: true },
-  { key: 'documents', labelKey: 'admin.section.documents', link: '/settings/documents' },
-  { key: 'integrations', labelKey: 'admin.section.integrations' },
-  { key: 'notifications', labelKey: 'admin.section.notifications', built: true },
-  { key: 'billing', labelKey: 'admin.section.billing', built: true },
-  { key: 'audit', labelKey: 'admin.section.audit' },
-  { key: 'security', labelKey: 'admin.section.security' },
+  { key: 'company', labelKey: 'admin.section.company', group: 'admin.group.brand', built: true },
+  { key: 'team', labelKey: 'admin.section.team', group: 'admin.group.people', built: true },
+  { key: 'baselines', labelKey: 'admin.section.baselines', group: 'admin.group.site', built: true },
+  { key: 'vendors', labelKey: 'admin.section.vendors', group: 'admin.group.site', built: true },
+  { key: 'materials', labelKey: 'admin.section.materials', group: 'admin.group.site', built: true },
+  { key: 'groups', labelKey: 'admin.section.groups', group: 'admin.group.comms', link: '/groups' },
+  { key: 'notifications', labelKey: 'admin.section.notifications', group: 'admin.group.comms', built: true },
+  { key: 'billing', labelKey: 'admin.section.billing', group: 'admin.group.account', built: true },
+  // Hidden for the pilot (empty stubs / now in the sidebar) — restore by re-adding:
+  //   { key: 'documents', labelKey: 'admin.section.documents', group: 'admin.group.site', link: '/settings/documents' },
+  //   { key: 'integrations', labelKey: 'admin.section.integrations', group: 'admin.group.comms' },
+  //   { key: 'audit', labelKey: 'admin.section.audit', group: 'admin.group.account' },
+  //   { key: 'security', labelKey: 'admin.section.security', group: 'admin.group.account' },
 ]
 
 export function AdminConsole() {
@@ -90,30 +92,37 @@ export function AdminConsole() {
           {/* Section rail. */}
           <nav aria-label={t('admin.nav_label')} className="md:sticky md:top-20 md:self-start">
             <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-              {SECTIONS.map((s) => {
-                const isActive = s.key === active.key
-                return (
-                  <li key={s.key} className="shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => select(s.key)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-control px-3 py-2 text-left font-body text-small font-semibold cstk-animate transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                        isActive
-                          ? 'bg-surface-selected text-text'
-                          : 'text-text-mute hover:bg-surface-hover hover:text-text'
-                      }`}
-                    >
-                      {t(s.labelKey)}
-                      {!s.built ? (
-                        <span className="rounded-pill bg-surface-sunken px-1.5 py-0.5 font-body text-micro font-semibold text-text-mute">
-                          {t('admin.soon')}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                )
-              })}
+              {Array.from(new Set(SECTIONS.map((s) => s.group))).map((group) => (
+                <li key={group} className="shrink-0">
+                  <div className="px-3 pb-1 pt-3 font-body text-micro font-semibold uppercase tracking-wide text-text-mute">
+                    {t(group)}
+                  </div>
+                  <ul className="flex flex-col gap-0.5">
+                    {SECTIONS.filter((s) => s.group === group).map((s) => {
+                      const isActive = s.key === active.key
+                      return (
+                        <li key={s.key}>
+                          <button
+                            type="button"
+                            onClick={() => select(s.key)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-control px-3 py-2 text-left font-body text-small font-semibold cstk-animate transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                              isActive ? 'bg-surface-selected text-text' : 'text-text-mute hover:bg-surface-hover hover:text-text'
+                            }`}
+                          >
+                            {t(s.labelKey)}
+                            {!s.built ? (
+                              <span className="rounded-pill bg-surface-sunken px-1.5 py-0.5 font-body text-micro font-semibold text-text-mute">
+                                {t('admin.soon')}
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </li>
+              ))}
             </ul>
           </nav>
 

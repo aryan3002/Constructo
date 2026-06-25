@@ -52,8 +52,20 @@ describe('AdminConsole', () => {
       await screen.findByRole('heading', { name: /company profile/i }),
     ).toBeInTheDocument()
     expect(await screen.findByDisplayValue('Verma Builders')).toBeInTheDocument()
-    // The section rail lists the control-plane map.
+    // The section rail lists the kept sections.
     expect(screen.getByRole('button', { name: /team & roles/i })).toBeInTheDocument()
+    // The company button shows the updated label.
+    expect(screen.getByRole('button', { name: /company & branding/i })).toBeInTheDocument()
+    // Removed sections are not rendered.
+    expect(screen.queryByRole('button', { name: /integrations/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /audit log/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /security/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /drawings register/i })).not.toBeInTheDocument()
+    // Group subheadings are rendered (use getAllByText because the button label is a superset).
+    expect(screen.getAllByText(/company & brand/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Site setup')).toBeInTheDocument()
+    expect(screen.getByText('Comms')).toBeInTheDocument()
+    expect(screen.getByText('Account')).toBeInTheDocument()
   })
 
   it('blocks a non-owner with an owner-only notice', async () => {
@@ -67,17 +79,16 @@ describe('AdminConsole', () => {
   it('switches to an unbuilt section showing the coming-soon panel', async () => {
     renderConsole('owner')
     await screen.findByRole('heading', { name: /company profile/i })
-    await userEvent.click(screen.getByRole('button', { name: /integrations/i }))
+    await userEvent.click(screen.getByRole('button', { name: /whatsapp groups/i }))
     await waitFor(() =>
       expect(screen.getByText(/coming soon/i)).toBeInTheDocument(),
     )
   })
 
   it('deep-links to a section via the ?section= param', async () => {
-    renderConsole('owner', '/settings/admin?section=integrations')
+    renderConsole('owner', '/settings/admin?section=baselines')
     expect(
-      await screen.findByRole('heading', { name: /integrations/i }),
+      await screen.findByRole('heading', { name: /site baselines/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/coming soon/i)).toBeInTheDocument()
   })
 })
