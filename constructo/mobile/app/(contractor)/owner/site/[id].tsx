@@ -8,12 +8,14 @@
 import { Image, ScrollView, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { owner, type SiteEvent, type SiteEventType } from '../../../../src/api/owner'
+import { health } from '../../../../src/api/health'
+import { SiteHealthCard } from '../_SiteHealthCard'
 import { Body, Button, Card, EmptyState, H1, Screen, Small, StatusPill, TimelineItem } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, formatWhen } from '../_components'
 
@@ -79,6 +81,11 @@ export default function SiteDetail() {
   const forecastQ = useQuery({ queryKey: ['owner', 'site', siteId, 'forecast'], queryFn: () => owner.forecast(siteId), enabled: !!siteId })
   const radarQ = useQuery({ queryKey: ['owner', 'site', siteId, 'sentinel'], queryFn: () => owner.sentinel(siteId), enabled: !!siteId })
   const photosQ = useQuery({ queryKey: ['owner', 'site', siteId, 'photos'], queryFn: () => owner.sitePhotos(siteId), enabled: !!siteId })
+  const healthQ = useQuery({ queryKey: ['owner', 'site', siteId, 'health'], queryFn: () => health.status(siteId, true), enabled: !!siteId })
+  const qc = useQueryClient()
+  const invalidateHealth = () => void qc.invalidateQueries({ queryKey: ['owner', 'site', siteId, 'health'] })
+  const ackM = useMutation({ mutationFn: (id: string) => health.acknowledge(id), onSuccess: invalidateHealth })
+  const resolveM = useMutation({ mutationFn: (id: string) => health.resolve(id), onSuccess: invalidateHealth })
 
   if (siteQ.isLoading) {
     return (
@@ -151,6 +158,16 @@ export default function SiteDetail() {
             )
           })}
         </Card>
+      ) : null}
+
+      {/* Site Health (proactive intelligence) — score + top findings. */}
+      {healthQ.data ? (
+        <SiteHealthCard
+          data={healthQ.data}
+          busy={ackM.isPending || resolveM.isPending}
+          onAcknowledge={(id) => ackM.mutate(id)}
+          onResolve={(id) => resolveM.mutate(id)}
+        />
       ) : null}
 
       {/* Latest from site — real published photos (horizontal strip). */}
