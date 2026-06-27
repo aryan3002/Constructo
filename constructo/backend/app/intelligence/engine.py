@@ -14,7 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.site_events import latest_event_clause
-from app.intelligence.detectors import consistency, operational, quality, schedule
+from app.extraction.llm import LLMClient
+from app.intelligence.design_inputs import load_design_inputs
+from app.intelligence.detectors import consistency, design, operational, quality, schedule
 from app.intelligence.detectors.base import EventRow, Finding, MilestoneRow
 from app.intelligence.findings import persist_findings
 from app.intelligence.score import health_band, health_score
@@ -80,11 +82,25 @@ def _run_detectors(
     ]
 
 
-async def run_site(session: AsyncSession, site_id: UUID, *, today: date) -> EngineResult:
-    """Run the full nightly intelligence pass for one site."""
+async def run_site(
+    session: AsyncSession, site_id: UUID, *, today: date, llm: LLMClient | None = None
+) -> EngineResult:
+    """Run the full nightly intelligence pass for one site.
+
+    The deterministic detectors always run. Design-fidelity checks run against the
+    Design Profiler taste model: ``material_theme_clash`` is deterministic (always);
+    ``photo_vs_theme`` needs vision, so it runs only when an ``llm`` is supplied
+    (the nightly sweep passes one). Both abstain when there is no taste data.
+    """
     events = await _load_events(session, site_id, since=today - timedelta(days=HISTORY_DAYS))
     milestones = await _load_milestones(session, site_id)
     found = _run_detectors(events, milestones, today=today)
+
+    specs, photos, areas = await load_design_inputs(session, site_id)
+    found.extend(design.material_theme_clash(specs, areas))
+    if llm is not None:
+        found.extend(await design.photo_vs_theme(photos, areas, llm=llm))
+
     active = await persist_findings(session, site_id, found, detected_on=today)
     score = health_score([f.severity for f in active])
     return EngineResult(findings=active, score=score, band=health_band(score))
