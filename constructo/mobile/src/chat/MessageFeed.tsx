@@ -54,10 +54,15 @@ export function MessageFeed({
   dayLabel = defaultDayLabel,
   inverted = true,
   onEndReached,
+  myUserId,
 }: {
   items: FeedRow[]
   /** Which `sender_side` is "me" for bubble alignment/tint. */
   mineSide: 'homeowner' | 'contractor'
+  /** When set, "mine" is decided by sender_id === myUserId (multi-party threads
+   *  where several participants share a sender_side, e.g. contractor crews).
+   *  Falls back to sender_side === mineSide when omitted. */
+  myUserId?: string | null
   /** Format an ISO timestamp for the bubble/card footer. */
   time: (iso: string) => string
   onLongPressMessage?: (m: ChatMessage) => void
@@ -84,6 +89,8 @@ export function MessageFeed({
   }, [])
 
   const senderNameFor = (m: ChatMessage) => m.sender_name ?? null
+  const isMine = (m: ChatMessage) =>
+    myUserId != null ? m.sender_id === myUserId : m.sender_side === mineSide
 
   // Derive day separators + grouping from the chronological items.
   const annotations = useMemo(() => {
@@ -96,13 +103,14 @@ export function MessageFeed({
           createdAt: m.created_at,
           senderId: m.sender_id,
           senderKind: m.sender_kind ?? 'user',
-          mine: m.sender_side === mineSide,
+          mine: isMine(m),
         }
       }
       return { key: it.key, kind: 'other' as const }
     })
     return annotateFeed(rows, dayLabel)
-  }, [items, mineSide, dayLabel])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, mineSide, myUserId, dayLabel])
 
   // Build the chronological render list, inserting a day separator before the
   // first row of each day, then reverse for the inverted list (so the day label
@@ -154,7 +162,7 @@ export function MessageFeed({
       }
       // bubble
       const m = item.message
-      const mine = m.sender_side === mineSide
+      const mine = isMine(m)
       const showSender = annotations.showSender.has(item.key)
       const isRunEnd = annotations.runEnd.has(item.key)
       const bubble = (
@@ -194,7 +202,8 @@ export function MessageFeed({
         </View>
       )
     },
-    [mineSide, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper],
   )
 
   return (

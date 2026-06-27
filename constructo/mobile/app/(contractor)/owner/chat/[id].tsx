@@ -9,12 +9,9 @@
  * Hindi-first copy. A header cue + composer; the read cursor advances on the
  * newest seq and invalidates the inbox so its unread badge clears.
  */
-import { useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
-  FlatList,
   KeyboardAvoidingView,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Platform,
   Pressable,
   TextInput,
@@ -31,7 +28,7 @@ import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
 import { CaptureCard, MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
-import { useChatThread } from '../../../../src/chat'
+import { MessageFeed, useChatThread, type FeedRow } from '../../../../src/chat'
 import { systemNotice } from '../../../../src/chat/systemNotice'
 import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
@@ -86,6 +83,22 @@ function msgSnippet(m: ChatMessage | undefined | null): string {
   return m.body ?? ''
 }
 
+function timeLabel(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+/** Day-separator label: Today / Yesterday / "8 Jun", localized. */
+function dayLabelFor(iso: string, lang: 'en' | 'hi'): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const key = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`
+  if (key(d) === key(now)) return lang === 'hi' ? 'आज' : 'Today'
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  if (key(d) === key(y)) return lang === 'hi' ? 'कल' : 'Yesterday'
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : undefined, { day: 'numeric', month: 'short' })
+}
+
 export default function OwnerConversation() {
   const { lang } = useT()
   const { theme } = useTheme()
@@ -94,7 +107,6 @@ export default function OwnerConversation() {
   const router = useRouter()
   const { me } = useAuth()
   const str = STR[lang]
-  const listRef = useRef<FlatList>(null)
 
   const { id, siteId, kind, title, hasHomeowner } = useLocalSearchParams<{
     id: string
@@ -136,20 +148,6 @@ export default function OwnerConversation() {
   const thread = useChatThread(address, { myUserId: me?.id })
   const messages = thread.messages
 
-  const scrollToEnd = () =>
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
-
-  // Only auto-scroll on passive content growth when already at the bottom — never
-  // yank the user down while they read older messages. (Own-send still jumps.)
-  const atBottom = useRef(true)
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-    atBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
-  }
-  const onContentGrow = () => {
-    if (atBottom.current) scrollToEnd()
-  }
-
   const onSend = async () => {
     const body = text.trim()
     if (!body || thread.sending) return
@@ -157,12 +155,103 @@ export default function OwnerConversation() {
     try {
       // Durable: enqueues to the persisted outbox (reply target handled by the
       // hook), so the message is never lost on a flaky link or an app kill.
+      // No manual scroll — the inverted MessageFeed sticks to the bottom on send.
       await thread.send(body)
-      scrollToEnd()
     } catch {
       setText(body) // restore on a hard (non-transient) failure
     }
   }
+
+  // Stable handlers/labelers so typing doesn't bust MessageFeed's memoized work.
+  const onReply = useCallback((m: ChatMessage) => thread.setReply(m), [thread.setReply])
+  const dayLabel = useCallback((iso: string) => dayLabelFor(iso, lang), [lang])
+
+  // Build the feed: plain human messages become bubbles (so MessageFeed gives them
+  // WhatsApp grouping / day separators / avatars / inverted scroll); system notices,
+  // Nivaan proposals/answers, and capture cards stay as custom rows (the contractor
+  // site-event ledger is kept inline). Pending outbox bubbles render at the bottom.
+  const items: FeedRow[] = useMemo(() => {
+    const base: FeedRow[] = messages.map((m): FeedRow => {
+      const notice = systemNotice(m)
+      if (notice !== null) return { kind: 'custom', key: m.id, node: <SystemNotice text={notice} /> }
+
+      const proposal = nivaanProposal(m)
+      if (proposal)
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+              <NivaanProposalCard
+                view={proposal}
+                onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
+                onDismiss={() => {}}
+              />
+            </View>
+          ),
+        }
+
+      if (isNivaanAnswer(m))
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+              <MessageBubble body={m.body} mine={false} nivaan timestamp={timeLabel(m.created_at)} />
+            </View>
+          ),
+        }
+
+      const cardEvents = m.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
+      if (cardEvents.length > 0) {
+        const mine = m.sender_side === 'contractor'
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.xs }}>
+              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
+                {cardEvents.map((ev: ChatEvent, i: number) => (
+                  <CaptureCard
+                    key={ev.id}
+                    event={ev}
+                    lang={lang}
+                    sourceText={i === 0 ? m.body : undefined}
+                    attachmentUrl={i === 0 ? m.attachment_url : undefined}
+                    time={i === 0 ? timeLabel(m.created_at) : ''}
+                  />
+                ))}
+              </View>
+            </View>
+          ),
+        }
+      }
+
+      // Plain human message → a real bubble (grouping / avatars / day separators).
+      return { kind: 'bubble', key: m.id, message: m }
+    })
+
+    const pendingRows: FeedRow[] = thread.pending.map((p): FeedRow => ({
+      kind: 'custom',
+      key: `pending:${p.clientMsgId}`,
+      node:
+        p.state === 'failed_permanent' ? (
+          <Pressable
+            onPress={() => void thread.retry(p.clientMsgId)}
+            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+          >
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={str.tapRetry} />
+          </Pressable>
+        ) : (
+          <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={str.sendingHint} />
+          </View>
+        ),
+    }))
+
+    return [...base, ...pendingRows]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, thread.pending, lang, str])
 
   // A group thread is valid with no site_id — it's addressed by `id`. Only
   // dead-end when the thread is wholly unaddressable (neither id nor siteId),
@@ -263,96 +352,22 @@ export default function OwnerConversation() {
           <ErrorBlock message={str.err} retryLabel={str.retry} onRetry={() => thread.refetch()} />
         </View>
       ) : (
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-          onContentSizeChange={onContentGrow}
-          ListEmptyComponent={
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Small muted>{str.empty}</Small>
-            </View>
-          }
-          ListFooterComponent={
-            thread.pending.length ? (
-              <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
-                {thread.pending.map((p) =>
-                  p.state === 'failed_permanent' ? (
-                    <Pressable key={p.clientMsgId} onPress={() => void thread.retry(p.clientMsgId)}>
-                      <MessageBubble body={p.body || (p.captured ? '📎' : '')} mine timestamp={str.tapRetry} />
-                    </Pressable>
-                  ) : (
-                    <MessageBubble
-                      key={p.clientMsgId}
-                      body={p.body || (p.captured ? '📎' : '')}
-                      mine
-                      timestamp={str.sendingHint}
-                    />
-                  ),
-                )}
+        <View style={{ flex: 1 }}>
+          <MessageFeed
+            items={items}
+            mineSide="contractor"
+            myUserId={me?.id}
+            time={timeLabel}
+            dayLabel={dayLabel}
+            onLongPressMessage={onReply}
+            deliveryStateFor={thread.deliveryState}
+            emptyState={
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Small muted>{str.empty}</Small>
               </View>
-            ) : null
-          }
-          renderItem={({ item }) => {
-            const notice = systemNotice(item)
-            if (notice !== null) return <SystemNotice text={notice} />
-            const proposal = nivaanProposal(item)
-            if (proposal) {
-              return (
-                <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
-                  <NivaanProposalCard
-                    view={proposal}
-                    onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
-                    onDismiss={() => {}}
-                  />
-                </View>
-              )
             }
-            if (isNivaanAnswer(item)) {
-              return (
-                <MessageBubble body={item.body} mine={false} nivaan
-                  timestamp={new Date(item.created_at).toLocaleTimeString()} />
-              )
-            }
-            const cardEvents = item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
-            if (cardEvents.length > 0) {
-              const mine = item.sender_side === 'contractor'
-              return (
-                <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
-                  {cardEvents.map((ev: ChatEvent, i: number) => (
-                    // The source text / attachment / time belong to the MESSAGE,
-                    // not each event — pass them to the first card only so the
-                    // proof reveal doesn't visually duplicate across sibling cards.
-                    <CaptureCard
-                      key={ev.id}
-                      event={ev}
-                      lang={lang}
-                      sourceText={i === 0 ? item.body : undefined}
-                      attachmentUrl={i === 0 ? item.attachment_url : undefined}
-                      time={i === 0 ? new Date(item.created_at).toLocaleTimeString() : ''}
-                    />
-                  ))}
-                </View>
-              )
-            }
-            return (
-              <MessageBubble
-                body={item.body}
-                mine={!!me && item.sender_id === me.id}
-                attachmentUrl={item.attachment_url}
-                timestamp={new Date(item.created_at).toLocaleTimeString()}
-                deliveryState={thread.deliveryState(item)}
-                onLongPress={() => thread.setReply(item)}
-                showSenderName
-                senderName={item.sender_name}
-              />
-            )
-          }}
-        />
+          />
+        </View>
       )}
 
       {/* Quote-reply banner */}
