@@ -18,8 +18,9 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
@@ -29,8 +30,10 @@ import { BodyStrong, Small } from '../../../../src/ui'
 import { CaptureCard, MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
 import { MessageFeed, useChatThread, type FeedRow } from '../../../../src/chat'
+import { enqueueChatSend } from '../../../../src/chat/outbox'
+import { takePhotoSend } from '../../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../../src/chat/systemNotice'
-import { type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
+import { newClientMsgId, type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
 import { LoadingBlock, ErrorBlock } from '../_components'
@@ -39,6 +42,8 @@ import { ManageGroupSheet } from '../_group_sheets'
 const STR = {
   en: {
     placeholder: 'Message your site team…',
+    caption: 'Add a caption…',
+    photo: 'Send a photo',
     send: 'Send',
     empty: 'No messages yet.',
     err: 'Could not load this conversation.',
@@ -57,6 +62,8 @@ const STR = {
   },
   hi: {
     placeholder: 'अपनी साइट टीम को मैसेज करें…',
+    caption: 'कैप्शन जोड़ें…',
+    photo: 'फ़ोटो भेजें',
     send: 'भेजो',
     empty: 'अभी कोई मैसेज नहीं।',
     err: 'यह बातचीत लोड नहीं हो सकी।',
@@ -165,6 +172,60 @@ export default function OwnerConversation() {
   // Stable handlers/labelers so typing doesn't bust MessageFeed's memoized work.
   const onReply = useCallback((m: ChatMessage) => thread.setReply(m), [thread.setReply])
   const dayLabel = useCallback((iso: string) => dayLabelFor(iso, lang), [lang])
+
+  // Quote-reply: render the parent message's snippet above a reply bubble (parity
+  // with the supervisor/homeowner threads).
+  const byId = useMemo(() => {
+    const m = new Map<string, ChatMessage>()
+    for (const x of messages) m.set(x.id, x)
+    return m
+  }, [messages])
+  const replySnippetFor = useCallback(
+    (m: ChatMessage) => (m.reply_to_id ? msgSnippet(byId.get(m.reply_to_id)) || null : null),
+    [byId],
+  )
+
+  // Send a photo: pick → push the preview route (caption + markup) → on return,
+  // enqueue with the local uri (the outbox uploads on drain) so the pending bubble
+  // shows the photo immediately. Consume-once → no double-send.
+  useFocusEffect(
+    useCallback(() => {
+      const s = takePhotoSend()
+      if (!s) return
+      void (async () => {
+        try {
+          await enqueueChatSend({
+            clientMsgId: newClientMsgId(),
+            address: addressByConv ? { conversation_id: id } : { site_id: siteId as string },
+            ...(s.caption ? { body: s.caption } : {}),
+            media: { kind: 'document', mime: s.mime, localUri: s.uri },
+          })
+          await thread.flush()
+        } catch {
+          /* the durable outbox retries; nothing to surface */
+        }
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id, siteId, addressByConv]),
+  )
+
+  const onCamera = async () => {
+    const cam = await ImagePicker.requestCameraPermissionsAsync()
+    let result: ImagePicker.ImagePickerResult
+    if (cam.granted) {
+      result = await ImagePicker.launchCameraAsync({ quality: 0.6 })
+    } else {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!lib.granted) return
+      result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 })
+    }
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    router.push({
+      pathname: '/photo-preview',
+      params: { uri: asset.uri, mime: asset.mimeType ?? 'image/jpeg', markup: '1', placeholder: str.caption },
+    })
+  }
 
   // Build the feed: plain human messages become bubbles (so MessageFeed gives them
   // WhatsApp grouping / day separators / avatars / inverted scroll); system notices,
@@ -361,6 +422,7 @@ export default function OwnerConversation() {
             dayLabel={dayLabel}
             onLongPressMessage={onReply}
             deliveryStateFor={thread.deliveryState}
+            replySnippetFor={replySnippetFor}
             emptyState={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Small muted>{str.empty}</Small>
@@ -419,6 +481,23 @@ export default function OwnerConversation() {
           borderTopWidth: 1,
         }}
       >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={str.photo}
+          onPress={() => void onCamera()}
+          style={{
+            width: 48,
+            height: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: theme.radii.control,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: c.bg,
+          }}
+        >
+          <Feather name="camera" size={20} color={c.accent} />
+        </Pressable>
         <TextInput
           value={text}
           onChangeText={setText}
