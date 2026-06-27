@@ -29,7 +29,7 @@ import { chatApi, type ChatMessage } from '../../../src/api/chat'
 import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
-import { summarizeWaiting } from '../_home_room.util'
+import { summarizeWaiting } from '../../../src/homeowner/waiting'
 import { ThreadSummaryStrip } from '../_thread_summary_strip'
 
 /** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */

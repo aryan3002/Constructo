@@ -1,5 +1,5 @@
-import { summarizeWaiting } from './_home_room.util'
-import type { HomeownerDecision, Update } from '../../src/api/types'
+import { summarizeWaiting } from './waiting'
+import type { HomeownerDecision, Update } from '../api/types'
 
 const upd = (id: string, type: string): Update =>
   ({ id, type, published_at: '2026-06-08T10:00:00Z' }) as unknown as Update

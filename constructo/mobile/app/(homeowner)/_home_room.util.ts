@@ -68,24 +68,6 @@ export function weaveHomeRoom(
     .map(({ r }) => r)
 }
 
-/** Counts that drive the pinned ThreadSummaryStrip. `needsYouCount` = pending
- *  decisions (the actionable approvals); `updateCount` = published updates,
- *  excluding `decision_needed` (those are represented by their pending Decision,
- *  mirroring the old weave's dedupe). */
-export interface WaitingSummary {
-  updateCount: number
-  needsYouCount: number
-}
-
-export function summarizeWaiting(
-  updates: Update[],
-  decisions: HomeownerDecision[],
-): WaitingSummary {
-  const needsYouCount = decisions.filter((d) => d.state === 'pending').length
-  const updateCount = updates.filter((u) => u.type !== 'decision_needed').length
-  return { updateCount, needsYouCount }
-}
-
 /** Her in-thread action on a pending decision (maps to POST /decisions/{id}/respond). */
 export type DecisionAction = 'approve' | 'comment' | 'request_change'
 
