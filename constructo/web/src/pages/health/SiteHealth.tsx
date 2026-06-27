@@ -68,14 +68,13 @@ function FindingCard({
           {finding.status === 'open' ? (
             <Button
               variant="secondary"
-              size="sm"
               disabled={busy}
               onClick={() => onAcknowledge(finding.id)}
             >
               Acknowledge
             </Button>
           ) : null}
-          <Button variant="primary" size="sm" disabled={busy} onClick={() => onResolve(finding.id)}>
+          <Button variant="primary" disabled={busy} onClick={() => onResolve(finding.id)}>
             Resolve
           </Button>
         </div>
@@ -143,7 +142,7 @@ export function SiteHealth() {
               Proactive checks across schedule, work, and quality — refreshed nightly.
             </Body>
           </div>
-          <Button variant="secondary" size="sm" disabled={phase === 'loading'} onClick={() => load(true)}>
+          <Button variant="secondary" disabled={phase === 'loading'} onClick={() => load(true)}>
             {phase === 'loading' ? 'Refreshing…' : 'Refresh'}
           </Button>
         </header>
