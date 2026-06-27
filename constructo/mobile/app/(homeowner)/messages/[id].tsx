@@ -96,6 +96,14 @@ function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+/** A one-line gist of a message — its card's summary, else its text. */
+function msgSnippet(m: ChatMessage | undefined | null): string {
+  if (!m) return ''
+  const ev = m.events?.find((e) => e.event_type !== 'unknown')
+  if (ev) return ev.summary || ev.event_type
+  return m.body ?? ''
+}
+
 /** Day-separator label: Today / Yesterday / "8 Jun", localized. */
 function dayLabelFor(iso: string, lang: 'en' | 'hi'): string {
   const d = new Date(iso)
@@ -187,6 +195,18 @@ export default function HomeownerThread() {
   const dayLabel = useCallback(
     (iso: string) => dayLabelFor(iso, (lang as 'en' | 'hi') ?? 'en'),
     [lang],
+  )
+
+  // Quote-reply: render the parent message's snippet above a reply bubble (parity
+  // with the contractor threads).
+  const byId = useMemo(() => {
+    const m = new Map<string, ChatMessage>()
+    for (const x of thread.messages) m.set(x.id, x)
+    return m
+  }, [thread.messages])
+  const replySnippetFor = useCallback(
+    (m: ChatMessage) => (m.reply_to_id ? msgSnippet(byId.get(m.reply_to_id)) || null : null),
+    [byId],
   )
 
   // Send a photo: pick from camera/library → push the WhatsApp-style preview
@@ -506,6 +526,7 @@ export default function HomeownerThread() {
             dayLabel={dayLabel}
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
+            replySnippetFor={replySnippetFor}
             emptyState={
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />
