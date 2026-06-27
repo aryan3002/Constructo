@@ -1,29 +1,6 @@
-import {
-  setMarkupResult,
-  takeMarkupResult,
-  setPhotoSend,
-  takePhotoSend,
-} from './markupHandoff'
+import { setPhotoSend, takePhotoSend } from './markupHandoff'
 
-describe('markupHandoff — markup result', () => {
-  it('returns null when nothing is pending', () => {
-    expect(takeMarkupResult()).toBeNull()
-  })
-
-  it('hands back a set result once, then clears (consume-once)', () => {
-    setMarkupResult('file://marked.jpg')
-    expect(takeMarkupResult()).toEqual({ uri: 'file://marked.jpg' })
-    expect(takeMarkupResult()).toBeNull()
-  })
-
-  it('keeps only the latest set result', () => {
-    setMarkupResult('file://a.jpg')
-    setMarkupResult('file://b.jpg')
-    expect(takeMarkupResult()).toEqual({ uri: 'file://b.jpg' })
-  })
-})
-
-describe('markupHandoff — send payload', () => {
+describe('markupHandoff — photo send payload', () => {
   it('returns null when nothing is pending', () => {
     expect(takePhotoSend()).toBeNull()
   })
@@ -32,5 +9,11 @@ describe('markupHandoff — send payload', () => {
     setPhotoSend({ uri: 'file://p.jpg', mime: 'image/jpeg', caption: 'Is it good?' })
     expect(takePhotoSend()).toEqual({ uri: 'file://p.jpg', mime: 'image/jpeg', caption: 'Is it good?' })
     expect(takePhotoSend()).toBeNull()
+  })
+
+  it('keeps only the latest payload', () => {
+    setPhotoSend({ uri: 'a', mime: 'image/jpeg', caption: '' })
+    setPhotoSend({ uri: 'b', mime: 'image/jpeg', caption: '' })
+    expect(takePhotoSend()?.uri).toBe('b')
   })
 })

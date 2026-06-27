@@ -62,14 +62,15 @@ describe('pendingForThread', () => {
     expect(pending[0].state).toBe('failed_permanent')
   })
 
-  test('a media item with no body shows a paperclip + captured flag', () => {
+  test('a media item with no body has empty text + captured flag + its local uri', () => {
     const pending = pendingForThread(
       'site-1',
-      [item({ body: undefined, media: { kind: 'image' } })],
+      [item({ body: undefined, media: { kind: 'image', localUri: 'file://p.jpg' } })],
       [],
     )
-    expect(pending[0].body).toBe('📎')
+    expect(pending[0].body).toBe('')
     expect(pending[0].captured).toBe(true)
+    expect(pending[0].mediaUri).toBe('file://p.jpg')
   })
 })
 

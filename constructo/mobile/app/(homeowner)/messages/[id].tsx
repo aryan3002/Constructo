@@ -25,7 +25,8 @@ import { Avatar, BodyStrong, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
-import { chatApi, type ChatMessage } from '../../../src/api/chat'
+import { newClientMsgId, type ChatMessage } from '../../../src/api/chat'
+import { enqueueChatSend } from '../../../src/chat/outbox'
 import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
 import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../src/chat/systemNotice'
@@ -175,26 +176,23 @@ export default function HomeownerThread() {
   }
 
   // Send a photo: pick from camera/library → push the WhatsApp-style preview
-  // route (caption + markup) → on return, the preview hands back {uri, caption}
-  // and we run the durable send here. Consume-once, so it never double-sends.
+  // route (caption + markup) → on return, the preview hands back {uri, caption}.
+  // Enqueue with the LOCAL uri (the durable outbox uploads on drain) so the pending
+  // bubble shows the actual photo + caption immediately — no caption-only flicker.
+  // Consume-once, so it never double-sends.
   useFocusEffect(
     useCallback(() => {
       const s = takePhotoSend()
       if (!s) return
       void (async () => {
         try {
-          const uploaded = await chatApi.uploadMedia(
-            { conversationId: id },
-            { uri: s.uri, name: 'photo.jpg', type: s.mime },
-            'document',
-          )
-          await thread.sendMedia({
-            attachmentKey: uploaded.key,
-            mime: s.mime,
-            sha256: uploaded.sha256,
-            mediaType: 'document',
+          await enqueueChatSend({
+            clientMsgId: newClientMsgId(),
+            address: { conversation_id: id },
             ...(s.caption ? { body: s.caption } : {}),
+            media: { kind: 'document', mime: s.mime, localUri: s.uri },
           })
+          await thread.flush()
         } catch {
           Alert.alert(t.photo, t.photoErr)
         }
@@ -287,11 +285,11 @@ export default function HomeownerThread() {
             onPress={() => void thread.retry(p.clientMsgId)}
             style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
           >
-            <MessageBubble body={p.body} mine timestamp={t.tapRetry} />
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.tapRetry} />
           </Pressable>
         ) : (
           <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
-            <MessageBubble body={p.body} mine timestamp={t.send + '…'} />
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.send + '…'} />
           </View>
         ),
     }))

@@ -3,14 +3,15 @@
  *
  * A real pushed ROUTE (not a Modal): the camera/gallery picker hands it an image
  * `uri`; the user can add a caption and (when `markup=1`) tap Markup to annotate
- * (reuses the markup screen, which returns here via the markup hand-off). On Send
- * it writes the {uri, mime, caption} to the send hand-off and pops back to the
- * chat thread, which runs its own durable send on focus.
+ * IN PLACE (the shared PhotoMarkupCanvas, no navigation). On Send it writes the
+ * {uri, mime, caption} to the send hand-off and pops back to the chat thread,
+ * which runs its own durable send on focus.
  *
- * Why a route, not a Modal: pushing the markup screen from inside a RN <Modal>
- * glitched (separate native window), dropped the keyboard, and double-fired the
- * send. A route composes cleanly with navigation. Theme-independent (dark, like
- * the markup screen) so it works at the top level, outside the per-group themes.
+ * Why a route + inline markup (not a Modal + pushed markup screen): a RN <Modal>
+ * doesn't compose with navigation (glitch, dropped keyboard, double-send), and a
+ * top-level preview pushing the grouped markup route sent `back` to the home tab.
+ * Inline markup avoids all of it. Theme-independent (dark) so it works at the top
+ * level, outside the per-group themes.
  */
 import { useCallback, useState } from 'react'
 import {
@@ -24,11 +25,13 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native'
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { setPhotoSend, takeMarkupResult } from '../src/chat/markupHandoff'
+import { useT } from '../src/i18n/I18nProvider'
+import { PhotoMarkupCanvas } from '../src/chat/PhotoMarkupCanvas'
+import { setPhotoSend } from '../src/chat/markupHandoff'
 
 const BG = '#111'
 const SURFACE = '#1f1f1f'
@@ -37,9 +40,16 @@ const TEXT = '#f5f5f5'
 const MUTE = '#9a9a9a'
 const ACCENT = '#3e7a66' // homeowner sage (brand), readable on dark
 
+const MARKUP_STR = {
+  en: { markup: 'Mark up', use: 'Use this' },
+  hi: { markup: 'मार्क करें', use: 'इसे भेजें' },
+} as const
+
 export default function PhotoPreview() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { lang } = useT()
+  const m = MARKUP_STR[lang === 'hi' ? 'hi' : 'en']
   const params = useLocalSearchParams<{
     uri?: string
     mime?: string
@@ -50,27 +60,30 @@ export default function PhotoPreview() {
 
   const [uri, setUri] = useState<string | undefined>(params.uri)
   const [caption, setCaption] = useState('')
+  const [markupMode, setMarkupMode] = useState(false)
   const mime = params.mime ?? 'image/jpeg'
   const canMarkup = params.markup === '1'
 
-  // Returning from the markup screen → swap in the annotated image (jpg).
-  useFocusEffect(
-    useCallback(() => {
-      const r = takeMarkupResult()
-      if (r) setUri(r.uri)
-    }, []),
-  )
-
-  const onMarkup = () => {
-    if (!uri) return
-    Keyboard.dismiss()
-    router.push({ pathname: '/(homeowner)/markup', params: { uri, returnTo: 'thread' } })
-  }
-
-  const onSend = () => {
+  const onSend = useCallback(() => {
     if (!uri) return
     setPhotoSend({ uri, mime, caption: caption.trim() })
     router.back()
+  }, [uri, mime, caption, router])
+
+  // Inline markup mode — full-screen annotation, no navigation.
+  if (markupMode && uri) {
+    return (
+      <PhotoMarkupCanvas
+        uri={uri}
+        title={params.markupLabel ?? m.markup}
+        useLabel={m.use}
+        onCancel={() => setMarkupMode(false)}
+        onDone={(out) => {
+          setUri(out)
+          setMarkupMode(false)
+        }}
+      />
+    )
   }
 
   return (
@@ -97,7 +110,10 @@ export default function PhotoPreview() {
         </Pressable>
         {canMarkup ? (
           <Pressable
-            onPress={onMarkup}
+            onPress={() => {
+              Keyboard.dismiss()
+              setMarkupMode(true)
+            }}
             hitSlop={10}
             accessibilityRole="button"
             style={{
@@ -112,7 +128,7 @@ export default function PhotoPreview() {
           >
             <Feather name="edit-2" size={16} color={ACCENT} />
             <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
-              {params.markupLabel ?? 'Markup'}
+              {params.markupLabel ?? m.markup}
             </Text>
           </Pressable>
         ) : null}
