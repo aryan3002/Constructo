@@ -155,25 +155,39 @@ export default function HomeownerThread() {
   // Make a to-do from a message (Slice C) — her own action item, linked back to
   // the message. site_id comes from her restored auth state (the builder channel
   // is her site). She sees only her own to-dos in the To-dos screen.
-  const makeTodo = async (m: ChatMessage) => {
-    const title = (m.body ?? '').trim()
-    if (!siteId || !title) return
-    try {
-      await actionItemsApi.create({ site_id: siteId, title, source_message_id: m.id })
-      router.push('/(homeowner)/todos')
-    } catch {
-      Alert.alert(t.makeTodo, t.todoErr)
-    }
-  }
+  const makeTodo = useCallback(
+    async (m: ChatMessage) => {
+      const title = (m.body ?? '').trim()
+      if (!siteId || !title) return
+      try {
+        await actionItemsApi.create({ site_id: siteId, title, source_message_id: m.id })
+        router.push('/(homeowner)/todos')
+      } catch {
+        Alert.alert(t.makeTodo, t.todoErr)
+      }
+    },
+    [siteId, router, t],
+  )
 
-  // Long-press a message → Reply or Make a to-do.
-  const onLongPress = (m: ChatMessage) => {
-    Alert.alert(headerTitle, undefined, [
-      { text: t.reply, onPress: () => thread.setReply(m) },
-      { text: t.makeTodo, onPress: () => void makeTodo(m) },
-      { text: t.cancel, style: 'cancel' },
-    ])
-  }
+  // Long-press a message → Reply or Make a to-do. Memoized so it stays a stable
+  // prop to MessageFeed (an unstable ref would re-run its renderItem each keystroke).
+  const onLongPress = useCallback(
+    (m: ChatMessage) => {
+      Alert.alert(headerTitle, undefined, [
+        { text: t.reply, onPress: () => thread.setReply(m) },
+        { text: t.makeTodo, onPress: () => void makeTodo(m) },
+        { text: t.cancel, style: 'cancel' },
+      ])
+    },
+    [headerTitle, t, thread, makeTodo],
+  )
+
+  // Stable day-separator labeler — a fresh closure here would re-run MessageFeed's
+  // O(n) annotate/render memos on every keystroke (the composer state lives here).
+  const dayLabel = useCallback(
+    (iso: string) => dayLabelFor(iso, (lang as 'en' | 'hi') ?? 'en'),
+    [lang],
+  )
 
   // Send a photo: pick from camera/library → push the WhatsApp-style preview
   // route (caption + markup) → on return, the preview hands back {uri, caption}.
@@ -489,7 +503,7 @@ export default function HomeownerThread() {
             items={items}
             mineSide="homeowner"
             time={timeLabel}
-            dayLabel={(iso) => dayLabelFor(iso, (lang as 'en' | 'hi') ?? 'en')}
+            dayLabel={dayLabel}
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
             emptyState={
