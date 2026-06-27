@@ -124,6 +124,21 @@ async def test_design_media_multipart_upload_stores_and_returns_key(client, fact
     assert get_storage().url_for(key) is not None
 
 
+async def test_presign_cross_company_stranger_404(client, factory):
+    """The upload presign is membrane-scoped — a stranger cannot mint a ticket
+    for someone else's profile."""
+    _architect, _site, pid, _area_id, _contributor_id = (
+        await _profile_with_area_self_contributor(client, factory)
+    )
+    stranger = await factory.user(role=UserRole.architect)  # different company
+    resp = await client.post(
+        "/api/v1/design/media/presign",
+        json={"profile_id": pid, "kind": "image"},
+        headers=auth(stranger),
+    )
+    assert resp.status_code == 404
+
+
 async def test_area_exposes_reference_and_my_ranked_counts(client, factory):
     architect, site, pid, area_id, contributor_id = await _profile_with_area_self_contributor(
         client, factory

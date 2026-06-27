@@ -15,7 +15,10 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+import httpx
+
 from app.common.errors import AppError
+from app.extraction.url_guard import assert_safe_media_url
 
 _PIN_HOST_RE = re.compile(r"(^|\.)(pinterest\.[a-z.]+|pin\.it)$", re.I)
 _OG_IMAGE_RE = re.compile(
@@ -47,24 +50,36 @@ class PinResolver:
 
 
 class HttpPinResolver(PinResolver):
+    def __init__(self, transport: httpx.BaseTransport | None = None):
+        # transport is injected in tests (httpx.MockTransport); None = real network.
+        self._transport = transport
+
     async def fetch(self, url: str) -> tuple[bytes, str, str]:
         if not is_pinterest_url(url):
             raise AppError(422, "pinterest_unresolved", "Paste a Pinterest pin link.")
-        import httpx
-
         async with httpx.AsyncClient(
-            follow_redirects=True,
             timeout=_FETCH_TIMEOUT,
             headers={"User-Agent": "Mozilla/5.0 (compatible; NeevBot/1.0)"},
+            transport=self._transport,
         ) as hc:
-            page = await hc.get(url)
+            # Page: pinterest host only; allow Pinterest's own redirects (pin.it ->
+            # pinterest.com) but require the landing URL to STAY on Pinterest.
+            page = await hc.get(url, follow_redirects=True)
             page.raise_for_status()
+            if not is_pinterest_url(str(page.url)):
+                raise AppError(
+                    422, "pinterest_unresolved", "That link didn't stay on Pinterest."
+                )
             image_url = parse_og_image(page.text)
             if not image_url:
                 raise AppError(
                     422, "pinterest_unresolved", "Couldn't find an image on that pin."
                 )
-            img = await hc.get(image_url)
+            # SSRF: the scraped og:image is attacker-influenceable — guard it against
+            # private/loopback/link-local/metadata hosts BEFORE fetching, and do not
+            # follow redirects on the image request (a 3xx would be rejected below).
+            assert_safe_media_url(image_url)
+            img = await hc.get(image_url, follow_redirects=False)
             img.raise_for_status()
             content_type = img.headers.get("content-type", "image/jpeg")
             if not content_type.startswith("image/"):

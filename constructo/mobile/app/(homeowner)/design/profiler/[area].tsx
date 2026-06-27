@@ -41,13 +41,11 @@ import {
   Card,
   Chip,
   Eyebrow,
-  FadeInUp,
   FLOATING_NAV_CLEARANCE,
   Micro,
   Screen,
   SegmentedTabs,
   Small,
-  StatusPill,
   SubHeader,
   useToast,
 } from '../../../../src/ui'
@@ -164,8 +162,13 @@ function sourceLabel(s: string): string {
 function RefImage({ reference, style }: { reference: ProfilerReference; style: ViewStyle }) {
   const { theme } = useTheme()
   const c = theme.colors
-  if (reference.image_url) {
-    return <BlurUpImage uri={reference.image_url} style={style} />
+  // Fall back to the placeholder not just when there's no URL, but also when a
+  // (presigned/expired/404) URL fails to load — otherwise the tile renders blank.
+  const [failed, setFailed] = useState(false)
+  if (reference.image_url && !failed) {
+    return (
+      <BlurUpImage uri={reference.image_url} style={style} onError={() => setFailed(true)} />
+    )
   }
   return (
     <View
@@ -461,6 +464,7 @@ export default function AreaRankScreen() {
   // Pinterest — paste a pin link (server re-hosts the image to our R2).
   const [pinOpen, setPinOpen] = useState(false)
   const [pinUrl, setPinUrl] = useState('')
+  const [pinError, setPinError] = useState<string | null>(null)
   const addByLink = useMutation({
     mutationFn: () =>
       design.referenceFromLink({
@@ -472,16 +476,18 @@ export default function AreaRankScreen() {
       toast('Added from Pinterest', 'check')
       setPinOpen(false)
       setPinUrl('')
+      setPinError(null)
       void refresh()
     },
-    onError: (e: Error) => toast(e.message),
+    onError: (e: Error) => setPinError(e.message),
   })
 
   // Presets — curated designer packs for this area kind.
   const [presetOpen, setPresetOpen] = useState(false)
   const presetsQ = useQuery({
     queryKey: ['design', 'presets', areaDetail?.area_kind, key],
-    queryFn: () => design.presets(areaDetail?.area_kind ?? 'interior', String(key)),
+    queryFn: () =>
+      design.presets(areaDetail?.area_kind ?? 'interior', key ? String(key) : undefined),
     enabled: presetOpen && !!areaDetail,
   })
   const addByPreset = useMutation({
@@ -596,7 +602,10 @@ export default function AreaRankScreen() {
               variant="secondary"
               size="md"
               leading={<Feather name="image" size={16} color={c.accentDeep} />}
-              onPress={() => setPinOpen(true)}
+              onPress={() => {
+                setPinError(null)
+                setPinOpen(true)
+              }}
               style={{ flex: 1 }}
             />
             <Button
@@ -826,7 +835,10 @@ export default function AreaRankScreen() {
             </Small>
             <TextInput
               value={pinUrl}
-              onChangeText={setPinUrl}
+              onChangeText={(t) => {
+                setPinUrl(t)
+                if (pinError) setPinError(null)
+              }}
               placeholder="https://pin.it/…"
               placeholderTextColor={c.textMute}
               autoCapitalize="none"
@@ -834,7 +846,7 @@ export default function AreaRankScreen() {
               keyboardType="url"
               style={{
                 borderWidth: 1,
-                borderColor: c.line,
+                borderColor: pinError ? c.warn : c.line,
                 borderRadius: theme.radii.control,
                 paddingHorizontal: SPACE.md,
                 paddingVertical: SPACE.sm,
@@ -843,6 +855,9 @@ export default function AreaRankScreen() {
                 marginTop: SPACE.xs,
               }}
             />
+            {pinError ? (
+              <Small style={{ color: c.warn }}>{pinError}</Small>
+            ) : null}
             <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
               <Button
                 title="Cancel"

@@ -95,3 +95,31 @@ async def test_reference_from_preset_unknown_is_404(client, factory):
         headers=auth(architect),
     )
     assert resp.status_code == 404
+
+
+async def test_reference_from_preset_area_kind_mismatch_is_422(client, factory, db_session):
+    # A house_build preset cannot be attached to an interior area.
+    preset = await _seed_preset(
+        db_session, area_kind="house_build", area_key=None, title="Facade",
+        image_r2_key="presets/facade.jpg",
+    )
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    resp = await client.post(
+        "/api/v1/design/references/from-preset",
+        json={"area_id": area_id, "contributor_id": contributor_id, "preset_id": str(preset.id)},
+        headers=auth(architect),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "preset_area_mismatch"
+
+
+async def test_reference_from_preset_cross_company_stranger_404(client, factory, db_session):
+    preset = await _seed_preset(db_session)
+    _architect, _site, _pid, area_id, _contributor_id = await _profile_with_area(client, factory)
+    stranger = await factory.user(role=UserRole.architect)  # different company
+    resp = await client.post(
+        "/api/v1/design/references/from-preset",
+        json={"area_id": area_id, "preset_id": str(preset.id)},
+        headers=auth(stranger),
+    )
+    assert resp.status_code == 404

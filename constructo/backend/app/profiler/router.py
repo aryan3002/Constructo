@@ -776,6 +776,10 @@ async def add_reference_from_preset(
     preset = await session.get(ProfilerPreset, body.preset_id)
     if preset is None:
         raise AppError(404, "not_found", "Preset not found")
+    if preset.area_kind != area.area_kind:
+        raise AppError(
+            422, "preset_area_mismatch", "That preset doesn't fit this kind of area."
+        )
 
     ref = ProfilerReference(
         profile_id=area.profile_id,

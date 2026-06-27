@@ -1,10 +1,18 @@
-"""Design Profiler — Pinterest paste-a-link: og:image parse, host guard, and the
-from-link endpoint that re-hosts the pin image into our R2 + creates a reference."""
+"""Design Profiler — Pinterest paste-a-link: og:image parse, host guard, SSRF
+guard, and the from-link endpoint that re-hosts the pin image into our R2."""
+import httpx
+import pytest
+
 from app.auth.jwt import create_access_token
 from app.common.errors import AppError
 from app.main import app
 from app.models import UserRole
-from app.profiler.pinterest import get_pin_resolver, is_pinterest_url, parse_og_image
+from app.profiler.pinterest import (
+    HttpPinResolver,
+    get_pin_resolver,
+    is_pinterest_url,
+    parse_og_image,
+)
 from app.storage import get_storage
 
 
@@ -38,6 +46,45 @@ def test_is_pinterest_url_accepts_pin_hosts():
 def test_is_pinterest_url_rejects_others():
     assert not is_pinterest_url("https://example.com/x.jpg")
     assert not is_pinterest_url("https://notpinterest.evil.com/")
+
+
+# --- SSRF: the scraped og:image URL is guarded before fetch -----------------
+
+
+def _mock_resolver(og_image_url: str) -> HttpPinResolver:
+    """A resolver whose network is a MockTransport: any pinterest page returns an
+    og:image of ``og_image_url``; everything else returns image bytes."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "pin.it" in url or "pinterest" in url:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text=f'<meta property="og:image" content="{og_image_url}"/>',
+            )
+        return httpx.Response(
+            200, headers={"content-type": "image/jpeg"}, content=b"\xff\xd8\xff IMG"
+        )
+
+    return HttpPinResolver(transport=httpx.MockTransport(handler))
+
+
+async def test_resolver_blocks_internal_og_image_ssrf():
+    # A pin whose og:image points at the cloud-metadata endpoint must be rejected
+    # BEFORE the server fetches it (SSRF).
+    resolver = _mock_resolver("http://169.254.169.254/latest/meta-data/")
+    with pytest.raises(AppError) as ei:
+        await resolver.fetch("https://pin.it/evil")
+    assert ei.value.code in ("blocked_media_url", "pinterest_unresolved")
+
+
+async def test_resolver_fetches_safe_public_image():
+    # A public image URL (literal public IP, no DNS needed) resolves to bytes.
+    resolver = _mock_resolver("http://93.184.216.34/pin.jpg")
+    data, content_type, resolved = await resolver.fetch("https://pin.it/ok")
+    assert data and content_type.startswith("image/")
+    assert resolved == "http://93.184.216.34/pin.jpg"
 
 
 # --- e2e: the from-link endpoint --------------------------------------------
@@ -109,6 +156,24 @@ async def test_reference_from_link_unresolved_is_422(client, factory):
         )
         assert resp.status_code == 422
         assert resp.json()["error"]["code"] == "pinterest_unresolved"
+    finally:
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+async def test_reference_from_link_cross_company_stranger_404(client, factory):
+    """A user from another company cannot add to a profile they can't access."""
+    app.dependency_overrides[get_pin_resolver] = lambda: _FakeResolver()
+    try:
+        _architect, _site, _pid, area_id, _contributor_id = await _profile_with_area(
+            client, factory
+        )
+        stranger = await factory.user(role=UserRole.architect)  # different company
+        resp = await client.post(
+            "/api/v1/design/references/from-link",
+            json={"area_id": area_id, "url": "https://pin.it/x"},
+            headers=auth(stranger),
+        )
+        assert resp.status_code == 404
     finally:
         app.dependency_overrides.pop(get_pin_resolver, None)
 
