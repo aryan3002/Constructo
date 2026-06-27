@@ -99,6 +99,12 @@ class ReferenceOut(BaseModel):
     created_at: datetime
 
 
+class ReferenceFromLinkIn(BaseModel):
+    area_id: UUID
+    contributor_id: UUID | None = None
+    url: str = Field(min_length=4, max_length=2048)
+
+
 class DesignMediaPresignIn(BaseModel):
     profile_id: UUID
     kind: str = "image"

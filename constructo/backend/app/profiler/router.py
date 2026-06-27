@@ -40,11 +40,13 @@ from app.models.profiler import (
     ProfilerReferenceAttributes,
     ProfilerTheme,
     ProfileStatus,
+    ReferenceSource,
     ThemeStatus,
 )
 from app.profiler.bridge import bridge_id, plan_proposals
 from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
 from app.profiler.extraction import extract_reference_attributes, get_llm
+from app.profiler.pinterest import PinResolver, get_pin_resolver
 from app.profiler.schemas import (
     AreaOut,
     BriefApprovalIn,
@@ -66,6 +68,7 @@ from app.profiler.schemas import (
     ProfileDetailOut,
     ProfileOut,
     RankingIn,
+    ReferenceFromLinkIn,
     ReferenceIn,
     ReferenceOut,
     ThemeDecisionIn,
@@ -108,6 +111,35 @@ def _reference_out(ref: ProfilerReference, storage: Storage) -> ReferenceOut:
     out = ReferenceOut.model_validate(ref)
     out.image_url = storage.url_for(ref.image_r2_key) or ref.source_url
     return out
+
+
+async def _run_vision(
+    session: AsyncSession,
+    llm: LLMClient,
+    ref: ProfilerReference,
+    area: ProfilerArea,
+    vision_url: str | None,
+) -> None:
+    """Extract design attributes from the reference image and flag consistency vs
+    the area's running taste model. Shared by every add path (upload / link /
+    preset). Never raises — extraction failure leaves attributes empty."""
+    if not vision_url:
+        return
+    try:
+        attrs = await extract_reference_attributes(llm, vision_url)
+    except Exception:  # never fail the request on extraction
+        logger.exception("profiler: vision extraction failed for reference %s", ref.id)
+        attrs = None
+    if attrs:
+        confidence = float(attrs.get("confidence") or 0.0)
+        session.add(
+            ProfilerReferenceAttributes(
+                reference_id=ref.id, attributes=attrs, confidence=confidence
+            )
+        )
+        verdict = check_consistency(attrs, area.taste_model or {})
+        ref.consistency_status = verdict["status"]
+        ref.consistency_note = verdict["reason"]
 
 
 async def _area_counts(
@@ -639,22 +671,57 @@ async def add_reference(
     # Vision needs a FETCHABLE url, never a bare R2 key — resolve the stored key
     # (presigned GET) or pass the external source_url through.
     vision_url = body.source_url or storage.url_for(body.image_r2_key)
-    if vision_url:
-        try:
-            attrs = await extract_reference_attributes(llm, vision_url)
-        except Exception:  # never fail the request on extraction
-            logger.exception("profiler: vision extraction failed for reference %s", ref.id)
-            attrs = None
-        if attrs:
-            confidence = float(attrs.get("confidence") or 0.0)
-            session.add(
-                ProfilerReferenceAttributes(
-                    reference_id=ref.id, attributes=attrs, confidence=confidence
-                )
-            )
-            verdict = check_consistency(attrs, area.taste_model or {})
-            ref.consistency_status = verdict["status"]
-            ref.consistency_note = verdict["reason"]
+    await _run_vision(session, llm, ref, area, vision_url)
+
+    await session.commit()
+    await session.refresh(ref)
+    return _reference_out(ref, storage)
+
+
+@router.post("/references/from-link", response_model=ReferenceOut, status_code=201)
+async def add_reference_from_link(
+    body: ReferenceFromLinkIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+    resolver: PinResolver = Depends(get_pin_resolver),
+) -> ReferenceOut:
+    """Add an inspiration reference from a pasted Pinterest pin link. The pin's
+    preview image is RE-HOSTED into our R2 so the reference is permanent and flows
+    through display + vision + ranking exactly like an upload."""
+    area = await session.get(ProfilerArea, body.area_id)
+    if area is None:
+        raise AppError(404, "not_found", "Area not found")
+    profile = await _load_accessible_profile(session, area.profile_id, user)
+    if body.contributor_id is not None:
+        await _validate_contributor(session, profile, body.contributor_id, user)
+
+    try:
+        data, content_type, _resolved = await resolver.fetch(body.url)
+    except AppError:
+        raise
+    except Exception as exc:  # network/parse failure -> friendly 422, never 500
+        logger.info("profiler: pinterest resolve failed for %s: %s", body.url, exc)
+        raise AppError(
+            422, "pinterest_unresolved",
+            "Couldn't read that Pinterest link. Try copying the pin link again.",
+        ) from exc
+
+    storage = get_storage()
+    key = f"design/{profile.site_id}/{uuid4().hex}.jpg"
+    storage.put_bytes(key, data, content_type or "image/jpeg")
+
+    ref = ProfilerReference(
+        profile_id=area.profile_id,
+        area_id=area.id,
+        contributor_id=body.contributor_id,
+        source_type=ReferenceSource.pinterest_link,
+        image_r2_key=key,
+        source_url=body.url,
+    )
+    session.add(ref)
+    await session.flush()
+    await _run_vision(session, llm, ref, area, storage.url_for(key))
 
     await session.commit()
     await session.refresh(ref)
