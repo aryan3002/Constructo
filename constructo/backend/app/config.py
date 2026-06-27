@@ -1,4 +1,9 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The public, in-repo dev JWT secret. Convenient for local/CI, but a deploy that
+# ships it lets anyone forge tokens — the prod guard below refuses to boot on it.
+_DEV_JWT_SECRET = "dev-secret-change-me-to-a-real-32byte-key"
 
 
 class Settings(BaseSettings):
@@ -9,12 +14,18 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # Deployment posture. "dev"/"test" (default) keep the convenient open defaults
+    # for local/CI; set APP_ENV=prod on a real deploy and the validator below
+    # REFUSES to boot in an insecure posture (world-open auth / dev JWT secret),
+    # so the Phase-0 lock lives in code and can't silently regress on a redeploy.
+    app_env: str = "dev"
+
     database_url: str = "postgresql+asyncpg://constructo:constructo@localhost:5433/constructo"
     redis_url: str = "redis://localhost:6379/0"
     # Chat realtime fan-out: "memory" (single process; tests/dev) or "redis"
     # (multi-worker / multi-replica prod).
     chat_realtime: str = "memory"
-    jwt_secret: str = "dev-secret-change-me-to-a-real-32byte-key"
+    jwt_secret: str = _DEV_JWT_SECRET
     ingest_api_key: str = "dev-ingest-key"
 
     jwt_algorithm: str = "HS256"
@@ -128,6 +139,31 @@ class Settings(BaseSettings):
     #   BRIDGE_URL   = http://localhost:8088         (the W1 Node bridge)
     #   BRIDGE_KEY   = shared secret (must match the bridge's BRIDGE_KEY)
     bot_enabled: bool = True
+
+    @model_validator(mode="after")
+    def _enforce_prod_security(self) -> "Settings":
+        """Fail-CLOSED in a prod posture: refuse to boot with world-open auth or
+        the public dev JWT secret. No-op for dev/test/CI (the default), so local
+        runs and the suite keep working untouched."""
+        if self.app_env.lower() not in ("prod", "production"):
+            return self
+        problems: list[str] = []
+        if self.dev_otp_enabled and not self.auth_phone_allowlist:
+            problems.append(
+                "DEV_OTP_ENABLED is true with an empty AUTH_PHONE_ALLOWLIST — auth is "
+                "world-open. Set DEV_OTP_ENABLED=false or a non-empty AUTH_PHONE_ALLOWLIST."
+            )
+        if self.jwt_secret == _DEV_JWT_SECRET or len(self.jwt_secret) < 32:
+            problems.append(
+                "JWT_SECRET is the public dev default or shorter than 32 chars — set a "
+                "real secret."
+            )
+        if problems:
+            raise ValueError(
+                "Insecure production configuration (APP_ENV=prod):\n  - "
+                + "\n  - ".join(problems)
+            )
+        return self
 
 
 settings = Settings()
