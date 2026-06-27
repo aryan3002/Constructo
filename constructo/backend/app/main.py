@@ -39,6 +39,7 @@ from app.dpr.router import router as dpr_router  # C4 PM Auto-DPR
 from app.forecast.router import router as forecast_router
 from app.homeowner.router import router as homeowner_router
 from app.ingestion.router import router as ingest_router
+from app.intelligence.router import router as intelligence_router
 from app.invites.router import router as invites_router
 from app.materials.router import router as materials_router
 from app.metrics.router import router as metrics_router
@@ -141,6 +142,7 @@ app.include_router(ask_router)  # Phase 2.2 Ask-the-Project (deterministic aggre
 app.include_router(forecast_router)  # Phase 3.3 deterministic forecasting
 app.include_router(portfolio_router)  # Phase 3.4 portfolio exact-math Q&A
 app.include_router(sentinel_router)  # Phase 3.1 Standing Sentinel (absence radar)
+app.include_router(intelligence_router)  # Site Health (proactive intelligence)
 app.include_router(metrics_router)  # Task 14 kill-criteria weekly rollup
 app.include_router(reports_router)  # W5 Slice 1 PDF reports
 app.include_router(documents_router)  # W5 Slice 2b company documents

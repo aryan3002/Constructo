@@ -2403,3 +2403,156 @@ async def my_capabilities(
             sub_role, can_design_flag=can_design_flag, design_space_id=design_space_id
         ),
     )
+
+
+class HeadsUpCardOut(_BaseModel):
+    finding_id: str
+    category: str  # "schedule" | "design"
+    headline: str
+    respondable: bool
+
+
+class HeadsUpOut(_BaseModel):
+    site_id: UUID
+    cards: list[HeadsUpCardOut] = []
+
+
+@router.get("/heads-up", response_model=HeadsUpOut)
+async def heads_up(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> HeadsUpOut:
+    """Homeowner-safe proactive findings, warm-reframed.
+
+    Crosses the trust membrane for schedule honesty (a phase running long) and
+    design fidelity (something installed differs from the approved design) only —
+    operational findings (attendance, vendors, sequence, etc.) never reach the
+    homeowner. See :mod:`app.intelligence.homeowner_filter`.
+    """
+    from app.intelligence.homeowner_filter import homeowner_cards
+    from app.models import SiteFinding
+
+    sid = await resolve_site(session, user, site_id)
+    rows = (
+        (
+            await session.execute(
+                select(SiteFinding).where(
+                    SiteFinding.site_id == sid, SiteFinding.status == "open"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return HeadsUpOut(
+        site_id=sid,
+        cards=[HeadsUpCardOut(**card.__dict__) for card in homeowner_cards(rows)],
+    )
+
+
+def _new_handoff(site_id: UUID, raised_by: UUID, title: str, detail: str | None,
+                 voice_key: str | None = None) -> HomeownerRequest:
+    """A builder-handoff request row (same shape as POST /requests)."""
+    from app.models import HomeownerRequest
+
+    return HomeownerRequest(
+        site_id=site_id,
+        raised_by=raised_by,
+        title=title,
+        detail=detail,
+        voice_key=voice_key,
+        sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
+    )
+
+
+class HeadsUpRespondIn(_BaseModel):
+    action: str  # "approved" | "disputed" | "show_more"
+    note: str | None = None
+
+
+class RespondOut(_BaseModel):
+    ok: bool = True
+    finding_status: str
+    request_id: UUID | None = None
+
+
+@router.post("/heads-up/{finding_id}/respond", response_model=RespondOut)
+async def respond_heads_up(
+    finding_id: UUID,
+    body: HeadsUpRespondIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> RespondOut:
+    """The homeowner's two-way response to a heads-up.
+
+    ``approved`` settles the deviation (the homeowner is fine with the change) →
+    the finding resolves. ``disputed`` opens a builder handoff with the detail
+    pre-attached and acknowledges the finding (it leaves the heads-up but is now
+    a tracked request). ``show_more`` asks the site team for more context.
+    """
+    from app.models import SiteFinding
+
+    finding = await session.get(SiteFinding, finding_id)
+    if finding is None:
+        raise AppError(404, "not_found", "Finding not found")
+    await resolve_site(session, user, finding.site_id)  # homeowner must be a member
+
+    request_id: UUID | None = None
+    if body.action == "approved":
+        finding.status = "resolved"
+    elif body.action == "disputed":
+        req = _new_handoff(
+            finding.site_id, user.id,
+            title="Design concern from homeowner",
+            detail=f"{finding.headline}\n\n{body.note or ''}".strip(),
+        )
+        session.add(req)
+        finding.status = "acknowledged"
+        await session.flush()
+        request_id = req.id
+    elif body.action == "show_more":
+        req = _new_handoff(
+            finding.site_id, user.id,
+            title="Homeowner asked for more detail",
+            detail=f"About: {finding.headline}\n\n{body.note or ''}".strip(),
+        )
+        session.add(req)
+        await session.flush()
+        request_id = req.id
+    else:
+        raise AppError(422, "bad_action", "action must be approved | disputed | show_more")
+
+    await session.commit()
+    return RespondOut(finding_status=finding.status, request_id=request_id)
+
+
+class FlagIn(_BaseModel):
+    note: str
+    site_id: UUID | None = None
+    voice_key: str | None = None
+
+
+class FlagOut(_BaseModel):
+    ok: bool = True
+    request_id: UUID
+
+
+@router.post("/flag", response_model=FlagOut, status_code=201)
+async def flag_something(
+    body: FlagIn,
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> FlagOut:
+    """Homeowner-initiated 'something looks off' → a builder handoff request."""
+    sid = await resolve_site(session, user, body.site_id)
+    req = _new_handoff(
+        sid, user.id,
+        title="Homeowner flagged something",
+        detail=body.note,
+        voice_key=body.voice_key,
+    )
+    session.add(req)
+    await session.commit()
+    await session.refresh(req)
+    return FlagOut(request_id=req.id)

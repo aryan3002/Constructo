@@ -46,6 +46,8 @@ const DprPage = lazy(() =>
 )
 // === search ===
 import { Search } from './pages/search/Search'
+// === site health (proactive intelligence) ===
+import { SiteHealth } from './pages/health/SiteHealth'
 // === designer workspace shell (D4) === lazy: keeps the D2+D3 surface out of
 // the entry chunk — only the architect who opens /designer pays for it
 const DesignerWorkspace = lazy(() =>
@@ -151,6 +153,9 @@ export function App() {
       {/* Sites list + detail. */}
       <Route path="/sites" element={<Guarded><Sites /></Guarded>} />
       <Route path="/sites/:id" element={<Guarded><SiteDetail /></Guarded>} />
+
+      {/* Site Health dashboard (proactive intelligence). */}
+      <Route path="/health/:siteId" element={<Guarded><SiteHealth /></Guarded>} />
 
       {/* WhatsApp group mapping. */}
       <Route path="/groups" element={<Guarded><Groups /></Guarded>} />

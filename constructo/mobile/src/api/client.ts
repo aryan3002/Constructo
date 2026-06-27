@@ -111,6 +111,19 @@ const qs = (params: Record<string, string | undefined>): string => {
   return entries.length ? '?' + new URLSearchParams(entries).toString() : ''
 }
 
+// ─── Proactive Site Health, homeowner side (trust-membrane filtered) ──────────
+export type HeadsUpAction = 'approved' | 'disputed' | 'show_more'
+export interface HeadsUpCard {
+  finding_id: string
+  category: 'schedule' | 'design'
+  headline: string
+  respondable: boolean
+}
+export interface HeadsUp {
+  site_id: string
+  cards: HeadsUpCard[]
+}
+
 /** Homeowner-facing endpoints (see HOMEOWNER_H0.md). */
 export const homeowner = {
   join: (body: HomeownerJoinRequest) =>
@@ -121,6 +134,21 @@ export const homeowner = {
   me: () => request<Me>('/api/v1/auth/me'),
   members: () => request<HomeownerMember[]>('/api/v1/homeowner/members'),
   home: (siteId?: string) => request<Home>(`/api/v1/homeowner/home${qs({ site_id: siteId })}`),
+  /** Homeowner-safe proactive findings (schedule honesty + design fidelity). */
+  headsUp: (siteId?: string) =>
+    request<HeadsUp>(`/api/v1/homeowner/heads-up${qs({ site_id: siteId })}`),
+  /** Respond to a design heads-up: approve the change, dispute it, or ask for more. */
+  respondHeadsUp: (findingId: string, action: HeadsUpAction, note?: string) =>
+    request<{ ok: boolean; finding_status: string; request_id: string | null }>(
+      `/api/v1/homeowner/heads-up/${findingId}/respond`,
+      { method: 'POST', body: JSON.stringify({ action, note: note ?? null }) },
+    ),
+  /** Proactive "something looks off" → opens a builder handoff. */
+  flagSomething: (note: string, siteId?: string) =>
+    request<{ ok: boolean; request_id: string }>('/api/v1/homeowner/flag', {
+      method: 'POST',
+      body: JSON.stringify({ note, site_id: siteId ?? null }),
+    }),
   photos: (siteId?: string, view: 'all' | 'room' | 'milestone' | 'mine' = 'all') =>
     request<Paginated<Photo>>(`/api/v1/homeowner/photos${qs({ site_id: siteId, view })}`),
   /** Upload a homeowner "site visit" photo (R1). Server streams it to R2.

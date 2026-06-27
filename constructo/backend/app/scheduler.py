@@ -126,6 +126,25 @@ async def _run_sentinel_sweep_job() -> None:
         logger.exception("sentinel sweep job failed")
 
 
+async def _run_intelligence_sweep_job() -> None:
+    """Run the proactive-intelligence engine for every site (persist findings +
+    compute health score), before the morning brief so findings are fresh. Owns
+    its session; never crashes the loop."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.db import SessionLocal
+    from app.intelligence.sweep import run_intelligence_sweep
+
+    today = datetime.now(ZoneInfo(settings.brief_timezone)).date()
+    try:
+        async with SessionLocal() as session:
+            done = await run_intelligence_sweep(session, today=today)
+        logger.info("intelligence sweep job complete: %d site(s) processed", len(done))
+    except Exception:
+        logger.exception("intelligence sweep job failed")
+
+
 def start_scheduler():
     """Create and start the AsyncIO scheduler if enabled. Returns it (or None)."""
     global _scheduler
@@ -188,6 +207,16 @@ def start_scheduler():
             hour=settings.permit_sweep_hour, minute=30, timezone=settings.brief_timezone
         ),
         id="sentinel_sweep",
+        replace_existing=True,
+    )
+    # Proactive intelligence: once daily, just before the 07:00 brief so fresh
+    # findings + health scores are available to the brief and the dashboard.
+    scheduler.add_job(
+        _run_intelligence_sweep_job,
+        CronTrigger(
+            hour=settings.quiet_sweep_hour, minute=15, timezone=settings.brief_timezone
+        ),
+        id="intelligence_sweep",
         replace_existing=True,
     )
     scheduler.start()

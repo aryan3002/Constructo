@@ -109,6 +109,7 @@ from app.models.site_baseline import SiteBaseline
 from app.models.site_change import SiteChange, SiteChangeStatus
 from app.models.site_event import SiteEventModel
 from app.models.site_financials import SiteFinancials
+from app.models.site_finding import SiteFinding
 from app.models.spec import Spec, SpecApprovalStatus
 from app.models.survey import Survey, SurveyStatus
 from app.models.translation_cache import TranslationCache
@@ -214,6 +215,7 @@ __all__ = [
     "Site",
     "SiteBaseline",
     "SiteFinancials",
+    "SiteFinding",
     "SiteEventModel",
     "Space",
     "SpaceKind",
