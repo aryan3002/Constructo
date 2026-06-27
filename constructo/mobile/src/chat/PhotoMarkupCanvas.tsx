@@ -14,6 +14,7 @@ import {
   Image,
   PanResponder,
   Pressable,
+  Text,
   View,
   type GestureResponderEvent,
 } from 'react-native'
@@ -23,7 +24,12 @@ import Svg, { Circle, G, Line, Path } from 'react-native-svg'
 import { captureRef } from 'react-native-view-shot'
 
 import { SPACE } from '../theme/tokens'
-import { BodyStrong } from '../ui'
+
+// Theme-independent (no useTheme): this canvas renders at the top level (the chat
+// photo preview), OUTSIDE the per-group ThemeProvider — so it must not pull in any
+// theme-aware UI component (e.g. Typography's BodyStrong). Plain Text + hardcoded
+// colors only.
+const LABEL = { color: '#fff', fontSize: 16, fontWeight: '600' as const }
 
 type Tool = 'draw' | 'arrow' | 'circle'
 type Pt = { x: number; y: number }
@@ -178,7 +184,7 @@ export function PhotoMarkupCanvas({
         <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={8}>
           <Feather name="x" size={26} color="#fff" />
         </Pressable>
-        <BodyStrong color="#fff">{title}</BodyStrong>
+        <Text style={LABEL}>{title}</Text>
         <Pressable
           onPress={() => void onUse()}
           accessibilityRole="button"
@@ -186,7 +192,7 @@ export function PhotoMarkupCanvas({
           disabled={saving}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: saving ? 0.5 : 1 }}
         >
-          <BodyStrong color="#fff">{useLabel}</BodyStrong>
+          <Text style={LABEL}>{useLabel}</Text>
           <Feather name="arrow-right" size={20} color="#fff" />
         </Pressable>
       </View>
