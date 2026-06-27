@@ -53,7 +53,7 @@ import { WEB_BASE } from '../../../src/api/config'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
-import { useChatThread } from '../../../src/chat'
+import { useChatThread, usePhotoComposer } from '../../../src/chat'
 import {
   CaptureCard,
   MessageBubble,
@@ -99,6 +99,7 @@ const STR = {
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
     uploadFailed: 'Upload failed — tap to retry',
+    caption: 'Add a caption…',
     nivaan: 'Nivaan',
     askFailed: "Couldn't reach Nivaan — try again.",
     evidence: 'events',
@@ -141,6 +142,7 @@ const STR = {
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
     uploadFailed: 'अपलोड फेल — फिर दबाएँ',
+    caption: 'कैप्शन जोड़ें…',
     nivaan: 'निवान',
     askFailed: 'निवान से जवाब नहीं मिला — फिर कोशिश करें।',
     evidence: 'इवेंट',
@@ -315,8 +317,36 @@ export default function CrewChat() {
     [text, lang],
   )
 
-  // Camera-as-Sensor: snap a challan → upload → send as a document; the worker
-  // OCRs it into a card. Eager upload (the kit's sendMedia takes a resolved key).
+  // Camera-as-Sensor: snap a challan → PREVIEW (confirm + optional caption) →
+  // upload → send as a document; the worker OCRs it into a card. The preview lets
+  // the supervisor confirm the shot before it's booked (markup is off here — this
+  // is a bill scanner, not photo-sharing).
+  const photo = usePhotoComposer({
+    enableMarkup: false,
+    placeholder: str.caption,
+    onSend: async ({ uri, mime, caption }) => {
+      if (!site) return
+      try {
+        const uploaded = await chatApi.uploadMedia(
+          { siteId: site.id },
+          { uri, name: 'challan.jpg', type: mime },
+          'document',
+        )
+        await thread.sendMedia({
+          attachmentKey: uploaded.key,
+          mime,
+          sha256: uploaded.sha256,
+          mediaType: 'document',
+          ...(caption ? { body: caption } : {}),
+        })
+        scrollToEnd()
+      } catch (e) {
+        Alert.alert(str.scanBill, str.uploadFailed)
+        throw e // keep the preview open for retry
+      }
+    },
+  })
+
   const onCamera = useCallback(async () => {
     if (!site) return
     const cam = await ImagePicker.requestCameraPermissionsAsync()
@@ -330,21 +360,8 @@ export default function CrewChat() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    const mime = asset.mimeType ?? 'image/jpeg'
-    try {
-      const uploaded = await chatApi.uploadMedia(
-        { siteId: site.id },
-        { uri: asset.uri, name: asset.fileName ?? 'challan.jpg', type: mime },
-        'document',
-      )
-      await thread.sendMedia({
-        attachmentKey: uploaded.key, mime, sha256: uploaded.sha256, mediaType: 'document',
-      })
-      scrollToEnd()
-    } catch {
-      Alert.alert(str.scanBill, str.uploadFailed)
-    }
-  }, [site, thread, str, scrollToEnd])
+    photo.open(asset.uri, asset.mimeType ?? 'image/jpeg')
+  }, [site, photo])
 
   // Voice-to-Card: hold-to-talk → upload the .m4a as voice media → send; the
   // worker runs STT + numeral-repair into a card.
@@ -1080,6 +1097,9 @@ export default function CrewChat() {
           </BodyStrong>
         </Pressable>
       </View>
+
+      {/* Photo preview (confirm + optional caption) before the bill is booked. */}
+      {photo.sheet}
     </KeyboardAvoidingView>
   )
 }

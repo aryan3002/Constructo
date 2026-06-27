@@ -26,7 +26,7 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
+import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, usePhotoComposer, messagesToFeed, type FeedRow } from '../../../src/chat'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
 import { summarizeWaiting } from '../../../src/homeowner/waiting'
@@ -59,6 +59,8 @@ const STR = {
     cancel: 'Cancel',
     photo: 'Send a photo',
     photoErr: 'We couldn’t send that photo just now.',
+    caption: 'Add a caption…',
+    markup: 'Markup',
     tapRetry: 'Tap to retry',
     mic: 'Hold to record — coming soon',
     micLabel: 'Voice message (coming soon)',
@@ -79,6 +81,8 @@ const STR = {
     cancel: 'रद्द करें',
     photo: 'फ़ोटो भेजें',
     photoErr: 'अभी फ़ोटो नहीं भेज सके।',
+    caption: 'कैप्शन जोड़ें…',
+    markup: 'मार्कअप',
     tapRetry: 'फिर भेजने के लिए टैप करें',
     mic: 'दबाकर रिकॉर्ड करें — जल्द आएगा',
     micLabel: 'वॉयस संदेश (जल्द आएगा)',
@@ -169,9 +173,33 @@ export default function HomeownerThread() {
     ])
   }
 
-  // Send a photo (Slice D): pick from camera/library → upload to her channel →
-  // send as a document so the worker OCRs a challan into a card (booked to her
-  // site, flagged for crew confirm). Only her builder channel (it has a site).
+  // Send a photo: pick from camera/library → a WhatsApp-style preview sheet
+  // (caption + markup) → upload + send. Markup reuses the existing markup screen.
+  const photo = usePhotoComposer({
+    enableMarkup: true,
+    placeholder: t.caption,
+    markupLabel: t.markup,
+    onSend: async ({ uri, mime, caption }) => {
+      try {
+        const uploaded = await chatApi.uploadMedia(
+          { conversationId: id },
+          { uri, name: 'photo.jpg', type: mime },
+          'document',
+        )
+        await thread.sendMedia({
+          attachmentKey: uploaded.key,
+          mime,
+          sha256: uploaded.sha256,
+          mediaType: 'document',
+          ...(caption ? { body: caption } : {}),
+        })
+      } catch (e) {
+        Alert.alert(t.photo, t.photoErr)
+        throw e // keep the preview open so she can retry
+      }
+    },
+  })
+
   const onCamera = async () => {
     const cam = await ImagePicker.requestCameraPermissionsAsync()
     let result: ImagePicker.ImagePickerResult
@@ -184,22 +212,7 @@ export default function HomeownerThread() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    const mime = asset.mimeType ?? 'image/jpeg'
-    try {
-      const uploaded = await chatApi.uploadMedia(
-        { conversationId: id },
-        { uri: asset.uri, name: asset.fileName ?? 'photo.jpg', type: mime },
-        'document',
-      )
-      await thread.sendMedia({
-        attachmentKey: uploaded.key,
-        mime,
-        sha256: uploaded.sha256,
-        mediaType: 'document',
-      })
-    } catch {
-      Alert.alert(t.photo, t.photoErr)
-    }
+    photo.open(asset.uri, asset.mimeType ?? 'image/jpeg')
   }
 
   // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
@@ -531,6 +544,9 @@ export default function HomeownerThread() {
           </View>
         }
       />
+
+      {/* WhatsApp-style photo preview (caption + markup) before send. */}
+      {photo.sheet}
     </KeyboardAvoidingView>
   )
 }

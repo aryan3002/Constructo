@@ -28,6 +28,7 @@ import { captureRef } from 'react-native-view-shot'
 import { useT } from '../../src/i18n/I18nProvider'
 import { SPACE } from '../../src/theme/tokens'
 import { BodyStrong, useToast } from '../../src/ui'
+import { setMarkupResult } from '../../src/chat/markupHandoff'
 
 type Tool = 'draw' | 'arrow' | 'circle'
 type Pt = { x: number; y: number }
@@ -69,7 +70,7 @@ export default function MarkupScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const toast = useToast()
-  const params = useLocalSearchParams<{ uri?: string }>()
+  const params = useLocalSearchParams<{ uri?: string; returnTo?: string }>()
   const uri = params.uri
 
   const shotRef = useRef<View>(null)
@@ -166,6 +167,13 @@ export default function MarkupScreen() {
       toast(t.failed, 'alert-circle')
     } finally {
       setSaving(false)
+    }
+    // Chat photo-composer mode: hand the annotated image back to the preview
+    // sheet (consume-once) and pop, instead of routing to the issue composer.
+    if (params.returnTo === 'thread') {
+      if (outUri) setMarkupResult(outUri)
+      router.back()
+      return
     }
     router.replace({ pathname: '/(homeowner)/issue', params: { photo: outUri } })
   }
