@@ -28,6 +28,7 @@ _OG_IMAGE_RE = re.compile(
 )
 _FETCH_TIMEOUT = 10.0
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024  # match the upload ceiling
+_MAX_PAGE_REDIRECTS = 3
 
 
 def is_pinterest_url(url: str) -> bool:
@@ -54,6 +55,29 @@ class HttpPinResolver(PinResolver):
         # transport is injected in tests (httpx.MockTransport); None = real network.
         self._transport = transport
 
+    async def _get_pinterest_page(
+        self, hc: httpx.AsyncClient, url: str
+    ) -> httpx.Response:
+        """GET ``url`` resolving redirects one hop at a time, refusing to follow any
+        Location that leaves Pinterest — so the request never reaches an internal
+        host. ``url`` is already host-checked by the caller."""
+        current = url
+        for _ in range(_MAX_PAGE_REDIRECTS):
+            resp = await hc.get(current, follow_redirects=False)
+            if resp.is_redirect:
+                location = resp.headers.get("location")
+                if not location:
+                    raise AppError(422, "pinterest_unresolved", "Bad redirect from Pinterest.")
+                current = str(resp.url.join(location))
+                if not is_pinterest_url(current):
+                    raise AppError(
+                        422, "pinterest_unresolved", "That link didn't stay on Pinterest."
+                    )
+                continue
+            resp.raise_for_status()
+            return resp
+        raise AppError(422, "pinterest_unresolved", "Too many Pinterest redirects.")
+
     async def fetch(self, url: str) -> tuple[bytes, str, str]:
         if not is_pinterest_url(url):
             raise AppError(422, "pinterest_unresolved", "Paste a Pinterest pin link.")
@@ -62,14 +86,11 @@ class HttpPinResolver(PinResolver):
             headers={"User-Agent": "Mozilla/5.0 (compatible; NeevBot/1.0)"},
             transport=self._transport,
         ) as hc:
-            # Page: pinterest host only; allow Pinterest's own redirects (pin.it ->
-            # pinterest.com) but require the landing URL to STAY on Pinterest.
-            page = await hc.get(url, follow_redirects=True)
-            page.raise_for_status()
-            if not is_pinterest_url(str(page.url)):
-                raise AppError(
-                    422, "pinterest_unresolved", "That link didn't stay on Pinterest."
-                )
+            # Resolve Pinterest's own redirects (pin.it -> pinterest.com) MANUALLY so
+            # every hop is host-checked BEFORE it is fetched — a redirect can never
+            # pivot the request to an internal/non-Pinterest host (SSRF). Mirrors the
+            # follow_redirects=False discipline in app/extraction/pdf_read.py.
+            page = await self._get_pinterest_page(hc, url)
             image_url = parse_og_image(page.text)
             if not image_url:
                 raise AppError(

@@ -87,6 +87,42 @@ async def test_resolver_fetches_safe_public_image():
     assert resolved == "http://93.184.216.34/pin.jpg"
 
 
+async def test_resolver_refuses_redirect_off_pinterest_without_fetching_internal():
+    # A pin that 302-redirects to the metadata endpoint must be refused BEFORE the
+    # internal host is ever requested (no blind SSRF).
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if "169.254" in str(request.url):
+            return httpx.Response(200, content=b"SECRET")
+        return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/"})
+
+    resolver = HttpPinResolver(transport=httpx.MockTransport(handler))
+    with pytest.raises(AppError) as ei:
+        await resolver.fetch("https://pin.it/redir")
+    assert ei.value.code == "pinterest_unresolved"
+    assert not any("169.254" in u for u in requested)  # internal host never hit
+
+
+async def test_resolver_follows_redirect_that_stays_on_pinterest():
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://pin.it/go":
+            return httpx.Response(302, headers={"location": "https://www.pinterest.com/pin/1/"})
+        if "pinterest.com" in url:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text='<meta property="og:image" content="http://93.184.216.34/p.jpg"/>',
+            )
+        return httpx.Response(200, headers={"content-type": "image/jpeg"}, content=b"\xff\xd8\xff")
+
+    resolver = HttpPinResolver(transport=httpx.MockTransport(handler))
+    data, content_type, resolved = await resolver.fetch("https://pin.it/go")
+    assert data and resolved == "http://93.184.216.34/p.jpg"
+
+
 # --- e2e: the from-link endpoint --------------------------------------------
 
 
