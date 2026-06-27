@@ -44,6 +44,10 @@ class AreaOut(BaseModel):
     status: str
     confidence: float
     has_conflict: bool
+    # Populated by the router (not on the ORM row): how many references this area
+    # holds, and how many the requesting user has ranked. Powers "X of N ranked".
+    reference_count: int = 0
+    my_ranked_count: int = 0
 
 
 class ContributorOut(BaseModel):
@@ -85,8 +89,52 @@ class ReferenceOut(BaseModel):
     id: UUID
     area_id: UUID
     source_type: ReferenceSource
+    image_r2_key: str | None = None
+    source_url: str | None = None
+    preset_id: str | None = None
+    # Computed by the router: a fetchable URL the app can render (presigned GET
+    # from image_r2_key, else the external source_url). Not on the ORM row.
+    image_url: str | None = None
     consistency_status: str | None = None
     created_at: datetime
+
+
+class ReferenceFromLinkIn(BaseModel):
+    area_id: UUID
+    contributor_id: UUID | None = None
+    url: str = Field(min_length=4, max_length=2048)
+
+
+class ReferenceFromPresetIn(BaseModel):
+    area_id: UUID
+    contributor_id: UUID | None = None
+    preset_id: UUID
+
+
+class PresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_kind: str
+    area_key: str | None = None
+    pack: str
+    title: str
+    # Computed by the router: a fetchable URL the app renders.
+    image_url: str | None = None
+
+
+class DesignMediaPresignIn(BaseModel):
+    profile_id: UUID
+    kind: str = "image"
+
+
+class DesignMediaPresignOut(BaseModel):
+    key: str
+    put_url: str | None
+    upload_mode: str  # "presigned" | "multipart"
+
+
+class DesignMediaUploadOut(BaseModel):
+    key: str
 
 
 class RankingIn(BaseModel):

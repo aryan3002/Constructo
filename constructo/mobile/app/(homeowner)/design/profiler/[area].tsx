@@ -21,10 +21,12 @@
  * Per-reference state is isolated in RefRankRow so ratings don't bleed.
  */
 import { useState } from 'react'
-import { Pressable, View, TextInput } from 'react-native'
+import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native'
+import type { ViewStyle } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { design } from '../../../../src/api/client'
@@ -32,19 +34,18 @@ import type { ProfilerReference } from '../../../../src/api/client'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import {
+  BlurUpImage,
   Body,
   BodyStrong,
   Button,
   Card,
   Chip,
   Eyebrow,
-  FadeInUp,
   FLOATING_NAV_CLEARANCE,
   Micro,
   Screen,
   SegmentedTabs,
   Small,
-  StatusPill,
   SubHeader,
   useToast,
 } from '../../../../src/ui'
@@ -148,6 +149,40 @@ function Stars({
 }
 
 // ---------------------------------------------------------------------------
+// Reference image — the real photo (presigned), placeholder while missing
+// ---------------------------------------------------------------------------
+
+function sourceLabel(s: string): string {
+  if (s === 'upload' || s === 'camera') return 'Upload'
+  if (s.startsWith('pinterest')) return 'Pinterest'
+  if (s === 'preset') return 'Preset'
+  return s
+}
+
+function RefImage({ reference, style }: { reference: ProfilerReference; style: ViewStyle }) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  // Fall back to the placeholder not just when there's no URL, but also when a
+  // (presigned/expired/404) URL fails to load — otherwise the tile renders blank.
+  const [failed, setFailed] = useState(false)
+  if (reference.image_url && !failed) {
+    return (
+      <BlurUpImage uri={reference.image_url} style={style} onError={() => setFailed(true)} />
+    )
+  }
+  return (
+    <View
+      style={[
+        style,
+        { backgroundColor: AP.surfaceContainer, alignItems: 'center', justifyContent: 'center' },
+      ]}
+    >
+      <Feather name="image" size={22} color={c.textMute} />
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Per-reference row (Ranking tab)
 // ---------------------------------------------------------------------------
 
@@ -192,21 +227,16 @@ function RefRankRow({ reference, contributorId, canRank, index, onSaved }: RefRa
   return (
     <Card padded={false} style={{ overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', gap: SPACE.md, padding: SPACE.md, alignItems: 'center' }}>
-        {/* Reference thumbnail placeholder */}
-        <View
+        {/* Reference thumbnail — the real photo */}
+        <RefImage
+          reference={reference}
           style={{
             width: 68,
             height: 68,
             borderRadius: theme.radii.chip,
-            backgroundColor: AP.surfaceContainer,
-            alignItems: 'center',
-            justifyContent: 'center',
             flexShrink: 0,
           }}
-        >
-          <Feather name="image" size={24} color={c.textMute} />
-          <Micro muted style={{ marginTop: 4 }}>ref {index + 1}</Micro>
-        </View>
+        />
         <View style={{ flex: 1 }}>
           <Micro muted style={{ marginBottom: 6 }}>
             {reference.source_type} · Reference {index + 1}
@@ -292,18 +322,12 @@ function RefGridTile({
         style={{
           height: 120,
           borderRadius: theme.radii.card,
-          backgroundColor: AP.surfaceContainer,
-          alignItems: 'center',
-          justifyContent: 'center',
           overflow: 'hidden',
           borderWidth: 1,
           borderColor: theme.colors.line,
         }}
       >
-        <Feather name="image" size={28} color={c.textMute} />
-        <Micro muted style={{ marginTop: 4 }}>
-          {reference.source_type}
-        </Micro>
+        <RefImage reference={reference} style={{ width: '100%', height: 120 }} />
         {/* Source kicker */}
         <View
           style={{
@@ -317,7 +341,7 @@ function RefGridTile({
           }}
         >
           <Micro style={{ fontWeight: '600', color: c.text, fontSize: 11 }}>
-            {reference.source_type === 'upload' ? 'Upload' : reference.source_type}
+            {sourceLabel(reference.source_type)}
           </Micro>
         </View>
       </View>
@@ -369,21 +393,119 @@ export default function AreaRankScreen() {
   const refs = refsQ.data ?? []
   const myContributorId = profileQ.data?.my_contributor_id ?? null
   const canRank = !!myContributorId
+  const contributorArg = myContributorId ?? undefined
 
   // Per-area meta from profile
   const areaDetail = profileQ.data?.areas?.find((a) => a.id === area)
   const confidence = areaDetail?.confidence ?? 0
-  const ranked = 0 // engine doesn't expose ranked count directly; use refs length proxy
-  const recommended = areaDetail?.recommended_count ?? 5
-  const progressPct = refs.length > 0 ? Math.min(100, Math.round((refs.length / recommended) * 100)) : 0
+  const ranked = areaDetail?.my_ranked_count ?? 0
+  const recommended = areaDetail?.recommended_count ?? 6
+  const progressPct =
+    recommended > 0 ? Math.min(100, Math.round((ranked / recommended) * 100)) : 0
   const hasConflict = areaDetail?.has_conflict ?? false
   const isLowInput = refs.length === 0
 
+  const refresh = () => qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
   const handleSaved = () => {
-    void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    void refresh()
   }
 
-  const progLabel = areaProgressLabel(refs.length, recommended)
+  // ── Add inspiration: upload / Pinterest link / preset ─────────────────────
+  // Upload reuses the proven chat presign→PUT→multipart fallback.
+  const addByUpload = useMutation({
+    mutationFn: async (localUri: string) => {
+      const presign = await design.presignMedia(pid as string)
+      let imageKey: string
+      if (presign.upload_mode === 'presigned' && presign.put_url) {
+        const blob = await (await fetch(localUri)).blob()
+        const put = await fetch(presign.put_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: blob,
+        })
+        if (!put.ok) throw new Error('Upload failed — please try again.')
+        imageKey = presign.key
+      } else {
+        const up = await design.uploadMedia(pid as string, {
+          uri: localUri,
+          name: 'inspiration.jpg',
+          type: 'image/jpeg',
+        })
+        imageKey = up.key
+      }
+      return design.addReference({
+        area_id: area as string,
+        contributor_id: contributorArg,
+        source_type: 'upload',
+        image_r2_key: imageKey,
+      })
+    },
+    onSuccess: () => {
+      toast('Added to your inspiration', 'check')
+      void refresh()
+    },
+    onError: (e: Error) => toast(e.message),
+  })
+
+  async function pickAndUpload() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!perm.granted) {
+      toast('Photo access is needed to add inspiration.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.8,
+    })
+    if (result.canceled || !result.assets?.length) return
+    addByUpload.mutate(result.assets[0].uri)
+  }
+
+  // Pinterest — paste a pin link (server re-hosts the image to our R2).
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pinUrl, setPinUrl] = useState('')
+  const [pinError, setPinError] = useState<string | null>(null)
+  const addByLink = useMutation({
+    mutationFn: () =>
+      design.referenceFromLink({
+        area_id: area as string,
+        contributor_id: contributorArg,
+        url: pinUrl.trim(),
+      }),
+    onSuccess: () => {
+      toast('Added from Pinterest', 'check')
+      setPinOpen(false)
+      setPinUrl('')
+      setPinError(null)
+      void refresh()
+    },
+    onError: (e: Error) => setPinError(e.message),
+  })
+
+  // Presets — curated designer packs for this area kind.
+  const [presetOpen, setPresetOpen] = useState(false)
+  const presetsQ = useQuery({
+    queryKey: ['design', 'presets', areaDetail?.area_kind, key],
+    queryFn: () =>
+      design.presets(areaDetail?.area_kind ?? 'interior', key ? String(key) : undefined),
+    enabled: presetOpen && !!areaDetail,
+  })
+  const addByPreset = useMutation({
+    mutationFn: (presetId: string) =>
+      design.referenceFromPreset({
+        area_id: area as string,
+        contributor_id: contributorArg,
+        preset_id: presetId,
+      }),
+    onSuccess: () => {
+      toast('Added to your inspiration', 'check')
+      void refresh()
+    },
+    onError: (e: Error) => toast(e.message),
+  })
+
+  const adding = addByUpload.isPending
+  const progLabel = areaProgressLabel(ranked, recommended)
 
   return (
     <Screen floatingNav style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE, paddingTop: 0 }} padded={false}>
@@ -442,18 +564,19 @@ export default function AreaRankScreen() {
             </Body>
             <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md, flexWrap: 'wrap' }}>
               <Button
-                title="Add inspiration"
+                title={adding ? 'Uploading…' : 'Add inspiration'}
                 variant="primary"
                 size="md"
+                loading={adding}
                 leading={<Feather name="plus" size={16} color={c.onAccent} />}
-                onPress={() => toast('Upload from your photo library — Pinterest connect coming soon.')}
+                onPress={() => void pickAndUpload()}
               />
               <Button
                 title="Use presets"
                 variant="secondary"
                 size="md"
                 leading={<Feather name="layers" size={16} color={c.accentDeep} />}
-                onPress={() => toast('Designer preset packs — visual-only, not yet backed by the engine.')}
+                onPress={() => setPresetOpen(true)}
               />
             </View>
           </Card>
@@ -469,8 +592,9 @@ export default function AreaRankScreen() {
               title="Upload"
               variant="secondary"
               size="md"
+              loading={adding}
               leading={<Feather name="camera" size={16} color={c.accentDeep} />}
-              onPress={() => toast('Upload from your photo library.')}
+              onPress={() => void pickAndUpload()}
               style={{ flex: 1 }}
             />
             <Button
@@ -478,7 +602,10 @@ export default function AreaRankScreen() {
               variant="secondary"
               size="md"
               leading={<Feather name="image" size={16} color={c.accentDeep} />}
-              onPress={() => toast('Pinterest connect — coming soon.')}
+              onPress={() => {
+                setPinError(null)
+                setPinOpen(true)
+              }}
               style={{ flex: 1 }}
             />
             <Button
@@ -486,7 +613,7 @@ export default function AreaRankScreen() {
               variant="secondary"
               size="md"
               leading={<Feather name="layers" size={16} color={c.accentDeep} />}
-              onPress={() => toast('Preset packs — visual-only, not yet backed by the engine.')}
+              onPress={() => setPresetOpen(true)}
               style={{ flex: 1 }}
             />
           </View>
@@ -677,6 +804,162 @@ export default function AreaRankScreen() {
           </Card>
         </View>
       ) : null}
+
+      {/* ── Pinterest paste-a-link sheet ──────────────────────────────── */}
+      <Modal
+        visible={pinOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPinOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+          onPress={() => setPinOpen(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: theme.radii.card,
+              borderTopRightRadius: theme.radii.card,
+              padding: SPACE.lg,
+              paddingBottom: insets.bottom + SPACE.lg,
+              gap: SPACE.sm,
+            }}
+            onPress={() => {}}
+          >
+            <Eyebrow style={{ color: c.textMute }}>Add from Pinterest</Eyebrow>
+            <BodyStrong>Paste a pin link</BodyStrong>
+            <Small muted>
+              Open a pin in Pinterest, tap Share → Copy link, and paste it here. We'll save the
+              image to your inspiration.
+            </Small>
+            <TextInput
+              value={pinUrl}
+              onChangeText={(t) => {
+                setPinUrl(t)
+                if (pinError) setPinError(null)
+              }}
+              placeholder="https://pin.it/…"
+              placeholderTextColor={c.textMute}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={{
+                borderWidth: 1,
+                borderColor: pinError ? c.warn : c.line,
+                borderRadius: theme.radii.control,
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm,
+                color: c.text,
+                backgroundColor: c.paper,
+                marginTop: SPACE.xs,
+              }}
+            />
+            {pinError ? (
+              <Small style={{ color: c.warn }}>{pinError}</Small>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                size="md"
+                onPress={() => setPinOpen(false)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title={addByLink.isPending ? 'Adding…' : 'Add'}
+                variant="primary"
+                size="md"
+                loading={addByLink.isPending}
+                onPress={() => {
+                  if (pinUrl.trim()) addByLink.mutate()
+                }}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Presets picker sheet ──────────────────────────────────────── */}
+      <Modal
+        visible={presetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPresetOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+          onPress={() => setPresetOpen(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: theme.radii.card,
+              borderTopRightRadius: theme.radii.card,
+              padding: SPACE.lg,
+              paddingBottom: insets.bottom + SPACE.lg,
+              gap: SPACE.md,
+              maxHeight: '72%',
+            }}
+            onPress={() => {}}
+          >
+            <Eyebrow style={{ color: c.textMute }}>Preset packs</Eyebrow>
+            <BodyStrong>Designer starters for {areaLabel}</BodyStrong>
+            {presetsQ.isLoading ? (
+              <Small muted>Loading packs…</Small>
+            ) : (presetsQ.data?.length ?? 0) === 0 ? (
+              <Small muted>No preset packs yet for this area.</Small>
+            ) : (
+              <ScrollView contentContainerStyle={{ gap: SPACE.md }}>
+                {(presetsQ.data ?? []).map((p) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => addByPreset.mutate(p.id)}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      gap: SPACE.md,
+                      alignItems: 'center',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    {p.image_url ? (
+                      <BlurUpImage
+                        uri={p.image_url}
+                        style={{ width: 64, height: 64, borderRadius: theme.radii.chip }}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: theme.radii.chip,
+                          backgroundColor: AP.surfaceContainer,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Feather name="image" size={20} color={c.textMute} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Body>{p.title}</Body>
+                      <Micro muted>{p.pack}</Micro>
+                    </View>
+                    <Feather name="plus-circle" size={20} color={c.accentDeep} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+            <Button
+              title="Done"
+              variant="secondary"
+              size="md"
+              onPress={() => setPresetOpen(false)}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   )
 }
