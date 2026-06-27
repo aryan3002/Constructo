@@ -13,15 +13,12 @@
  * menu with dispute/to-do/vendor-confirm, the pinned brief, recap + radar) are
  * layered on top of the hook.
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Platform,
   Pressable,
   Share,
@@ -53,7 +50,7 @@ import { WEB_BASE } from '../../../src/api/config'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
-import { useChatThread } from '../../../src/chat'
+import { MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
 import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import {
   CaptureCard,
@@ -164,6 +161,18 @@ function fmtTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+/** Day-separator label: Today / Yesterday / "8 Jun", localized. */
+function dayLabelFor(iso: string, lang: 'en' | 'hi'): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const key = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`
+  if (key(d) === key(now)) return lang === 'hi' ? 'आज' : 'Today'
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  if (key(d) === key(y)) return lang === 'hi' ? 'कल' : 'Yesterday'
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : undefined, { day: 'numeric', month: 'short' })
+}
+
 /** A one-line gist of a message — its card's summary, else its text. */
 function msgSnippet(m: ChatMessage | undefined): string {
   if (!m) return ''
@@ -179,7 +188,6 @@ export default function CrewChat() {
   const c = theme.colors
   const { me, role } = useAuth()
   const insets = useSafeAreaInsets()
-  const listRef = useRef<FlatList>(null)
   const router = useRouter()
   const canResolve = role === 'owner' || role === 'pm'
 
@@ -233,21 +241,158 @@ export default function CrewChat() {
     return m
   }, [thread.messages])
 
-  const scrollToEnd = useCallback(() => {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
-  }, [])
+  // The inverted MessageFeed auto-sticks to the bottom on new content / own send,
+  // so no imperative scroll is needed. Kept as a no-op so the existing call sites
+  // (onAsk / onSend / onVoice) stay valid without churn.
+  const scrollToEnd = useCallback(() => {}, [])
 
-  // Only auto-scroll to the bottom on passive content growth (incoming/poll) when
-  // the user is ALREADY at the bottom — never yank them down while they read up.
-  // (Explicit scrollToEnd() on own-send still always jumps to the latest.)
-  const atBottom = useRef(true)
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-    atBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
-  }, [])
-  const onContentGrow = useCallback(() => {
-    if (atBottom.current) scrollToEnd()
-  }, [scrollToEnd])
+  // Stable handlers/labelers so typing doesn't bust MessageFeed's memoized work.
+  const onReply = useCallback((m: ChatMessage) => thread.setReply(m), [thread.setReply])
+  const dayLabel = useCallback((iso: string) => dayLabelFor(iso, lang), [lang])
+  const replySnippetFor = useCallback(
+    (m: ChatMessage) => (m.reply_to_id ? msgSnippet(byId.get(m.reply_to_id)) || null : null),
+    [byId],
+  )
+
+  // Build the feed: plain human messages become bubbles (WhatsApp grouping / day
+  // separators / avatars / inverted scroll); capture cards (with their long-press
+  // action menu), Nivaan proposals/answers, system notices, @ask answers, and
+  // pending bubbles stay as custom rows — the contractor site ledger is kept inline.
+  const items: FeedRow[] = useMemo(() => {
+    const base: FeedRow[] = thread.messages.map((m): FeedRow => {
+      const notice = systemNotice(m)
+      if (notice !== null) return { kind: 'custom', key: m.id, node: <SystemNotice text={notice} /> }
+
+      const proposal = nivaanProposal(m)
+      if (proposal)
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.xs }}>
+              <NivaanProposalCard
+                view={proposal}
+                onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
+                onDismiss={() => {}}
+              />
+            </View>
+          ),
+        }
+
+      if (isNivaanAnswer(m))
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+              <MessageBubble body={m.body} mine={false} nivaan timestamp={fmtTime(m.created_at)} />
+            </View>
+          ),
+        }
+
+      const cardEvents = m.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
+      if (cardEvents.length > 0) {
+        const mine = !!me && m.sender_id === me.id
+        const parentSnippet = m.reply_to_id ? msgSnippet(byId.get(m.reply_to_id)) : ''
+        return {
+          kind: 'custom',
+          key: m.id,
+          node: (
+            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.xs, gap: 2 }}>
+              {parentSnippet ? (
+                <View
+                  style={{
+                    alignSelf: mine ? 'flex-end' : 'flex-start',
+                    maxWidth: '92%',
+                    borderLeftWidth: 2,
+                    borderLeftColor: c.accent,
+                    paddingLeft: SPACE.sm,
+                  }}
+                >
+                  <Small numberOfLines={1} style={{ color: c.textMute }}>↩ {parentSnippet}</Small>
+                </View>
+              ) : null}
+              <Pressable
+                onLongPress={() => setCardMenu({ msg: m, event: cardEvents[0] })}
+                delayLongPress={250}
+                style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
+              >
+                {cardEvents.map((ev: ChatEvent, i: number) => (
+                  <CaptureCard
+                    key={ev.id}
+                    event={ev}
+                    lang={lang}
+                    sourceText={i === 0 ? m.body : undefined}
+                    attachmentUrl={i === 0 ? m.attachment_url : undefined}
+                    time={i === 0 ? fmtTime(m.created_at) : ''}
+                  />
+                ))}
+              </Pressable>
+            </View>
+          ),
+        }
+      }
+
+      return { kind: 'bubble', key: m.id, message: m }
+    })
+
+    const pendingRows: FeedRow[] = thread.pending.map((p): FeedRow => ({
+      kind: 'custom',
+      key: `pending:${p.clientMsgId}`,
+      node:
+        p.state === 'failed_permanent' ? (
+          <Pressable
+            onPress={() => void thread.retry(p.clientMsgId)}
+            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+          >
+            <MessageBubble body={p.body || (p.mediaUri ? '' : str.photo)} attachmentUrl={p.mediaUri} mine timestamp={str.failed} />
+          </Pressable>
+        ) : (
+          <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
+            <MessageBubble body={p.body || (p.mediaUri ? '' : str.photo)} attachmentUrl={p.mediaUri} mine timestamp={p.captured ? str.booked : str.sending} />
+          </View>
+        ),
+    }))
+
+    const answerRows: FeedRow[] = answers.map((a): FeedRow => ({
+      kind: 'custom',
+      key: a.id,
+      node: (
+        <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.sm }}>
+          <View
+            style={{
+              alignSelf: 'flex-start',
+              maxWidth: '92%',
+              backgroundColor: c.card,
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: c.line,
+              borderLeftWidth: 3,
+              borderLeftColor: c.info,
+              padding: SPACE.md,
+              gap: 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="zap" size={13} color={c.info} />
+              <Small style={{ color: c.info, fontWeight: '600' }}>{str.nivaan}</Small>
+            </View>
+            <Small muted numberOfLines={1}>{a.question}</Small>
+            <BodyStrong style={{ color: c.text }}>{a.result.answer}</BodyStrong>
+            {a.result.evidence_event_ids.length > 0 ? (
+              <Mono muted style={{ fontSize: 11 }}>
+                {a.result.evidence_event_ids.length} {str.evidence}
+              </Mono>
+            ) : null}
+          </View>
+        </View>
+      ),
+    }))
+
+    // Pending then @ask answers at the very bottom (matches the old footer order).
+    return [...base, ...pendingRows, ...answerRows]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.messages, thread.pending, answers, byId, me, lang, str, c, theme])
 
   // @ask Nivaan: a grounded one-line answer, scoped, computed server-side. Kept
   // local (the deterministic @ask path); @nivaan goes through the live thread so
@@ -554,165 +699,27 @@ export default function CrewChat() {
         </Pressable>
       ) : null}
 
-      {/* Messages */}
-      <FlatList
-        ref={listRef}
-        data={thread.messages}
-        keyExtractor={(m) => m.id}
-        contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        keyboardShouldPersistTaps="handled"
-        onContentSizeChange={onContentGrow}
-        ListEmptyComponent={
-          thread.isLoading ? null : (
-            <View style={{ flex: 1, justifyContent: 'center' }}>
-              <CalmEmpty title={str.emptyTitle} body={str.emptyBody} />
-            </View>
-          )
-        }
-        ListFooterComponent={
-          <View style={{ gap: SPACE.sm }}>
-            {/* Durable-outbox pending bubbles (failed → tap to retry). */}
-            {thread.pending.map((p) =>
-              p.state === 'failed_permanent' ? (
-                <Pressable key={p.clientMsgId} onPress={() => void thread.retry(p.clientMsgId)}>
-                  <MessageBubble body={p.body || str.photo} mine timestamp={str.failed} />
-                </Pressable>
-              ) : (
-                <MessageBubble
-                  key={p.clientMsgId}
-                  body={p.body || str.photo}
-                  mine
-                  timestamp={p.captured ? str.booked : str.sending}
-                />
-              ),
-            )}
-            {/* Local @ask answer rows (info-toned, grounded, evidence count). */}
-            {answers.map((a) => (
-              <View
-                key={a.id}
-                style={{
-                  alignSelf: 'flex-start',
-                  maxWidth: '92%',
-                  backgroundColor: c.card,
-                  borderRadius: theme.radii.card,
-                  borderWidth: 1,
-                  borderColor: c.line,
-                  borderLeftWidth: 3,
-                  borderLeftColor: c.info,
-                  padding: SPACE.md,
-                  gap: 4,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Feather name="zap" size={13} color={c.info} />
-                  <Small style={{ color: c.info, fontWeight: '600' }}>{str.nivaan}</Small>
-                </View>
-                <Small muted numberOfLines={1}>{a.question}</Small>
-                <BodyStrong style={{ color: c.text }}>{a.result.answer}</BodyStrong>
-                {a.result.evidence_event_ids.length > 0 ? (
-                  <Mono muted style={{ fontSize: 11 }}>
-                    {a.result.evidence_event_ids.length} {str.evidence}
-                  </Mono>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        }
-        renderItem={({ item }) => {
-          // A centered system row (member added, dispute resolved, blocked).
-          const notice = systemNotice(item)
-          if (notice !== null) return <SystemNotice text={notice} />
-
-          // A server-driven Nivaan proposal card (Confirm books the capture).
-          const proposal = nivaanProposal(item)
-          if (proposal) {
-            return (
-              <View style={{ marginBottom: SPACE.xs }}>
-                <NivaanProposalCard
-                  view={proposal}
-                  onConfirm={() => void thread.sendProposal(proposal.captureType, proposal.fields)}
-                  onDismiss={() => {}}
-                />
+      {/* Messages — WhatsApp-style bubbles (grouping/day separators/avatars/
+          inverted scroll) with the contractor's capture cards kept inline. */}
+      <View style={{ flex: 1 }}>
+        <MessageFeed
+          items={items}
+          mineSide="contractor"
+          myUserId={me?.id}
+          time={fmtTime}
+          dayLabel={dayLabel}
+          onLongPressMessage={onReply}
+          deliveryStateFor={thread.deliveryState}
+          replySnippetFor={replySnippetFor}
+          emptyState={
+            thread.isLoading ? null : (
+              <View style={{ flex: 1, justifyContent: 'center' }}>
+                <CalmEmpty title={str.emptyTitle} body={str.emptyBody} />
               </View>
             )
           }
-          // A Nivaan grounded answer row.
-          if (isNivaanAnswer(item)) {
-            return <MessageBubble body={item.body} mine={false} nivaan timestamp={fmtTime(item.created_at)} />
-          }
-
-          const mine = !!me && item.sender_id === me.id
-          const cardEvents =
-            item.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
-
-          const parentSnippet = item.reply_to_id ? msgSnippet(byId.get(item.reply_to_id)) : ''
-          const quoted = parentSnippet ? (
-            <View
-              style={{
-                alignSelf: mine ? 'flex-end' : 'flex-start',
-                maxWidth: '92%',
-                borderLeftWidth: 2,
-                borderLeftColor: c.accent,
-                paddingLeft: SPACE.sm,
-              }}
-            >
-              <Small numberOfLines={1} style={{ color: c.textMute }}>
-                ↩ {parentSnippet}
-              </Small>
-            </View>
-          ) : null
-
-          // A message that became structured capture renders as Card(s) — the
-          // long-press opens the action menu (reply / dispute / to-do / vendor).
-          if (cardEvents.length > 0) {
-            return (
-              <View style={{ gap: 2 }}>
-                {quoted}
-                <Pressable
-                  onLongPress={() => setCardMenu({ msg: item, event: cardEvents[0] })}
-                  delayLongPress={250}
-                  style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}
-                >
-                  {cardEvents.map((ev: ChatEvent, i: number) => (
-                    // The source text / attachment / time belong to the MESSAGE,
-                    // not each event — pass them to the first card only so the
-                    // proof reveal doesn't visually duplicate across sibling cards.
-                    <CaptureCard
-                      key={ev.id}
-                      event={ev}
-                      lang={lang}
-                      sourceText={i === 0 ? item.body : undefined}
-                      attachmentUrl={i === 0 ? item.attachment_url : undefined}
-                      time={i === 0 ? fmtTime(item.created_at) : ''}
-                    />
-                  ))}
-                </Pressable>
-              </View>
-            )
-          }
-
-          // A plain bubble — long-press to quote-reply; own messages show ticks.
-          return (
-            <View style={{ gap: 2 }}>
-              {quoted}
-              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%' }}>
-                <MessageBubble
-                  body={item.body}
-                  mine={mine}
-                  attachmentUrl={item.attachment_url}
-                  timestamp={fmtTime(item.created_at)}
-                  deliveryState={thread.deliveryState(item)}
-                  onLongPress={() => thread.setReply(item)}
-                  showSenderName
-                  senderName={item.sender_name}
-                />
-              </View>
-            </View>
-          )
-        }}
-      />
+        />
+      </View>
 
       {/* Long-press card menu — Reply / To-do / Vendor confirm / Dispute / Resolve. */}
       <Modal
