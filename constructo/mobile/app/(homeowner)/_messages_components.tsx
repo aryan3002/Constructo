@@ -1,19 +1,18 @@
 /**
- * Home Room message primitives — the homeowner Messages tab, re-skinned to the
- * locked "Calm Cockpit" design system (Direction C · "Blend").
+ * Home Room primitives for the homeowner Messages tab, on the locked "Calm
+ * Cockpit" design system (Direction C · "Blend"). Daylight palette throughout.
  *
- * These DO NOT reuse the Neev `MessageBubble` (it hardcodes amber). They
- * are calm, warm, residential bubbles + inbox rows on the Daylight palette:
- *   - the homeowner's OWN message sits on a soft SAGE tint (green-tint as a
- *     calm solid, never the loud sage fill) with ink text;
- *   - the builder / team message sits on the warm SURFACE card (hairline +
- *     soft "lifted paper" shadow);
- *   - bubbles use the chat bubble radius (~19 — the skill's `--radius-bubble`),
- *     with a gentle spoken-bubble tail on the sender's side;
- *   - real-photo attachments render through the kit `PhotoTile` (real photos
- *     only — never an AI/3D render);
- *   - timestamps are muted IBM Plex Mono; status = colour + icon + word;
- *   - bilingual EN/HI via the active language.
+ * Exports:
+ *   - `ChannelRow` — the inbox conversation row (used by messages.tsx).
+ *   - `HomeRoomUpdateCard` / `HomeRoomDecisionCard` — curated Update/Decision
+ *     cards. NOTE (2026-06-27): no longer woven into the chat thread (the thread
+ *     is now pure chat with a pinned summary strip; see messages/[id].tsx). They
+ *     are currently UNUSED and retained pending a follow-up that either removes
+ *     them or reuses them on the Updates/Decisions screens.
+ *
+ * Chat bubbles themselves live in the shared kit (`src/chat/MessageView` —
+ * `MessageBubble`, which now uses `theme.radii.bubble` with a sender-side tail).
+ * Real-photo attachments only — never an AI/3D render. Bilingual EN/HI.
  */
 import { useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
