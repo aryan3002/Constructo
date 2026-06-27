@@ -29,7 +29,7 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
@@ -53,7 +53,8 @@ import { WEB_BASE } from '../../../src/api/config'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
-import { useChatThread, usePhotoComposer } from '../../../src/chat'
+import { useChatThread } from '../../../src/chat'
+import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import {
   CaptureCard,
   MessageBubble,
@@ -317,35 +318,35 @@ export default function CrewChat() {
     [text, lang],
   )
 
-  // Camera-as-Sensor: snap a challan → PREVIEW (confirm + optional caption) →
-  // upload → send as a document; the worker OCRs it into a card. The preview lets
-  // the supervisor confirm the shot before it's booked (markup is off here — this
-  // is a bill scanner, not photo-sharing).
-  const photo = usePhotoComposer({
-    enableMarkup: false,
-    placeholder: str.caption,
-    onSend: async ({ uri, mime, caption }) => {
-      if (!site) return
-      try {
-        const uploaded = await chatApi.uploadMedia(
-          { siteId: site.id },
-          { uri, name: 'challan.jpg', type: mime },
-          'document',
-        )
-        await thread.sendMedia({
-          attachmentKey: uploaded.key,
-          mime,
-          sha256: uploaded.sha256,
-          mediaType: 'document',
-          ...(caption ? { body: caption } : {}),
-        })
-        scrollToEnd()
-      } catch (e) {
-        Alert.alert(str.scanBill, str.uploadFailed)
-        throw e // keep the preview open for retry
-      }
-    },
-  })
+  // Camera-as-Sensor: snap a challan → PREVIEW route (confirm + optional caption)
+  // → on return, upload + send as a document; the worker OCRs it into a card.
+  // Markup is off (bill scanner, not photo-sharing). Consume-once → no double-send.
+  useFocusEffect(
+    useCallback(() => {
+      const s = takePhotoSend()
+      if (!s || !site) return
+      void (async () => {
+        try {
+          const uploaded = await chatApi.uploadMedia(
+            { siteId: site.id },
+            { uri: s.uri, name: 'challan.jpg', type: s.mime },
+            'document',
+          )
+          await thread.sendMedia({
+            attachmentKey: uploaded.key,
+            mime: s.mime,
+            sha256: uploaded.sha256,
+            mediaType: 'document',
+            ...(s.caption ? { body: s.caption } : {}),
+          })
+          scrollToEnd()
+        } catch {
+          Alert.alert(str.scanBill, str.uploadFailed)
+        }
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [site]),
+  )
 
   const onCamera = useCallback(async () => {
     if (!site) return
@@ -360,8 +361,16 @@ export default function CrewChat() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    photo.open(asset.uri, asset.mimeType ?? 'image/jpeg')
-  }, [site, photo])
+    router.push({
+      pathname: '/photo-preview',
+      params: {
+        uri: asset.uri,
+        mime: asset.mimeType ?? 'image/jpeg',
+        markup: '0',
+        placeholder: str.caption,
+      },
+    })
+  }, [site, router, str])
 
   // Voice-to-Card: hold-to-talk → upload the .m4a as voice media → send; the
   // worker runs STT + numeral-repair into a card.
@@ -1097,9 +1106,6 @@ export default function CrewChat() {
           </BodyStrong>
         </Pressable>
       </View>
-
-      {/* Photo preview (confirm + optional caption) before the bill is booked. */}
-      {photo.sheet}
     </KeyboardAvoidingView>
   )
 }

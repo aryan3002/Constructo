@@ -10,10 +10,10 @@
  * ledger slice will light the cards up). The composer is text + reply for now;
  * camera/voice/@ask arrive with their slices.
  */
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
@@ -26,7 +26,8 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, usePhotoComposer, messagesToFeed, type FeedRow } from '../../../src/chat'
+import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
+import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
 import { summarizeWaiting } from '../../../src/homeowner/waiting'
@@ -173,32 +174,34 @@ export default function HomeownerThread() {
     ])
   }
 
-  // Send a photo: pick from camera/library → a WhatsApp-style preview sheet
-  // (caption + markup) → upload + send. Markup reuses the existing markup screen.
-  const photo = usePhotoComposer({
-    enableMarkup: true,
-    placeholder: t.caption,
-    markupLabel: t.markup,
-    onSend: async ({ uri, mime, caption }) => {
-      try {
-        const uploaded = await chatApi.uploadMedia(
-          { conversationId: id },
-          { uri, name: 'photo.jpg', type: mime },
-          'document',
-        )
-        await thread.sendMedia({
-          attachmentKey: uploaded.key,
-          mime,
-          sha256: uploaded.sha256,
-          mediaType: 'document',
-          ...(caption ? { body: caption } : {}),
-        })
-      } catch (e) {
-        Alert.alert(t.photo, t.photoErr)
-        throw e // keep the preview open so she can retry
-      }
-    },
-  })
+  // Send a photo: pick from camera/library → push the WhatsApp-style preview
+  // route (caption + markup) → on return, the preview hands back {uri, caption}
+  // and we run the durable send here. Consume-once, so it never double-sends.
+  useFocusEffect(
+    useCallback(() => {
+      const s = takePhotoSend()
+      if (!s) return
+      void (async () => {
+        try {
+          const uploaded = await chatApi.uploadMedia(
+            { conversationId: id },
+            { uri: s.uri, name: 'photo.jpg', type: s.mime },
+            'document',
+          )
+          await thread.sendMedia({
+            attachmentKey: uploaded.key,
+            mime: s.mime,
+            sha256: uploaded.sha256,
+            mediaType: 'document',
+            ...(s.caption ? { body: s.caption } : {}),
+          })
+        } catch {
+          Alert.alert(t.photo, t.photoErr)
+        }
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]),
+  )
 
   const onCamera = async () => {
     const cam = await ImagePicker.requestCameraPermissionsAsync()
@@ -212,7 +215,16 @@ export default function HomeownerThread() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    photo.open(asset.uri, asset.mimeType ?? 'image/jpeg')
+    router.push({
+      pathname: '/photo-preview',
+      params: {
+        uri: asset.uri,
+        mime: asset.mimeType ?? 'image/jpeg',
+        markup: '1',
+        placeholder: t.caption,
+        markupLabel: t.markup,
+      },
+    })
   }
 
   // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
@@ -547,9 +559,6 @@ export default function HomeownerThread() {
           </View>
         }
       />
-
-      {/* WhatsApp-style photo preview (caption + markup) before send. */}
-      {photo.sheet}
     </KeyboardAvoidingView>
   )
 }
