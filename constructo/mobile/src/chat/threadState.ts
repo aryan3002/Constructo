@@ -37,6 +37,10 @@ export interface PendingMessage {
   /** A structured/media send shows a "booked ✓" receipt rather than plain text. */
   captured: boolean
   state: ChatOutboxItem['state']
+  /** Local image URI for a not-yet-uploaded media send — lets the optimistic
+   *  bubble show the actual photo (+ caption), matching the final message instead
+   *  of flashing as a caption-only text bubble first. */
+  mediaUri: string | null
 }
 
 /** The stable conversation key (conversation_id XOR site_id) for an outbox item. */
@@ -64,9 +68,12 @@ export function pendingForThread(
     .sort((a, b) => a.createdAt - b.createdAt)
     .map((i) => ({
       clientMsgId: i.clientMsgId,
-      body: i.body ?? (i.media ? '📎' : ''),
+      // Empty (not '📎') when there's no caption — the image itself (mediaUri) or
+      // each screen's own fallback handles the no-text case.
+      body: i.body ?? '',
       captured: !!i.captureType || !!i.media,
       state: i.state,
+      mediaUri: i.media?.localUri ?? null,
     }))
 }
 

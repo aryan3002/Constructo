@@ -10,13 +10,13 @@
  * ledger slice will light the cards up). The composer is text + reply for now;
  * camera/voice/@ask arrive with their slices.
  */
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -25,19 +25,24 @@ import { Avatar, BodyStrong, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
-import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, type FeedRow } from '../../../src/chat'
+import { newClientMsgId, type ChatMessage } from '../../../src/api/chat'
+import { enqueueChatSend } from '../../../src/chat/outbox'
+import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
+import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
-import { HOME_ROOM_STR, weaveHomeRoom, type DecisionAction } from '../_home_room.util'
-import { HomeRoomDecisionCard, HomeRoomUpdateCard } from '../_messages_components'
+import { summarizeWaiting } from '../../../src/homeowner/waiting'
+import { ThreadSummaryStrip } from '../_thread_summary_strip'
 
-/** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */
+/** An ephemeral inline @ask exchange (Slice B) — not a persisted message.
+ *  `createdAt` (epoch ms) lets us interleave it with real messages by time, so a
+ *  message sent AFTER an @ask renders below the answer, not above it. */
 interface AskEntry {
   id: number
   question: string
   status: AskStatus
   answer?: string
+  createdAt: number
 }
 
 const STR = {
@@ -56,6 +61,8 @@ const STR = {
     cancel: 'Cancel',
     photo: 'Send a photo',
     photoErr: 'We couldn’t send that photo just now.',
+    caption: 'Add a caption…',
+    markup: 'Markup',
     tapRetry: 'Tap to retry',
     mic: 'Hold to record — coming soon',
     micLabel: 'Voice message (coming soon)',
@@ -76,6 +83,8 @@ const STR = {
     cancel: 'रद्द करें',
     photo: 'फ़ोटो भेजें',
     photoErr: 'अभी फ़ोटो नहीं भेज सके।',
+    caption: 'कैप्शन जोड़ें…',
+    markup: 'मार्कअप',
     tapRetry: 'फिर भेजने के लिए टैप करें',
     mic: 'दबाकर रिकॉर्ड करें — जल्द आएगा',
     micLabel: 'वॉयस संदेश (जल्द आएगा)',
@@ -85,6 +94,18 @@ const STR = {
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+/** Day-separator label: Today / Yesterday / "8 Jun", localized. */
+function dayLabelFor(iso: string, lang: 'en' | 'hi'): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const key = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`
+  if (key(d) === key(now)) return lang === 'hi' ? 'आज' : 'Today'
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  if (key(d) === key(y)) return lang === 'hi' ? 'कल' : 'Yesterday'
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : undefined, { day: 'numeric', month: 'short' })
 }
 
 export default function HomeownerThread() {
@@ -107,14 +128,13 @@ export default function HomeownerThread() {
   const { siteId, me } = useAuth()
   const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
   const [text, setText] = useState('')
-  const qc = useQueryClient()
 
-  // Home Room weave (#158): in her builder channel (kind=homeowner, which has a
-  // site), interleave the published Updates + pending Decisions as on-brand cards
-  // she can act on in place. A group thread has no single site → plain feed.
+  // The builder channel (kind=homeowner, has a site) surfaces its published
+  // Updates + pending Decisions as a pinned summary STRIP above the pure chat —
+  // never woven into the message stream. She acts on them on their own screens.
+  // A group thread has no single site → no strip, just chat.
   const isBuilder = kind === 'homeowner'
   const homeRoom = isBuilder && !!siteId
-  const hr = HOME_ROOM_STR[lang as 'en' | 'hi'] ?? HOME_ROOM_STR.en
 
   const updatesQ = useQuery({
     queryKey: ['homeowner', 'updates', siteId],
@@ -126,60 +146,75 @@ export default function HomeownerThread() {
     queryFn: () => homeowner.decisions(siteId ?? undefined),
     enabled: homeRoom,
   })
-  const capsQ = useQuery({
-    queryKey: ['homeowner', 'capabilities', siteId],
-    queryFn: () => homeowner.capabilities(siteId ?? undefined),
-    enabled: homeRoom,
-  })
-  const canApprove = capsQ.data?.can_approve ?? false
 
-  // Her in-thread action on a pending decision (approve is owners-only server-side).
-  const onRespondDecision = async (decisionId: string, action: DecisionAction, note?: string) => {
-    try {
-      await homeowner.respondDecision(decisionId, action, note)
-      await Promise.all([
-        decisionsQ.refetch(),
-        qc.invalidateQueries({ queryKey: ['homeowner', 'home'] }),
-      ])
-      Alert.alert(
-        '',
-        action === 'approve'
-          ? hr.approved
-          : action === 'comment'
-            ? hr.commentSent
-            : hr.changeRequested,
-      )
-    } catch {
-      Alert.alert('', hr.respondErr)
-    }
-  }
+  const waiting = summarizeWaiting(
+    homeRoom ? (updatesQ.data?.items ?? []) : [],
+    homeRoom ? (decisionsQ.data ?? []) : [],
+  )
 
   // Make a to-do from a message (Slice C) — her own action item, linked back to
   // the message. site_id comes from her restored auth state (the builder channel
   // is her site). She sees only her own to-dos in the To-dos screen.
-  const makeTodo = async (m: ChatMessage) => {
-    const title = (m.body ?? '').trim()
-    if (!siteId || !title) return
-    try {
-      await actionItemsApi.create({ site_id: siteId, title, source_message_id: m.id })
-      router.push('/(homeowner)/todos')
-    } catch {
-      Alert.alert(t.makeTodo, t.todoErr)
-    }
-  }
+  const makeTodo = useCallback(
+    async (m: ChatMessage) => {
+      const title = (m.body ?? '').trim()
+      if (!siteId || !title) return
+      try {
+        await actionItemsApi.create({ site_id: siteId, title, source_message_id: m.id })
+        router.push('/(homeowner)/todos')
+      } catch {
+        Alert.alert(t.makeTodo, t.todoErr)
+      }
+    },
+    [siteId, router, t],
+  )
 
-  // Long-press a message → Reply or Make a to-do.
-  const onLongPress = (m: ChatMessage) => {
-    Alert.alert(headerTitle, undefined, [
-      { text: t.reply, onPress: () => thread.setReply(m) },
-      { text: t.makeTodo, onPress: () => void makeTodo(m) },
-      { text: t.cancel, style: 'cancel' },
-    ])
-  }
+  // Long-press a message → Reply or Make a to-do. Memoized so it stays a stable
+  // prop to MessageFeed (an unstable ref would re-run its renderItem each keystroke).
+  const onLongPress = useCallback(
+    (m: ChatMessage) => {
+      Alert.alert(headerTitle, undefined, [
+        { text: t.reply, onPress: () => thread.setReply(m) },
+        { text: t.makeTodo, onPress: () => void makeTodo(m) },
+        { text: t.cancel, style: 'cancel' },
+      ])
+    },
+    [headerTitle, t, thread, makeTodo],
+  )
 
-  // Send a photo (Slice D): pick from camera/library → upload to her channel →
-  // send as a document so the worker OCRs a challan into a card (booked to her
-  // site, flagged for crew confirm). Only her builder channel (it has a site).
+  // Stable day-separator labeler — a fresh closure here would re-run MessageFeed's
+  // O(n) annotate/render memos on every keystroke (the composer state lives here).
+  const dayLabel = useCallback(
+    (iso: string) => dayLabelFor(iso, (lang as 'en' | 'hi') ?? 'en'),
+    [lang],
+  )
+
+  // Send a photo: pick from camera/library → push the WhatsApp-style preview
+  // route (caption + markup) → on return, the preview hands back {uri, caption}.
+  // Enqueue with the LOCAL uri (the durable outbox uploads on drain) so the pending
+  // bubble shows the actual photo + caption immediately — no caption-only flicker.
+  // Consume-once, so it never double-sends.
+  useFocusEffect(
+    useCallback(() => {
+      const s = takePhotoSend()
+      if (!s) return
+      void (async () => {
+        try {
+          await enqueueChatSend({
+            clientMsgId: newClientMsgId(),
+            address: { conversation_id: id },
+            ...(s.caption ? { body: s.caption } : {}),
+            media: { kind: 'document', mime: s.mime, localUri: s.uri },
+          })
+          await thread.flush()
+        } catch {
+          Alert.alert(t.photo, t.photoErr)
+        }
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]),
+  )
+
   const onCamera = async () => {
     const cam = await ImagePicker.requestCameraPermissionsAsync()
     let result: ImagePicker.ImagePickerResult
@@ -192,22 +227,16 @@ export default function HomeownerThread() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    const mime = asset.mimeType ?? 'image/jpeg'
-    try {
-      const uploaded = await chatApi.uploadMedia(
-        { conversationId: id },
-        { uri: asset.uri, name: asset.fileName ?? 'photo.jpg', type: mime },
-        'document',
-      )
-      await thread.sendMedia({
-        attachmentKey: uploaded.key,
-        mime,
-        sha256: uploaded.sha256,
-        mediaType: 'document',
-      })
-    } catch {
-      Alert.alert(t.photo, t.photoErr)
-    }
+    router.push({
+      pathname: '/photo-preview',
+      params: {
+        uri: asset.uri,
+        mime: asset.mimeType ?? 'image/jpeg',
+        markup: '1',
+        placeholder: t.caption,
+        markupLabel: t.markup,
+      },
+    })
   }
 
   // Inline @ask (Slice B): ephemeral grounded answers, shown right in the thread.
@@ -225,50 +254,39 @@ export default function HomeownerThread() {
   }
 
   const items: FeedRow[] = useMemo(() => {
-    // Weave her messages (bubbles + capture cards) with the published Updates +
-    // pending Decisions, chronologically; render update/decision rows as the
-    // signature Home Room cards.
-    const woven = weaveHomeRoom(
-      thread.messages,
-      homeRoom ? (updatesQ.data?.items ?? []) : [],
-      homeRoom ? (decisionsQ.data ?? []) : [],
-      (lang as 'en' | 'hi') ?? 'en',
-    )
-    const base: FeedRow[] = woven.map((r) => {
-      if (r.kind === 'update')
-        return { kind: 'custom', key: r.key, node: <HomeRoomUpdateCard update={r.update} /> }
-      if (r.kind === 'decision')
-        return {
-          kind: 'custom',
-          key: r.key,
-          node: (
-            <HomeRoomDecisionCard
-              decision={r.decision}
-              canApprove={canApprove}
-              str={hr}
-              onRespond={(a, n) => onRespondDecision(r.decision.id, a, n)}
-            />
-          ),
-        }
-      // System notices (sender_kind=system or blocked-contested) render as a
-      // centered row, not a bubble — route before handing to the feed kit.
-      const noticeText = systemNotice(r.item.message)
-      if (noticeText !== null)
-        return { kind: 'custom', key: r.key, node: <SystemNotice text={noticeText} /> }
-      return r.item
+    // Pure chat: her messages only (a captured photo stays a photo bubble, not a
+    // card — the structured detection lives on its own screen). System notices
+    // render centered. Updates/Decisions are NOT woven in — they're in the strip.
+    // Each row carries its epoch-ms timestamp so messages and @ask answers can be
+    // interleaved chronologically (an @ask answer stays where it was asked).
+    const baseItems = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en', {
+      capturesAsBubbles: true,
+    }).map((row) => {
+      const ts = Date.parse(row.message.created_at) || 0
+      const noticeText = systemNotice(row.message)
+      const feedRow: FeedRow =
+        noticeText !== null ? { kind: 'custom', key: row.key, node: <SystemNotice text={noticeText} /> } : row
+      return { ts, row: feedRow }
     })
-    const askRows: FeedRow[] = asks.map((a) => ({
-      kind: 'custom',
-      key: `ask:${a.id}`,
-      node: (
-        <HomeownerAskRow
-          question={a.question}
-          status={a.status}
-          answer={a.answer}
-          onAskBuilder={a.status === 'abstain' ? () => askBuilder(a) : undefined}
-        />
-      ),
+    const askItems = asks.map((a) => ({
+      ts: a.createdAt,
+      row: {
+        kind: 'custom' as const,
+        key: `ask:${a.id}`,
+        node: (
+          <HomeownerAskRow
+            question={a.question}
+            status={a.status}
+            answer={a.answer}
+            onAskBuilder={a.status === 'abstain' ? () => askBuilder(a) : undefined}
+          />
+        ),
+      } as FeedRow,
     }))
+    // Stable sort by time → equal timestamps keep server seq order (messagesToFeed).
+    const timeline: FeedRow[] = [...baseItems, ...askItems]
+      .sort((a, b) => a.ts - b.ts)
+      .map((x) => x.row)
     // Durable-outbox pending bubbles — a storage-backed message that hasn't yet
     // confirmed from the server. Rendered as her own bubble with a calm status.
     // A failed_permanent bubble is wrapped in a Pressable so she can tap to retry.
@@ -281,17 +299,18 @@ export default function HomeownerThread() {
             onPress={() => void thread.retry(p.clientMsgId)}
             style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
           >
-            <MessageBubble body={p.body} mine timestamp={t.tapRetry} />
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.tapRetry} />
           </Pressable>
         ) : (
           <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
-            <MessageBubble body={p.body} mine timestamp={t.send + '…'} />
+            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.send + '…'} />
           </View>
         ),
     }))
-    return [...base, ...askRows, ...pendingRows]
+    // Pending are the very latest (in-flight) — they belong at the bottom.
+    return [...timeline, ...pendingRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.messages, thread.pending, lang, asks, homeRoom, updatesQ.data, decisionsQ.data, canApprove, hr])
+  }, [thread.messages, thread.pending, lang, asks])
 
   const onSend = async () => {
     const body = text.trim()
@@ -302,7 +321,7 @@ export default function HomeownerThread() {
       if (!question) return
       setText('')
       const id = (askId.current += 1)
-      setAsks((prev) => [...prev, { id, question, status: 'pending' }])
+      setAsks((prev) => [...prev, { id, question, status: 'pending', createdAt: Date.now() }])
       try {
         const res = await homeowner.ask(question)
         setAsks((prev) =>
@@ -329,7 +348,10 @@ export default function HomeownerThread() {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={insets.top + 56}
+      // This KAV is the root view (headerShown:false), spanning from the screen
+      // top — so the offset is 0. A non-zero offset adds that many px of padding
+      // ABOVE the keyboard (the gap bug: insets.top+56 ≈ 115px of empty space).
+      keyboardVerticalOffset={0}
     >
       {/* Header — warm card, back chevron, title + calm site subtitle */}
       <View
@@ -454,6 +476,17 @@ export default function HomeownerThread() {
         </Pressable>
       </View>
 
+      {/* Pinned summary of everything AI-derived — never woven into the chat. */}
+      {homeRoom ? (
+        <ThreadSummaryStrip
+          updateCount={waiting.updateCount}
+          needsYouCount={waiting.needsYouCount}
+          lang={(lang as 'en' | 'hi') ?? 'en'}
+          onOpenUpdates={() => router.push('/(homeowner)/updates')}
+          onOpenDecisions={() => router.push('/(homeowner)/updates')}
+        />
+      ) : null}
+
       {thread.isLoading && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={c.accent} />
@@ -470,6 +503,7 @@ export default function HomeownerThread() {
             items={items}
             mineSide="homeowner"
             time={timeLabel}
+            dayLabel={dayLabel}
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
             emptyState={

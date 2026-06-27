@@ -20,6 +20,8 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   Share,
@@ -27,7 +29,7 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
@@ -52,6 +54,7 @@ import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
 import { useChatThread } from '../../../src/chat'
+import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import {
   CaptureCard,
   MessageBubble,
@@ -97,6 +100,7 @@ const STR = {
     scanBill: 'Scan a bill',
     photo: '📷 Photo',
     uploadFailed: 'Upload failed — tap to retry',
+    caption: 'Add a caption…',
     nivaan: 'Nivaan',
     askFailed: "Couldn't reach Nivaan — try again.",
     evidence: 'events',
@@ -139,6 +143,7 @@ const STR = {
     scanBill: 'बिल स्कैन करें',
     photo: '📷 फ़ोटो',
     uploadFailed: 'अपलोड फेल — फिर दबाएँ',
+    caption: 'कैप्शन जोड़ें…',
     nivaan: 'निवान',
     askFailed: 'निवान से जवाब नहीं मिला — फिर कोशिश करें।',
     evidence: 'इवेंट',
@@ -232,6 +237,18 @@ export default function CrewChat() {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
   }, [])
 
+  // Only auto-scroll to the bottom on passive content growth (incoming/poll) when
+  // the user is ALREADY at the bottom — never yank them down while they read up.
+  // (Explicit scrollToEnd() on own-send still always jumps to the latest.)
+  const atBottom = useRef(true)
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+    atBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
+  }, [])
+  const onContentGrow = useCallback(() => {
+    if (atBottom.current) scrollToEnd()
+  }, [scrollToEnd])
+
   // @ask Nivaan: a grounded one-line answer, scoped, computed server-side. Kept
   // local (the deterministic @ask path); @nivaan goes through the live thread so
   // the server agent replies with a real Nivaan row/proposal (rendered by the kit).
@@ -301,8 +318,36 @@ export default function CrewChat() {
     [text, lang],
   )
 
-  // Camera-as-Sensor: snap a challan → upload → send as a document; the worker
-  // OCRs it into a card. Eager upload (the kit's sendMedia takes a resolved key).
+  // Camera-as-Sensor: snap a challan → PREVIEW route (confirm + optional caption)
+  // → on return, upload + send as a document; the worker OCRs it into a card.
+  // Markup is off (bill scanner, not photo-sharing). Consume-once → no double-send.
+  useFocusEffect(
+    useCallback(() => {
+      const s = takePhotoSend()
+      if (!s || !site) return
+      void (async () => {
+        try {
+          const uploaded = await chatApi.uploadMedia(
+            { siteId: site.id },
+            { uri: s.uri, name: 'challan.jpg', type: s.mime },
+            'document',
+          )
+          await thread.sendMedia({
+            attachmentKey: uploaded.key,
+            mime: s.mime,
+            sha256: uploaded.sha256,
+            mediaType: 'document',
+            ...(s.caption ? { body: s.caption } : {}),
+          })
+          scrollToEnd()
+        } catch {
+          Alert.alert(str.scanBill, str.uploadFailed)
+        }
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [site]),
+  )
+
   const onCamera = useCallback(async () => {
     if (!site) return
     const cam = await ImagePicker.requestCameraPermissionsAsync()
@@ -316,21 +361,16 @@ export default function CrewChat() {
     }
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
-    const mime = asset.mimeType ?? 'image/jpeg'
-    try {
-      const uploaded = await chatApi.uploadMedia(
-        { siteId: site.id },
-        { uri: asset.uri, name: asset.fileName ?? 'challan.jpg', type: mime },
-        'document',
-      )
-      await thread.sendMedia({
-        attachmentKey: uploaded.key, mime, sha256: uploaded.sha256, mediaType: 'document',
-      })
-      scrollToEnd()
-    } catch {
-      Alert.alert(str.scanBill, str.uploadFailed)
-    }
-  }, [site, thread, str, scrollToEnd])
+    router.push({
+      pathname: '/photo-preview',
+      params: {
+        uri: asset.uri,
+        mime: asset.mimeType ?? 'image/jpeg',
+        markup: '0',
+        placeholder: str.caption,
+      },
+    })
+  }, [site, router, str])
 
   // Voice-to-Card: hold-to-talk → upload the .m4a as voice media → send; the
   // worker runs STT + numeral-repair into a card.
@@ -520,7 +560,10 @@ export default function CrewChat() {
         data={thread.messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
-        onContentSizeChange={scrollToEnd}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={onContentGrow}
         ListEmptyComponent={
           thread.isLoading ? null : (
             <View style={{ flex: 1, justifyContent: 'center' }}>

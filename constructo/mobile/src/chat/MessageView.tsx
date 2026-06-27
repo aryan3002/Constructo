@@ -404,14 +404,20 @@ export function MessageBubble({
     borderWidth: 1,
   }
 
+  const TAIL = 4
+  const r = theme.radii.bubble
+  const tail = mine
+    ? { borderTopLeftRadius: r, borderTopRightRadius: r, borderBottomLeftRadius: r, borderBottomRightRadius: TAIL }
+    : { borderTopLeftRadius: r, borderTopRightRadius: r, borderBottomLeftRadius: TAIL, borderBottomRightRadius: r }
+
   const bubbleStyle = [
     {
       maxWidth: '82%' as const,
-      borderRadius: theme.radii.card,
       paddingVertical: SPACE.sm,
       paddingHorizontal: SPACE.md,
       gap: 2,
     },
+    tail,
     mine ? ownBubble : otherBubble,
   ]
 
