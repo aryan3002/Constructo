@@ -15,7 +15,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.extraction.llm import LLMClient
 from app.intelligence.detectors.base import Finding
+from app.profiler.extraction import extract_reference_attributes
 from app.profiler.taste import check_consistency
 
 # Concrete material words -> abstract taste vocabulary. Both the abstract bucket
@@ -114,6 +116,51 @@ def material_theme_clash(specs: list[SpecRow], areas: list[AreaTaste]) -> list[F
                     f"the homeowner's approved taste for {spec.area_key}. Worth confirming."
                 ),
                 evidence_event_ids=[spec.id],
+                phase="design",
+            )
+        )
+    return out
+
+
+@dataclass
+class PhotoRow:
+    """An installed/published photo tied to a design area (via room_tag)."""
+
+    id: str
+    image_url: str
+    area_key: str | None
+
+
+async def photo_vs_theme(
+    photos: list[PhotoRow], areas: list[AreaTaste], *, llm: LLMClient
+) -> list[Finding]:
+    """Flag an installed photo whose look clearly conflicts with the homeowner's
+    approved taste for its area. One vision call per photo that has area taste to
+    compare against; abstains otherwise (no taste -> no call). The homeowner's
+    standout signal, so a conflict is high severity."""
+    taste_by_area = {a.area_key: a.dimensions for a in areas if a.dimensions}
+    out: list[Finding] = []
+    for photo in photos:
+        dims = taste_by_area.get(photo.area_key)
+        if not dims:
+            continue
+        attrs = await extract_reference_attributes(llm, photo.image_url)
+        if not isinstance(attrs, dict):
+            continue
+        if check_consistency(attrs, dims).get("status") != "conflict":
+            continue
+        out.append(
+            Finding(
+                finding_type="photo_vs_theme",
+                severity="high",
+                headline=(
+                    f"Installed work in {photo.area_key} looks different from the design"
+                ),
+                detail=(
+                    f"A photo from {photo.area_key} appears to go against the homeowner's "
+                    f"approved taste for that area. Worth confirming before it goes further."
+                ),
+                evidence_event_ids=[photo.id],
                 phase="design",
             )
         )
