@@ -324,7 +324,10 @@ export default function HomeownerThread() {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={insets.top + 56}
+      // This KAV is the root view (headerShown:false), spanning from the screen
+      // top — so the offset is 0. A non-zero offset adds that many px of padding
+      // ABOVE the keyboard (the gap bug: insets.top+56 ≈ 115px of empty space).
+      keyboardVerticalOffset={0}
     >
       {/* Header — warm card, back chevron, title + calm site subtitle */}
       <View
