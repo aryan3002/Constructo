@@ -20,6 +20,8 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   Share,
@@ -231,6 +233,18 @@ export default function CrewChat() {
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
   }, [])
+
+  // Only auto-scroll to the bottom on passive content growth (incoming/poll) when
+  // the user is ALREADY at the bottom — never yank them down while they read up.
+  // (Explicit scrollToEnd() on own-send still always jumps to the latest.)
+  const atBottom = useRef(true)
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+    atBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
+  }, [])
+  const onContentGrow = useCallback(() => {
+    if (atBottom.current) scrollToEnd()
+  }, [scrollToEnd])
 
   // @ask Nivaan: a grounded one-line answer, scoped, computed server-side. Kept
   // local (the deterministic @ask path); @nivaan goes through the live thread so
@@ -520,7 +534,10 @@ export default function CrewChat() {
         data={thread.messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
-        onContentSizeChange={scrollToEnd}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={onContentGrow}
         ListEmptyComponent={
           thread.isLoading ? null : (
             <View style={{ flex: 1, justifyContent: 'center' }}>

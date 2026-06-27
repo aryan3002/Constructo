@@ -13,6 +13,8 @@ import { useRef, useState } from 'react'
 import {
   FlatList,
   KeyboardAvoidingView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   TextInput,
@@ -137,6 +139,17 @@ export default function OwnerConversation() {
   const scrollToEnd = () =>
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))
 
+  // Only auto-scroll on passive content growth when already at the bottom — never
+  // yank the user down while they read older messages. (Own-send still jumps.)
+  const atBottom = useRef(true)
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+    atBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
+  }
+  const onContentGrow = () => {
+    if (atBottom.current) scrollToEnd()
+  }
+
   const onSend = async () => {
     const body = text.trim()
     if (!body || thread.sending) return
@@ -255,7 +268,10 @@ export default function OwnerConversation() {
           data={messages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
-          onContentSizeChange={scrollToEnd}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={onContentGrow}
           ListEmptyComponent={
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Small muted>{str.empty}</Small>
