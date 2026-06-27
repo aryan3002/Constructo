@@ -380,6 +380,9 @@ export function MessageBubble({
   const { theme } = useTheme()
   const c = theme.colors
   const daylight = theme.name === 'daylight'
+  // Attachment image load state — show a graceful placeholder instead of a blank
+  // box when the image is loading or its (possibly expired presigned) URL fails.
+  const [imgState, setImgState] = useState<'loading' | 'ok' | 'failed'>('loading')
 
   // Own bubble: neev keeps its translucent amber (unchanged); daylight uses
   // the warm sage chip the homeowner DaylightBubble used, so the look is preserved
@@ -434,11 +437,40 @@ export function MessageBubble({
         </Micro>
       ) : null}
       {attachmentUrl ? (
-        <Image
-          source={{ uri: attachmentUrl }}
-          style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4 }}
-          resizeMode="cover"
-        />
+        <View style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4, overflow: 'hidden' }}>
+          {imgState !== 'failed' ? (
+            <Image
+              source={{ uri: attachmentUrl }}
+              style={{ width: 200, height: 150 }}
+              resizeMode="cover"
+              onLoad={() => setImgState('ok')}
+              onError={() => setImgState('failed')}
+            />
+          ) : null}
+          {imgState !== 'ok' ? (
+            <View
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: c.paper,
+                borderWidth: 1,
+                borderColor: c.line,
+                borderRadius: 8,
+              }}
+            >
+              <Feather
+                name={imgState === 'failed' ? 'image' : 'loader'}
+                size={26}
+                color={c.textMute}
+              />
+            </View>
+          ) : null}
+        </View>
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
       {timestamp ? (
