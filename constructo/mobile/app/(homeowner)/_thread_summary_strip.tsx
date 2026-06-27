@@ -8,7 +8,7 @@ import { Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE, TAP } from '../../src/theme/tokens'
+import { AP, SPACE } from '../../src/theme/tokens'
 import { Small } from '../../src/ui'
 
 const STR = {
@@ -40,14 +40,19 @@ export function ThreadSummaryStrip({
   const t = STR[lang] ?? STR.en
   if (updateCount === 0 && needsYouCount === 0) return null
 
+  // The whole bar taps through to Updates; the amber pill taps to Decisions.
+  // Compact, fixed height — no minHeight on the visible pill (that made it a fat
+  // 48px chip); tap targets come from the row padding + hitSlop.
   return (
-    <View
+    <Pressable
+      onPress={onOpenUpdates}
+      accessibilityRole="button"
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACE.sm,
         paddingHorizontal: SPACE.gutter,
-        paddingVertical: SPACE.sm,
+        paddingVertical: 10,
         backgroundColor: c.paper,
         borderBottomWidth: 1,
         borderBottomColor: c.line,
@@ -56,14 +61,7 @@ export function ThreadSummaryStrip({
       <Feather name="layers" size={16} color={c.textMute} />
 
       {updateCount > 0 ? (
-        <Pressable
-          onPress={onOpenUpdates}
-          accessibilityRole="button"
-          hitSlop={8}
-          style={{ minHeight: TAP, justifyContent: 'center' }}
-        >
-          <Small style={{ color: c.textMute }}>{t.updates(updateCount)}</Small>
-        </Pressable>
+        <Small style={{ color: c.textMute }}>{t.updates(updateCount)}</Small>
       ) : null}
 
       {needsYouCount > 0 ? (
@@ -75,19 +73,19 @@ export function ThreadSummaryStrip({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            minHeight: TAP,
-            paddingHorizontal: SPACE.sm,
+            paddingVertical: 3,
+            paddingHorizontal: 10,
             borderRadius: theme.radii.pill,
             backgroundColor: AP.surfaceContainer,
           }}
         >
-          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.warn }} />
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.warn }} />
           <Small style={{ color: c.warn, fontWeight: '600' }}>{t.needsYou(needsYouCount)}</Small>
         </Pressable>
       ) : null}
 
       <View style={{ flex: 1 }} />
-      <Feather name="chevron-right" size={16} color={c.textMute} />
-    </View>
+      <Feather name="chevron-right" size={18} color={c.textMute} />
+    </Pressable>
   )
 }

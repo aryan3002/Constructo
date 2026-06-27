@@ -32,12 +32,15 @@ import { HomeownerAskRow, type AskStatus } from '../_ask_row'
 import { summarizeWaiting } from '../../../src/homeowner/waiting'
 import { ThreadSummaryStrip } from '../_thread_summary_strip'
 
-/** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */
+/** An ephemeral inline @ask exchange (Slice B) — not a persisted message.
+ *  `createdAt` (epoch ms) lets us interleave it with real messages by time, so a
+ *  message sent AFTER an @ask renders below the answer, not above it. */
 interface AskEntry {
   id: number
   question: string
   status: AskStatus
   answer?: string
+  createdAt: number
 }
 
 const STR = {
@@ -217,26 +220,36 @@ export default function HomeownerThread() {
     // Pure chat: her messages only (a captured photo stays a photo bubble, not a
     // card — the structured detection lives on its own screen). System notices
     // render centered. Updates/Decisions are NOT woven in — they're in the strip.
-    const base: FeedRow[] = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en', {
+    // Each row carries its epoch-ms timestamp so messages and @ask answers can be
+    // interleaved chronologically (an @ask answer stays where it was asked).
+    const baseItems = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en', {
       capturesAsBubbles: true,
     }).map((row) => {
+      const ts = Date.parse(row.message.created_at) || 0
       const noticeText = systemNotice(row.message)
-      if (noticeText !== null)
-        return { kind: 'custom', key: row.key, node: <SystemNotice text={noticeText} /> }
-      return row
+      const feedRow: FeedRow =
+        noticeText !== null ? { kind: 'custom', key: row.key, node: <SystemNotice text={noticeText} /> } : row
+      return { ts, row: feedRow }
     })
-    const askRows: FeedRow[] = asks.map((a) => ({
-      kind: 'custom',
-      key: `ask:${a.id}`,
-      node: (
-        <HomeownerAskRow
-          question={a.question}
-          status={a.status}
-          answer={a.answer}
-          onAskBuilder={a.status === 'abstain' ? () => askBuilder(a) : undefined}
-        />
-      ),
+    const askItems = asks.map((a) => ({
+      ts: a.createdAt,
+      row: {
+        kind: 'custom' as const,
+        key: `ask:${a.id}`,
+        node: (
+          <HomeownerAskRow
+            question={a.question}
+            status={a.status}
+            answer={a.answer}
+            onAskBuilder={a.status === 'abstain' ? () => askBuilder(a) : undefined}
+          />
+        ),
+      } as FeedRow,
     }))
+    // Stable sort by time → equal timestamps keep server seq order (messagesToFeed).
+    const timeline: FeedRow[] = [...baseItems, ...askItems]
+      .sort((a, b) => a.ts - b.ts)
+      .map((x) => x.row)
     // Durable-outbox pending bubbles — a storage-backed message that hasn't yet
     // confirmed from the server. Rendered as her own bubble with a calm status.
     // A failed_permanent bubble is wrapped in a Pressable so she can tap to retry.
@@ -258,7 +271,7 @@ export default function HomeownerThread() {
         ),
     }))
     // Pending are the very latest (in-flight) — they belong at the bottom.
-    return [...base, ...askRows, ...pendingRows]
+    return [...timeline, ...pendingRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.messages, thread.pending, lang, asks])
 
@@ -271,7 +284,7 @@ export default function HomeownerThread() {
       if (!question) return
       setText('')
       const id = (askId.current += 1)
-      setAsks((prev) => [...prev, { id, question, status: 'pending' }])
+      setAsks((prev) => [...prev, { id, question, status: 'pending', createdAt: Date.now() }])
       try {
         const res = await homeowner.ask(question)
         setAsks((prev) =>
