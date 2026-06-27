@@ -292,7 +292,10 @@ export default function DecisionDetailScreen() {
     )
   }
 
-  const isPending = decision.state === 'pending'
+  // 'escalated' is still actionable (the backend accepts resolve/reject from it);
+  // Home surfaces escalated items under "Needs your input", so the detail screen
+  // must let the homeowner respond, not dead-end with no actions.
+  const isPending = decision.state === 'pending' || decision.state === 'escalated'
   const multilineStyle: TextStyle = {
     ...(inputStyle as TextStyle),
     minHeight: 80,

@@ -197,6 +197,15 @@ function TimelineItem({
 // Screen
 // ---------------------------------------------------------------------------
 
+const BRIEF_STATE_LABEL: Record<string, string> = {
+  homeowner_review: 'your review',
+  revision_requested: 'changes requested',
+  architect_review: 'with your designer',
+  contractor_brief_ready: 'ready to approve',
+  approved: 'approved',
+  locked: 'locked',
+}
+
 export default function BriefScreen() {
   const router = useRouter()
   const toast = useToast()
@@ -250,6 +259,8 @@ export default function BriefScreen() {
     onError: (e: unknown) => {
       if (e instanceof ApiError && e.code === 'approve_forbidden') {
         toast(S.onlyOwnerCanApprove)
+      } else if (e instanceof ApiError && e.code === 'invalid_transition') {
+        toast("This brief isn't ready for that step yet.")
       } else {
         toast((e as Error).message)
       }
@@ -257,6 +268,11 @@ export default function BriefScreen() {
   })
 
   const canApprove = capQ.data?.can_approve ?? false
+  // The homeowner can only "approve" once the brief is contractor-ready (after
+  // designer sign-off). In review states their action is send-to-designer /
+  // request-changes — showing Approve there always 409s.
+  const briefState = briefQ.data?.state ?? null
+  const canApproveNow = briefState === 'contractor_brief_ready'
 
   // Parse content_json from the brief
   const content = briefQ.data?.content_json as
@@ -345,7 +361,11 @@ export default function BriefScreen() {
       {/* SubHeader with version chip */}
       <SubHeader
         title="Whole-house design brief"
-        subtitle={briefQ.data ? 'v1.2 · building' : 'Loading…'}
+        subtitle={
+          briefQ.data
+            ? `v${briefQ.data.version ?? 1} · ${BRIEF_STATE_LABEL[briefQ.data.state ?? ''] ?? 'in progress'}`
+            : 'Loading…'
+        }
         onBack={() => router.back()}
         right={
           briefId ? (
@@ -756,15 +776,17 @@ export default function BriefScreen() {
           <FadeInUp delay={50}>
             {canApprove ? (
               <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-                <Button
-                  title="Approve this version"
-                  variant="primary"
-                  size="md"
-                  loading={actMut.isPending}
-                  leading={<Feather name="check" size={16} color={c.onAccent} />}
-                  onPress={() => actMut.mutate('approve')}
-                  style={{ flex: 1 }}
-                />
+                {canApproveNow ? (
+                  <Button
+                    title="Approve this version"
+                    variant="primary"
+                    size="md"
+                    loading={actMut.isPending}
+                    leading={<Feather name="check" size={16} color={c.onAccent} />}
+                    onPress={() => actMut.mutate('approve')}
+                    style={{ flex: 1 }}
+                  />
+                ) : null}
                 <Button
                   title="Request changes"
                   variant="secondary"

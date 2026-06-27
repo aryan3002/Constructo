@@ -189,6 +189,10 @@ class BriefRenderingOut(BaseModel):
     area_id: UUID | None = None
     content_json: dict = {}
     created_at: datetime
+    # The owning brief's lifecycle state + version, so the app can show the
+    # state-appropriate action (e.g. "Approve" only once it's contractor-ready).
+    state: str | None = None
+    version: int | None = None
 
 
 class BriefOut(BaseModel):

@@ -7,9 +7,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import NetInfo from '@react-native-community/netinfo'
 
-import { request } from '../api/client'
+import { ApiError, request } from '../api/client'
 import { submitCapture } from '../api/capture'
 import { list, remove, type OutboxItem } from './outbox'
+
+/** A 4xx (except 408 timeout / 429 rate-limit) is a PERMANENT rejection — the
+ *  item can never succeed as-is (too large / forbidden / invalid), so retrying
+ *  it forever would wedge everything queued behind it. */
+function isPermanentFailure(e: unknown): boolean {
+  return (
+    e instanceof ApiError &&
+    e.status >= 400 &&
+    e.status < 500 &&
+    e.status !== 408 &&
+    e.status !== 429
+  )
+}
 
 export type SyncState = 'idle' | 'syncing' | 'offline'
 
@@ -49,8 +62,16 @@ export function useOutbox(): OutboxStatus {
           })
         }
         await remove(item.id)
-      } catch {
-        // Leave it queued; stop the drain so we retry the whole tail next time.
+      } catch (e) {
+        if (isPermanentFailure(e)) {
+          // This item will NEVER sync (e.g. 413 too-large / 403 not-assigned /
+          // 422). Drop it so it can't wedge every capture queued behind it, and
+          // keep draining the rest. (Follow-up: surface dropped items for review
+          // + downscale oversized media before enqueue.)
+          await remove(item.id)
+          continue
+        }
+        // Transient (network / 5xx / timeout): stop and retry the whole tail next time.
         break
       }
     }

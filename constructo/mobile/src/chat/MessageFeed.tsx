@@ -253,7 +253,9 @@ export function MessageFeed({
         flexGrow: 1,
       }}
       ListHeaderComponent={header ? <>{header}</> : null}
-      ListEmptyComponent={emptyState ? <>{emptyState}</> : null}
+      ListEmptyComponent={
+        emptyState ? <View style={{ flexGrow: 1 }}>{emptyState}</View> : null
+      }
     />
   )
 }

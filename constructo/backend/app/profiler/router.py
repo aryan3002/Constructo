@@ -1218,7 +1218,10 @@ async def get_brief_rendering(
     ).scalars().first()
     if rendering is None:
         raise AppError(404, "not_found", "Rendering not found")
-    return BriefRenderingOut.model_validate(rendering)
+    out = BriefRenderingOut.model_validate(rendering)
+    out.state = brief.state.value if hasattr(brief.state, "value") else brief.state
+    out.version = brief.version
+    return out
 
 
 @router.get("/briefs/{brief_id}/approvals", response_model=list[BriefApprovalOut])
