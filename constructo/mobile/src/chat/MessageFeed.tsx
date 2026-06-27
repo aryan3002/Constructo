@@ -55,6 +55,7 @@ export function MessageFeed({
   inverted = true,
   onEndReached,
   myUserId,
+  replySnippetFor,
 }: {
   items: FeedRow[]
   /** Which `sender_side` is "me" for bubble alignment/tint. */
@@ -77,6 +78,9 @@ export function MessageFeed({
   inverted?: boolean
   /** Called when the user scrolls toward older messages (load-more seam). */
   onEndReached?: () => void
+  /** Optional quoted-parent snippet for a replied-to message — rendered above the
+   *  bubble (quote-reply). Return null/'' for no quote. */
+  replySnippetFor?: (m: ChatMessage) => string | null
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -165,6 +169,23 @@ export function MessageFeed({
       const mine = isMine(m)
       const showSender = annotations.showSender.has(item.key)
       const isRunEnd = annotations.runEnd.has(item.key)
+      const snippet = replySnippetFor?.(m) || null
+      const quoted = snippet ? (
+        <View
+          style={{
+            alignSelf: mine ? 'flex-end' : 'flex-start',
+            maxWidth: '82%',
+            borderLeftWidth: 2,
+            borderLeftColor: c.accent,
+            paddingLeft: SPACE.sm,
+            marginBottom: 2,
+          }}
+        >
+          <Small numberOfLines={1} style={{ color: c.textMute }}>
+            ↩ {snippet}
+          </Small>
+        </View>
+      ) : null
       const bubble = (
         <MessageBubble
           body={m.body}
@@ -180,7 +201,12 @@ export function MessageFeed({
       // Tighter spacing inside a run; full gap when the run ends.
       const marginBottom = isRunEnd ? SPACE.md : 2
       if (mine) {
-        return <View style={{ paddingHorizontal: SPACE.gutter, marginBottom }}>{bubble}</View>
+        return (
+          <View style={{ paddingHorizontal: SPACE.gutter, marginBottom }}>
+            {quoted}
+            {bubble}
+          </View>
+        )
       }
       // Received: leading avatar on first-of-run, else an aligning spacer.
       return (
@@ -198,12 +224,15 @@ export function MessageFeed({
           ) : (
             <View style={{ width: AVATAR }} />
           )}
-          <View style={{ flex: 1 }}>{bubble}</View>
+          <View style={{ flex: 1 }}>
+            {quoted}
+            {bubble}
+          </View>
         </View>
       )
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper],
+    [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper, c.accent, c.textMute, replySnippetFor],
   )
 
   return (
