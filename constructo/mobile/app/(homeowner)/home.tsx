@@ -25,10 +25,11 @@ import {
 } from 'react-native'
 import { Link, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { homeowner } from '../../src/api/client'
+import { homeowner, type HeadsUpAction } from '../../src/api/client'
+import { HeadsUpSection } from './_heads_up'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -239,6 +240,27 @@ export default function Home() {
   // Notification bell badge — the unread count for the in-app inbox.
   const notifQ = useQuery({ queryKey: ['notifications'], queryFn: () => homeowner.notifications() })
   const unreadCount = notifQ.data?.unread_count ?? 0
+
+  // Proactive "heads up" — homeowner-safe Site Health findings + the design loop.
+  const headsUpQ = useQuery({
+    queryKey: ['home', 'headsUp'],
+    queryFn: () => homeowner.headsUp(),
+    enabled: homeQ.isSuccess,
+  })
+  const qc = useQueryClient()
+  const respondM = useMutation({
+    mutationFn: (v: { id: string; action: HeadsUpAction }) =>
+      homeowner.respondHeadsUp(v.id, v.action),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['home', 'headsUp'] })
+      void qc.invalidateQueries({ queryKey: ['home', 'requests'] })
+    },
+  })
+  const flagM = useMutation({
+    mutationFn: () =>
+      homeowner.flagSomething('Something looks off on site — please take a look.'),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['home', 'requests'] }),
+  })
 
   // ── Loading / error states ───────────────────────────────────────────────────
   if (homeQ.isLoading) {
@@ -572,6 +594,18 @@ export default function Home() {
           Prototype: Card flush — clay eyebrow, target handover date,
           On-track pill + chevron; collapsed shows MilestoneStrip + clay "Now" box.
       ══════════════════════════════════════════════════════════════════ */}
+      {/* Proactive Heads up — Site Health (schedule honesty + design fidelity). */}
+      {headsUpQ.data && headsUpQ.data.cards.length > 0 ? (
+        <FadeInUp delay={35}>
+          <HeadsUpSection
+            data={headsUpQ.data}
+            busy={respondM.isPending || flagM.isPending}
+            onRespond={(id, action) => respondM.mutate({ id, action })}
+            onFlag={() => flagM.mutate()}
+          />
+        </FadeInUp>
+      ) : null}
+
       <FadeInUp delay={40}>
         <Pressable
           accessibilityRole="button"
