@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -26,11 +26,11 @@ import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ChatMessage } from '../../../src/api/chat'
-import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, type FeedRow } from '../../../src/chat'
+import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../_ask_row'
-import { HOME_ROOM_STR, weaveHomeRoom, type DecisionAction } from '../_home_room.util'
-import { HomeRoomDecisionCard, HomeRoomUpdateCard } from '../_messages_components'
+import { summarizeWaiting } from '../_home_room.util'
+import { ThreadSummaryStrip } from '../_thread_summary_strip'
 
 /** An ephemeral inline @ask exchange (Slice B) — not a persisted message. */
 interface AskEntry {
@@ -87,6 +87,18 @@ function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+/** Day-separator label: Today / Yesterday / "8 Jun", localized. */
+function dayLabelFor(iso: string, lang: 'en' | 'hi'): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const key = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`
+  if (key(d) === key(now)) return lang === 'hi' ? 'आज' : 'Today'
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  if (key(d) === key(y)) return lang === 'hi' ? 'कल' : 'Yesterday'
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : undefined, { day: 'numeric', month: 'short' })
+}
+
 export default function HomeownerThread() {
   const { lang } = useT()
   const { theme } = useTheme()
@@ -107,14 +119,13 @@ export default function HomeownerThread() {
   const { siteId, me } = useAuth()
   const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
   const [text, setText] = useState('')
-  const qc = useQueryClient()
 
-  // Home Room weave (#158): in her builder channel (kind=homeowner, which has a
-  // site), interleave the published Updates + pending Decisions as on-brand cards
-  // she can act on in place. A group thread has no single site → plain feed.
+  // The builder channel (kind=homeowner, has a site) surfaces its published
+  // Updates + pending Decisions as a pinned summary STRIP above the pure chat —
+  // never woven into the message stream. She acts on them on their own screens.
+  // A group thread has no single site → no strip, just chat.
   const isBuilder = kind === 'homeowner'
   const homeRoom = isBuilder && !!siteId
-  const hr = HOME_ROOM_STR[lang as 'en' | 'hi'] ?? HOME_ROOM_STR.en
 
   const updatesQ = useQuery({
     queryKey: ['homeowner', 'updates', siteId],
@@ -126,33 +137,11 @@ export default function HomeownerThread() {
     queryFn: () => homeowner.decisions(siteId ?? undefined),
     enabled: homeRoom,
   })
-  const capsQ = useQuery({
-    queryKey: ['homeowner', 'capabilities', siteId],
-    queryFn: () => homeowner.capabilities(siteId ?? undefined),
-    enabled: homeRoom,
-  })
-  const canApprove = capsQ.data?.can_approve ?? false
 
-  // Her in-thread action on a pending decision (approve is owners-only server-side).
-  const onRespondDecision = async (decisionId: string, action: DecisionAction, note?: string) => {
-    try {
-      await homeowner.respondDecision(decisionId, action, note)
-      await Promise.all([
-        decisionsQ.refetch(),
-        qc.invalidateQueries({ queryKey: ['homeowner', 'home'] }),
-      ])
-      Alert.alert(
-        '',
-        action === 'approve'
-          ? hr.approved
-          : action === 'comment'
-            ? hr.commentSent
-            : hr.changeRequested,
-      )
-    } catch {
-      Alert.alert('', hr.respondErr)
-    }
-  }
+  const waiting = summarizeWaiting(
+    homeRoom ? (updatesQ.data?.items ?? []) : [],
+    homeRoom ? (decisionsQ.data ?? []) : [],
+  )
 
   // Make a to-do from a message (Slice C) — her own action item, linked back to
   // the message. site_id comes from her restored auth state (the builder channel
@@ -225,37 +214,16 @@ export default function HomeownerThread() {
   }
 
   const items: FeedRow[] = useMemo(() => {
-    // Weave her messages (bubbles + capture cards) with the published Updates +
-    // pending Decisions, chronologically; render update/decision rows as the
-    // signature Home Room cards.
-    const woven = weaveHomeRoom(
-      thread.messages,
-      homeRoom ? (updatesQ.data?.items ?? []) : [],
-      homeRoom ? (decisionsQ.data ?? []) : [],
-      (lang as 'en' | 'hi') ?? 'en',
-    )
-    const base: FeedRow[] = woven.map((r) => {
-      if (r.kind === 'update')
-        return { kind: 'custom', key: r.key, node: <HomeRoomUpdateCard update={r.update} /> }
-      if (r.kind === 'decision')
-        return {
-          kind: 'custom',
-          key: r.key,
-          node: (
-            <HomeRoomDecisionCard
-              decision={r.decision}
-              canApprove={canApprove}
-              str={hr}
-              onRespond={(a, n) => onRespondDecision(r.decision.id, a, n)}
-            />
-          ),
-        }
-      // System notices (sender_kind=system or blocked-contested) render as a
-      // centered row, not a bubble — route before handing to the feed kit.
-      const noticeText = systemNotice(r.item.message)
+    // Pure chat: her messages only (a captured photo stays a photo bubble, not a
+    // card — the structured detection lives on its own screen). System notices
+    // render centered. Updates/Decisions are NOT woven in — they're in the strip.
+    const base: FeedRow[] = messagesToFeed(thread.messages, (lang as 'en' | 'hi') ?? 'en', {
+      capturesAsBubbles: true,
+    }).map((row) => {
+      const noticeText = systemNotice(row.message)
       if (noticeText !== null)
-        return { kind: 'custom', key: r.key, node: <SystemNotice text={noticeText} /> }
-      return r.item
+        return { kind: 'custom', key: row.key, node: <SystemNotice text={noticeText} /> }
+      return row
     })
     const askRows: FeedRow[] = asks.map((a) => ({
       kind: 'custom',
@@ -289,9 +257,10 @@ export default function HomeownerThread() {
           </View>
         ),
     }))
+    // Pending are the very latest (in-flight) — they belong at the bottom.
     return [...base, ...askRows, ...pendingRows]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.messages, thread.pending, lang, asks, homeRoom, updatesQ.data, decisionsQ.data, canApprove, hr])
+  }, [thread.messages, thread.pending, lang, asks])
 
   const onSend = async () => {
     const body = text.trim()
@@ -454,6 +423,17 @@ export default function HomeownerThread() {
         </Pressable>
       </View>
 
+      {/* Pinned summary of everything AI-derived — never woven into the chat. */}
+      {homeRoom ? (
+        <ThreadSummaryStrip
+          updateCount={waiting.updateCount}
+          needsYouCount={waiting.needsYouCount}
+          lang={(lang as 'en' | 'hi') ?? 'en'}
+          onOpenUpdates={() => router.push('/(homeowner)/updates')}
+          onOpenDecisions={() => router.push('/(homeowner)/updates')}
+        />
+      ) : null}
+
       {thread.isLoading && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={c.accent} />
@@ -470,6 +450,7 @@ export default function HomeownerThread() {
             items={items}
             mineSide="homeowner"
             time={timeLabel}
+            dayLabel={(iso) => dayLabelFor(iso, (lang as 'en' | 'hi') ?? 'en')}
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
             emptyState={
