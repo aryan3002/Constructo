@@ -364,6 +364,10 @@ export interface ProfilerArea {
   status: string
   confidence: number
   has_conflict: boolean
+  /** How many references this area holds (any contributor). */
+  reference_count: number
+  /** How many of them the signed-in user has ranked — powers "X of N ranked". */
+  my_ranked_count: number
 }
 export interface ProfilerContributor {
   id: string
@@ -405,8 +409,30 @@ export interface ProfilerReference {
   id: string
   area_id: string
   source_type: string
+  image_r2_key: string | null
+  source_url: string | null
+  preset_id: string | null
+  /** A fetchable URL the app renders (presigned GET, else the external source_url). */
+  image_url: string | null
   consistency_status: string | null
   created_at: string
+}
+
+/** Direct-to-R2 upload ticket for an inspiration image (mirrors chat media). */
+export interface DesignMediaPresign {
+  key: string
+  put_url: string | null
+  upload_mode: 'presigned' | 'multipart'
+}
+
+/** A curated preset inspiration image a homeowner can add with one tap. */
+export interface DesignPreset {
+  id: string
+  area_kind: string
+  area_key: string | null
+  pack: string
+  title: string
+  image_url: string | null
 }
 export interface ProfilerBriefRendering {
   id: string
@@ -451,6 +477,41 @@ export const design = {
     preset_id?: string
   }) =>
     request<ProfilerReference>(`/api/v1/design/references`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Mint a direct-to-R2 upload ticket scoped to a profile. `multipart` mode (no
+   *  put_url) means the backend has no presigned PUT — fall back to {@link uploadMedia}. */
+  presignMedia: (profileId: string, kind: 'image' = 'image') =>
+    request<DesignMediaPresign>(`/api/v1/design/media/presign`, {
+      method: 'POST',
+      body: JSON.stringify({ profile_id: profileId, kind }),
+    }),
+
+  /** Multipart fallback upload (local/CI) — streams the image to storage, returns the key. */
+  uploadMedia: (profileId: string, file: UploadFile) => {
+    const form = new FormData()
+    form.append('file', file as unknown as Blob)
+    form.append('profile_id', profileId)
+    form.append('kind', 'image')
+    return uploadMultipart<{ key: string }>(`/api/v1/design/media`, form)
+  },
+
+  /** Layer 2 — add a reference from a pasted Pinterest pin link (server re-hosts to R2). */
+  referenceFromLink: (body: { area_id: string; contributor_id?: string; url: string }) =>
+    request<ProfilerReference>(`/api/v1/design/references/from-link`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Layer 3 — list curated preset inspiration for an area. */
+  presets: (areaKind: string, areaKey?: string) =>
+    request<DesignPreset[]>(`/api/v1/design/presets${qs({ area_kind: areaKind, area_key: areaKey })}`),
+
+  /** Layer 3 — add a reference from a curated preset. */
+  referenceFromPreset: (body: { area_id: string; contributor_id?: string; preset_id: string }) =>
+    request<ProfilerReference>(`/api/v1/design/references/from-preset`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

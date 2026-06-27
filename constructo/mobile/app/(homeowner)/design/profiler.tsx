@@ -144,10 +144,7 @@ export default function ProfilerHubScreen() {
 
   const areas = q.data?.areas ?? []
   const groups = groupAreasByKind(areas)
-  const ranked = areas.reduce(
-    (s, a) => s + (a.status === 'ready' ? a.recommended_count : 0),
-    0,
-  )
+  const ranked = areas.reduce((s, a) => s + (a.my_ranked_count ?? 0), 0)
   const recTotal = areas.reduce((s, a) => s + a.recommended_count, 0)
   const pct = recTotal > 0 ? Math.round((ranked / recTotal) * 100) : 0
 
@@ -417,7 +414,7 @@ export default function ProfilerHubScreen() {
                                 {a.area_key.replace(/_/g, ' ')}
                               </Body>
                               <Small muted style={{ marginTop: 1 }}>
-                                {areaProgressLabel(0, a.recommended_count)}
+                                {areaProgressLabel(a.my_ranked_count ?? 0, a.recommended_count)}
                                 {a.has_conflict ? ' · needs a decision' : ''}
                               </Small>
                             </View>

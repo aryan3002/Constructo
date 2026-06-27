@@ -1,8 +1,8 @@
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,6 +58,9 @@ from app.profiler.schemas import (
     ConflictResolveIn,
     ContributorIn,
     ContributorOut,
+    DesignMediaPresignIn,
+    DesignMediaPresignOut,
+    DesignMediaUploadOut,
     MaterializeOut,
     ProfileCreate,
     ProfileDetailOut,
@@ -71,6 +74,7 @@ from app.profiler.schemas import (
 from app.profiler.taste import build_taste_model, check_consistency
 from app.profiler.themes import narrate_themes, top_reference_ids
 from app.specs.schemas import SpecOut
+from app.storage import Storage, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,63 @@ _BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
     (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
     (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
 }
+
+
+# Direct-to-R2 upload (mirrors the chat media flow, scoped to a design profile).
+_DESIGN_MAX_MEDIA_BYTES = 15 * 1024 * 1024  # 15 MB, same ceiling as chat media
+_DESIGN_MEDIA_EXT = {"image": "jpg", "document": "bin"}
+_DESIGN_MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/octet-stream"}
+
+
+def _reference_out(ref: ProfilerReference, storage: Storage) -> ReferenceOut:
+    """Serialize a reference with a fetchable image_url (presigned GET from the
+    stored key, else the external source_url) so the app can render the photo."""
+    out = ReferenceOut.model_validate(ref)
+    out.image_url = storage.url_for(ref.image_r2_key) or ref.source_url
+    return out
+
+
+async def _area_counts(
+    session: AsyncSession, profile_id: UUID, my_contributor_id: UUID | None
+) -> dict[UUID, tuple[int, int]]:
+    """Per-area (reference_count, my_ranked_count) for a profile, in 2 aggregate
+    queries. my_ranked_count is 0 for every area when the caller is not a
+    contributor (my_contributor_id is None)."""
+    ref_rows = (
+        await session.execute(
+            select(ProfilerReference.area_id, func.count())
+            .where(ProfilerReference.profile_id == profile_id)
+            .group_by(ProfilerReference.area_id)
+        )
+    ).all()
+    counts: dict[UUID, tuple[int, int]] = {area_id: (n, 0) for area_id, n in ref_rows}
+    if my_contributor_id is not None:
+        ranked_rows = (
+            await session.execute(
+                select(
+                    ProfilerReference.area_id,
+                    func.count(func.distinct(ProfilerRanking.reference_id)),
+                )
+                .join(ProfilerReference, ProfilerReference.id == ProfilerRanking.reference_id)
+                .where(
+                    ProfilerReference.profile_id == profile_id,
+                    ProfilerRanking.contributor_id == my_contributor_id,
+                )
+                .group_by(ProfilerReference.area_id)
+            )
+        ).all()
+        for area_id, ranked in ranked_rows:
+            ref_count = counts.get(area_id, (0, 0))[0]
+            counts[area_id] = (ref_count, ranked)
+    return counts
+
+
+def _area_out(area: ProfilerArea, counts: dict[UUID, tuple[int, int]]) -> AreaOut:
+    out = AreaOut.model_validate(area)
+    ref_count, ranked = counts.get(area.id, (0, 0))
+    out.reference_count = ref_count
+    out.my_ranked_count = ranked
+    return out
 
 
 async def _load_owned_profile(
@@ -438,9 +499,10 @@ async def get_profile(
         .all()
     )
     out = ProfileDetailOut.model_validate(profile)
-    out.areas = [AreaOut.model_validate(a) for a in areas]
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
     out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
+    counts = await _area_counts(session, profile_id, out.my_contributor_id)
+    out.areas = [_area_out(a, counts) for a in areas]
     return out
 
 
@@ -472,9 +534,10 @@ async def get_profile_by_site(
         )
     ).scalars().all()
     out = ProfileDetailOut.model_validate(profile)
-    out.areas = [AreaOut.model_validate(a) for a in areas]
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
     out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
+    counts = await _area_counts(session, profile.id, out.my_contributor_id)
+    out.areas = [_area_out(a, counts) for a in areas]
     return out
 
 
@@ -496,6 +559,55 @@ async def add_contributor(
     session.add(c)
     await session.commit()
     return {"id": str(c.id)}
+
+
+@router.post("/media/presign", response_model=DesignMediaPresignOut)
+async def presign_design_media(
+    body: DesignMediaPresignIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DesignMediaPresignOut:
+    """Direct-to-R2 upload ticket for an inspiration image, scoped to a design
+    profile (the caller must be able to access it). Mirrors /chat/media/presign:
+    LocalStorage (CI/dev) has no presigned PUT, so the client falls back to the
+    multipart POST /design/media."""
+    profile = await _load_accessible_profile(session, body.profile_id, user)
+    ext = _DESIGN_MEDIA_EXT.get(body.kind, "bin")
+    key = f"design/{profile.site_id}/{uuid4().hex}.{ext}"
+    storage = get_storage()
+    content_type = _DESIGN_MEDIA_CONTENT_TYPE.get(body.kind, "application/octet-stream")
+    put_url: str | None = None
+    try:
+        ticket = storage.presigned_put(key, content_type)
+        put_url = ticket["url"]
+    except NotImplementedError:
+        put_url = None
+    return DesignMediaPresignOut(
+        key=key, put_url=put_url, upload_mode="presigned" if put_url else "multipart"
+    )
+
+
+@router.post("/media", response_model=DesignMediaUploadOut)
+async def upload_design_media(
+    file: UploadFile = File(...),
+    profile_id: UUID = Form(...),
+    kind: str = Form("image"),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DesignMediaUploadOut:
+    """Multipart fallback for the local/CI backend (no presigned PUT): the server
+    streams the image to object storage and returns the bare key, which the client
+    then attaches via POST /design/references."""
+    profile = await _load_accessible_profile(session, profile_id, user)
+    data = await file.read()
+    if not data:
+        raise AppError(422, "empty_file", "No file content")
+    if len(data) > _DESIGN_MAX_MEDIA_BYTES:
+        raise AppError(413, "media_too_large", "Image exceeds 15 MB")
+    ext = _DESIGN_MEDIA_EXT.get(kind, "bin")
+    key = f"design/{profile.site_id}/{uuid4().hex}.{ext}"
+    get_storage().put_bytes(key, data, file.content_type or "application/octet-stream")
+    return DesignMediaUploadOut(key=key)
 
 
 @router.post("/references", response_model=ReferenceOut, status_code=201)
@@ -523,10 +635,13 @@ async def add_reference(
     session.add(ref)
     await session.flush()
 
-    image_url = body.source_url or body.image_r2_key
-    if image_url:
+    storage = get_storage()
+    # Vision needs a FETCHABLE url, never a bare R2 key — resolve the stored key
+    # (presigned GET) or pass the external source_url through.
+    vision_url = body.source_url or storage.url_for(body.image_r2_key)
+    if vision_url:
         try:
-            attrs = await extract_reference_attributes(llm, image_url)
+            attrs = await extract_reference_attributes(llm, vision_url)
         except Exception:  # never fail the request on extraction
             logger.exception("profiler: vision extraction failed for reference %s", ref.id)
             attrs = None
@@ -543,7 +658,7 @@ async def add_reference(
 
     await session.commit()
     await session.refresh(ref)
-    return ReferenceOut.model_validate(ref)
+    return _reference_out(ref, storage)
 
 
 @router.get(
@@ -568,7 +683,8 @@ async def list_references(
             .order_by(ProfilerReference.created_at)
         )
     ).scalars().all()
-    return [ReferenceOut.model_validate(r) for r in rows]
+    storage = get_storage()
+    return [_reference_out(r, storage) for r in rows]
 
 
 @router.post("/references/{reference_id}/rankings", status_code=201)
