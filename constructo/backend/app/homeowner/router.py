@@ -2403,3 +2403,49 @@ async def my_capabilities(
             sub_role, can_design_flag=can_design_flag, design_space_id=design_space_id
         ),
     )
+
+
+class HeadsUpCardOut(_BaseModel):
+    finding_id: str
+    category: str  # "schedule" | "design"
+    headline: str
+    respondable: bool
+
+
+class HeadsUpOut(_BaseModel):
+    site_id: UUID
+    cards: list[HeadsUpCardOut] = []
+
+
+@router.get("/heads-up", response_model=HeadsUpOut)
+async def heads_up(
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+    site_id: UUID | None = Query(None),
+) -> HeadsUpOut:
+    """Homeowner-safe proactive findings, warm-reframed.
+
+    Crosses the trust membrane for schedule honesty (a phase running long) and
+    design fidelity (something installed differs from the approved design) only —
+    operational findings (attendance, vendors, sequence, etc.) never reach the
+    homeowner. See :mod:`app.intelligence.homeowner_filter`.
+    """
+    from app.intelligence.homeowner_filter import homeowner_cards
+    from app.models import SiteFinding
+
+    sid = await resolve_site(session, user, site_id)
+    rows = (
+        (
+            await session.execute(
+                select(SiteFinding).where(
+                    SiteFinding.site_id == sid, SiteFinding.status == "open"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return HeadsUpOut(
+        site_id=sid,
+        cards=[HeadsUpCardOut(**card.__dict__) for card in homeowner_cards(rows)],
+    )
