@@ -63,6 +63,14 @@ describe('theme tokens — Wave-0 component surface', () => {
     }
   })
 
+  it('both themes expose a tight bubble radius for chat bubbles', () => {
+    for (const name of ['neev', 'daylight'] as const) {
+      expect(typeof THEMES[name].radii.bubble).toBe('number')
+      // a chat bubble is tighter than a card
+      expect(THEMES[name].radii.bubble).toBeLessThan(THEMES[name].radii.card)
+    }
+  })
+
   it('both themes have chip radius for ListRow icon tile', () => {
     for (const name of ['neev', 'daylight'] as const) {
       expect(THEMES[name].radii.chip).toBeGreaterThan(0)

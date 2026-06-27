@@ -82,6 +82,8 @@ export interface ThemeRadii {
   pill: number
   /** alias of `chip` — kept for existing call sites (inputs/controls). */
   control: number
+  /** chat message bubble — tighter than a card. */
+  bubble: number
 }
 
 /** A single type role's size/line-height (+ optional tracking). */
@@ -187,7 +189,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     name: 'neev',
     colors: NEEV_COLORS,
     // Neev "sturdy, not toy": buttons/inputs 10, cards 14, sheets/big 18, pill.
-    radii: { chip: 10, card: 14, hero: 18, sheet: 18, pill: 9999, control: 10 },
+    radii: { chip: 10, card: 14, hero: 18, sheet: 18, pill: 9999, control: 10, bubble: 12 },
     // A record leans on hairline borders over heavy shadow — a low, warm-ink lift.
     shadowCard: {
       shadowColor: '#1b1916',
@@ -204,7 +206,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     // while keeping the warm residential soul: buttons/inputs 11, primary cards
     // 16, hero 20, sheet 18, pill full. (Tiles track `card`.) Tightened from the
     // original soft 14/22/28/24 "pebbles".
-    radii: { chip: 11, card: 16, hero: 20, sheet: 18, pill: 9999, control: 11 },
+    radii: { chip: 11, card: 16, hero: 20, sheet: 18, pill: 9999, control: 11, bubble: 14 },
     // Crisper "lifted paper" — a tighter, more DEFINED ink-tinted lift (far less
     // diffuse than the original blur-24 soft drop), never a hard black shadow.
     shadowCard: {
