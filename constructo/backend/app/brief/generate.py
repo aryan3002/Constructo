@@ -21,16 +21,28 @@ from app.common.site_events import latest_event_clause
 from app.config import settings
 from app.contracts.events import EventType, SiteEvent
 from app.extraction.llm import LLMClient, get_llm_client
-from app.models import OwnerBrief, Site, SiteBaseline, SiteEventModel, User, UserRole
+from app.models import (
+    OwnerBrief,
+    Site,
+    SiteBaseline,
+    SiteEventModel,
+    SiteFinding,
+    User,
+    UserRole,
+)
 
 MAX_TOP_RISKS = 3
+# Proactive Site Health findings surfaced per site in the brief (top by severity).
+MAX_TOP_FINDINGS = 3
+_FINDING_SEV_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 _SYSTEM_PROMPT_BASE = (
     "You write a daily WhatsApp morning brief for the owner of an Indian "
     "construction company. Lead with exceptions and risks, NOT an activity dump. "
     "Keep it under a 2-minute read. Be concise: per-site, surface the top risks "
-    "first, then a one-line activity summary. Never invent data beyond the JSON "
-    'provided. Return strict JSON of the form {"text": "<the brief>"}.'
+    "first, then any Site Health 'findings' (proactive checks — schedule drift, "
+    "work inconsistency, quality), then a one-line activity summary. Never invent "
+    'data beyond the JSON provided. Return strict JSON of the form {"text": "<the brief>"}.'
 )
 
 
@@ -176,23 +188,55 @@ async def build_brief(
         )
         baseline_by_site = {b.site_id: b.expected_daily_headcount for b in brows}
 
-    site_payloads: list[dict] = []
-    for site_id, events in events_by_site.items():
-        if not events:
-            continue
-        risks = detect_risks(
-            events,
-            site_id=site_id,
-            expected_headcount=baseline_by_site.get(site_id),
-            history_events=history_by_site.get(site_id),
+    # Proactive Site Health findings (persisted by the nightly engine). Only OPEN
+    # ones reach the brief — acknowledged findings stay on the dashboard but are
+    # hidden here so the brief never re-nags. A site with open findings is
+    # surfaced even when it had no events on the brief day (silent drift).
+    findings_by_site: dict[UUID, list[dict]] = defaultdict(list)
+    if site_ids:
+        frows = (
+            (
+                await session.execute(
+                    select(SiteFinding).where(
+                        SiteFinding.site_id.in_(site_ids),
+                        SiteFinding.status == "open",
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-        events_by_id = {
-            e.id: e for e in (events + (history_by_site.get(site_id) or []))
-        }
-        top = [
-            _jsonable_risk(r, events_by_id)
-            for r in rank_risks(risks, MAX_TOP_RISKS)
-        ]
+        grouped: dict[UUID, list[SiteFinding]] = defaultdict(list)
+        for f in frows:
+            grouped[f.site_id].append(f)
+        for sid, fs in grouped.items():
+            fs.sort(key=lambda f: _FINDING_SEV_RANK.get(f.severity, 0), reverse=True)
+            findings_by_site[sid] = [
+                {
+                    "finding_type": f.finding_type,
+                    "severity": f.severity,
+                    "headline": f.headline,
+                    "phase": f.phase,
+                }
+                for f in fs[:MAX_TOP_FINDINGS]
+            ]
+
+    site_payloads: list[dict] = []
+    for site_id in set(events_by_site) | set(findings_by_site):
+        events = events_by_site.get(site_id, [])
+        if events:
+            risks = detect_risks(
+                events,
+                site_id=site_id,
+                expected_headcount=baseline_by_site.get(site_id),
+                history_events=history_by_site.get(site_id),
+            )
+            events_by_id = {
+                e.id: e for e in (events + (history_by_site.get(site_id) or []))
+            }
+            top = [_jsonable_risk(r, events_by_id) for r in rank_risks(risks, MAX_TOP_RISKS)]
+        else:
+            top = []
         site = site_by_id[site_id]
         site_payloads.append(
             {
@@ -200,11 +244,14 @@ async def build_brief(
                 "name": site.name,
                 "top_risks": top,
                 "counts": _counts(events),
+                "findings": findings_by_site.get(site_id, []),
             }
         )
 
-    # stable order: sites with more/severe risks first, then by name
-    site_payloads.sort(key=lambda s: (-len(s["top_risks"]), s["name"]))
+    # stable order: sites with the most risks + health findings first, then by name
+    site_payloads.sort(
+        key=lambda s: (-(len(s["top_risks"]) + len(s["findings"])), s["name"])
+    )
 
     payload: dict = {"brief_date": brief_date.isoformat(), "sites": site_payloads}
 
@@ -280,8 +327,10 @@ def _fallback_text(payload: dict) -> str:
         if s["top_risks"]:
             for r in s["top_risks"]:
                 lines.append(f"  ⚠ [{r['severity']}] {r['message']}")
-        else:
+        elif not s.get("findings"):
             lines.append("  No risks.")
+        for f in s.get("findings", []):
+            lines.append(f"  ◆ Site Health [{f['severity']}] {f['headline']}")
         c = s["counts"]
         lines.append(
             f"  Activity: {c['attendance']} attendance, "
