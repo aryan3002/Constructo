@@ -72,7 +72,7 @@ screens that already host it — surfaced back in the thread only as a single
 |---|---|---|
 | D1 | How much leaves the thread | **Pure chat + light pointers** — thread is human-only; all AI/derived content moves to its own screens; a small tappable nudge stays in the thread. |
 | D2 | The inline `@ask` feature | **Keep in chat** — an ephemeral, "only you can see this" assistant reply; never a persisted person bubble. |
-| D3 | Scope of the chat-feel fixes | **Shared kit for all roles**, AI-content **un-weave for homeowner only**. |
+| D3 | Scope of the chat-feel fixes | **Shared kit for all roles**, AI-content **un-weave for homeowner only**. *Refined post-verification:* the inversion/scroll/grouping live in the homeowner-only `MessageFeed`; contractor parity is delivered by (a) the **shared `MessageBubble`** radius/tail change and (b) an explicit slice that applies the same scroll fix to the contractor screens' own `FlatList`s. |
 | D4 | How the pointer appears | **Pinned strip on top** — one persistent bar (`N updates · N needs you →`) above the messages; the message flow stays 100% pure. |
 
 ## 5. Current architecture (verified)
@@ -86,6 +86,13 @@ screens that already host it — surfaced back in the thread only as a single
   - `MessageFeed.tsx` — a plain non-inverted `FlatList`; `onContentSizeChange →
     scrollToEnd` (lines 42–46, 89). Renders `bubble` / `card` / `custom` rows.
     **Never forwards** `showSenderName` / `senderName` to `MessageBubble`.
+    **Correction (verified 2026-06-27):** `MessageFeed` is consumed **only** by
+    the homeowner thread. The contractor screens (`(contractor)/supervisor/chat.tsx`,
+    `(contractor)/owner/chat/[id].tsx`, architect/pm) each have their **own**
+    `FlatList` + identical `onContentSizeChange → scrollToEnd` bug and render
+    `MessageBubble`/`CaptureCard` directly. So the *truly* shared primitives are
+    `MessageView` (`MessageBubble`, `CaptureCard`, `SystemNotice`) and `feed.ts`
+    (`messagesToFeed`) — not `MessageFeed`.
   - `MessageView.tsx` — `MessageBubble` (own/other tint, `radii.card`,
     per-bubble Mono timestamp, own-side delivery tick). Already accepts
     `showSenderName` / `senderName` (dead today). `CaptureCard` (the
@@ -155,7 +162,13 @@ A new component `app/(homeowner)/_thread_summary_strip.tsx`:
 - Daylight ("Calm Cockpit") styling: warm surface, amber accent for "needs you".
   Uses the homeowner design tokens, ≥44px tap targets.
 
-### 6.4 Scrolling fix (D3 — shared kit, `MessageFeed.tsx`)
+### 6.4 Scrolling fix (`MessageFeed.tsx` for homeowner; contractor files for parity)
+
+The fix below lands in `MessageFeed.tsx` (homeowner's list). The **same** fix is
+applied to the contractor screens' own `FlatList`s (`(contractor)/supervisor/chat.tsx`,
+`(contractor)/owner/chat/[id].tsx`) in a dedicated parity slice (§9 step 5) so
+D3 ("all roles get a better chat") is actually delivered, since those screens do
+not use `MessageFeed`.
 
 - Make the `FlatList` **inverted** (render newest-first by reversing the row
   array). This gives bottom-stick and cheap upward pagination for free and
@@ -260,7 +273,10 @@ Each step is independently shippable and demoable:
 3. **Sender names/avatars + day separators + grouping** (`feed.ts` +
    `MessageFeed` + `MessageView`).
 4. **Bubble shape + clustered timestamps + de-serif + pending-by-time** —
-   the visual feel pass.
+   the visual feel pass (shared `MessageBubble` → contractor benefits too).
+5. **Contractor scroll parity** — apply the step-1 scroll fix to the contractor
+   screens' own `FlatList`s (`supervisor/chat.tsx`, `owner/chat/[id].tsx`).
+   Delivers D3; isolated and last so the homeowner win ships first.
 
 ## 10. Risks & mitigations
 
