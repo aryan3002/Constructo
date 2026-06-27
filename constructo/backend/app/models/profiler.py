@@ -441,3 +441,23 @@ class ProfilerBriefApproval(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ProfilerPreset(Base):
+    """Curated designer inspiration images a homeowner can add to an area with one
+    tap. Catalog data (not site-scoped); seeded by scripts/seed_profiler_presets.py.
+    area_key NULL = applies to any area of that kind. area_kind is a plain string
+    (interior|house_build|element) to avoid reusing the profiler enum types."""
+
+    __tablename__ = "profiler_presets"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    area_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    area_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pack: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    image_r2_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

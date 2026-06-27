@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
@@ -34,6 +34,7 @@ from app.models.profiler import (
     ProfilerClarification,
     ProfilerConflict,
     ProfilerContributor,
+    ProfilerPreset,
     ProfilerProfile,
     ProfilerRanking,
     ProfilerReference,
@@ -64,11 +65,13 @@ from app.profiler.schemas import (
     DesignMediaPresignOut,
     DesignMediaUploadOut,
     MaterializeOut,
+    PresetOut,
     ProfileCreate,
     ProfileDetailOut,
     ProfileOut,
     RankingIn,
     ReferenceFromLinkIn,
+    ReferenceFromPresetIn,
     ReferenceIn,
     ReferenceOut,
     ThemeDecisionIn,
@@ -722,6 +725,70 @@ async def add_reference_from_link(
     session.add(ref)
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))
+
+    await session.commit()
+    await session.refresh(ref)
+    return _reference_out(ref, storage)
+
+
+@router.get("/presets", response_model=list[PresetOut])
+async def list_presets(
+    area_kind: str = Query(...),
+    area_key: str | None = Query(None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[PresetOut]:
+    """Curated designer preset inspiration for an area kind (catalog, not site
+    data — any authenticated user). area_key NULL presets apply to any area of
+    that kind."""
+    stmt = select(ProfilerPreset).where(ProfilerPreset.area_kind == area_kind)
+    if area_key is not None:
+        stmt = stmt.where(
+            or_(ProfilerPreset.area_key == area_key, ProfilerPreset.area_key.is_(None))
+        )
+    stmt = stmt.order_by(ProfilerPreset.sort, ProfilerPreset.title)
+    rows = (await session.execute(stmt)).scalars().all()
+    storage = get_storage()
+    out: list[PresetOut] = []
+    for p in rows:
+        po = PresetOut.model_validate(p)
+        po.image_url = storage.url_for(p.image_r2_key)
+        out.append(po)
+    return out
+
+
+@router.post("/references/from-preset", response_model=ReferenceOut, status_code=201)
+async def add_reference_from_preset(
+    body: ReferenceFromPresetIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> ReferenceOut:
+    """Add an inspiration reference from a curated preset — the reference points at
+    the preset's already-stored R2 object (no re-upload) and runs the same vision +
+    ranking path as everything else."""
+    area = await session.get(ProfilerArea, body.area_id)
+    if area is None:
+        raise AppError(404, "not_found", "Area not found")
+    profile = await _load_accessible_profile(session, area.profile_id, user)
+    if body.contributor_id is not None:
+        await _validate_contributor(session, profile, body.contributor_id, user)
+    preset = await session.get(ProfilerPreset, body.preset_id)
+    if preset is None:
+        raise AppError(404, "not_found", "Preset not found")
+
+    ref = ProfilerReference(
+        profile_id=area.profile_id,
+        area_id=area.id,
+        contributor_id=body.contributor_id,
+        source_type=ReferenceSource.preset,
+        image_r2_key=preset.image_r2_key,
+        preset_id=str(preset.id),
+    )
+    session.add(ref)
+    await session.flush()
+    storage = get_storage()
+    await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
     await session.commit()
     await session.refresh(ref)

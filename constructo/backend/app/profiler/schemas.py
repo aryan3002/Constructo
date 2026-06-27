@@ -105,6 +105,23 @@ class ReferenceFromLinkIn(BaseModel):
     url: str = Field(min_length=4, max_length=2048)
 
 
+class ReferenceFromPresetIn(BaseModel):
+    area_id: UUID
+    contributor_id: UUID | None = None
+    preset_id: UUID
+
+
+class PresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    area_kind: str
+    area_key: str | None = None
+    pack: str
+    title: str
+    # Computed by the router: a fetchable URL the app renders.
+    image_url: str | None = None
+
+
 class DesignMediaPresignIn(BaseModel):
     profile_id: UUID
     kind: str = "image"
