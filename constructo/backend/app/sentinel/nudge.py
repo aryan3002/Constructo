@@ -11,7 +11,7 @@ deterministic detector; a quiet site raises nothing.
 """
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -97,7 +97,10 @@ async def run_sentinel_sweep(
     session: AsyncSession, *, today: date | None = None
 ) -> list[UUID]:
     """Raise at most one Sentinel nudge per site per day. Returns nudged site ids."""
-    day = today or datetime.now(UTC).date()
+    # Use the SAME calendar source as the read endpoint (date.today()), not UTC —
+    # the split made "today's attendance" mis-evaluate (and the tests flap) when
+    # the server's local date differs from UTC.
+    day = today or date.today()
     nudged: list[UUID] = []
 
     sites = (await session.execute(select(Site))).scalars().all()
