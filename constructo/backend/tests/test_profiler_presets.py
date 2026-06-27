@@ -71,6 +71,22 @@ async def test_list_presets_filters_by_kind_and_key(client, factory, db_session)
     assert all(r["image_url"] for r in rows)  # resolved for rendering
 
 
+async def test_list_presets_matches_across_space_underscore(client, factory, db_session):
+    # Catalog keys (spaces) must match area keys (underscores) — convention drift
+    # otherwise hides every multi-word room's curated packs.
+    await _seed_preset(
+        db_session, area_key="master bedroom", title="Soft neutrals",
+        image_r2_key="presets/mb.jpg",
+    )
+    user = await factory.user(role=UserRole.architect)
+    resp = await client.get(
+        "/api/v1/design/presets?area_kind=interior&area_key=master_bedroom",
+        headers=auth(user),
+    )
+    assert resp.status_code == 200
+    assert any(r["title"] == "Soft neutrals" for r in resp.json())
+
+
 async def test_reference_from_preset_creates_reference(client, factory, db_session):
     preset = await _seed_preset(db_session)
     architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)

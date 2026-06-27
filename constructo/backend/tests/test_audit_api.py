@@ -34,6 +34,26 @@ async def _create(client, owner, site, **kw):
     return await client.post("/api/v1/audits", json=payload, headers=auth(owner))
 
 
+async def test_add_finding_is_idempotent_on_title_location(client, world):
+    # A retry / double-tap of the same defect must not create a duplicate
+    # owner-visible finding.
+    _company, owner, site = world
+    audit = (await _create(client, owner, site)).json()
+    body = {"title": "Cracked tile", "severity": "major", "location": "Kitchen"}
+
+    f1 = await client.post(
+        f"/api/v1/audits/{audit['id']}/findings", json=body, headers=auth(owner)
+    )
+    f2 = await client.post(
+        f"/api/v1/audits/{audit['id']}/findings", json=body, headers=auth(owner)
+    )
+    assert f1.status_code == 201 and f2.status_code == 201
+    assert f1.json()["id"] == f2.json()["id"]  # reused, not duplicated
+
+    detail = (await client.get(f"/api/v1/audits/{audit['id']}", headers=auth(owner))).json()
+    assert sum(1 for x in detail["findings"] if x["title"] == "Cracked tile") == 1
+
+
 async def test_create_list_get(client, world):
     _, owner, site = world
     resp = await _create(client, owner, site)

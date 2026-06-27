@@ -42,6 +42,16 @@ def test_negative_quick_tag_suppresses_a_dimension_value():
     assert scores["lighting"]["dark"] == -0.5
 
 
+def test_negative_quick_tag_accepts_mobile_display_labels():
+    # The app sends human labels ("Too dark", "Hard to maintain"); the reducer
+    # must normalize them to its snake_case keys (regression: they were dropped).
+    attrs = [{"reference_id": "r1", "attributes": {"lighting": "dark"}}]
+    rankings = [{"reference_id": "r1", "contributor_id": "A", "stars": 4,
+                 "tags": {"positive": [], "negative": ["Too dark"]}}]
+    scores = aggregate_dimension_scores(rankings, attrs)
+    assert scores["lighting"]["dark"] == -0.5
+
+
 def test_confidence_is_coverage_ratio_clipped_to_one():
     assert confidence_score(0, 6) == 0.0
     assert confidence_score(3, 6) == 0.5
