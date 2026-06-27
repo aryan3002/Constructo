@@ -212,11 +212,14 @@ export type ChatAddress =
 export const chatApi = {
   /** A thread, oldest→newest, after a seq cursor (sync-on-reconnect). Address a
    *  site crew thread by `siteId`, or a group/homeowner thread by `conversationId`. */
-  messages(opts: ChatAddress & { afterSeq?: number }): Promise<ChatMessage[]> {
+  messages(opts: ChatAddress & { afterSeq?: number; limit?: number }): Promise<ChatMessage[]> {
     const q = new URLSearchParams()
     if ('conversationId' in opts && opts.conversationId) q.set('conversation_id', opts.conversationId)
     else if ('siteId' in opts && opts.siteId) q.set('site_id', opts.siteId)
     q.set('after_seq', String(opts.afterSeq ?? 0))
+    // Default to the server's max page (MAX_LIMIT=200) instead of its DEFAULT_LIMIT=50,
+    // so the thread fills in a few pages rather than 50-at-a-time per poll.
+    if (opts.limit != null) q.set('limit', String(opts.limit))
     return request<ChatMessage[]>(`/api/v1/chat/messages?${q.toString()}`)
   },
 

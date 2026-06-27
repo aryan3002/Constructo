@@ -9,7 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { ChatMessage } from '../api/chat'
 
 const KEY_PREFIX = 'constructo.chat.cache.'
-const MAX_CACHED = 200
+// Retain a full thread's worth of history (was 200, which silently dropped older
+// messages of a large seeded thread). FlatList virtualizes, so this renders fine.
+const MAX_CACHED = 2000
 
 export async function loadThreadCache(convKey: string): Promise<ChatMessage[]> {
   try {

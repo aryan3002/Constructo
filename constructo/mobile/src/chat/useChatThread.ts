@@ -34,6 +34,7 @@ import {
 import { CHAT_WS_URL } from '../api/config'
 import { uploadMultipart, type UploadFile } from '../api/client'
 import { loadThreadCache, maxCachedSeq, mergeMessages } from './cache'
+import { drainPages } from './paging'
 import {
   drainChatOutbox,
   enqueueChatSend,
@@ -87,6 +88,10 @@ export interface UseChatThread {
    *  deterministic fast-path (capture_type+fields). The agent never calls this. */
   sendProposal: (captureType: string, fields: Record<string, unknown>) => Promise<void>
 }
+
+// The server caps a /chat/messages page at MAX_LIMIT=200; request that so the
+// thread drains in a few pages, not 50-at-a-time.
+const PAGE_SIZE = 200
 
 // --- module-level socket singleton (one per app session) --------------------
 // Lazily created on the first thread mount; shared across every thread so the
@@ -286,8 +291,19 @@ export function useChatThread(
       syncOrCache(
         async () => {
           const after = await maxCachedSeq(addrKey as string)
-          const page = await chatApi.messages({ ...addressRef.current, afterSeq: after })
-          return mergeMessages(addrKey as string, page)
+          // Drain ALL pages back-to-back in this one sync (the server caps each
+          // page at 200) so a large seeded thread loads in one shot instead of
+          // 50-rows-per-8s-poll (the "messages trickle in over 1-2 min" bug).
+          // On a steady-state poll `after` is the newest seq, so this is a single
+          // page fetch (usually empty) — no extra cost.
+          const pages = await drainPages(
+            (afterSeq) => chatApi.messages({ ...addressRef.current, afterSeq, limit: PAGE_SIZE }),
+            after,
+            PAGE_SIZE,
+          )
+          return pages.length
+            ? mergeMessages(addrKey as string, pages)
+            : loadThreadCache(addrKey as string)
         },
         () => loadThreadCache(addrKey as string),
       ),
