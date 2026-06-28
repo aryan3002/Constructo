@@ -198,7 +198,7 @@ export default function OwnerConversation() {
             clientMsgId: newClientMsgId(),
             address: addressByConv ? { conversation_id: id } : { site_id: siteId as string },
             ...(s.caption ? { body: s.caption } : {}),
-            media: { kind: 'document', mime: s.mime, localUri: s.uri },
+            media: { kind: 'image', mime: s.mime, localUri: s.uri },
           })
           await thread.flush()
         } catch {

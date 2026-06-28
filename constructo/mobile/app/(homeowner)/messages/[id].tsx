@@ -224,7 +224,7 @@ export default function HomeownerThread() {
             clientMsgId: newClientMsgId(),
             address: { conversation_id: id },
             ...(s.caption ? { body: s.caption } : {}),
-            media: { kind: 'document', mime: s.mime, localUri: s.uri },
+            media: { kind: 'image', mime: s.mime, localUri: s.uri },
           })
           await thread.flush()
         } catch {

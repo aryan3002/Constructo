@@ -35,6 +35,7 @@ import {
 import { CHAT_WS_URL } from '../api/config'
 import { uploadMultipart, type UploadFile } from '../api/client'
 import { loadThreadCache, maxCachedSeq, mergeMessages } from './cache'
+import { effectiveMediaKind, signedMediaContentType } from './media'
 import { drainPages } from './paging'
 import {
   drainChatOutbox,
@@ -183,27 +184,44 @@ export async function performSend(
     let attachmentKey = item.media?.key
     let attachmentSha = item.media?.sha256
     if (item.media && !attachmentKey && item.media.localUri) {
-      const kind = item.media.kind ?? 'document'
-      const mime = item.media.mime ?? 'application/octet-stream'
-      const presign = await chatApi.presignMedia({ ...address, kind })
+      // Recover the real kind — older builds queued photos as 'document', which
+      // the backend signs + stores as application/pdf: the PUT (sending an image
+      // content-type) 403s and the send sticks on "Send…" forever. Then send the
+      // EXACT content-type the backend signs for that kind (NOT the raw file mime,
+      // which may be image/heic etc.) so the R2 signature matches. See ./media.
+      const kind = effectiveMediaKind(item.media.kind, item.media.mime)
+      item.media.kind = kind
+      const contentType = signedMediaContentType(kind)
       const file: UploadFile = {
         uri: item.media.localUri,
         name: `${item.clientMsgId}.${kind === 'image' ? 'jpg' : kind === 'voice' ? 'm4a' : 'bin'}`,
-        type: mime,
+        type: contentType,
       }
+      const presign = await chatApi.presignMedia({ ...address, kind })
+      let putOk = false
       if (presign.upload_mode === 'presigned' && presign.put_url) {
-        const blob = await (await fetch(file.uri)).blob()
-        const putRes = await fetch(presign.put_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': mime },
-          body: blob,
-        })
-        if (!putRes.ok) return { ok: false, permanent: false }
-        attachmentKey = presign.key
-        // The presign path returns no sha256; the server dedupes on key here.
-        attachmentSha = item.media.sha256
-      } else {
-        // Fallback: the existing multipart upload to /chat/media.
+        try {
+          const blob = await (await fetch(file.uri)).blob()
+          const putRes = await fetch(presign.put_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': contentType },
+            body: blob,
+          })
+          if (putRes.ok) {
+            attachmentKey = presign.key
+            // The presign path returns no sha256; the server dedupes on key here.
+            attachmentSha = item.media.sha256
+            putOk = true
+          }
+        } catch {
+          // network / blob-read failure → fall through to the multipart upload.
+        }
+      }
+      if (!putOk) {
+        // Multipart upload to /chat/media — robust fallback when the presigned
+        // PUT is unavailable OR failed. The backend sets the stored content-type
+        // server-side, so there is no signature to mismatch: this self-heals a
+        // send that would otherwise be stuck on "Send…".
         const form = new FormData()
         form.append('file', file as unknown as Blob)
         if (item.address.conversation_id)
