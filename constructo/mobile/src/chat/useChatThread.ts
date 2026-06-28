@@ -281,6 +281,13 @@ export function useChatThread(
     [refreshOutbox, flush],
   )
 
+  // The FIRST sync after a thread opens fetches from seq 0 (a full refresh) so
+  // every message's attachment_url is re-resolved to a FRESH presigned GET. The
+  // server's presign TTL is ~1h and the incremental (after_seq) path never re-
+  // fetches already-cached messages — so without this, photos sent >1h ago go
+  // blank on reopen (their cached presign expired). Later polls stay incremental.
+  const urlsRefreshed = useRef(false)
+
   // --- cache-first incremental query --------------------------------------
   const q = useQuery({
     queryKey: ['chat', 'thread', addrKey],
@@ -290,7 +297,9 @@ export function useChatThread(
       // the retries exhaust (the "shows for 4s then disappears" bug).
       syncOrCache(
         async () => {
-          const after = await maxCachedSeq(addrKey as string)
+          // First run this mount → full refresh (after_seq=0) to renew presigned
+          // attachment URLs; subsequent polls → incremental from the newest seq.
+          const after = urlsRefreshed.current ? await maxCachedSeq(addrKey as string) : 0
           // Drain ALL pages back-to-back in this one sync (the server caps each
           // page at 200) so a large seeded thread loads in one shot instead of
           // 50-rows-per-8s-poll (the "messages trickle in over 1-2 min" bug).
@@ -301,6 +310,7 @@ export function useChatThread(
             after,
             PAGE_SIZE,
           )
+          urlsRefreshed.current = true
           return pages.length
             ? mergeMessages(addrKey as string, pages)
             : loadThreadCache(addrKey as string)
