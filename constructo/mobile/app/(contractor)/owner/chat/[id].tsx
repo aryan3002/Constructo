@@ -27,13 +27,13 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
-import { CaptureCard, MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
+import { MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
 import { MessageFeed, useChatThread, type FeedRow } from '../../../../src/chat'
 import { enqueueChatSend } from '../../../../src/chat/outbox'
 import { takePhotoSend } from '../../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../../src/chat/systemNotice'
-import { newClientMsgId, type ChatEvent, type ChatMessage } from '../../../../src/api/chat'
+import { newClientMsgId, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
 import { LoadingBlock, ErrorBlock } from '../_components'
@@ -263,32 +263,12 @@ export default function OwnerConversation() {
           ),
         }
 
-      const cardEvents = m.events?.filter((e: ChatEvent) => e.event_type !== 'unknown') ?? []
-      if (cardEvents.length > 0) {
-        const mine = m.sender_side === 'contractor'
-        return {
-          kind: 'custom',
-          key: m.id,
-          node: (
-            <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.xs }}>
-              <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '92%', gap: SPACE.sm }}>
-                {cardEvents.map((ev: ChatEvent, i: number) => (
-                  <CaptureCard
-                    key={ev.id}
-                    event={ev}
-                    lang={lang}
-                    sourceText={i === 0 ? m.body : undefined}
-                    attachmentUrl={i === 0 ? m.attachment_url : undefined}
-                    time={i === 0 ? timeLabel(m.created_at) : ''}
-                  />
-                ))}
-              </View>
-            </View>
-          ),
-        }
-      }
-
-      // Plain human message → a real bubble (grouping / avatars / day separators).
+      // NOTE: Delivery/Invoice capture cards are intentionally NOT rendered in the
+      // thread for now (the capture feature isn't being worked on) — a photo
+      // should be the face of the message, not buried behind a "Show proof" card.
+      // The events are still captured server-side (recoverable later); we just
+      // render every message as a plain bubble: a photo attachment shows as the
+      // face, text shows as text — WhatsApp-style, with grouping/avatars/day-seps.
       return { kind: 'bubble', key: m.id, message: m }
     })
 
