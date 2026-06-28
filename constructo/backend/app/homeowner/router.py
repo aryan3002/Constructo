@@ -377,10 +377,14 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
                 403, "phone_mismatch", "This invite was issued to a different phone number."
             )
 
-    # Find-or-create the homeowner user by phone.
+    # Find-or-create the homeowner user by phone — match across equivalent formats
+    # (like login) so re-joining with a differently-typed number resolves to the
+    # SAME user instead of creating a duplicate and tripping the re-bind guard.
     user = (
-        await session.execute(select(User).where(User.phone == body.phone))
-    ).scalar_one_or_none()
+        await session.execute(
+            select(User).where(User.phone.in_(phone_candidates(body.phone)))
+        )
+    ).scalars().first()
     if user is None:
         user = User(company_id=site.company_id, phone=body.phone, role=UserRole.homeowner)
         session.add(user)

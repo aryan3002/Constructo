@@ -37,6 +37,26 @@ async def test_join_accepts_the_invited_phone(client, factory, db_session):
     assert resp.status_code == 200
 
 
+async def test_join_rejoin_with_different_phone_format_is_same_user(client, factory, db_session):
+    # Re-redeeming as the SAME person typing a different format (+91… vs bare
+    # 10-digit) must resolve to the same user, not 409 / a duplicate account.
+    company = await factory.company()
+    site = await factory.site(company)
+    await _invite(db_session, site, "jb-rejoin", phone="+919812345678")
+
+    first = await client.post(
+        "/api/v1/homeowner/join",
+        json={"join_code": "jb-rejoin", "phone": "+919812345678", "otp": "000000"},
+    )
+    assert first.status_code == 200
+
+    again = await client.post(
+        "/api/v1/homeowner/join",
+        json={"join_code": "jb-rejoin", "phone": "9812345678", "otp": "000000"},
+    )
+    assert again.status_code == 200
+
+
 async def test_join_open_invite_without_phone_still_works(client, factory, db_session):
     company = await factory.company()
     site = await factory.site(company)
