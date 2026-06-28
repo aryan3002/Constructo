@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
@@ -106,6 +106,11 @@ _BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
 _DESIGN_MAX_MEDIA_BYTES = 15 * 1024 * 1024  # 15 MB, same ceiling as chat media
 _DESIGN_MEDIA_EXT = {"image": "jpg", "document": "bin"}
 _DESIGN_MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/octet-stream"}
+
+
+def _norm_area_key(key: str | None) -> str | None:
+    """Normalize an area key for tolerant matching (lowercase, spaces->underscores)."""
+    return key.strip().lower().replace(" ", "_") if key else None
 
 
 def _reference_out(ref: ProfilerReference, storage: Storage) -> ReferenceOut:
@@ -741,13 +746,17 @@ async def list_presets(
     """Curated designer preset inspiration for an area kind (catalog, not site
     data — any authenticated user). area_key NULL presets apply to any area of
     that kind."""
-    stmt = select(ProfilerPreset).where(ProfilerPreset.area_kind == area_kind)
-    if area_key is not None:
-        stmt = stmt.where(
-            or_(ProfilerPreset.area_key == area_key, ProfilerPreset.area_key.is_(None))
-        )
-    stmt = stmt.order_by(ProfilerPreset.sort, ProfilerPreset.title)
+    stmt = (
+        select(ProfilerPreset)
+        .where(ProfilerPreset.area_kind == area_kind)
+        .order_by(ProfilerPreset.sort, ProfilerPreset.title)
+    )
     rows = (await session.execute(stmt)).scalars().all()
+    # Match area_key tolerant of the space/underscore convention difference
+    # (catalog "master bedroom" vs area "master_bedroom"); NULL applies to any.
+    want = _norm_area_key(area_key)
+    if want is not None:
+        rows = [p for p in rows if p.area_key is None or _norm_area_key(p.area_key) == want]
     storage = get_storage()
     out: list[PresetOut] = []
     for p in rows:
@@ -1209,7 +1218,10 @@ async def get_brief_rendering(
     ).scalars().first()
     if rendering is None:
         raise AppError(404, "not_found", "Rendering not found")
-    return BriefRenderingOut.model_validate(rendering)
+    out = BriefRenderingOut.model_validate(rendering)
+    out.state = brief.state.value if hasattr(brief.state, "value") else brief.state
+    out.version = brief.version
+    return out
 
 
 @router.get("/briefs/{brief_id}/approvals", response_model=list[BriefApprovalOut])

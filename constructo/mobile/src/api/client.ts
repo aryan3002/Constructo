@@ -442,6 +442,9 @@ export interface ProfilerBriefRendering {
   area_id: string | null
   content_json: Record<string, unknown>
   created_at: string
+  /** The owning brief's lifecycle state + version (drives the right action). */
+  state: string | null
+  version: number | null
 }
 export interface ProfilerClarification {
   id: string

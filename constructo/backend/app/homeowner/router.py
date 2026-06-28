@@ -31,6 +31,7 @@ from app.approvals.state_machine import DecisionAction
 from app.auth.deps import get_current_user
 from app.auth.jwt import create_access_token
 from app.auth.otp import assert_otp_valid
+from app.auth.phone import phone_candidates
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
@@ -366,14 +367,36 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
     if site is None:
         raise AppError(404, "not_found", "Property no longer exists")
 
-    # Find-or-create the homeowner user by phone.
+    # Bind only to the invited identity: if the contractor named a phone for this
+    # invite, the OTP-verified caller must BE that phone (across equivalent
+    # formats). Otherwise a forwarded/leaked join link could be redeemed by anyone.
+    if member.phone is not None:
+        invited = set(phone_candidates(member.phone))
+        if not (set(phone_candidates(body.phone)) & invited):
+            raise AppError(
+                403, "phone_mismatch", "This invite was issued to a different phone number."
+            )
+
+    # Find-or-create the homeowner user by phone — match across equivalent formats
+    # (like login) so re-joining with a differently-typed number resolves to the
+    # SAME user instead of creating a duplicate and tripping the re-bind guard.
     user = (
-        await session.execute(select(User).where(User.phone == body.phone))
-    ).scalar_one_or_none()
+        await session.execute(
+            select(User).where(User.phone.in_(phone_candidates(body.phone)))
+        )
+    ).scalars().first()
     if user is None:
         user = User(company_id=site.company_id, phone=body.phone, role=UserRole.homeowner)
         session.add(user)
         await session.flush()
+
+    # Don't silently re-point an already-claimed membership to a different account.
+    if (
+        member.status == MemberStatus.active
+        and member.user_id is not None
+        and member.user_id != user.id
+    ):
+        raise AppError(409, "already_claimed", "This invite has already been used.")
 
     member.user_id = user.id
     member.status = MemberStatus.active

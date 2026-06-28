@@ -74,3 +74,22 @@ async def test_settlement_endpoint_flags_advance(client, db_session, world):
     body = resp.json()
     assert Decimal(body["unadjusted_advance"]) == Decimal("20000")
     assert body["warn"] is True
+
+
+async def test_settlement_survives_non_numeric_invoice_amount(client, db_session, world):
+    # A comma-formatted / unreadable amount (from extraction or manual entry) must
+    # not 500 the whole Advance Guard for the company.
+    company, owner, site = world
+    db_session.add(
+        SiteEventModel(
+            site_id=site.id, event_type="invoice_received", occurred_on=date.today(),
+            summary="inv", fields={"vendor": "Sharma Traders", "amount": "72,000"},
+            confidence=1.0, needs_clarification=False, source_message_ids=[],
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get(
+        "/api/v1/payments/settlement?counterparty=Sharma%20Traders", headers=auth(owner)
+    )
+    assert resp.status_code == 200, resp.text

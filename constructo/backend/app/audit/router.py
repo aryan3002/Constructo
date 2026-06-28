@@ -391,6 +391,21 @@ async def add_finding(
     session: AsyncSession = Depends(get_session),
 ) -> FindingOut:
     audit = await _scoped_audit_or_error(session, user, audit_id)
+    # Idempotent: a retry / double-tap of the same defect (a non-transactional
+    # submit loop re-runs every addFinding) must not duplicate an owner-visible
+    # finding. Reuse an existing OPEN finding with the same (title, location).
+    existing = (
+        await session.execute(
+            select(AuditFinding).where(
+                AuditFinding.audit_id == audit.id,
+                AuditFinding.title == body.title,
+                AuditFinding.location == body.location,
+                AuditFinding.status == FindingStatus.open,
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        return _finding_out(existing)
     finding = AuditFinding(
         audit_id=audit.id,
         company_id=audit.company_id,

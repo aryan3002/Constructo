@@ -11,7 +11,7 @@ in/out/net totals per site or across all visible sites, and any payment can be
 linked to the SiteEvent (e.g. a payment_request) it settles.
 """
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -51,6 +51,18 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 # they aren't individually assigned to. Mirrors the owner/accountant "sees all
 # payments" rule in the founder spec.
 _ALL_PAYMENTS_ROLES = {UserRole.owner, UserRole.pm, UserRole.accountant}
+
+
+def _safe_amount(value) -> Decimal:
+    """Coerce a free-form JSONB invoice amount to Decimal; unreadable -> 0 (never
+    raise). Mirrors scripts/enrich_payments._to_decimal so one bad/comma-formatted
+    row can't 500 the whole company's Advance Guard."""
+    if value is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
 
 
 def _parse_limit(limit: int) -> int:
@@ -268,7 +280,7 @@ async def settlement(
     invoices = [
         CounterpartyInvoice(
             vendor=e.fields.get("vendor"),
-            amount=Decimal(str(e.fields.get("amount") or 0)),
+            amount=_safe_amount(e.fields.get("amount")),
         )
         for e in (await session.execute(inv_stmt)).scalars().all()
     ]

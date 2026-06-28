@@ -94,9 +94,16 @@ az containerapp update -n $APP -g $RG \
 ### Phase 0 — close the auth hole (do NOT skip on any public/pilot deploy)
 The dev OTP `000000` is open by default so local dev / CI work out of the box. On
 any internet-reachable deploy you MUST close it:
+- **`APP_ENV=prod`** — turns the Phase-0 lock from a checklist into a **code guard**:
+  with it set, the app *refuses to boot* if auth is world-open (dev OTP on with an
+  empty allowlist) or if `JWT_SECRET` is the public dev default / too short. Set
+  this on every real deploy so the secure posture can't silently regress.
 - **`DEV_OTP_ENABLED=false`** — refuses the `000000` bypass. (With no SMS provider
   wired yet, this makes login impossible *unless* you also keep the dev OTP on
   behind an allowlist — see below. Pick one.)
+- **`JWT_SECRET=<random ≥32 bytes>`** — never ship the in-repo dev secret; anyone
+  who knows it can forge admin tokens. With `APP_ENV=prod` the boot guard enforces
+  this.
 - **`AUTH_PHONE_ALLOWLIST=["+91…","+91…"]`** — restricts login to your known pilot
   numbers, matched across phone formats. For a **private pilot** the simplest
   secure posture is: keep `DEV_OTP_ENABLED=true` *and* set the allowlist to just

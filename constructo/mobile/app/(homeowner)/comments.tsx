@@ -26,7 +26,7 @@ import type { PhotoComment } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
-import { Body, BodyStrong, MonoSm, ScreenLoader, Small, SubHeader, useInputStyle } from '../../src/ui'
+import { Body, BodyStrong, MonoSm, ScreenLoader, Small, SubHeader, useInputStyle, useToast } from '../../src/ui'
 
 const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
   primary_owner: { en: 'Owner', hi: 'मालिक' },
@@ -51,6 +51,7 @@ export default function PhotoCommentsScreen() {
   const { lang } = useT()
   const L = lang === 'hi' ? 'hi' : 'en'
   const t = STR[L]
+  const toast = useToast()
   const { theme } = useTheme()
   const c = theme.colors
   const router = useRouter()
@@ -74,6 +75,9 @@ export default function PhotoCommentsScreen() {
       setText('')
       void qc.invalidateQueries({ queryKey: ['photo-comments', photoId] })
     },
+    // The composer text is preserved (only cleared on success), so the user can
+    // retry — but they MUST be told it failed (was a silent no-op before).
+    onError: () => toast(t.failed),
   })
 
   const comments: PhotoComment[] = q.data ?? []

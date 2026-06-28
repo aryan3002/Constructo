@@ -50,7 +50,10 @@ def aggregate_dimension_scores(rankings: list[dict], attributes: list[dict]) -> 
                 scores[dim][v] = scores[dim].get(v, 0.0) + w
     for r in rankings:
         for tag in (r.get("tags") or {}).get("negative", []):
-            mapping = NEGATIVE_TAG_DIMENSION.get(tag)
+            # Normalize the app's human label ("Too dark") to the reducer key
+            # ("too_dark") so the negative quick-tags actually take effect.
+            tag_key = str(tag).strip().lower().replace(" ", "_")
+            mapping = NEGATIVE_TAG_DIMENSION.get(tag_key)
             if mapping:
                 dim, v = mapping
                 scores.setdefault(dim, {})
