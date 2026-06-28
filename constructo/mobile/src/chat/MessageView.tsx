@@ -11,7 +11,7 @@
  * - {@link MessageBubble}: a plain chat bubble (own = amber bg, other = card bg)
  *   with an optional attachment image, body text and a Mono timestamp.
  */
-import { useState, type ComponentProps } from 'react'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { Image, LayoutAnimation, Platform, Pressable, UIManager, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
@@ -383,6 +383,14 @@ export function MessageBubble({
   // Attachment image load state — show a graceful placeholder instead of a blank
   // box when the image is loading or its (possibly expired presigned) URL fails.
   const [imgState, setImgState] = useState<'loading' | 'ok' | 'failed'>('loading')
+  // Reset load state when the URL changes. Without this, a bubble that first
+  // rendered from cache with an EXPIRED presigned URL fails (imgState='failed',
+  // Image unmounted) and never retries — so the FRESH URL delivered by the
+  // thread's on-focus refresh is never attempted and the photo stays a blank
+  // placeholder forever. Re-arming on URL change lets the fresh URL load.
+  useEffect(() => {
+    setImgState('loading')
+  }, [attachmentUrl])
 
   // Own bubble: neev keeps its translucent amber (unchanged); daylight uses
   // the warm sage chip the homeowner DaylightBubble used, so the look is preserved
