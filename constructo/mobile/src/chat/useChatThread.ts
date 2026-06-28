@@ -21,6 +21,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 import NetInfo from '@react-native-community/netinfo'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -324,6 +325,27 @@ export function useChatThread(
     enabled: !!addrKey,
   })
   const messages = useMemo(() => q.data ?? [], [q.data])
+
+  // Re-refresh presigned attachment URLs whenever the thread regains focus, not
+  // only on first mount. The mount-only refresh (urlsRefreshed) misses a thread
+  // that stays mounted — a contractor tab the user returns to, or a screen kept
+  // alive by Fast Refresh — so its photos' ~1h presigns expire and go blank
+  // until a full remount. On every focus after the first, force the next sync to
+  // be a full refresh (after_seq=0). The first focus is skipped because the
+  // initial mount query already does a full refresh.
+  const refetchRef = useRef(q.refetch)
+  refetchRef.current = q.refetch
+  const firstFocus = useRef(true)
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false
+        return
+      }
+      urlsRefreshed.current = false
+      void refetchRef.current()
+    }, []),
+  )
 
   // Seed the feed from the persisted cache the instant the thread mounts, before
   // the network resolves (offline-first). Done as an effect (not initialData)
