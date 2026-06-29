@@ -122,3 +122,5 @@ cd constructo/mobile  && npm run typecheck && npm test          # mobile
 ---
 
 *Pilot-stage project — no open-source license yet. The product strategy, AI-native specs, and design system live in a separate Obsidian vault.*
+
+<!-- 2026-06-28: chat photo reliability — load, send, and photo-as-face fixes shipped (#226–#230). -->
