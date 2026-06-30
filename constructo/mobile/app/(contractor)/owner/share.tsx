@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useLocalSearchParams } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { contractor } from '../../../src/api/contractor'
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -43,6 +44,8 @@ export default function ShareWithOwner() {
     setDrafts((d) => [...d, ...result.assets.map((a) => ({ uri: a.uri, captionSent: false, state: 'new' as const }))])
   }
 
+  const insets = useSafeAreaInsets()
+
   const setRoom = (i: number, room: string) =>
     setDrafts((d) => d.map((x, j) => (j === i ? { ...x, room } : x)))
 
@@ -54,7 +57,9 @@ export default function ShareWithOwner() {
       try {
         setDrafts((s) => s.map((x, j) => (j === i ? { ...x, state: 'uploading' } : x)))
         const key = await uploadSitePhoto(siteId, drafts[i].uri)
-        const enrich = await contractor.enrichPhoto({ site_id: siteId, image_url: key, room_tag: drafts[i].room })
+        const enrich = await contractor
+          .enrichPhoto({ site_id: siteId, image_url: key, room_tag: drafts[i].room })
+          .catch(() => ({ caption_draft: null, room_hint: null }))
         const room = drafts[i].room ?? defaultRoomFor(enrich.room_hint, SPACES)
         const photo = await contractor.publishPhoto({ site_id: siteId, image_url: key, room_tag: room })
         setDrafts((s) =>
@@ -77,7 +82,7 @@ export default function ShareWithOwner() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: SPACE.md }}>
+    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: SPACE.md, paddingTop: insets.top + SPACE.sm }}>
       <Text style={{ color: c.text, fontSize: 22, fontWeight: '700', marginBottom: SPACE.sm }}>
         {lang === 'hi' ? 'घर वाले को भेजें' : 'Share with owner'}
       </Text>

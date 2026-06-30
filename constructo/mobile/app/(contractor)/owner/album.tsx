@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { contractor, type ContractorPhoto } from '../../../src/api/contractor'
@@ -20,6 +21,7 @@ export default function ContractorAlbum() {
   const { siteId } = useLocalSearchParams<{ siteId: string }>()
   const [view, setView] = useState<AlbumView>('all')
   const qc = useQueryClient()
+  const insets = useSafeAreaInsets()
 
   const query = useQuery({
     queryKey: ['contractor-photos', siteId, view],
@@ -48,7 +50,7 @@ export default function ContractorAlbum() {
   ]
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: SPACE.md }}>
+    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: SPACE.md, paddingTop: insets.top + SPACE.sm }}>
       <View style={{ flexDirection: 'row', marginBottom: SPACE.md }}>
         {tabs.map((t) => (
           <Pressable key={t.k} onPress={() => setView(t.k)} style={{ paddingHorizontal: 12, paddingVertical: 8, marginRight: 6, borderRadius: 999, backgroundColor: view === t.k ? c.accent : c.paper }}>
