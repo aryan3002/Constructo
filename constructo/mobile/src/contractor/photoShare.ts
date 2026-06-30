@@ -16,13 +16,18 @@ export async function uploadSitePhoto(siteId: string, localUri: string): Promise
   const presign = await contractor.presignPhoto(siteId)
   const file: UploadFile = { uri: localUri, name: presign.key.split('/').pop() ?? 'photo.jpg', type: IMAGE_CONTENT_TYPE }
   if (presign.upload_mode === 'presigned' && presign.put_url) {
-    const blob = await (await fetch(file.uri)).blob()
-    const res = await fetch(presign.put_url, {
-      method: 'PUT',
-      headers: { 'Content-Type': IMAGE_CONTENT_TYPE },
-      body: blob,
-    })
-    if (res.ok) return presign.key
+    try {
+      const blob = await (await fetch(file.uri)).blob()
+      const res = await fetch(presign.put_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': IMAGE_CONTENT_TYPE },
+        body: blob,
+      })
+      if (res.ok) return presign.key
+    } catch {
+      // network / blob-read failure on one bar → fall through to multipart,
+      // which self-heals (server sets the content-type, no signature to mismatch).
+    }
   }
   const form = new FormData()
   form.append('file', file as unknown as Blob)
