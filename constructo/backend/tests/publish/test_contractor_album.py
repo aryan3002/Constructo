@@ -105,3 +105,32 @@ async def test_enrich_returns_advisory_draft_and_persists_nothing(
     assert "caption_draft" in body and "room_hint" in body
     after = len((await db_session.execute(select(PublishedPhoto))).all())
     assert after == before
+
+
+async def test_publish_no_caption_survives_vision_failure(client, ctx):
+    # Regression (prod 500): publish with caption=None drafts via vision; a
+    # vision failure (real provider can't fetch the bare key, model down, etc.)
+    # must NOT 500 — the draft is advisory. Before the fix this raised → HTTP 500.
+    from app.homeowner.ai import get_llm
+    from app.main import app
+
+    class _BoomLLM:
+        async def complete(self, *a, **k):
+            raise RuntimeError("vision unavailable")
+
+        async def complete_vision(self, *a, **k):
+            raise RuntimeError("vision unavailable")
+
+    app.dependency_overrides[get_llm] = lambda: _BoomLLM()
+    try:
+        res = await client.post(
+            "/api/v1/publish/photo",
+            json={"site_id": str(ctx.site.id), "image_url": "chat/x/a.jpg", "room_tag": "Kitchen"},
+            headers=_auth(ctx.owner),
+        )
+        assert res.status_code == 201, res.text
+        body = res.json()
+        assert body["caption"] is None
+        assert body["draft_caption"] is None
+    finally:
+        app.dependency_overrides.pop(get_llm, None)

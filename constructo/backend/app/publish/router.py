@@ -150,12 +150,21 @@ async def publish_photo(
             event = await session.get(SiteEventModel, body.source_event_id)
             summary = event.summary if event is not None else None
         if summary or body.image_url:
-            draft = await draft_caption(
-                llm,
-                summary=summary or "",
-                image_url=body.image_url,
-                room_tag=body.room_tag,
+            # Resolve a bare storage key to a fetchable URL — a real vision
+            # provider (prod) cannot fetch a bare R2 key. And the draft is
+            # advisory: a vision failure must NEVER 500 the publish.
+            image_for_vision = (
+                get_storage().url_for(body.image_url) if body.image_url else None
             )
+            try:
+                draft = await draft_caption(
+                    llm,
+                    summary=summary or "",
+                    image_url=image_for_vision,
+                    room_tag=body.room_tag,
+                )
+            except Exception:
+                draft = None
 
     photo = PublishedPhoto(
         site_id=body.site_id,
@@ -195,7 +204,9 @@ async def enrich_photo(
     Fake today, so this is a suggestion only — never auto-applied."""
     await _assert_site(session, user, body.site_id)
     try:
-        result = await caption_photo(body.image_url, llm=llm, user_hint=body.room_tag or "")
+        # Vision needs a fetchable URL, not a bare R2 key (see publish_photo).
+        image_for_vision = get_storage().url_for(body.image_url) or body.image_url
+        result = await caption_photo(image_for_vision, llm=llm, user_hint=body.room_tag or "")
     except Exception:
         return EnrichOut(caption_draft=None, room_hint=None)
     return EnrichOut(
