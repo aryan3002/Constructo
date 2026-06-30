@@ -1,5 +1,4 @@
 import { uploadMultipart, type UploadFile } from '../api/client'
-import { contractor } from '../api/contractor'
 
 const IMAGE_CONTENT_TYPE = 'image/jpeg'
 
@@ -10,25 +9,12 @@ export function defaultRoomFor(hint: string | null | undefined, spaces: string[]
   return spaces.find((s) => s.toLowerCase() === hint.toLowerCase())
 }
 
-/** Upload one local image to R2 via the presign path (multipart fallback) and
- *  return the stored bare key to pass as `image_url` to publishPhoto. */
+/** Upload one local image via MULTIPART (server streams it to R2). Not the
+ *  presigned-PUT path: FormData streams the file so we never read the whole
+ *  image into JS memory (the blob read OOM-crashed on large photos), and there
+ *  is no R2 content-type signature to mismatch. Returns the stored bare key. */
 export async function uploadSitePhoto(siteId: string, localUri: string): Promise<string> {
-  const presign = await contractor.presignPhoto(siteId)
-  const file: UploadFile = { uri: localUri, name: presign.key.split('/').pop() ?? 'photo.jpg', type: IMAGE_CONTENT_TYPE }
-  if (presign.upload_mode === 'presigned' && presign.put_url) {
-    try {
-      const blob = await (await fetch(file.uri)).blob()
-      const res = await fetch(presign.put_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': IMAGE_CONTENT_TYPE },
-        body: blob,
-      })
-      if (res.ok) return presign.key
-    } catch {
-      // network / blob-read failure on one bar → fall through to multipart,
-      // which self-heals (server sets the content-type, no signature to mismatch).
-    }
-  }
+  const file: UploadFile = { uri: localUri, name: 'photo.jpg', type: IMAGE_CONTENT_TYPE }
   const form = new FormData()
   form.append('file', file as unknown as Blob)
   form.append('site_id', siteId)

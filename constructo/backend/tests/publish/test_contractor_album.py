@@ -134,3 +134,18 @@ async def test_publish_no_caption_survives_vision_failure(client, ctx):
         assert body["draft_caption"] is None
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_publish_with_draft_false_skips_vision(client, ctx, fake_llm):
+    # The contractor app publishes with ?with_draft=false so the share returns
+    # instantly (no vision in the critical path); the draft is fetched via
+    # /photo/enrich separately. draft_caption must be None even though a (fake)
+    # LLM is wired.
+    res = await client.post(
+        "/api/v1/publish/photo?with_draft=false",
+        json={"site_id": str(ctx.site.id), "image_url": "chat/x/a.jpg", "room_tag": "Kitchen"},
+        headers=_auth(ctx.owner),
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["draft_caption"] is None
+    assert res.json()["caption"] is None

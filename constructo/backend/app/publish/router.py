@@ -123,11 +123,16 @@ async def _space_in_scope(session: AsyncSession, user: User, space_id: UUID) -> 
 @router.post("/photo", response_model=PhotoOut, status_code=201)
 async def publish_photo(
     body: PublishPhotoIn,
+    with_draft: bool = True,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> PhotoOut:
     """Curate a photo into the homeowner feed (optionally promoted from an event).
+
+    ``with_draft=false`` skips the synchronous AI caption draft so the publish
+    returns immediately (the contractor app fetches the suggestion via
+    ``/photo/enrich`` separately) — a slow vision call must never delay the share.
 
     Honest-AI caption gate (Slice V / red-team): a CONTRACTOR-supplied caption is
     a reviewed, grounded fact → it is published verbatim and the homeowner sees
@@ -144,7 +149,7 @@ async def publish_photo(
 
     caption = body.caption  # contractor-reviewed → homeowner-visible
     draft = None  # AI suggestion → contractor reviews, never auto-published
-    if caption is None:
+    if with_draft and caption is None:
         summary = body.event_summary
         if summary is None and body.source_event_id is not None:
             event = await session.get(SiteEventModel, body.source_event_id)

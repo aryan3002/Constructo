@@ -11,7 +11,7 @@ import { contractor } from '../../../src/api/contractor'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../src/theme/tokens'
-import { defaultRoomFor, uploadSitePhoto } from '../../../src/contractor/photoShare'
+import { uploadSitePhoto } from '../../../src/contractor/photoShare'
 
 interface Draft {
   uri: string
@@ -36,7 +36,7 @@ export default function ShareWithOwner() {
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!lib.granted) return
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.6,
+      quality: 0.4,
       allowsMultipleSelection: true,
       selectionLimit: 12,
     })
@@ -57,16 +57,20 @@ export default function ShareWithOwner() {
       try {
         setDrafts((s) => s.map((x, j) => (j === i ? { ...x, state: 'uploading' } : x)))
         const key = await uploadSitePhoto(siteId, drafts[i].uri)
-        const enrich = await contractor
-          .enrichPhoto({ site_id: siteId, image_url: key, room_tag: drafts[i].room })
-          .catch(() => ({ caption_draft: null, room_hint: null }))
-        const room = drafts[i].room ?? defaultRoomFor(enrich.room_hint, SPACES)
-        const photo = await contractor.publishPhoto({ site_id: siteId, image_url: key, room_tag: room })
-        setDrafts((s) =>
-          s.map((x, j) =>
-            j === i ? { ...x, room, photoId: photo.id, captionDraft: enrich.caption_draft, state: 'shared' } : x,
-          ),
+        const room = drafts[i].room
+        // Publish FAST (draft:false -> no vision in the critical path) and mark
+        // Shared immediately; the AI caption is fetched async below, never blocking.
+        const photo = await contractor.publishPhoto(
+          { site_id: siteId, image_url: key, room_tag: room },
+          { draft: false },
         )
+        setDrafts((s) => s.map((x, j) => (j === i ? { ...x, room, photoId: photo.id, state: 'shared' } : x)))
+        contractor
+          .enrichPhoto({ site_id: siteId, image_url: key, room_tag: room })
+          .then((e) =>
+            setDrafts((s) => s.map((x, j) => (j === i ? { ...x, captionDraft: e.caption_draft } : x))),
+          )
+          .catch(() => {})
       } catch {
         setDrafts((s) => s.map((x, j) => (j === i ? { ...x, state: 'error' } : x)))
       }

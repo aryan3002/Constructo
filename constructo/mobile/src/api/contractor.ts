@@ -34,13 +34,20 @@ export const contractor = {
       body: JSON.stringify(input),
     }),
 
-  publishPhoto: (input: {
-    site_id: string
-    image_url: string
-    caption?: string
-    room_tag?: string
-    milestone_id?: string
-  }) => request<Photo>('/api/v1/publish/photo', { method: 'POST', body: JSON.stringify(input) }),
+  publishPhoto: (
+    input: {
+      site_id: string
+      image_url: string
+      caption?: string
+      room_tag?: string
+      milestone_id?: string
+    },
+    opts?: { draft?: boolean },
+  ) =>
+    request<Photo>(
+      `/api/v1/publish/photo${q({ with_draft: opts?.draft === false ? 'false' : undefined })}`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
 
   publishedPhotos: (siteId: string, view: 'all' | 'room' | 'milestone' = 'all') =>
     request<ContractorPhoto[]>(`/api/v1/publish/photos${q({ site_id: siteId, view })}`),
