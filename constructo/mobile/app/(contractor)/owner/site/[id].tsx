@@ -197,7 +197,7 @@ export default function SiteDetail() {
         </View>
       ) : null}
 
-      {/* Tamper-evident dispute pack (3.6) — per-counterparty advance case. */}
+      {/* Contractor photo album — the homeowner feed for this site (off-tab). */}
       <Button
         title={t.sitePhotos}
         variant="secondary"
@@ -207,6 +207,7 @@ export default function SiteDetail() {
         style={{ marginTop: SPACE.xs }}
       />
 
+      {/* Tamper-evident dispute pack (3.6) — per-counterparty advance case. */}
       <Button
         title={t.disputePack}
         variant="secondary"
