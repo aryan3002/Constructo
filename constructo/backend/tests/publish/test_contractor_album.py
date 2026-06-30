@@ -91,7 +91,9 @@ async def test_album_requires_site_scope(client, ctx, factory, fake_llm):
     assert res.status_code in (403, 404), res.text
 
 
-async def test_enrich_returns_advisory_draft_and_persists_nothing(client, ctx, db_session, fake_llm):
+async def test_enrich_returns_advisory_draft_and_persists_nothing(
+    client, ctx, db_session, fake_llm
+):
     before = len((await db_session.execute(select(PublishedPhoto))).all())
     res = await client.post(
         "/api/v1/publish/photo/enrich",
