@@ -192,6 +192,8 @@ async def edit_photo(
     await _assert_site(session, user, photo.site_id)
     _assert_can_manage(photo, user)
     for key, value in body.model_dump(exclude_unset=True).items():
+        if key == "is_starred" and value is None:
+            continue  # is_starred is NOT NULL; explicit null is a no-op, not a clear
         setattr(photo, key, value)
     await session.commit()
     await session.refresh(photo)

@@ -37,9 +37,11 @@ async def test_owner_edits_caption_and_pin(client, ctx, fake_llm):
     assert item["caption"] == "Kitchen plaster done"
 
 
-async def test_crew_cannot_edit_others_photo(client, ctx, factory, fake_llm):
+async def test_crew_cannot_edit_others_photo(client, ctx, factory, db_session, fake_llm):
     crew = await factory.user(company=ctx.company, role=UserRole.supervisor)
-    pid = await _publish(client, ctx, ctx.owner)
+    db_session.add(SiteAssignment(site_id=ctx.site.id, user_id=crew.id))
+    await db_session.flush()
+    pid = await _publish(client, ctx, ctx.owner)   # owner publishes, NOT the crew
     res = await client.patch(
         f"/api/v1/publish/photo/{pid}", json={"caption": "hi"}, headers=_auth(crew)
     )
@@ -57,3 +59,12 @@ async def test_crew_can_edit_own_photo(client, ctx, factory, db_session, fake_ll
     )
     assert res.status_code == 200, res.text
     assert res.json()["room_tag"] == "kitchen"
+
+
+async def test_edit_explicit_null_is_starred_is_noop(client, ctx, fake_llm):
+    pid = await _publish(client, ctx, ctx.owner)
+    res = await client.patch(
+        f"/api/v1/publish/photo/{pid}", json={"is_starred": None}, headers=_auth(ctx.owner)
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["is_starred"] is False
