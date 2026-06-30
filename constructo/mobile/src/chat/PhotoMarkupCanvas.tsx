@@ -22,6 +22,7 @@ import { Feather } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Circle, G, Line, Path } from 'react-native-svg'
 import { captureRef } from 'react-native-view-shot'
+import Constants, { ExecutionEnvironment } from 'expo-constants'
 
 import { SPACE } from '../theme/tokens'
 
@@ -43,12 +44,6 @@ const COLORS = [
   { key: 'question', value: '#3B7DD8' }, // blue — a question
   { key: 'approval', value: '#2F8F6F' }, // green — an approval
 ]
-
-// react-native-view-shot is a NATIVE module. In Expo Go it does NOT throw — it
-// "succeeds" but writes a tiny (~1.3KB) broken JPEG that uploads as a blank/corrupt
-// image. A real full-screen flatten is hundreds of KB, so any capture under this
-// floor is treated as broken and we fall back to the unannotated original.
-const MIN_CAPTURE_BYTES = 20000
 
 function pathFromPts(pts: Pt[]): string {
   if (pts.length === 0) return ''
@@ -160,20 +155,22 @@ export function PhotoMarkupCanvas({
       onDone(uri)
       return
     }
+    // Markup flatten (react-native-view-shot) is a NATIVE module: it works in a
+    // real build (dev client / standalone) but NOT in Expo Go, where captureRef
+    // returns a tiny broken JPEG. Detect the runtime DIRECTLY — the previous
+    // `fetch().blob().size` check was unreliable (blob.size is often wrong for
+    // local files in RN) and wrongly degraded VALID dev-build captures. In Expo
+    // Go: skip the capture, send the original, let the caller alert. In a real
+    // build: trust the capture (view-shot works there).
+    if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+      onCaptureFail?.()
+      onDone(uri)
+      return
+    }
     setSaving(true)
     let outUri = uri
     try {
-      const captured = await captureRef(shotRef, { format: 'jpg', quality: 0.9 })
-      // Validate the captured bytes (the same read the uploader does). In Expo Go
-      // view-shot returns a tiny broken JPEG instead of throwing, so a size check —
-      // not just a try/catch — is what prevents uploading a blank markup image.
-      const blob = await (await fetch(captured)).blob()
-      if (captured && blob.size >= MIN_CAPTURE_BYTES) {
-        outUri = captured
-      } else {
-        outUri = uri
-        onCaptureFail?.()
-      }
+      outUri = await captureRef(shotRef, { format: 'jpg', quality: 0.9 })
     } catch {
       outUri = uri
       onCaptureFail?.()
