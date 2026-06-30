@@ -28,6 +28,14 @@ export default function ContractorAlbum() {
   })
   const photos: ContractorPhoto[] = query.data ?? []
 
+  if (!siteId) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: c.textMute }}>{lang === 'hi' ? 'कोई साइट नहीं चुनी' : 'No site selected'}</Text>
+      </View>
+    )
+  }
+
   const togglePin = async (p: ContractorPhoto) => {
     await contractor.editPhoto(p.id, { is_starred: !p.is_starred })
     qc.invalidateQueries({ queryKey: ['contractor-photos', siteId] })
@@ -60,7 +68,7 @@ export default function ContractorAlbum() {
           <View style={{ padding: SPACE.sm }}>
             {p.caption ? <Text style={{ color: c.text }}>{p.caption}</Text> : <Text style={{ color: c.textMute, fontStyle: 'italic' }}>{lang === 'hi' ? 'कोई कैप्शन नहीं' : 'No caption'}</Text>}
             <Text style={{ color: c.textMute, fontSize: 12, marginTop: 4 }}>
-              {p.room_tag ?? (lang === 'hi' ? 'बिना कमरा' : 'Unsorted')} · {lang === 'hi' ? 'भेजा' : 'shared by'} {p.shared_by_name ?? '—'}
+              {p.room_tag ?? (lang === 'hi' ? 'बिना कमरा' : 'Unsorted')} · {lang === 'hi' ? `${p.shared_by_name ?? '—'} द्वारा भेजा` : `shared by ${p.shared_by_name ?? '—'}`}
             </Text>
             <Pressable onPress={() => togglePin(p)} style={{ minHeight: TAP, justifyContent: 'center', marginTop: SPACE.sm }}>
               <Text style={{ color: p.is_starred ? c.accentDeep : c.textMute }}>{p.is_starred ? '★ ' : '☆ '}{lang === 'hi' ? 'पिन' : 'Pin'}</Text>
