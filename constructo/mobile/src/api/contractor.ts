@@ -54,4 +54,7 @@ export const contractor = {
 
   editPhoto: (id: string, patch: { caption?: string; room_tag?: string; is_starred?: boolean }) =>
     request<Photo>(`/api/v1/publish/photo/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+
+  deletePhoto: (id: string) =>
+    request<void>(`/api/v1/publish/photo/${id}`, { method: 'DELETE' }),
 }

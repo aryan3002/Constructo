@@ -2,7 +2,7 @@
  *  with attribution ("shared by") and per-photo pin/edit. Segments: Feed / By
  *  Room / By Milestone. No unshare in v1 — once shared, a photo stays. */
 import { useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,6 +43,23 @@ export default function ContractorAlbum() {
     qc.invalidateQueries({ queryKey: ['contractor-photos', siteId] })
   }
 
+  const removePhoto = (p: ContractorPhoto) =>
+    Alert.alert(
+      lang === 'hi' ? 'फ़ीड से हटाएँ?' : 'Remove from feed?',
+      lang === 'hi' ? 'घर वाले को अब यह फ़ोटो नहीं दिखेगी।' : 'The homeowner will no longer see this photo.',
+      [
+        { text: lang === 'hi' ? 'रद्द' : 'Cancel', style: 'cancel' },
+        {
+          text: lang === 'hi' ? 'हटाएँ' : 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await contractor.deletePhoto(p.id)
+            qc.invalidateQueries({ queryKey: ['contractor-photos', siteId] })
+          },
+        },
+      ],
+    )
+
   const tabs: { k: AlbumView; label: string }[] = [
     { k: 'all', label: lang === 'hi' ? 'फ़ीड' : 'Feed' },
     { k: 'room', label: lang === 'hi' ? 'कमरे' : 'By room' },
@@ -72,9 +89,14 @@ export default function ContractorAlbum() {
             <Text style={{ color: c.textMute, fontSize: 12, marginTop: 4 }}>
               {p.room_tag ?? (lang === 'hi' ? 'बिना कमरा' : 'Unsorted')} · {lang === 'hi' ? `${p.shared_by_name ?? '—'} द्वारा भेजा` : `shared by ${p.shared_by_name ?? '—'}`}
             </Text>
-            <Pressable onPress={() => togglePin(p)} style={{ minHeight: TAP, justifyContent: 'center', marginTop: SPACE.sm }}>
-              <Text style={{ color: p.is_starred ? c.accentDeep : c.textMute }}>{p.is_starred ? '★ ' : '☆ '}{lang === 'hi' ? 'पिन' : 'Pin'}</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', marginTop: SPACE.sm }}>
+              <Pressable onPress={() => togglePin(p)} style={{ minHeight: TAP, justifyContent: 'center', paddingRight: SPACE.lg }}>
+                <Text style={{ color: p.is_starred ? c.accentDeep : c.textMute }}>{p.is_starred ? '★ ' : '☆ '}{lang === 'hi' ? 'पिन' : 'Pin'}</Text>
+              </Pressable>
+              <Pressable onPress={() => removePhoto(p)} style={{ minHeight: TAP, justifyContent: 'center' }}>
+                <Text style={{ color: c.risk }}>{lang === 'hi' ? 'हटाएँ' : 'Remove'}</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       ))}

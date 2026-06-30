@@ -149,3 +149,20 @@ async def test_publish_with_draft_false_skips_vision(client, ctx, fake_llm):
     assert res.status_code == 201, res.text
     assert res.json()["draft_caption"] is None
     assert res.json()["caption"] is None
+
+
+async def test_owner_can_delete_photo(client, ctx, fake_llm):
+    pid = await _publish(client, ctx, ctx.owner)
+    res = await client.delete(f"/api/v1/publish/photo/{pid}", headers=_auth(ctx.owner))
+    assert res.status_code == 204, res.text
+    feed = await client.get("/api/v1/homeowner/photos", headers=_auth(ctx.homeowner))
+    assert all(i["id"] != pid for i in feed.json()["items"])
+
+
+async def test_crew_cannot_delete_others_photo(client, ctx, factory, db_session, fake_llm):
+    crew = await factory.user(company=ctx.company, role=UserRole.supervisor)
+    db_session.add(SiteAssignment(site_id=ctx.site.id, user_id=crew.id))
+    await db_session.flush()
+    pid = await _publish(client, ctx, ctx.owner)  # owner published, not the crew
+    res = await client.delete(f"/api/v1/publish/photo/{pid}", headers=_auth(crew))
+    assert res.status_code == 403, res.text

@@ -242,6 +242,24 @@ async def edit_photo(
     return _photo_out(photo)
 
 
+@router.delete("/photo/{photo_id}", status_code=204)
+async def delete_photo(
+    photo_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Remove a photo from the homeowner feed (owner-any / crew-own) — the safety
+    valve for a wrongly-shared photo. Hard-deletes the published_photos row only;
+    the underlying R2 object is left intact (it may be shared with a chat message)."""
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None:
+        raise AppError(404, "not_found", "Photo not found")
+    await _assert_site(session, user, photo.site_id)
+    _assert_can_manage(photo, user)
+    await session.delete(photo)
+    await session.commit()
+
+
 @router.get("/photos", response_model=list[ContractorPhotoOut])
 async def list_published_photos(
     site_id: UUID,
