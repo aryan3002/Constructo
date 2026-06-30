@@ -22,9 +22,11 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
+from app.extraction.vision import caption_photo
 from app.homeowner.ai import draft_caption, draft_weekly_summary, get_llm
 from app.homeowner.quiet import confirm_quiet_period
 from app.homeowner.router import (
+    _bucket_photos_by_milestone,
     _member_out,
     _milestone_out,
     _photo_out,
@@ -58,15 +60,20 @@ from app.models import (
     User,
     WeeklySummary,
 )
+from app.models.user import UserRole
 from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    ContractorPhotoOut,
     DrawingPresignIn,
     DrawingPresignOut,
     DrawingRegisterOut,
+    EnrichIn,
+    EnrichOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
+    PhotoPatchIn,
     PropertyCreateIn,
     PropertyUpdateIn,
     PublishDrawingIn,
@@ -93,6 +100,13 @@ async def _assert_site(session: AsyncSession, user: User, site_id: UUID) -> None
     if site is None or site.company_id != user.company_id:
         raise AppError(404, "not_found", "Site not found")
     raise AppError(403, "forbidden", "Site not in scope")
+
+
+def _assert_can_manage(photo: PublishedPhoto, user: User) -> None:
+    """Owner manages any shared photo; a crew member manages only their own."""
+    if user.role == UserRole.owner or photo.published_by == user.id:
+        return
+    raise AppError(403, "forbidden", "Only the owner or the original sharer can change this photo")
 
 
 async def _space_in_scope(session: AsyncSession, user: User, space_id: UUID) -> Space:
@@ -167,6 +181,80 @@ async def publish_photo(
     )
     out = _photo_out(photo)
     return out.model_copy(update={"draft_caption": draft})
+
+
+@router.post("/photo/enrich", response_model=EnrichOut)
+async def enrich_photo(
+    body: EnrichIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> EnrichOut:
+    """Advisory pre-fill for the Share sheet: a caption DRAFT + a room hint from
+    the image. Persists nothing; the contractor confirms with a tap. Vision is a
+    Fake today, so this is a suggestion only — never auto-applied."""
+    await _assert_site(session, user, body.site_id)
+    try:
+        result = await caption_photo(body.image_url, llm=llm, user_hint=body.room_tag or "")
+    except Exception:
+        return EnrichOut(caption_draft=None, room_hint=None)
+    return EnrichOut(
+        caption_draft=(result.get("caption") or None),
+        room_hint=(result.get("room_hint") or None),
+    )
+
+
+@router.patch("/photo/{photo_id}", response_model=PhotoOut)
+async def edit_photo(
+    photo_id: UUID,
+    body: PhotoPatchIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PhotoOut:
+    """Edit caption / room / pin on a shared photo (owner-any, crew-own)."""
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None:
+        raise AppError(404, "not_found", "Photo not found")
+    await _assert_site(session, user, photo.site_id)
+    _assert_can_manage(photo, user)
+    for key, value in body.model_dump(exclude_unset=True).items():
+        if key == "is_starred" and value is None:
+            continue  # is_starred is NOT NULL; explicit null is a no-op, not a clear
+        setattr(photo, key, value)
+    await session.commit()
+    await session.refresh(photo)
+    return _photo_out(photo)
+
+
+@router.get("/photos", response_model=list[ContractorPhotoOut])
+async def list_published_photos(
+    site_id: UUID,
+    view: str = "all",
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ContractorPhotoOut]:
+    """The contractor's view of the homeowner feed for a site, with attribution,
+    for the album/management screen."""
+    await _assert_site(session, user, site_id)
+    stmt = (
+        select(PublishedPhoto, User.name)
+        .join(User, PublishedPhoto.published_by == User.id, isouter=True)
+        .where(PublishedPhoto.site_id == site_id)
+    )
+    if view == "room":
+        stmt = stmt.order_by(PublishedPhoto.room_tag, PublishedPhoto.published_at.desc())
+    elif view == "milestone":
+        stmt = stmt.order_by(PublishedPhoto.milestone_id, PublishedPhoto.published_at.desc())
+    else:
+        stmt = stmt.order_by(PublishedPhoto.published_at.desc())
+    rows = (await session.execute(stmt)).all()
+    base = await _bucket_photos_by_milestone(
+        session, site_id, [_photo_out(p) for p, _ in rows]
+    )
+    return [
+        ContractorPhotoOut(**out.model_dump(), shared_by_name=name)
+        for (_, name), out in zip(rows, base, strict=True)
+    ]
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)

@@ -14,9 +14,26 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.homeowner.schemas import PhotoOut
 from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind, UpdateType
 
 # ---- publish to the feed ---------------------------------------------------
+
+
+class PhotoPatchIn(BaseModel):
+    """Partial edit of a published photo. Only provided fields change. A
+    contractor-supplied caption is a reviewed, homeowner-visible fact."""
+
+    caption: str | None = None
+    room_tag: str | None = None
+    is_starred: bool | None = None
+
+
+class ContractorPhotoOut(PhotoOut):
+    """A published photo as the CONTRACTOR sees it — adds the audit attribution
+    the homeowner-facing PhotoOut deliberately omits."""
+
+    shared_by_name: str | None = None
 
 
 class PublishPhotoIn(BaseModel):
@@ -188,6 +205,17 @@ class DrawingRegisterOut(BaseModel):
     supersedes_id: UUID | None = None
     is_current: bool
     file_url: str
+
+
+class EnrichIn(BaseModel):
+    site_id: UUID
+    image_url: str = Field(min_length=1)
+    room_tag: str | None = None
+
+
+class EnrichOut(BaseModel):
+    caption_draft: str | None = None
+    room_hint: str | None = None
 
 
 class DrawingPresignIn(BaseModel):

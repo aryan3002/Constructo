@@ -33,6 +33,7 @@ const STR = {
     radarClear: 'All clear — nothing’s slipping.',
     latest: 'Latest from site',
     disputePack: 'Dispute pack',
+    sitePhotos: 'Site photos',
   },
   hi: {
     timeline: 'टाइमलाइन',
@@ -47,6 +48,7 @@ const STR = {
     radarClear: 'सब ठीक — कुछ नहीं अटक रहा।',
     latest: 'साइट से ताज़ा',
     disputePack: 'विवाद फ़ाइल',
+    sitePhotos: 'साइट फ़ोटो',
   },
 } as const
 
@@ -194,6 +196,16 @@ export default function SiteDetail() {
           </ScrollView>
         </View>
       ) : null}
+
+      {/* Contractor photo album — the homeowner feed for this site (off-tab). */}
+      <Button
+        title={t.sitePhotos}
+        variant="secondary"
+        onPress={() =>
+          router.push({ pathname: '/(contractor)/owner/album', params: { siteId } })
+        }
+        style={{ marginTop: SPACE.xs }}
+      />
 
       {/* Tamper-evident dispute pack (3.6) — per-counterparty advance case. */}
       <Button
