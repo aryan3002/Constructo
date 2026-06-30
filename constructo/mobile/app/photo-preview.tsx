@@ -15,6 +15,7 @@
  */
 import { useCallback, useState } from 'react'
 import {
+  Alert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -78,6 +79,12 @@ export default function PhotoPreview() {
         title={params.markupLabel ?? m.markup}
         useLabel={m.use}
         onCancel={() => setMarkupMode(false)}
+        onCaptureFail={() =>
+          Alert.alert(
+            'Markup',
+            'This preview build can’t flatten the drawing onto the photo, so it was sent without the markup. Markup works in the installed app.',
+          )
+        }
         onDone={(out) => {
           setUri(out)
           setMarkupMode(false)

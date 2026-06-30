@@ -44,6 +44,12 @@ const COLORS = [
   { key: 'approval', value: '#2F8F6F' }, // green — an approval
 ]
 
+// react-native-view-shot is a NATIVE module. In Expo Go it does NOT throw — it
+// "succeeds" but writes a tiny (~1.3KB) broken JPEG that uploads as a blank/corrupt
+// image. A real full-screen flatten is hundreds of KB, so any capture under this
+// floor is treated as broken and we fall back to the unannotated original.
+const MIN_CAPTURE_BYTES = 20000
+
 function pathFromPts(pts: Pt[]): string {
   if (pts.length === 0) return ''
   return pts.reduce((d, p, i) => d + `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)} `, '')
@@ -157,7 +163,17 @@ export function PhotoMarkupCanvas({
     setSaving(true)
     let outUri = uri
     try {
-      outUri = await captureRef(shotRef, { format: 'jpg', quality: 0.9 })
+      const captured = await captureRef(shotRef, { format: 'jpg', quality: 0.9 })
+      // Validate the captured bytes (the same read the uploader does). In Expo Go
+      // view-shot returns a tiny broken JPEG instead of throwing, so a size check —
+      // not just a try/catch — is what prevents uploading a blank markup image.
+      const blob = await (await fetch(captured)).blob()
+      if (captured && blob.size >= MIN_CAPTURE_BYTES) {
+        outUri = captured
+      } else {
+        outUri = uri
+        onCaptureFail?.()
+      }
     } catch {
       outUri = uri
       onCaptureFail?.()
