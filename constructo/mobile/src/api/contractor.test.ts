@@ -6,7 +6,7 @@ const okJson = (body: unknown) =>
 beforeEach(() => jest.restoreAllMocks())
 
 test('publishPhoto POSTs to /api/v1/publish/photo with the body', async () => {
-  const fetchMock = jest.spyOn(global, 'fetch').mockReturnValue(okJson({ id: 'p1' }) as never)
+  const fetchMock = jest.spyOn(globalThis, 'fetch').mockReturnValue(okJson({ id: 'p1' }) as never)
   await contractor.publishPhoto({ site_id: 's1', image_url: 'chat/s1/a.jpg', room_tag: 'kitchen' })
   const [url, init] = fetchMock.mock.calls[0]
   expect(String(url)).toContain('/api/v1/publish/photo')
@@ -16,7 +16,7 @@ test('publishPhoto POSTs to /api/v1/publish/photo with the body', async () => {
 
 test('publishedPhotos GETs with site_id + view query', async () => {
   const fetchMock = jest
-    .spyOn(global, 'fetch')
+    .spyOn(globalThis, 'fetch')
     .mockReturnValue(okJson([]) as never)
   await contractor.publishedPhotos('s1', 'room')
   const url = String(fetchMock.mock.calls[0][0])
@@ -25,7 +25,7 @@ test('publishedPhotos GETs with site_id + view query', async () => {
 })
 
 test('editPhoto PATCHes the photo id', async () => {
-  const fetchMock = jest.spyOn(global, 'fetch').mockReturnValue(okJson({ id: 'p9' }) as never)
+  const fetchMock = jest.spyOn(globalThis, 'fetch').mockReturnValue(okJson({ id: 'p9' }) as never)
   await contractor.editPhoto('p9', { is_starred: true })
   const [url, init] = fetchMock.mock.calls[0]
   expect(String(url)).toContain('/api/v1/publish/photo/p9')
