@@ -1,6 +1,8 @@
 import pytest
+from sqlalchemy import select
 
 from app.auth.jwt import create_access_token
+from app.models.homeowner_feed import PublishedPhoto
 from app.models.user import UserRole
 from app.sites.models import SiteAssignment
 
@@ -87,3 +89,17 @@ async def test_album_requires_site_scope(client, ctx, factory, fake_llm):
         f"/api/v1/publish/photos?site_id={ctx.site.id}", headers=_auth(outsider)
     )
     assert res.status_code in (403, 404), res.text
+
+
+async def test_enrich_returns_advisory_draft_and_persists_nothing(client, ctx, db_session, fake_llm):
+    before = len((await db_session.execute(select(PublishedPhoto))).all())
+    res = await client.post(
+        "/api/v1/publish/photo/enrich",
+        json={"site_id": str(ctx.site.id), "image_url": "chat/x/a.jpg"},
+        headers=_auth(ctx.owner),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert "caption_draft" in body and "room_hint" in body
+    after = len((await db_session.execute(select(PublishedPhoto))).all())
+    assert after == before

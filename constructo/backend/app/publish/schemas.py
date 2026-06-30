@@ -207,6 +207,17 @@ class DrawingRegisterOut(BaseModel):
     file_url: str
 
 
+class EnrichIn(BaseModel):
+    site_id: UUID
+    image_url: str = Field(min_length=1)
+    room_tag: str | None = None
+
+
+class EnrichOut(BaseModel):
+    caption_draft: str | None = None
+    room_hint: str | None = None
+
+
 class DrawingPresignIn(BaseModel):
     """Request a short-lived direct-to-R2 upload ticket for a new revision."""
 

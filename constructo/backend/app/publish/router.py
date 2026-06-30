@@ -22,6 +22,7 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
+from app.extraction.vision import caption_photo
 from app.homeowner.ai import draft_caption, draft_weekly_summary, get_llm
 from app.homeowner.quiet import confirm_quiet_period
 from app.homeowner.router import (
@@ -68,6 +69,8 @@ from app.publish.schemas import (
     DrawingPresignIn,
     DrawingPresignOut,
     DrawingRegisterOut,
+    EnrichIn,
+    EnrichOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
     PhotoPatchIn,
@@ -178,6 +181,27 @@ async def publish_photo(
     )
     out = _photo_out(photo)
     return out.model_copy(update={"draft_caption": draft})
+
+
+@router.post("/photo/enrich", response_model=EnrichOut)
+async def enrich_photo(
+    body: EnrichIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> EnrichOut:
+    """Advisory pre-fill for the Share sheet: a caption DRAFT + a room hint from
+    the image. Persists nothing; the contractor confirms with a tap. Vision is a
+    Fake today, so this is a suggestion only — never auto-applied."""
+    await _assert_site(session, user, body.site_id)
+    try:
+        result = await caption_photo(body.image_url, llm=llm, user_hint=body.room_tag or "")
+    except Exception:
+        return EnrichOut(caption_draft=None, room_hint=None)
+    return EnrichOut(
+        caption_draft=(result.get("caption") or None),
+        room_hint=(result.get("room_hint") or None),
+    )
 
 
 @router.patch("/photo/{photo_id}", response_model=PhotoOut)
