@@ -68,3 +68,22 @@ async def test_edit_explicit_null_is_starred_is_noop(client, ctx, fake_llm):
     )
     assert res.status_code == 200, res.text
     assert res.json()["is_starred"] is False
+
+
+async def test_contractor_album_lists_with_attribution(client, ctx, fake_llm):
+    pid = await _publish(client, ctx, ctx.owner)
+    res = await client.get(
+        f"/api/v1/publish/photos?site_id={ctx.site.id}", headers=_auth(ctx.owner)
+    )
+    assert res.status_code == 200, res.text
+    row = next(i for i in res.json() if i["id"] == pid)
+    assert "shared_by_name" in row
+
+
+async def test_album_requires_site_scope(client, ctx, factory, fake_llm):
+    other_company = await factory.company()
+    outsider = await factory.user(company=other_company, role=UserRole.owner)
+    res = await client.get(
+        f"/api/v1/publish/photos?site_id={ctx.site.id}", headers=_auth(outsider)
+    )
+    assert res.status_code in (403, 404), res.text

@@ -25,6 +25,7 @@ from app.extraction.llm import LLMClient
 from app.homeowner.ai import draft_caption, draft_weekly_summary, get_llm
 from app.homeowner.quiet import confirm_quiet_period
 from app.homeowner.router import (
+    _bucket_photos_by_milestone,
     _member_out,
     _milestone_out,
     _photo_out,
@@ -63,6 +64,7 @@ from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    ContractorPhotoOut,
     DrawingPresignIn,
     DrawingPresignOut,
     DrawingRegisterOut,
@@ -198,6 +200,37 @@ async def edit_photo(
     await session.commit()
     await session.refresh(photo)
     return _photo_out(photo)
+
+
+@router.get("/photos", response_model=list[ContractorPhotoOut])
+async def list_published_photos(
+    site_id: UUID,
+    view: str = "all",
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ContractorPhotoOut]:
+    """The contractor's view of the homeowner feed for a site, with attribution,
+    for the album/management screen."""
+    await _assert_site(session, user, site_id)
+    stmt = (
+        select(PublishedPhoto, User.name)
+        .join(User, PublishedPhoto.published_by == User.id, isouter=True)
+        .where(PublishedPhoto.site_id == site_id)
+    )
+    if view == "room":
+        stmt = stmt.order_by(PublishedPhoto.room_tag, PublishedPhoto.published_at.desc())
+    elif view == "milestone":
+        stmt = stmt.order_by(PublishedPhoto.milestone_id, PublishedPhoto.published_at.desc())
+    else:
+        stmt = stmt.order_by(PublishedPhoto.published_at.desc())
+    rows = (await session.execute(stmt)).all()
+    base = await _bucket_photos_by_milestone(
+        session, site_id, [_photo_out(p) for p, _ in rows]
+    )
+    return [
+        ContractorPhotoOut(**out.model_dump(), shared_by_name=name)
+        for (_, name), out in zip(rows, base, strict=True)
+    ]
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)

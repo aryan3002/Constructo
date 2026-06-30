@@ -14,6 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.homeowner.schemas import PhotoOut
 from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind, UpdateType
 
 # ---- publish to the feed ---------------------------------------------------
@@ -26,6 +27,13 @@ class PhotoPatchIn(BaseModel):
     caption: str | None = None
     room_tag: str | None = None
     is_starred: bool | None = None
+
+
+class ContractorPhotoOut(PhotoOut):
+    """A published photo as the CONTRACTOR sees it — adds the audit attribution
+    the homeowner-facing PhotoOut deliberately omits."""
+
+    shared_by_name: str | None = None
 
 
 class PublishPhotoIn(BaseModel):
