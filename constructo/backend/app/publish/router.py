@@ -58,6 +58,7 @@ from app.models import (
     User,
     WeeklySummary,
 )
+from app.models.user import UserRole
 from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
@@ -67,6 +68,7 @@ from app.publish.schemas import (
     DrawingRegisterOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
+    PhotoPatchIn,
     PropertyCreateIn,
     PropertyUpdateIn,
     PublishDrawingIn,
@@ -93,6 +95,13 @@ async def _assert_site(session: AsyncSession, user: User, site_id: UUID) -> None
     if site is None or site.company_id != user.company_id:
         raise AppError(404, "not_found", "Site not found")
     raise AppError(403, "forbidden", "Site not in scope")
+
+
+def _assert_can_manage(photo: PublishedPhoto, user: User) -> None:
+    """Owner manages any shared photo; a crew member manages only their own."""
+    if user.role == UserRole.owner or photo.published_by == user.id:
+        return
+    raise AppError(403, "forbidden", "Only the owner or the original sharer can change this photo")
 
 
 async def _space_in_scope(session: AsyncSession, user: User, space_id: UUID) -> Space:
@@ -167,6 +176,26 @@ async def publish_photo(
     )
     out = _photo_out(photo)
     return out.model_copy(update={"draft_caption": draft})
+
+
+@router.patch("/photo/{photo_id}", response_model=PhotoOut)
+async def edit_photo(
+    photo_id: UUID,
+    body: PhotoPatchIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PhotoOut:
+    """Edit caption / room / pin on a shared photo (owner-any, crew-own)."""
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None:
+        raise AppError(404, "not_found", "Photo not found")
+    await _assert_site(session, user, photo.site_id)
+    _assert_can_manage(photo, user)
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(photo, key, value)
+    await session.commit()
+    await session.refresh(photo)
+    return _photo_out(photo)
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)

@@ -19,6 +19,15 @@ from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind,
 # ---- publish to the feed ---------------------------------------------------
 
 
+class PhotoPatchIn(BaseModel):
+    """Partial edit of a published photo. Only provided fields change. A
+    contractor-supplied caption is a reviewed, homeowner-visible fact."""
+
+    caption: str | None = None
+    room_tag: str | None = None
+    is_starred: bool | None = None
+
+
 class PublishPhotoIn(BaseModel):
     site_id: UUID
     image_url: str = Field(min_length=1)
