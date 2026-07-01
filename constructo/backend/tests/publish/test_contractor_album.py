@@ -166,3 +166,14 @@ async def test_crew_cannot_delete_others_photo(client, ctx, factory, db_session,
     pid = await _publish(client, ctx, ctx.owner)  # owner published, not the crew
     res = await client.delete(f"/api/v1/publish/photo/{pid}", headers=_auth(crew))
     assert res.status_code == 403, res.text
+
+
+async def test_home_heartbeat_counts_photos_this_week(client, ctx, fake_llm, fake_translation):
+    # Phase 2 heartbeat: /home reports how many contractor photos landed this week
+    # + when the last one did, so silence reads as a "slow day", not "hiding".
+    await _publish(client, ctx, ctx.owner)
+    res = await client.get("/api/v1/homeowner/home", headers=_auth(ctx.homeowner))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["photos_this_week"] >= 1
+    assert body["last_photo_at"] is not None

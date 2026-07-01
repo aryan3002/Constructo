@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import apply_action
@@ -937,6 +937,21 @@ async def home(
             session, translation, user.language, _quiet_out(quiet_window)
         )
 
+    # Heartbeat: how alive is the photo channel this week (receive-first signal).
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    photos_this_week = (
+        await session.execute(
+            select(func.count())
+            .select_from(PublishedPhoto)
+            .where(PublishedPhoto.site_id == sid, PublishedPhoto.published_at >= week_ago)
+        )
+    ).scalar_one()
+    last_photo_at = (
+        await session.execute(
+            select(func.max(PublishedPhoto.published_at)).where(PublishedPhoto.site_id == sid)
+        )
+    ).scalar_one_or_none()
+
     return HomeOut(
         property=prop,
         milestone_now=_milestone_out(milestone_now) if milestone_now else None,
@@ -954,6 +969,8 @@ async def home(
         recent_activity=recent_activity,
         spend_summary=spend,
         quiet=quiet_out,
+        photos_this_week=photos_this_week,
+        last_photo_at=last_photo_at,
     )
 
 
