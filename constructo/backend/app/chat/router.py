@@ -840,6 +840,29 @@ _MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/pdf", "vo
 CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
 
 
+def _downsize_image(data: bytes, *, max_dim: int = 1600, quality: int = 80) -> bytes:
+    """Downsize an uploaded photo so the mobile feed serves small images (fast
+    load, low decode memory — 4000px phone photos crashed the RN feed). Best
+    effort: any decode failure (HEIC without a plugin, corrupt bytes) returns the
+    original bytes untouched — never breaks the upload."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image, ImageOps
+
+        img = Image.open(BytesIO(data))
+        img = ImageOps.exif_transpose(img)  # bake in orientation before stripping EXIF
+        img.thumbnail((max_dim, max_dim))  # preserves aspect ratio, in place
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        out = BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        resized = out.getvalue()
+        return resized if len(resized) < len(data) else data
+    except Exception:
+        return data
+
+
 @router.post("/media", response_model=MediaUploadOut, status_code=201)
 async def upload_media(
     file: UploadFile = File(...),
@@ -874,9 +897,14 @@ async def upload_media(
         raise AppError(422, "empty_file", "No file content")
     if len(data) > CHAT_MAX_MEDIA_BYTES:
         raise AppError(413, "media_too_large", "Attachment exceeds 15 MB")
+    content_type = file.content_type or "application/octet-stream"
+    if kind == "image":
+        # Serve small images to the mobile feed (fast + no big-image memory crash).
+        data = _downsize_image(data)
+        content_type = "image/jpeg"
     ext = _MEDIA_EXT.get(kind, "bin")
     key = f"chat/{site_id}/{uuid4().hex}.{ext}"
-    get_storage().put_bytes(key, data, file.content_type or "application/octet-stream")
+    get_storage().put_bytes(key, data, content_type)
     media_type = kind if kind in _CHAT_MEDIA_TYPES else "document"
     return MediaUploadOut(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest())
 
