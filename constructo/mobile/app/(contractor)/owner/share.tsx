@@ -2,7 +2,8 @@
  *  room per shot, tap Share once: each photo publishes instantly (caption=None);
  *  the AI caption appears as a pending suggestion to confirm/ignore. */
 import { useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native'
+import { Image } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -93,7 +94,7 @@ export default function ShareWithOwner() {
 
       {drafts.map((d, i) => (
         <View key={i} style={{ backgroundColor: c.card, borderRadius: 14, marginBottom: SPACE.md, overflow: 'hidden' }}>
-          <Image source={{ uri: d.uri }} style={{ width: '100%', height: 200 }} />
+          <Image source={{ uri: d.uri }} style={{ width: '100%', height: 200 }} contentFit="cover" />
           <View style={{ padding: SPACE.sm }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {SPACES.map((s) => (
