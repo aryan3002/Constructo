@@ -155,6 +155,8 @@ const STR = {
     decisionReview: 'Review',
     feedEmpty: 'No photos shared yet',
     feedEmptyBody: 'Your builder will share photos here as work progresses.',
+    requestPhotoCta: 'Request a photo',
+    requestPhotoSub: 'Ask your site team for a specific room',
     sharedBy: 'Shared by builder',
     // Stubs
     markUpSoon: 'Mark up is coming soon.',
@@ -230,6 +232,8 @@ const STR = {
     decisionReview: 'देखें',
     feedEmpty: 'अभी कोई तस्वीर नहीं',
     feedEmptyBody: 'जैसे-जैसे काम आगे बढ़ेगा, आपका बिल्डर यहाँ तस्वीरें साझा करेगा।',
+    requestPhotoCta: 'फ़ोटो का अनुरोध करें',
+    requestPhotoSub: 'किसी ख़ास कमरे की फ़ोटो टीम से माँगें',
     sharedBy: 'बिल्डर द्वारा साझा',
     markUpSoon: 'मार्क अप जल्द आ रहा है।',
     commentSoon: 'टिप्पणियाँ जल्द आ रही हैं।',
@@ -1137,6 +1141,46 @@ export default function Photos() {
         onChange={(key) => setTab(key as FilterTab)}
         style={{ paddingHorizontal: 0, paddingVertical: 0 }}
       />
+
+      {/* Pull-door — request a photo of a specific room. Creates a homeowner
+          request; the site team is notified and can share it back to the feed
+          (the push/pull counterpart to the contractor photo-share flow). */}
+      {tab === 'feed' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={s.requestPhotoCta}
+          onPress={() => router.push('/(homeowner)/request-photo')}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.md,
+            padding: SPACE.md,
+            borderRadius: theme.radii.card,
+            borderWidth: 1,
+            borderColor: c.line,
+            borderStyle: 'dashed',
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <View
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              backgroundColor: c.secondaryContainer,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="camera" size={17} color={AP.clay} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Body style={{ fontWeight: '600', color: c.text }}>{s.requestPhotoCta}</Body>
+            <Small muted>{s.requestPhotoSub}</Small>
+          </View>
+          <Feather name="chevron-right" size={18} color={c.textMute} />
+        </Pressable>
+      ) : null}
 
       {/* ---- FEED TAB ---- */}
       {tab === 'feed' ? (
