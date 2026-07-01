@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "ai.constructo.app",
       "infoPlist": {
-        "NSPhotoLibraryAddUsageDescription": "Constructo saves your site photos here."
+        "NSPhotoLibraryAddUsageDescription": "Constructo saves your site photos here.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
