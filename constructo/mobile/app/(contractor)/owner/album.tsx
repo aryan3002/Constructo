@@ -2,8 +2,7 @@
  *  with attribution ("shared by") and per-photo pin/edit. Segments: Feed / By
  *  Room / By Milestone. No unshare in v1 — once shared, a photo stays. */
 import { useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native'
-import { Image } from 'expo-image'
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -84,7 +83,7 @@ export default function ContractorAlbum() {
       {query.isLoading && <ActivityIndicator color={c.accent} />}
       {photos.map((p) => (
         <View key={p.id} style={{ backgroundColor: c.card, borderRadius: 14, marginBottom: SPACE.md, overflow: 'hidden' }}>
-          <Image source={{ uri: p.image_url }} style={{ width: '100%', height: 200 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+          <Image source={{ uri: p.image_url }} style={{ width: '100%', height: 200 }} />
           <View style={{ padding: SPACE.sm }}>
             {p.caption ? <Text style={{ color: c.text }}>{p.caption}</Text> : <Text style={{ color: c.textMute, fontStyle: 'italic' }}>{lang === 'hi' ? 'कोई कैप्शन नहीं' : 'No caption'}</Text>}
             <Text style={{ color: c.textMute, fontSize: 12, marginTop: 4 }}>
