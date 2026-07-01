@@ -75,6 +75,42 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
     assert second == []
 
 
+async def test_create_request_surfaces_to_contractor_immediately(client, ctx, db_session):
+    """Root cause fix: a fresh homeowner request must reach the site team's Brief
+    on creation (an immediate pending Decision), not only after the 3-day SLA
+    lapses. Being contractor-facing, it must NOT appear on the homeowner's own
+    'Needs your input', and the later overdue sweep must not duplicate it."""
+    created = await client.post(
+        "/api/v1/homeowner/requests",
+        json={
+            "title": "Photo request — Kitchen",
+            "detail": "Please share a recent photo of the Kitchen.",
+        },
+        headers=auth(ctx.homeowner),
+    )
+    assert created.status_code == 201, created.text
+
+    # (a) The contractor's approval inbox (the Brief source) shows it right away.
+    inbox = await client.get("/api/v1/approvals?state=pending", headers=auth(ctx.owner))
+    assert inbox.status_code == 200, inbox.text
+    assert any(
+        "Photo request — Kitchen" in it["title"] for it in inbox.json()["items"]
+    ), inbox.text
+
+    # (b) It does NOT leak onto the homeowner's own Home "Needs your input".
+    home = await client.get("/api/v1/homeowner/home", headers=auth(ctx.homeowner))
+    assert home.status_code == 200, home.text
+    assert all(
+        "Photo request — Kitchen" not in a["title"] for a in home.json()["needs_attention"]
+    ), home.json()["needs_attention"]
+
+    # (c) The later overdue sweep raises no duplicate (already surfaced).
+    swept = await run_request_nudge_sweep(
+        db_session, now=datetime.now(UTC) + timedelta(days=365)
+    )
+    assert swept == []
+
+
 async def test_decision_detail_humanizes_leaked_enum_token(client, ctx, db_session):
     """P2-1: a leaked internal token (e.g. 'unverified_invoice' from the real-data
     import path) must never reach the homeowner as a raw enum string in the

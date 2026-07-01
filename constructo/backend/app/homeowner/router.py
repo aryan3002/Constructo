@@ -51,6 +51,7 @@ from app.homeowner.design_fingerprint import (
     build_fingerprint,
 )
 from app.homeowner.milestone_reference import typical_duration_days
+from app.homeowner.nudge import NUDGE_TAG, surface_request_now
 from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
 from app.homeowner.render import get_translation, render_text
 from app.homeowner.schemas import (
@@ -867,6 +868,9 @@ async def home(
             .where(
                 Decision.site_id == sid,
                 Decision.state.in_([DecisionState.pending, DecisionState.escalated]),
+                # Contractor-facing request-nudges surface on the owner Brief, not
+                # on the homeowner's own "Needs your input".
+                Decision.title.not_like(f"{NUDGE_TAG}%"),
             )
             .order_by(Decision.created_at)
         )
@@ -2227,6 +2231,12 @@ async def create_request(
         sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
     )
     session.add(req)
+    # Surface to the site team's Brief / approval inbox immediately — not only once
+    # the SLA lapses and the overdue sweep escalates it (stamps nudged_at so that
+    # sweep never raises a duplicate). Flush first so the row has its id, then a
+    # single commit persists the request + its decision together.
+    await session.flush()
+    await surface_request_now(session, req)
     await session.commit()
     await session.refresh(req)
     await _alert_site_leads(session, sid, user, req)
@@ -2345,6 +2355,8 @@ async def my_decisions(
                 Decision.state.in_(
                     [DecisionState.pending, DecisionState.acknowledged, DecisionState.escalated]
                 ),
+                # Hide contractor-facing request-nudges from the homeowner's asks.
+                Decision.title.not_like(f"{NUDGE_TAG}%"),
             )
             .order_by(Decision.created_at)
         )

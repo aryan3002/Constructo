@@ -40,6 +40,42 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
+def _request_decision(req: HomeownerRequest, company_id: UUID, *, overdue: bool) -> Decision:
+    """The single contractor-facing Decision for a homeowner request. Tagged so
+    it is recognisable and de-duplicated; surfaces in the owner Brief / approval
+    inbox. ``overdue`` only changes the wording — immediate surfacing at creation
+    vs SLA escalation — the row is otherwise identical either way."""
+    lead = (
+        "A homeowner request is overdue and still open. "
+        if overdue
+        else "A homeowner request is open and waiting for the team. "
+    )
+    return Decision(
+        company_id=company_id,
+        site_id=req.site_id,
+        kind=DecisionKind.generic,
+        title=f"{NUDGE_TAG}[{req.id}] {req.title}",
+        detail=f"{lead}Original: {req.detail or req.title}",
+        state=DecisionState.pending,
+    )
+
+
+async def surface_request_now(
+    session: AsyncSession, req: HomeownerRequest, *, now: datetime | None = None
+) -> bool:
+    """Surface a freshly-created request to the site team immediately — the same
+    one Decision the overdue sweep would raise — and stamp ``nudged_at`` so the
+    sweep never double-surfaces it. Best-effort: returns ``False`` (never raises)
+    if the site is missing. The caller owns the commit."""
+    moment = _aware(now) if now is not None else datetime.now(UTC)
+    site = await session.get(Site, req.site_id)
+    if site is None:
+        return False
+    req.nudged_at = moment
+    session.add(_request_decision(req, site.company_id, overdue=False))
+    return True
+
+
 async def run_request_nudge_sweep(
     session: AsyncSession, *, now: datetime | None = None
 ) -> list[UUID]:
@@ -64,19 +100,7 @@ async def run_request_nudge_sweep(
         if site is None:
             continue  # orphaned request; nothing to escalate to
         req.nudged_at = moment
-        session.add(
-            Decision(
-                company_id=site.company_id,
-                site_id=req.site_id,
-                kind=DecisionKind.generic,
-                title=f"{NUDGE_TAG}[{req.id}] {req.title}",
-                detail=(
-                    "A homeowner request is overdue and still open. "
-                    f"Original: {req.detail or req.title}"
-                ),
-                state=DecisionState.pending,
-            )
-        )
+        session.add(_request_decision(req, site.company_id, overdue=True))
         nudged.append(req.id)
 
     if nudged:
