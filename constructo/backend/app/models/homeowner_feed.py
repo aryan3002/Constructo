@@ -76,6 +76,15 @@ class PublishedPhoto(Base):
     published_by: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # The chat message this photo was published FROM ("Send to feed"). Unique so a
+    # message maps to at most one feed photo (the endpoint is idempotent on it);
+    # SET NULL keeps the feed photo if the source message is later hard-deleted.
+    source_chat_message_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
     published_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

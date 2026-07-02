@@ -67,6 +67,7 @@ from app.models import (
     HomeownerMember,
     MessageAck,
     MessageSide,
+    PublishedPhoto,
     RawMessageModel,
     SenderKind,
     Site,
@@ -185,6 +186,10 @@ class ChatMessageOut(BaseModel):
     # Set when this attachment duplicates an earlier one (1.7) — the UI flags it
     # and it never books a second event.
     duplicate_of_id: UUID | None = None
+    # The homeowner-feed photo this message was published to ("Send to feed"),
+    # if any — lets the UI show an "In feed" badge + a dedupe affordance. None
+    # until the message is published to the feed.
+    feed_photo_id: UUID | None = None
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
@@ -1031,6 +1036,20 @@ async def list_messages(
         users_by_id = {
             u.id: (u.name, u.role.value if u.role else None) for u in urows
         }
+    # Batch-resolve which messages have been published to the homeowner feed
+    # ("Send to feed") so the UI can badge them — one query for the whole page
+    # (no N+1). Maps source chat message id → feed photo id.
+    msg_ids = [r.id for r in rows]
+    feed_photo_by_msg: dict[UUID, UUID] = {}
+    if msg_ids:
+        feed_rows = (
+            await session.execute(
+                select(
+                    PublishedPhoto.source_chat_message_id, PublishedPhoto.id
+                ).where(PublishedPhoto.source_chat_message_id.in_(msg_ids))
+            )
+        ).all()
+        feed_photo_by_msg = {row[0]: row[1] for row in feed_rows}
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
@@ -1040,6 +1059,7 @@ async def list_messages(
         name, role = users_by_id.get(r.sender_id, (None, None))
         msg_out.sender_name = name
         msg_out.sender_role = role
+        msg_out.feed_photo_id = feed_photo_by_msg.get(r.id)
         events = []
         for e in events_by_raw.get(r.raw_message_id, []):
             eo = ChatEventOut.model_validate(e)

@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.chat.access import can_access
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
@@ -47,7 +48,9 @@ from app.homeowner.schemas import (
 )
 from app.models import (
     Change,
+    ChatMessage,
     Component,
+    Conversation,
     HomeownerMember,
     Milestone,
     Property,
@@ -77,6 +80,7 @@ from app.publish.schemas import (
     PropertyCreateIn,
     PropertyUpdateIn,
     PublishDrawingIn,
+    PublishFromChatIn,
     PublishPhotoIn,
     PublishUpdateIn,
     PublishWeeklySummaryIn,
@@ -289,6 +293,97 @@ async def list_published_photos(
         ContractorPhotoOut(**out.model_dump(), shared_by_name=name)
         for (_, name), out in zip(rows, base, strict=True)
     ]
+
+
+@router.post("/photo/from-chat", response_model=ContractorPhotoOut, status_code=201)
+async def publish_photo_from_chat(
+    body: PublishFromChatIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ContractorPhotoOut:
+    """Publish an existing chat photo into the homeowner feed ("Send to feed").
+
+    The fast path: the image already lives in storage (a chat attachment), so
+    this reuses ``attachment_key`` verbatim and skips the synchronous vision
+    draft entirely — the contractor is deliberately curating a known photo.
+
+    Access is by the message's CONVERSATION (``can_access`` — a member of the
+    crew site thread / group / homeowner channel), and homeowner-role callers are
+    rejected (only the contractor publishes into the feed). Idempotent: the
+    ``published_photos.source_chat_message_id`` unique link means a re-send of the
+    same message returns the existing feed photo instead of duplicating it.
+    """
+    msg = await session.get(ChatMessage, body.message_id)
+    if msg is None:
+        raise AppError(404, "not_found", "Message not found")
+    # A message is a photo iff it carries an image attachment.
+    is_image = msg.attachment_key is not None and (msg.attachment_mime or "").startswith("image/")
+    if not is_image:
+        raise AppError(400, "not_an_image", "This message is not a photo")
+
+    conv = await session.get(Conversation, msg.conversation_id)
+    if conv is None:
+        raise AppError(404, "not_found", "Conversation not found")
+    # Only the contractor publishes into the homeowner feed — never a homeowner.
+    if user.role is UserRole.homeowner:
+        raise AppError(403, "forbidden", "Only the contractor can publish to the feed")
+    if not await can_access(session, user, conv):
+        raise AppError(403, "forbidden", "You cannot access this conversation")
+
+    if conv.site_id is None:
+        raise AppError(400, "no_site", "This conversation has no site to publish to")
+
+    # Idempotent: a message maps to at most one feed photo. A re-send returns it.
+    existing = (
+        await session.execute(
+            select(PublishedPhoto).where(
+                PublishedPhoto.source_chat_message_id == body.message_id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return await _from_chat_out(session, existing)
+
+    # Blank caption/room are stored as NULL (an empty string is not a caption).
+    caption = (body.caption or "").strip() or None
+    room_tag = (body.room_tag or "").strip() or None
+
+    photo = PublishedPhoto(
+        site_id=conv.site_id,
+        image_url=msg.attachment_key,  # reuse the chat attachment as-is
+        source_chat_message_id=body.message_id,
+        published_by=user.id,
+        caption=caption,
+        room_tag=room_tag,
+    )
+    session.add(photo)
+    await session.flush()  # assign id + defaults before we serialize
+    await session.commit()
+    await session.refresh(photo)
+    # Best-effort push — a new photo is a "site_updates" event (honours cadence).
+    await notify_site_homeowners(
+        session,
+        conv.site_id,
+        "New photo from your site",
+        caption or "Your builder shared a new photo.",
+        category="site_updates",
+        data={"type": "photo", "photo_id": str(photo.id)},
+    )
+    return await _from_chat_out(session, photo)
+
+
+async def _from_chat_out(
+    session: AsyncSession, photo: PublishedPhoto
+) -> ContractorPhotoOut:
+    """Serialize a feed photo with its publisher's name (contractor album shape)."""
+    name = None
+    if photo.published_by is not None:
+        name = (
+            await session.execute(
+                select(User.name).where(User.id == photo.published_by)
+            )
+        ).scalar_one_or_none()
+    return ContractorPhotoOut(**_photo_out(photo).model_dump(), shared_by_name=name)
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)

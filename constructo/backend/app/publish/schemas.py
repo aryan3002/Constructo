@@ -77,6 +77,19 @@ class PublishUpdateIn(BaseModel):
         return self
 
 
+class PublishFromChatIn(BaseModel):
+    """Publish an existing chat photo into the homeowner feed ("Send to feed").
+
+    Points at a chat message (which must be an image); the image is reused as-is.
+    Caption/room are optional overrides the contractor supplies at share time —
+    unlike the /photo path there is NO AI draft (the fast path: the image already
+    exists, the contractor is deliberately curating it)."""
+
+    message_id: UUID
+    caption: str | None = None
+    room_tag: str | None = None
+
+
 class PublishWeeklySummaryIn(BaseModel):
     site_id: UUID
     week_start: date
