@@ -15,14 +15,21 @@
  * "✓ In feed") + a toast, then close. On failure → keep the sheet open + error
  * toast so the contractor can retry.
  *
+ * Keyboard-aware: a KeyboardAvoidingView lifts the sheet above the on-screen
+ * keyboard, the form scrolls, and the action row is pinned so Send is always
+ * reachable while typing the caption.
+ *
  * RN `Image` (not expo-image, which crashes in Expo Go). Neev theme, English-first
  * with Hindi copy following the app's `STR` pattern.
  */
 import { useEffect, useState } from 'react'
 import {
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   TextInput,
   View,
 } from 'react-native'
@@ -146,24 +153,31 @@ export function SendToFeedSheet({
       animationType="slide"
       onRequestClose={sending ? undefined : onClose}
     >
-      {/* Scrim — tap outside to dismiss (disabled while sending). */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t.cancel}
-        onPress={sending ? undefined : onClose}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+      {/* KeyboardAvoidingView lifts the whole sheet above the keyboard so the
+          caption field + room chips + actions are never hidden behind it. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, justifyContent: 'flex-end' }}
       >
-        {/* Stop the sheet body from bubbling the scrim's dismiss press. */}
+        {/* Scrim — sits BEHIND the sheet (absolute fill) so it dims the backdrop
+            and dismisses on an outside tap, without intercepting sheet touches. */}
         <Pressable
-          onPress={() => {}}
+          accessibilityRole="button"
+          accessibilityLabel={t.cancel}
+          onPress={sending ? undefined : onClose}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' }}
+        />
+
+        {/* Sheet — capped height; the form scrolls and the actions stay pinned so
+            Send is always reachable even with the keyboard up. */}
+        <View
           style={{
             backgroundColor: c.bg,
             borderTopLeftRadius: theme.radii.card,
             borderTopRightRadius: theme.radii.card,
-            paddingHorizontal: SPACE.lg,
             paddingTop: SPACE.md,
             paddingBottom: Math.max(insets.bottom, SPACE.lg),
-            gap: SPACE.lg,
+            maxHeight: '92%',
           }}
         >
           {/* Grab handle */}
@@ -174,71 +188,78 @@ export function SendToFeedSheet({
               height: 4,
               borderRadius: 9999,
               backgroundColor: c.line,
+              marginBottom: SPACE.sm,
             }}
           />
 
-          {/* Header */}
-          <View style={{ gap: SPACE.xs }}>
-            <BodyStrong>{t.title}</BodyStrong>
-            <Small muted>{t.subtitle}</Small>
-          </View>
-
-          {/* Photo preview */}
-          {photoUri ? (
-            <Image
-              source={{ uri: photoUri }}
-              style={{
-                width: '100%',
-                height: 200,
-                borderRadius: theme.radii.control,
-                backgroundColor: c.paper,
-              }}
-              resizeMode="cover"
-            />
-          ) : null}
-
-          {/* Optional caption */}
-          <View style={{ gap: SPACE.xs }}>
-            <BodyStrong>{t.captionLabel}</BodyStrong>
-            <TextInput
-              value={caption}
-              onChangeText={setCaption}
-              placeholder={t.captionPlaceholder}
-              placeholderTextColor={c.textMute}
-              multiline
-              editable={!sending}
-              style={{
-                minHeight: 56,
-                borderWidth: 1,
-                borderColor: c.line,
-                borderRadius: theme.radii.control,
-                paddingHorizontal: SPACE.md,
-                paddingVertical: SPACE.sm,
-                color: c.text,
-                fontSize: 16,
-                textAlignVertical: 'top',
-                backgroundColor: c.card,
-              }}
-            />
-          </View>
-
-          {/* Room chips */}
-          <View style={{ gap: SPACE.xs }}>
-            <BodyStrong>{t.roomLabel}</BodyStrong>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-              {ROOM_PRESETS.map((r) => (
-                <Chip
-                  key={r.key}
-                  label={lang === 'hi' ? r.hi : r.en}
-                  active={roomKey === r.key}
-                  onPress={() => setRoomKey(roomKey === r.key ? null : r.key)}
-                />
-              ))}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: SPACE.lg, gap: SPACE.lg, paddingBottom: SPACE.md }}
+          >
+            {/* Header */}
+            <View style={{ gap: SPACE.xs }}>
+              <BodyStrong>{t.title}</BodyStrong>
+              <Small muted>{t.subtitle}</Small>
             </View>
-          </View>
 
-          {/* Actions */}
-          <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+            {/* Photo preview */}
+            {photoUri ? (
+              <Image
+                source={{ uri: photoUri }}
+                style={{
+                  width: '100%',
+                  height: 180,
+                  borderRadius: theme.radii.control,
+                  backgroundColor: c.paper,
+                }}
+                resizeMode="cover"
+              />
+            ) : null}
+
+            {/* Optional caption */}
+            <View style={{ gap: SPACE.xs }}>
+              <BodyStrong>{t.captionLabel}</BodyStrong>
+              <TextInput
+                value={caption}
+                onChangeText={setCaption}
+                placeholder={t.captionPlaceholder}
+                placeholderTextColor={c.textMute}
+                multiline
+                editable={!sending}
+                style={{
+                  minHeight: 56,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderRadius: theme.radii.control,
+                  paddingHorizontal: SPACE.md,
+                  paddingVertical: SPACE.sm,
+                  color: c.text,
+                  fontSize: 16,
+                  textAlignVertical: 'top',
+                  backgroundColor: c.card,
+                }}
+              />
+            </View>
+
+            {/* Room chips */}
+            <View style={{ gap: SPACE.xs }}>
+              <BodyStrong>{t.roomLabel}</BodyStrong>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
+                {ROOM_PRESETS.map((r) => (
+                  <Chip
+                    key={r.key}
+                    label={lang === 'hi' ? r.hi : r.en}
+                    active={roomKey === r.key}
+                    onPress={() => setRoomKey(roomKey === r.key ? null : r.key)}
+                  />
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Actions — pinned below the scroll so Send is always reachable. */}
+          <View style={{ flexDirection: 'row', gap: SPACE.sm, paddingHorizontal: SPACE.lg, paddingTop: SPACE.md }}>
             <Button
               title={t.cancel}
               variant="secondary"
@@ -256,8 +277,8 @@ export function SendToFeedSheet({
               leading={sending ? undefined : <Feather name="send" size={16} color={c.onAccent} />}
             />
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
