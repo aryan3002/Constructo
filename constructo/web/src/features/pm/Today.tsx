@@ -22,6 +22,7 @@ import {
   type SiteCard,
 } from '../../api/dashboard'
 import { useCan } from '../../auth/useCan'
+import { toEvidenceItems } from '../../lib/evidence'
 import { useDecide, type DecideInput } from '../owner/useDecide'
 import { useT, type TranslationKey } from '../../i18n'
 import { formatDate } from '../../lib/format'
@@ -238,11 +239,7 @@ function toBriefRisks(site: SiteCard, t: ReturnType<typeof useT>): BriefRisk[] {
     claim: r.message,
     status: r.status as Status,
     detail: t(RISK_KIND_KEY[r.kind] ?? 'brief.risk.data_quality'),
-    evidence: r.evidence_event_ids.map((id) => ({
-      kind: 'message' as const,
-      label: t('brief.evidence.linked'),
-      detail: id,
-    })),
+    evidence: toEvidenceItems(r.evidence, r.evidence_event_ids, t),
   }))
 }
 

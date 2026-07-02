@@ -12,7 +12,14 @@ import {
   type Status,
 } from '../../ui'
 import { useT } from '../../i18n'
-import type { OwnerHome, PulseTile, SiteCard, DashStatus } from '../../api/dashboard'
+import { toEvidenceItems } from '../../lib/evidence'
+import type {
+  DashEvidence,
+  OwnerHome,
+  PulseTile,
+  SiteCard,
+  DashStatus,
+} from '../../api/dashboard'
 import type { TranslationKey } from '../../i18n'
 
 const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3, done: 3 }
@@ -53,6 +60,19 @@ export function Portfolio({
 }) {
   const t = useT()
   const [evidenceTile, setEvidenceTile] = useState<PulseTile | null>(null)
+
+  // Pulse tiles only carry raw event ids, but the risks on each site already
+  // ship resolved proof rows (summary/type/date). Index those so a tapped tile
+  // can render "100 bori cement aaya…" instead of a bare UUID.
+  const evidenceById = useMemo(() => {
+    const map = new Map<string, DashEvidence>()
+    for (const site of home.sites) {
+      for (const risk of site.top_risks) {
+        for (const ev of risk.evidence ?? []) map.set(ev.id, ev)
+      }
+    }
+    return map
+  }, [home.sites])
 
   // Worst-status-first so the site most in trouble reads first.
   const rolled = useMemo(
@@ -116,11 +136,13 @@ export function Portfolio({
                 n: evidenceTile.evidence_event_ids.length,
               })}
               defaultOpen
-              evidence={evidenceTile.evidence_event_ids.map((id) => ({
-                kind: 'message' as const,
-                label: t('brief.evidence.linked'),
-                detail: id,
-              }))}
+              evidence={toEvidenceItems(
+                evidenceTile.evidence_event_ids
+                  .map((id) => evidenceById.get(id))
+                  .filter((e): e is DashEvidence => Boolean(e)),
+                evidenceTile.evidence_event_ids,
+                t,
+              )}
             />
           </div>
         ) : null}

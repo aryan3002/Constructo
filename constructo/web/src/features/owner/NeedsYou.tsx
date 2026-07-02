@@ -11,6 +11,7 @@ import { useDecide, type DecideInput } from './useDecide'
 import { DecisionLog } from './DecisionLog'
 import { useCan } from '../../auth/useCan'
 import type { DashRisk, OwnerHome, SiteCard } from '../../api/dashboard'
+import { toEvidenceItems } from '../../lib/evidence'
 import { useT } from '../../i18n'
 import {
   BriefCommandCard,
@@ -184,11 +185,7 @@ function toBriefRisks(site: SiteCard, t: ReturnType<typeof useT>): BriefRisk[] {
     claim: r.message,
     status: r.status as Status,
     detail: t(RISK_KIND_KEY[r.kind] ?? 'brief.risk.data_quality'),
-    evidence: r.evidence_event_ids.map((id) => ({
-      kind: 'message' as const,
-      label: t('brief.evidence.linked'),
-      detail: id,
-    })),
+    evidence: toEvidenceItems(r.evidence, r.evidence_event_ids, t),
   }))
 }
 
