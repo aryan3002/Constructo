@@ -81,6 +81,14 @@ const WITH_RISK: OwnerHomeData = {
           status: 'risk',
           message: 'Attendance 3 below expected 10',
           evidence_event_ids: ['ev-1'],
+          evidence: [
+            {
+              id: 'ev-1',
+              summary: '3 mazdoor aaye aaj Tower B pe',
+              event_type: 'attendance',
+              occurred_on: '2026-05-28',
+            },
+          ],
         },
       ],
       risk_overflow: 0,
@@ -140,7 +148,10 @@ describe('OwnerHome — Command Center', () => {
 
     const proof = screen.getAllByRole('button', { name: /show proof/i })[0]
     await userEvent.click(proof)
-    expect(await screen.findByText('ev-1')).toBeInTheDocument()
+    // Proof shows the human-readable event summary, not a raw event id.
+    expect(
+      await screen.findByText('3 mazdoor aaye aaj Tower B pe'),
+    ).toBeInTheDocument()
   })
 
   it('posts a decision when an inline owner chip is used', async () => {

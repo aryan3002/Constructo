@@ -331,6 +331,16 @@ export const en = {
   'brief.risk.pending_approval': 'Pending approval',
   'brief.risk.data_quality': 'Needs clarification',
   'brief.evidence.linked': 'Linked evidence',
+  // Event-type labels shown under each proof row's summary.
+  'evidence.type.attendance': 'Attendance',
+  'evidence.type.material_delivery': 'Material delivery',
+  'evidence.type.progress_update': 'Progress update',
+  'evidence.type.issue': 'Issue',
+  'evidence.type.invoice_received': 'Invoice',
+  'evidence.type.drawing_shared': 'Drawing',
+  'evidence.type.approval': 'Approval',
+  'evidence.type.payment_request': 'Payment request',
+  'evidence.type.unknown': 'Update',
   // === capture/attendance ===
   'capture.title': 'Capture',
   'capture.subtitle': 'Send a photo or speak — typing is optional',

@@ -12,6 +12,18 @@ import { getToken } from './auth'
 export type DashStatus = 'ok' | 'warn' | 'risk' | 'info'
 export type PulseKind = 'cash' | 'labor' | 'material' | 'progress'
 
+/**
+ * A resolved proof row: the event id plus its human-readable summary/type/date,
+ * so "Show proof" can render real evidence ("100 bori cement aaya ACC se")
+ * instead of a bare UUID. Mirrors the backend `EvidenceItemOut`.
+ */
+export interface DashEvidence {
+  id: string
+  summary: string | null
+  event_type: string | null
+  occurred_on: string | null
+}
+
 export interface DashRisk {
   site_id: string
   kind: string
@@ -19,6 +31,8 @@ export interface DashRisk {
   status: DashStatus
   message: string
   evidence_event_ids: string[]
+  /** Resolved proof rows (id + summary + type + date). Optional for older callers. */
+  evidence?: DashEvidence[]
 }
 
 export interface PulseTile {
@@ -145,6 +159,10 @@ const mockHome: OwnerHome = {
           status: 'risk',
           message: 'Steel invoice ₹2,40,000 has no matching delivery',
           evidence_event_ids: ['evt-inv-44', 'evt-grn-12'],
+          evidence: [
+            { id: 'evt-inv-44', summary: 'Steel invoice ₹2,40,000 received from Jindal', event_type: 'invoice_received', occurred_on: '2026-05-28' },
+            { id: 'evt-grn-12', summary: '8 TMT bundles delivered, challan #4471', event_type: 'material_delivery', occurred_on: '2026-05-26' },
+          ],
         },
         {
           site_id: 'site-tower-b',
@@ -153,6 +171,9 @@ const mockHome: OwnerHome = {
           status: 'risk',
           message: 'Only 9 of 24 expected workers marked present',
           evidence_event_ids: ['evt-att-91'],
+          evidence: [
+            { id: 'evt-att-91', summary: '9 mazdoor aaye aaj Tower B pe', event_type: 'attendance', occurred_on: '2026-05-28' },
+          ],
         },
       ],
       risk_overflow: 0,
@@ -177,6 +198,9 @@ const mockHome: OwnerHome = {
           status: 'warn',
           message: 'Extra 50 cement bags pending your approval (₹17,500)',
           evidence_event_ids: ['evt-req-7'],
+          evidence: [
+            { id: 'evt-req-7', summary: '50 bori cement extra chahiye, ₹17,500', event_type: 'payment_request', occurred_on: '2026-05-28' },
+          ],
         },
       ],
       risk_overflow: 0,
