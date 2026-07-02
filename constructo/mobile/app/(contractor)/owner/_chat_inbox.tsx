@@ -10,11 +10,11 @@
  * Neev theme: warm paper canvas, ScrollView + RefreshControl, exceptions-calm
  * empty state (a single bilingual line, not a dump).
  */
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
-import { useQuery } from '@tanstack/react-query'
+import { useRouter, useFocusEffect } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -22,6 +22,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { Body, Button, EmptyState, H1 } from '../../../src/ui'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../../src/api/chat'
+import { getSharedSocket, frameHandlers, type FrameHandler } from '../../../src/chat/useChatThread'
 import { ErrorBlock, LoadingBlock } from './_components'
 import { ConversationRow } from './_chat_components'
 import { NewGroupSheet } from './_group_sheets'
@@ -54,6 +55,7 @@ export function ChatInbox({ detailHref }: { detailHref: string }) {
   const { lang } = useT()
   const { theme } = useTheme()
   const router = useRouter()
+  const qc = useQueryClient()
   const { me } = useAuth()
   const t = STR[lang]
 
@@ -79,6 +81,44 @@ export function ChatInbox({ detailHref }: { detailHref: string }) {
       },
     })
 
+  const items = q.data ?? []
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      if (!items.length) return
+      const socket = getSharedSocket()
+      const handler: FrameHandler = (frame) => {
+        if (frame.type === 'msg') {
+          if (timerRef.current) clearTimeout(timerRef.current)
+          timerRef.current = setTimeout(() => {
+            void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
+          }, 500)
+        }
+      }
+      
+      const ids = items.map(c => c.id)
+
+      ids.forEach((id) => {
+        const set = frameHandlers.get(id) ?? new Set<FrameHandler>()
+        set.add(handler)
+        frameHandlers.set(id, set)
+        socket.subscribe(id, 0)
+      })
+
+      return () => {
+        ids.forEach((id) => {
+          const set = frameHandlers.get(id)
+          if (set) {
+            set.delete(handler)
+            if (set.size === 0) frameHandlers.delete(id)
+          }
+          socket.unsubscribe(id)
+        })
+      }
+    }, [items, qc])
+  )
+
   if (q.isLoading) {
     return (
       <Wrap>
@@ -96,8 +136,6 @@ export function ChatInbox({ detailHref }: { detailHref: string }) {
       </Wrap>
     )
   }
-
-  const items = q.data ?? []
 
   return (
     <Wrap onRefresh={() => void q.refetch()} refreshing={q.isRefetching}>

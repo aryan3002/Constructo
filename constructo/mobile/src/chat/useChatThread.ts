@@ -95,6 +95,10 @@ export interface UseChatThread {
   /** Network connectivity (NetInfo). False → the header shows "Connecting…" and
    *  the green dot goes muted, explaining stuck ticks / "Send…". */
   online: boolean
+  /** Throttled WS frame indicating local user is typing. */
+  sendTyping: () => void
+  /** True if someone else in the thread is currently typing. */
+  isTyping: boolean
 }
 
 // The server caps a /chat/messages page at MAX_LIMIT=200; request that so the
@@ -105,12 +109,12 @@ const PAGE_SIZE = 200
 // Lazily created on the first thread mount; shared across every thread so the
 // app holds exactly one multiplexed WS. Per-conversation onFrame routing is done
 // via a registry the mounted hooks register into.
-type FrameHandler = (frame: Record<string, unknown>) => void
-const frameHandlers = new Map<string, Set<FrameHandler>>()
+export type FrameHandler = (frame: Record<string, unknown>) => void
+export const frameHandlers = new Map<string, Set<FrameHandler>>()
 let sharedSocket: ChatSocket | null = null
 let socketConnecting = false
 
-function getSharedSocket(): ChatSocket {
+export function getSharedSocket(): ChatSocket {
   if (sharedSocket) return sharedSocket
   sharedSocket = new ChatSocket({
     getTicket: () => chatApi.wsTicket().then((r) => r.ticket),
@@ -303,6 +307,7 @@ export function useChatThread(
   opts?: { pollMs?: number; myUserId?: string | null },
 ): UseChatThread {
   const qc = useQueryClient()
+  const myUserId = opts?.myUserId ?? null
   const addrKey = 'conversationId' in address ? address.conversationId : address.siteId
   const [reply, setReply] = useState<ChatMessage | null>(null)
   const [outbox, setOutbox] = useState<ChatOutboxItem[]>([])
@@ -381,6 +386,16 @@ export function useChatThread(
       // the retries exhaust (the "shows for 4s then disappears" bug).
       syncOrCache(
         async () => {
+          const socket = getSharedSocket()
+          // Poll gating: if the WS is connected and we already did our initial
+          // full refresh, we can safely skip the REST poll (the WS will push).
+          if (socket.isLive && urlsRefreshed.current) {
+            return loadThreadCache(addrKey as string)
+          }
+          
+          // Fetch cursors on every poll to ensure ticks stay updated even offline
+          void fetchCursors()
+
           // First run this mount → full refresh (after_seq=0) to renew presigned
           // attachment URLs; subsequent polls → incremental from the newest seq.
           const after = urlsRefreshed.current ? await maxCachedSeq(addrKey as string) : 0
@@ -454,12 +469,26 @@ export function useChatThread(
     chatApi
       .read({ ...addressRef.current, lastSeq: newestSeq })
       .then(() => {
+        // Optimistic cursor update
+        if (myUserId) {
+          setCursors((prev) => {
+            const next = [...prev]
+            const me = next.find((c) => c.user_id === myUserId)
+            if (me) {
+              me.last_read_seq = Math.max(me.last_read_seq, newestSeq)
+              me.last_delivered_seq = Math.max(me.last_delivered_seq, newestSeq)
+            } else {
+              next.push({ user_id: myUserId, last_read_seq: newestSeq, last_delivered_seq: newestSeq })
+            }
+            return next
+          })
+        }
         qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
         qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
       })
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addrKey, newestSeq, qc])
+  }, [addrKey, newestSeq, qc, myUserId])
 
   // --- cursor fetch (delivery/read ticks) ---------------------------------
   const fetchCursors = useCallback(async () => {
@@ -573,6 +602,19 @@ export function useChatThread(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addrKey])
 
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const lastTypingSent = useRef<number>(0)
+  const sendTyping = useCallback(() => {
+    if (!addrKey) return
+    const now = Date.now()
+    if (now - lastTypingSent.current > 3000) {
+      lastTypingSent.current = now
+      getSharedSocket().typing(addrKey)
+    }
+  }, [addrKey])
+
   // --- live socket: subscribe this thread; route frames -------------------
   useEffect(() => {
     if (!addrKey) return
@@ -591,6 +633,19 @@ export function useChatThread(
             qc.setQueryData(['chat', 'thread', addrKey], merged)
           })
           socket.markDelivered(addrKey, payload.seq)
+          // Optimistic cursor update for delivery
+          if (myUserId) {
+            setCursors((prev) => {
+              const next = [...prev]
+              const me = next.find((c) => c.user_id === myUserId)
+              if (me) {
+                me.last_delivered_seq = Math.max(me.last_delivered_seq, payload.seq)
+              } else {
+                next.push({ user_id: myUserId, last_read_seq: 0, last_delivered_seq: payload.seq })
+              }
+              return next
+            })
+          }
         } else {
           qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
         }
@@ -600,6 +655,20 @@ export function useChatThread(
         qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
       } else if (type === 'receipt') {
         void fetchCursors()
+      } else if (type === 'sub_ok') {
+        const last_seq = frame.last_seq as number
+        void maxCachedSeq(addrKey).then(after => {
+          if (last_seq > after) {
+            qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
+          }
+        })
+      } else if (type === 'typing') {
+        const uid = typeof frame.user_id === 'string' ? frame.user_id : null
+        if (uid && uid !== myUserId) {
+          setIsTyping(true)
+          if (typingTimer.current) clearTimeout(typingTimer.current)
+          typingTimer.current = setTimeout(() => setIsTyping(false), 4000)
+        }
       }
     }
 
@@ -624,7 +693,6 @@ export function useChatThread(
   }, [addrKey, qc, fetchCursors])
 
   // --- derived: pending bubbles + delivery ticks --------------------------
-  const myUserId = opts?.myUserId ?? null
   const pending = useMemo(
     () => pendingForThread(addrKey ?? '', outbox, messages),
     [addrKey, outbox, messages],
@@ -666,6 +734,8 @@ export function useChatThread(
       flush,
       retry,
       online,
+      sendTyping,
+      isTyping,
     }),
     [
       messages,
@@ -683,6 +753,8 @@ export function useChatThread(
       flush,
       retry,
       online,
+      sendTyping,
+      isTyping,
     ],
   )
 }

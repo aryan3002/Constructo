@@ -18,10 +18,11 @@
  * channel still shows. We dedupe it against `conversations()` so it never appears
  * twice. Self-themed by the (homeowner) layout's Daylight ThemeProvider.
  */
+import { useCallback, useRef } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
-import { useQuery } from '@tanstack/react-query'
+import { useRouter, useFocusEffect } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../src/i18n/I18nProvider'
@@ -30,6 +31,7 @@ import { AP, SPACE } from '../../src/theme/tokens'
 import { Body, Display, Eyebrow, FLOATING_NAV_CLEARANCE, QuietState, Small, StatusPill } from '../../src/ui'
 import { useAuth } from '../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../src/api/chat'
+import { getSharedSocket, frameHandlers, type FrameHandler } from '../../src/chat/useChatThread'
 import { ChannelRow } from './_messages_components'
 
 const STR = {
@@ -64,6 +66,7 @@ export default function HomeownerMessagesInbox() {
   const { theme } = useTheme()
   const c = theme.colors
   const router = useRouter()
+  const qc = useQueryClient()
   const { siteId } = useAuth()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
 
@@ -88,6 +91,43 @@ export default function HomeownerMessagesInbox() {
   // `siteId` is set in auth state (e.g. a non-join-code login path).
   const builder =
     channelQ.data ?? conversations.find((conv) => conv.kind === 'homeowner') ?? null
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversations.length && !builder) return
+      const socket = getSharedSocket()
+      const handler: FrameHandler = (frame) => {
+        if (frame.type === 'msg') {
+          if (timerRef.current) clearTimeout(timerRef.current)
+          timerRef.current = setTimeout(() => {
+            void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
+          }, 500)
+        }
+      }
+      
+      const convs = builder ? [builder, ...conversations.filter(c => c.id !== builder.id)] : conversations
+      const ids = convs.map(c => c.id)
+
+      ids.forEach((id) => {
+        const set = frameHandlers.get(id) ?? new Set<FrameHandler>()
+        set.add(handler)
+        frameHandlers.set(id, set)
+        socket.subscribe(id, 0)
+      })
+
+      return () => {
+        ids.forEach((id) => {
+          const set = frameHandlers.get(id)
+          if (set) {
+            set.delete(handler)
+            if (set.size === 0) frameHandlers.delete(id)
+          }
+          socket.unsubscribe(id)
+        })
+      }
+    }, [conversations, builder, qc])
+  )
 
   // Her groups only (the builder channel is rendered from `builder`, pinned).
   // Dedupe the builder row by id in case it also appears in conversations().

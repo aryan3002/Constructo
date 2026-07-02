@@ -717,6 +717,7 @@ export default function CrewChat() {
           onLongPressMessage={onReply}
           deliveryStateFor={thread.deliveryState}
           replySnippetFor={replySnippetFor}
+          onPressAttachment={(uri) => router.push({ pathname: '/(contractor)/supervisor/chat-viewer', params: { uri } })}
           emptyState={
             thread.isLoading ? null : (
               <View style={{ flex: 1, justifyContent: 'center' }}>

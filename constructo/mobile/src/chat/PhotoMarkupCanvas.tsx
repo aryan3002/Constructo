@@ -9,7 +9,7 @@
  * on failure it returns the original image via onDone + onCaptureFail.
  */
 import type * as React from 'react'
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import {
   Image,
   PanResponder,
@@ -61,6 +61,33 @@ function arrowHead(a: Pt, b: Pt): [Pt, Pt] {
   ]
 }
 
+function renderStroke(s: Stroke, key: string) {
+  if (s.tool === 'draw') {
+    return (
+      <Path key={key} d={pathFromPts(s.pts)} stroke={s.color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    )
+  }
+  if (s.tool === 'circle') {
+    const cx = (s.a.x + s.b.x) / 2
+    const cy = (s.a.y + s.b.y) / 2
+    const rx = Math.abs(s.b.x - s.a.x) / 2
+    const ry = Math.abs(s.b.y - s.a.y) / 2
+    return <Circle key={key} cx={cx} cy={cy} r={Math.max(rx, ry)} stroke={s.color} strokeWidth={4} fill="none" />
+  }
+  const [h1, h2] = arrowHead(s.a, s.b)
+  return (
+    <G key={key}>
+      <Line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
+      <Line x1={s.b.x} y1={s.b.y} x2={h1.x} y2={h1.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
+      <Line x1={s.b.x} y1={s.b.y} x2={h2.x} y2={h2.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
+    </G>
+  )
+}
+
+const CompletedStrokes = memo(function CompletedStrokes({ strokes }: { strokes: Stroke[] }) {
+  return <>{strokes.map((s, i) => renderStroke(s, `s${i}`))}</>
+})
+
 export function PhotoMarkupCanvas({
   uri,
   title,
@@ -93,6 +120,8 @@ export function PhotoMarkupCanvas({
   toolRef.current = tool
   const colorRef = useRef(color)
   colorRef.current = color
+  const pointsRef = useRef<Pt[]>([])
+  const frameRef = useRef<number | null>(null)
 
   const pan = useRef(
     PanResponder.create({
@@ -102,49 +131,54 @@ export function PhotoMarkupCanvas({
         const p = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }
         const tl = toolRef.current
         const col = colorRef.current
+        pointsRef.current = []
         setCurrent(
           tl === 'draw' ? { tool: 'draw', color: col, pts: [p] } : { tool: tl, color: col, a: p, b: p },
         )
       },
       onPanResponderMove: (e: GestureResponderEvent) => {
         const p = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }
-        setCurrent((cur) => {
-          if (!cur) return cur
-          if (cur.tool === 'draw') return { ...cur, pts: [...cur.pts, p] }
-          return { ...cur, b: p }
-        })
+        pointsRef.current.push(p)
+
+        if (frameRef.current === null) {
+          frameRef.current = requestAnimationFrame(() => {
+            frameRef.current = null
+            setCurrent((cur) => {
+              if (!cur || pointsRef.current.length === 0) return cur
+              let nextCur = cur
+              if (cur.tool === 'draw') {
+                nextCur = { ...cur, pts: [...cur.pts, ...pointsRef.current] }
+              } else {
+                nextCur = { ...cur, b: pointsRef.current[pointsRef.current.length - 1] }
+              }
+              pointsRef.current = []
+              return nextCur
+            })
+          })
+        }
       },
       onPanResponderRelease: () => {
+        if (frameRef.current !== null) {
+          cancelAnimationFrame(frameRef.current)
+          frameRef.current = null
+        }
         setCurrent((cur) => {
-          if (cur) setStrokes((s) => [...s, cur])
+          if (!cur) return null
+          let finalCur = cur
+          if (pointsRef.current.length > 0) {
+            if (cur.tool === 'draw') {
+              finalCur = { ...cur, pts: [...cur.pts, ...pointsRef.current] }
+            } else {
+              finalCur = { ...cur, b: pointsRef.current[pointsRef.current.length - 1] }
+            }
+          }
+          pointsRef.current = []
+          setStrokes((s) => [...s, finalCur])
           return null
         })
       },
     }),
   ).current
-
-  function renderStroke(s: Stroke, key: string) {
-    if (s.tool === 'draw') {
-      return (
-        <Path key={key} d={pathFromPts(s.pts)} stroke={s.color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      )
-    }
-    if (s.tool === 'circle') {
-      const cx = (s.a.x + s.b.x) / 2
-      const cy = (s.a.y + s.b.y) / 2
-      const rx = Math.abs(s.b.x - s.a.x) / 2
-      const ry = Math.abs(s.b.y - s.a.y) / 2
-      return <Circle key={key} cx={cx} cy={cy} r={Math.max(rx, ry)} stroke={s.color} strokeWidth={4} fill="none" />
-    }
-    const [h1, h2] = arrowHead(s.a, s.b)
-    return (
-      <G key={key}>
-        <Line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
-        <Line x1={s.b.x} y1={s.b.y} x2={h1.x} y2={h1.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
-        <Line x1={s.b.x} y1={s.b.y} x2={h2.x} y2={h2.y} stroke={s.color} strokeWidth={4} strokeLinecap="round" />
-      </G>
-    )
-  }
 
   async function onUse() {
     if (strokes.length === 0) {
@@ -180,8 +214,6 @@ export function PhotoMarkupCanvas({
     onDone(outUri ?? uri)
   }
 
-  const all = current ? [...strokes, current] : strokes
-
   return (
     <View style={{ flex: 1, backgroundColor: '#111', paddingTop: insets.top }}>
       {/* Top bar */}
@@ -214,7 +246,10 @@ export function PhotoMarkupCanvas({
       <View ref={shotRef} collapsable={false} style={{ flex: 1, overflow: 'hidden' }}>
         <Image source={{ uri }} resizeMode="contain" style={{ position: 'absolute', inset: 0 }} />
         <View style={{ flex: 1 }} {...pan.panHandlers}>
-          <Svg style={{ position: 'absolute', inset: 0 }}>{all.map((s, i) => renderStroke(s, `s${i}`))}</Svg>
+          <Svg style={{ position: 'absolute', inset: 0 }}>
+            <CompletedStrokes strokes={strokes} />
+            {current && renderStroke(current, 'current')}
+          </Svg>
         </View>
       </View>
 

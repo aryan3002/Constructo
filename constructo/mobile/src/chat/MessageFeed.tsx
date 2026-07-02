@@ -69,6 +69,7 @@ export const MessageFeed = memo(function MessageFeed({
   replySnippetFor,
   photoActionFor,
   newMessagesLabel = 'New messages',
+  onPressAttachment,
 }: {
   items: FeedRow[]
   /** Which `sender_side` is "me" for bubble alignment/tint. */
@@ -104,6 +105,8 @@ export const MessageFeed = memo(function MessageFeed({
   ) => { onSendToFeed?: () => void; feedPhotoId?: string | null } | undefined
   /** Localized label for the scrolled-up "new messages" pill. */
   newMessagesLabel?: string
+  /** Called when the user taps a photo bubble attachment, passing the full-size URL. */
+  onPressAttachment?: (uri: string) => void
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -243,6 +246,13 @@ export const MessageFeed = memo(function MessageFeed({
           senderName={senderNameFor(m)}
           onSendToFeed={photoAction?.onSendToFeed}
           feedPhotoId={photoAction?.feedPhotoId}
+          attachmentWidth={m.attachment_width}
+          attachmentHeight={m.attachment_height}
+          onPressAttachment={
+            m.attachment_url && onPressAttachment
+              ? () => onPressAttachment(m.attachment_url!)
+              : undefined
+          }
         />
       )
       // Tighter spacing inside a run; full gap when the run ends.

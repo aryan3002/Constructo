@@ -34,6 +34,7 @@ export function ChatComposer({
   leadingActions,
   belowComposer,
   insetsBottom,
+  sendTyping,
 }: {
   value: string
   onChange: (s: string) => void
@@ -53,6 +54,7 @@ export function ChatComposer({
   /** Slot under the input row (e.g. voice recorder, suggest chip). */
   belowComposer?: ReactNode
   insetsBottom: number
+  sendTyping?: () => void
 }) {
   const { lang } = useT()
   const { theme } = useTheme()
@@ -67,6 +69,11 @@ export function ChatComposer({
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined)
     }
     onSend()
+  }
+
+  const handleChange = (s: string) => {
+    onChange(s)
+    if (sendTyping) sendTyping()
   }
 
   return (
@@ -141,7 +148,7 @@ export function ChatComposer({
         >
           <TextInput
             value={value}
-            onChangeText={onChange}
+            onChangeText={handleChange}
             placeholder={placeholder}
             placeholderTextColor={c.textMute}
             multiline

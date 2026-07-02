@@ -10,12 +10,15 @@
  * Reduced motion: the image simply appears at its resolved frame on load (no
  * scale, no fade-in loop) over the warm placeholder.
  */
-import { useRef } from 'react'
-import { Animated, Image, type ImageProps, type ViewStyle } from 'react-native'
+import { useRef, useState, useEffect } from 'react'
+import { Animated, type ViewStyle, Pressable, View } from 'react-native'
+import { Image, type ImageProps } from 'expo-image'
+import { Feather } from '@expo/vector-icons'
 
 import { DUR, EASE } from '../theme/motionTokens'
 import { AP } from '../theme/tokens'
 import { useReducedMotion } from './motion'
+import { useTheme } from '../theme/ThemeProvider'
 
 const AnimatedImage = Animated.createAnimatedComponent(Image)
 
@@ -31,18 +34,33 @@ export function BlurUpImage({
   uri,
   style,
   placeholderColor = AP.surfaceLow,
+  onError,
   ...rest
 }: BlurUpImageProps) {
   const reduced = useReducedMotion()
+  const { theme } = useTheme()
   const progress = useRef(new Animated.Value(0)).current
+  const [failed, setFailed] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
 
-  function onLoad() {
+  useEffect(() => {
+    progress.setValue(0)
+    setFailed(false)
+  }, [uri, progress])
+
+  function onLoad(e: any) {
     Animated.timing(progress, {
       toValue: 1,
       duration: reduced ? 0 : DUR.gentle,
       easing: EASE,
       useNativeDriver: true,
     }).start()
+    rest.onLoad?.(e)
+  }
+
+  function handleImgError(e: any) {
+    setFailed(true)
+    onError?.(e)
   }
 
   const animatedStyle = reduced
@@ -52,15 +70,26 @@ export function BlurUpImage({
         transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }],
       }
 
+  const Container = failed ? Pressable : View
+
   return (
-    <Animated.View style={[{ overflow: 'hidden', backgroundColor: placeholderColor }, style]}>
-      <AnimatedImage
-        {...rest}
-        source={{ uri }}
-        onLoad={onLoad}
-        resizeMode="cover"
-        style={[{ width: '100%', height: '100%' }, animatedStyle]}
-      />
+    <Animated.View style={[{ overflow: 'hidden', backgroundColor: placeholderColor, justifyContent: 'center', alignItems: 'center' }, style]}>
+      {failed ? (
+        <Container style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }} onPress={() => { setRetryKey(k => k + 1); setFailed(false); }}>
+          <Feather name="image" size={24} color={theme.colors.textMute} />
+        </Container>
+      ) : (
+        <AnimatedImage
+          {...rest}
+          key={`${uri}-${retryKey}`}
+          source={{ uri }}
+          onLoad={onLoad}
+          onError={handleImgError}
+          resizeMode="cover"
+          style={[{ width: '100%', height: '100%' }, animatedStyle]}
+        />
+      )}
     </Animated.View>
   )
 }
+

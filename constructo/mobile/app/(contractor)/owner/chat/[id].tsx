@@ -28,7 +28,8 @@ import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { PRESS_SCALE } from '../../../../src/theme/motionTokens'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
-import { BodyStrong, Small } from '../../../../src/ui'
+import { FadeInUp } from '../../../../src/ui/motion'
+import { BodyStrong, Small, BreathingDots } from '../../../../src/ui'
 import { MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
 import { SendToFeedSheet } from '../../../../src/contractor/SendToFeedSheet'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
@@ -446,6 +447,7 @@ export default function OwnerConversation() {
             deliveryStateFor={thread.deliveryState}
             replySnippetFor={replySnippetFor}
             photoActionFor={photoActionFor}
+            onPressAttachment={(uri) => router.push({ pathname: '/(contractor)/owner/chat-viewer', params: { uri } })}
             emptyState={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Small muted>{str.empty}</Small>
@@ -491,6 +493,24 @@ export default function OwnerConversation() {
       ) : null}
 
       {/* Composer */}
+      {thread.isTyping && (
+        <FadeInUp
+          style={{
+            position: 'absolute',
+            left: SPACE.lg,
+            bottom: Math.max(insets.bottom, SPACE.sm) + 64, // above composer
+            backgroundColor: c.paper,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: c.line,
+            zIndex: 10,
+          }}
+        >
+          <BreathingDots />
+        </FadeInUp>
+      )}
       <View
         style={{
           flexDirection: 'row',
@@ -523,7 +543,10 @@ export default function OwnerConversation() {
         </Pressable>
         <TextInput
           value={text}
-          onChangeText={setText}
+          onChangeText={(s) => {
+            setText(s)
+            thread.sendTyping()
+          }}
           placeholder={str.placeholder}
           placeholderTextColor={c.textMute}
           multiline

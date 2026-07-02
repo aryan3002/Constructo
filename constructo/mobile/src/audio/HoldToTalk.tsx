@@ -92,10 +92,9 @@ export function HoldToTalk({
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
   const state = useAudioRecorderState(recorder)
 
-  // Guards: a hold may be released before async prepare/record resolves; track
-  // whether the user is still holding so a late start auto-stops cleanly.
   const heldRef = useRef(false)
   const startingRef = useRef(false)
+  const preparedRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [tooShort, setTooShort] = useState(false)
 
@@ -106,8 +105,21 @@ export function HoldToTalk({
     )
   }, [])
 
+  // Pre-warm the recorder
+  useEffect(() => {
+    void (async () => {
+      try {
+        const p = await requestRecordingPermissionsAsync()
+        if (p.granted) {
+          await recorder.prepareToRecordAsync()
+          preparedRef.current = true
+        }
+      } catch {}
+    })()
+  }, [recorder])
+
   const startHaptic = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined)
   }, [])
   const stopHaptic = useCallback(() => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
@@ -120,6 +132,11 @@ export function HoldToTalk({
     startingRef.current = true
     setTooShort(false)
     try {
+      if (preparedRef.current && !state.isRecording && recorder) {
+        recorder.record()
+        return
+      }
+
       const perm = await requestRecordingPermissionsAsync()
       if (!perm.granted) {
         onPermissionDenied?.()
@@ -127,19 +144,19 @@ export function HoldToTalk({
         return
       }
       await recorder.prepareToRecordAsync()
+      preparedRef.current = true
       // If the user already let go while we were preparing, abort silently.
       if (!heldRef.current) {
         startingRef.current = false
         return
       }
       recorder.record()
-      startHaptic()
     } catch {
       startingRef.current = false
     } finally {
       startingRef.current = false
     }
-  }, [recorder, state.isRecording, onPermissionDenied, startHaptic])
+  }, [recorder, state.isRecording, onPermissionDenied])
 
   const endRecording = useCallback(async () => {
     // Nothing was recording (e.g. permission denied, or released mid-prepare).
@@ -149,6 +166,9 @@ export function HoldToTalk({
     try {
       await recorder.stop()
       stopHaptic()
+      preparedRef.current = false
+      void recorder.prepareToRecordAsync().then(() => { preparedRef.current = true }).catch(() => undefined)
+
       const uri = recorder.uri
       if (!uri || durationMs < MIN_RECORDING_MS) {
         setTooShort(true)
@@ -169,9 +189,10 @@ export function HoldToTalk({
 
   const onPressIn = useCallback(() => {
     if (disabled || busy) return
+    startHaptic()
     heldRef.current = true
     void beginRecording()
-  }, [disabled, busy, beginRecording])
+  }, [disabled, busy, beginRecording, startHaptic])
 
   const onPressOut = useCallback(() => {
     if (!heldRef.current) return
