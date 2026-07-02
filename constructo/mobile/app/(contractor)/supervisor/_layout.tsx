@@ -12,6 +12,7 @@ import { View } from 'react-native'
 import { Tabs } from 'expo-router'
 
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
+import { ToastProvider } from '../../../src/ui'
 import { EngTabBar } from './_eng.components'
 
 function SupervisorTabs() {
@@ -20,6 +21,7 @@ function SupervisorTabs() {
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Tabs
         initialRouteName="home"
+        backBehavior="history"
         tabBar={(props) => <EngTabBar {...props} />}
         screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: theme.colors.bg } }}
       >
@@ -51,7 +53,9 @@ function SupervisorTabs() {
 export default function SupervisorLayout() {
   return (
     <ThemeProvider initial="daylight">
-      <SupervisorTabs />
+      <ToastProvider>
+        <SupervisorTabs />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

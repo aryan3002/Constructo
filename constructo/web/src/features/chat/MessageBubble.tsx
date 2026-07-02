@@ -127,13 +127,18 @@ export function MessageBubble({
       {/* Quoted parent strip */}
       {parentMsg ? <QuotedParent parent={parentMsg} /> : null}
 
-      {/* Inline image attachment */}
+      {/* Inline image attachment — fixed-size box reserves space so the thread
+          does not reflow/jump as the presigned R2 GET resolves. */}
       {isImage ? (
-        <img
-          src={message.attachment_url!}
-          alt="attachment"
-          className="mb-1 max-w-[240px] rounded-md object-cover"
-        />
+        <div className="mb-1 h-[180px] w-[240px] overflow-hidden rounded-md bg-surface-sunken">
+          <img
+            src={message.attachment_url!}
+            alt="attachment"
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
+        </div>
       ) : null}
 
       {/* Document / voice chip */}

@@ -92,6 +92,9 @@ export interface UseChatThread {
   /** Commit a Nivaan proposal: a human tap that books the capture via the
    *  deterministic fast-path (capture_type+fields). The agent never calls this. */
   sendProposal: (captureType: string, fields: Record<string, unknown>) => Promise<void>
+  /** Network connectivity (NetInfo). False → the header shows "Connecting…" and
+   *  the green dot goes muted, explaining stuck ticks / "Send…". */
+  online: boolean
 }
 
 // The server caps a /chat/messages page at MAX_LIMIT=200; request that so the
@@ -304,6 +307,10 @@ export function useChatThread(
   const [reply, setReply] = useState<ChatMessage | null>(null)
   const [outbox, setOutbox] = useState<ChatOutboxItem[]>([])
   const [cursors, setCursors] = useState<CursorOut[]>([])
+  // Connectivity for the chat header's "Connecting…" affordance. NetInfo's
+  // isConnected is null on the first event — treat null as online so the header
+  // never flashes "Connecting…" at open.
+  const [online, setOnline] = useState(true)
 
   // Stable address ref so callbacks/effects keyed on addrKey don't churn.
   const addressRef = useRef(address)
@@ -542,6 +549,7 @@ export function useChatThread(
     void flush() // drain on mount (recovers stuck items from a prior session)
 
     const netSub = NetInfo.addEventListener((s) => {
+      setOnline(s.isConnected !== false)
       if (s.isConnected) {
         // Connectivity is back: retry NOW — don't make the user wait out the
         // remainder of an up-to-5-minute backoff earned while offline.
@@ -657,6 +665,7 @@ export function useChatThread(
       deliveryState,
       flush,
       retry,
+      online,
     }),
     [
       messages,
@@ -673,6 +682,7 @@ export function useChatThread(
       deliveryState,
       flush,
       retry,
+      online,
     ],
   )
 }

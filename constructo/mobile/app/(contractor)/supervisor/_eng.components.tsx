@@ -11,6 +11,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { useAndroidKeyboardVisible } from '../../../src/ui/useKeyboardVisible'
 import { AP, SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import {
   Body,
@@ -313,8 +314,13 @@ const TABS: TabDef[] = [
 export function EngTabBar({ state, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
+  const keyboardUp = useAndroidKeyboardVisible()
   const c = theme.colors
   const activeName = state.routes[state.index]?.name
+
+  // Android: hide the bar while the keyboard is up (it otherwise rises to sit
+  // between the composer and the keyboard in crew chat). No-op on iOS.
+  if (keyboardUp) return null
 
   const go = (name: string) => {
     const route = state.routes.find((r) => r.name === name)

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, Pressable, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as Haptics from 'expo-haptics'
 
 import {
   captureSites,
@@ -30,7 +31,7 @@ import {
 import type { CaptureKind } from '../../../src/api/supervisor'
 import type { Site } from '../../../src/api/types'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus } from '../../../src/ui'
+import { Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus, useToast } from '../../../src/ui'
 import { HoldToTalk, TranscriptConfirm, type RecordedAudio } from '../../../src/audio'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { enqueue, list, type OutboxItem } from '../../../src/offline/outbox'
@@ -122,6 +123,7 @@ function mediaFromAsset(a: ImagePicker.ImagePickerAsset): CaptureMedia {
 export default function Capture() {
   const { lang } = useT()
   const { online, pending, flush } = useOutbox()
+  const toast = useToast()
   const str = STR[lang]
 
   const [kind, setKind] = useState<CaptureKind>('progress')
@@ -171,9 +173,12 @@ export default function Capture() {
       })
       await refresh()
       if (online) void flush() // optimistic: nudge a drain immediately
-      Alert.alert('✓', str.queuedToast)
+      // The SentRow list below already shows the queued item, so a blocking
+      // OS Alert adds nothing — a calm toast + success haptic is the ack.
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      toast(str.queuedToast)
     },
-    [kind, site, str, refresh, online, flush],
+    [kind, site, str, refresh, online, flush, toast],
   )
 
   const onPhoto = useCallback(async () => {

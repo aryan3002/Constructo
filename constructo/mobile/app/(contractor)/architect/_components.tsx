@@ -10,6 +10,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { useAndroidKeyboardVisible } from '../../../src/ui/useKeyboardVisible'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import type { RoutingStatus } from '../../../src/api/specs'
 import type { SiteChange, SiteChangeStatus } from '../../../src/api/siteChanges'
@@ -298,8 +299,13 @@ const TABS: TabDef[] = [
 export function DesTabBar({ state, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
+  const keyboardUp = useAndroidKeyboardVisible()
   const c = theme.colors
   const activeName = state.routes[state.index]?.name
+
+  // Android: hide while the keyboard is up so the floating bar never rises to
+  // sit between the composer and the keyboard (no-op on iOS).
+  if (keyboardUp) return null
 
   const go = (name: string) => {
     const route = state.routes.find((r) => r.name === name)

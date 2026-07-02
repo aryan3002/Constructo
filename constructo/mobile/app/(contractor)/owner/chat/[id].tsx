@@ -367,11 +367,19 @@ export default function OwnerConversation() {
         >
           <Feather name="chevron-left" size={24} color={c.text} />
         </Pressable>
-        <BodyStrong style={{ flex: 1 }} numberOfLines={1}>
-          {isHomeowner
-            ? `${str.homeowner} · ${title || str.site}`
-            : (title || str.site)}
-        </BodyStrong>
+        <View style={{ flex: 1 }}>
+          <BodyStrong numberOfLines={1}>
+            {isHomeowner
+              ? `${str.homeowner} · ${title || str.site}`
+              : (title || str.site)}
+          </BodyStrong>
+          {/* Calm offline affordance — explains stuck ticks / "Send…". */}
+          {!thread.online ? (
+            <Small muted numberOfLines={1}>
+              {lang === 'hi' ? 'कनेक्ट हो रहा है…' : 'Connecting…'}
+            </Small>
+          ) : null}
+        </View>
         {isGroup && isAdmin ? (
           <Pressable
             accessibilityRole="button"

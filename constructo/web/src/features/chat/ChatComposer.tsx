@@ -20,7 +20,8 @@ import {
   type KeyboardEvent,
   type DragEvent,
 } from 'react'
-import { chatApi, type ChatAddress, type ChatMessage, type MediaKind } from '../../api/chat'
+import { newClientMsgId, type ChatAddress, type ChatMessage } from '../../api/chat'
+import { canonicalMime, mimeToKind, uploadChatMedia } from './mediaUpload'
 import { parseSlash, isSlash, SLASH_MENU, type SlashMenuItem } from './slash'
 import { suggestCapture } from './suggest'
 import { SlashMenu } from './SlashMenu'
@@ -34,6 +35,17 @@ export interface MediaPayload {
   mime: string
   sha256: string
   mediaType: 'image' | 'document' | 'voice'
+  /** The optimistic pending bubble's id (created at upload start). */
+  clientMsgId?: string
+}
+
+export interface MediaStartPayload {
+  clientMsgId: string
+  /** Object-URL preview for images; absent for documents. */
+  previewUrl?: string
+  mediaType: 'image' | 'document' | 'voice'
+  /** Source file, kept so a failed send can re-upload on retry. */
+  file: File
 }
 
 export interface ChatComposerProps {
@@ -41,6 +53,10 @@ export interface ChatComposerProps {
   onSend: (body: string) => void
   /** Called after the media upload completes, with the upload receipt. */
   onSendMedia: (m: MediaPayload) => void
+  /** Called at the START of an upload so an optimistic bubble can appear. */
+  onMediaStart?: (m: MediaStartPayload) => void
+  /** Called when the media upload fails, so the bubble can flip to "failed". */
+  onMediaError?: (clientMsgId: string) => void
   /** Called when a slash-command or smart-suggest chip resolves to a capture. */
   onSendProposal: (captureType: string, fields: Record<string, unknown>) => void
   /** When set, a reply-banner renders above the textarea. */
@@ -57,49 +73,6 @@ export interface ChatComposerProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Derive the canonical MIME the R2 upload endpoint expects.
- *  R2 CORS rejects `image/jpg`; normalise it to `image/jpeg`. */
-function canonicalMime(raw: string): string {
-  if (raw === 'image/jpg') return 'image/jpeg'
-  return raw
-}
-
-/** Classify a MIME string into a `MediaKind` for the presign call. */
-function mimeToKind(mime: string): MediaKind {
-  if (mime.startsWith('image/')) return 'image'
-  return 'document'
-  // Voice recording is Phase B — 'voice' is not produced here yet.
-}
-
-/** Compute a hex SHA-256 of a File via the Web Crypto API.
- *  Falls back to an empty string in environments (e.g. jsdom) where
- *  `File.prototype.arrayBuffer` is unavailable — the backend will
- *  re-derive the hash on multipart paths; callers should treat '' as
- *  "hash not yet available". */
-async function sha256Hex(file: File): Promise<string> {
-  try {
-    // Some older jsdom builds don't implement File.prototype.arrayBuffer;
-    // guard defensively so tests and real browsers both work.
-    const buf =
-      typeof file.arrayBuffer === 'function'
-        ? await file.arrayBuffer()
-        : await new Promise<ArrayBuffer>((resolve, reject) => {
-            const fr = new FileReader()
-            fr.onload = () => resolve(fr.result as ArrayBuffer)
-            fr.onerror = () => reject(fr.error)
-            fr.readAsArrayBuffer(file)
-          })
-    const hashBuf = await crypto.subtle.digest('SHA-256', buf)
-    return Array.from(new Uint8Array(hashBuf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-  } catch {
-    // In environments without crypto.subtle (or without FileReader) we
-    // return an empty string — the parent must treat '' as "unknown hash".
-    return ''
-  }
-}
-
 /** Pull a short one-line snippet from a ChatMessage for the reply banner. */
 function replySnippet(msg: ChatMessage): string {
   if (msg.events && msg.events.length > 0) return msg.events[0].summary
@@ -113,6 +86,8 @@ function replySnippet(msg: ChatMessage): string {
 export function ChatComposer({
   onSend,
   onSendMedia,
+  onMediaStart,
+  onMediaError,
   onSendProposal,
   reply,
   onCancelReply,
@@ -190,16 +165,20 @@ export function ChatComposer({
     if (parsed) {
       onSendProposal(parsed.capture_type, parsed.fields)
       clearText()
+      textareaRef.current?.focus()
       return
     }
     onSend(body)
     clearText()
+    // Keep focus in the composer so a mouse user can keep typing (WhatsApp Web).
+    textareaRef.current?.focus()
   }, [text, sending, uploading, onSend, onSendProposal, clearText])
 
   const acceptSuggestion = useCallback(() => {
     if (!suggestion) return
     onSendProposal(suggestion.capture_type, suggestion.fields)
     clearText()
+    textareaRef.current?.focus()
   }, [suggestion, onSendProposal, clearText])
 
   const handleKeyDown = useCallback(
@@ -242,44 +221,37 @@ export function ChatComposer({
     async (file: File) => {
       setUploadError(null)
       setUploading(true)
-      try {
-        const rawMime = file.type || 'application/octet-stream'
-        const mime = canonicalMime(rawMime)
-        const kind = mimeToKind(mime)
 
-        const presign = await chatApi.presignMedia({ ...address, kind })
-
-        let key: string
-        let sha256: string
-
-        if (presign.upload_mode === 'presigned' && presign.put_url) {
-          // Direct PUT to R2 with canonical MIME
-          const r2Res = await fetch(presign.put_url, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': mime },
-          })
-          if (!r2Res.ok) throw new Error(`R2 PUT failed: ${r2Res.status}`)
-          key = presign.key
-          sha256 = await sha256Hex(file)
-        } else {
-          // Multipart fallback — server returns key + sha256
-          const uploaded = await chatApi.uploadMedia(address, file, kind)
-          key = uploaded.key
-          sha256 = uploaded.sha256
+      // Insert the optimistic pending bubble immediately (before the upload),
+      // so a multi-second photo send shows up in the thread right away.
+      const cid = newClientMsgId()
+      const kind = mimeToKind(canonicalMime(file.type || 'application/octet-stream'))
+      if (onMediaStart) {
+        let previewUrl: string | undefined
+        if (kind === 'image') {
+          try {
+            previewUrl = URL.createObjectURL(file)
+          } catch {
+            previewUrl = undefined
+          }
         }
+        onMediaStart({ clientMsgId: cid, previewUrl, mediaType: kind, file })
+      }
 
-        onSendMedia({ attachmentKey: key, mime, sha256, mediaType: kind })
+      try {
+        const { key, sha256, mime, mediaType } = await uploadChatMedia(address, file)
+        onSendMedia({ attachmentKey: key, mime, sha256, mediaType, clientMsgId: cid })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed'
         setUploadError(msg)
+        onMediaError?.(cid)
       } finally {
         setUploading(false)
         // Clear the file input so the same file can be re-picked after an error
         if (fileInputRef.current) fileInputRef.current.value = ''
       }
     },
-    [address, onSendMedia],
+    [address, onSendMedia, onMediaStart, onMediaError],
   )
 
   const handleFileChange = useCallback(

@@ -1,9 +1,9 @@
 /**
  * ChatInbox — the conversation list panel for the contractor web chat.
  *
- * Queries `chatApi.conversations()` via TanStack Query (15 s polling) and
- * renders the list as `ConversationRow` entries. Handles loading / error /
- * empty states with the shared `states.tsx` primitives.
+ * Queries `chatApi.conversations()` via TanStack Query (5 s polling +
+ * refetch-on-focus) and renders the list as `ConversationRow` entries. Handles
+ * loading / error / empty states with the shared `states.tsx` primitives.
  *
  * Props:
  *   selectedId — the currently open conversation's `id`, or null.
@@ -28,7 +28,10 @@ export function ChatInbox({ selectedId, onSelect }: ChatInboxProps) {
   const q = useQuery({
     queryKey: ['chat', 'conversations'],
     queryFn: chatApi.conversations,
-    refetchInterval: 15_000,
+    // Tighter poll + refetch-on-focus so unopened threads bump/badge quickly.
+    // (The open thread is already live via the socket.)
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   })
 
   return (

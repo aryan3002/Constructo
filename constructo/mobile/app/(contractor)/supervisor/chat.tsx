@@ -575,7 +575,14 @@ export default function CrewChat() {
       >
         <View style={{ flex: 1 }}>
           <BodyStrong>{str.title}</BodyStrong>
-          <Small style={{ color: c.textMute }}>{site.name}</Small>
+          {/* Calm offline affordance — explains stuck ticks / "Send…". */}
+          <Small style={{ color: c.textMute }}>
+            {!thread.online
+              ? lang === 'hi'
+                ? 'कनेक्ट हो रहा है…'
+                : 'Connecting…'
+              : site.name}
+          </Small>
         </View>
         {(
           [

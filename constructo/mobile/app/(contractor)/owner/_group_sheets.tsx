@@ -18,7 +18,9 @@
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   TextInput,
@@ -144,25 +146,31 @@ function SheetShell({
   const insets = useSafeAreaInsets()
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
-        onPress={onClose}
+      {/* Lift the sheet above the keyboard so name/member inputs stay visible (iOS). */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Pressable
-          onPress={() => {}}
-          style={{
-            backgroundColor: theme.colors.card,
-            borderTopLeftRadius: theme.radii.sheet,
-            borderTopRightRadius: theme.radii.sheet,
-            paddingTop: SPACE.lg,
-            paddingHorizontal: SPACE.lg,
-            paddingBottom: Math.max(insets.bottom, SPACE.lg),
-            maxHeight: '88%',
-          }}
+          style={{ flex: 1, backgroundColor: 'rgba(21,23,28,0.45)', justifyContent: 'flex-end' }}
+          onPress={onClose}
         >
-          {children}
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: theme.colors.card,
+              borderTopLeftRadius: theme.radii.sheet,
+              borderTopRightRadius: theme.radii.sheet,
+              paddingTop: SPACE.lg,
+              paddingHorizontal: SPACE.lg,
+              paddingBottom: Math.max(insets.bottom, SPACE.lg),
+              maxHeight: '88%',
+            }}
+          >
+            {children}
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }

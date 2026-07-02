@@ -21,6 +21,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   TouchableWithoutFeedback,
@@ -95,6 +96,17 @@ export default function PhotoPreview() {
 
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
+      {/* Full-bleed image LAYER — absolutely positioned behind the chrome so the
+          caption KAV lifting over it never squeezes/reflows the photo. Tapping
+          it dismisses the keyboard. */}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={StyleSheet.absoluteFill}>
+          {uri ? (
+            <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          ) : null}
+        </View>
+      </TouchableWithoutFeedback>
+
       {/* Top bar: close + (optional) Markup */}
       <View
         style={{
@@ -141,16 +153,11 @@ export default function PhotoPreview() {
         ) : null}
       </View>
 
-      {/* Image — tapping it dismisses the keyboard. */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          {uri ? (
-            <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-          ) : null}
-        </View>
-      </TouchableWithoutFeedback>
+      {/* Spacer — lets the caption sit at the bottom while the image shows
+          through from the absolute layer behind. Taps fall through to dismiss. */}
+      <View style={{ flex: 1 }} pointerEvents="none" />
 
-      {/* Caption + send */}
+      {/* Caption + send — the only thing the keyboard lifts (image stays put). */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View
           style={{

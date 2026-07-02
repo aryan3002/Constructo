@@ -252,3 +252,152 @@ describe('useChatThread', () => {
     expect(result.current.deliveryState(1)).toBe('sent')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Wave B — WhatsApp-smoothness contracts
+// ---------------------------------------------------------------------------
+describe('useChatThread — Wave B', () => {
+  // B1 — thread opens on the NEWEST page, not the oldest
+  it('initial load requests the newest page (order desc, limit 50)', async () => {
+    const { Wrapper } = makeWrapper()
+    renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+
+    await waitFor(() => expect(mockMessages).toHaveBeenCalled())
+    expect(mockMessages).toHaveBeenCalledWith(
+      { siteId: 'site-1' },
+      expect.objectContaining({ order: 'desc', limit: 50 }),
+    )
+  })
+
+  // B1 — a full initial page arms upward paging from the start
+  it('arms hasOlder when the initial page is full (>= 50)', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => ({
+      ...FAKE_MSGS[0], id: `f${i}`, seq: i + 1,
+    }))
+    mockMessages.mockResolvedValueOnce(full)
+
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(50))
+    expect(result.current.hasOlder).toBe(true)
+  })
+
+  it('does not arm hasOlder for a short initial page', async () => {
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.hasOlder).toBe(false)
+  })
+
+  // B3 + B7 — loadOlder pages upward, is awaitable, and preserves history order
+  it('loadOlder requests older rows (beforeSeq/desc/limit) and prepends them', async () => {
+    const initial = [
+      { ...FAKE_MSGS[0], id: 's51', seq: 51 },
+      { ...FAKE_MSGS[1], id: 's52', seq: 52 },
+    ]
+    mockMessages.mockResolvedValueOnce(initial)
+
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current.messages).toHaveLength(2))
+
+    mockMessages.mockResolvedValueOnce([{ ...FAKE_MSGS[0], id: 's50', seq: 50 }])
+    await act(async () => {
+      await result.current.loadOlder()
+    })
+
+    expect(mockMessages).toHaveBeenLastCalledWith(
+      { siteId: 'site-1' },
+      expect.objectContaining({ beforeSeq: 51, order: 'desc', limit: 50 }),
+    )
+    expect(result.current.messages.map((m) => m.seq)).toEqual([50, 51, 52])
+  })
+
+  // B5 — optimistic media bubble appears at upload start and is reused on send
+  it('startMedia adds an optimistic pending bubble with a preview', async () => {
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => {
+      result.current.startMedia({ clientMsgId: 'cid-media', previewUrl: 'blob:preview', mediaType: 'image' })
+    })
+
+    expect(result.current.pending).toHaveLength(1)
+    expect(result.current.pending[0].clientMsgId).toBe('cid-media')
+    expect(result.current.pending[0].previewUrl).toBe('blob:preview')
+    expect(result.current.pending[0].state).toBe('sending')
+  })
+
+  it('sendMedia reuses the optimistic bubble (no duplicate) and clears it on success', async () => {
+    mockSend.mockResolvedValueOnce({ ...FAKE_MSGS[0], id: 'm-img', seq: 3, media_type: 'image' })
+
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => {
+      result.current.startMedia({ clientMsgId: 'cid-media', previewUrl: 'blob:preview', mediaType: 'image' })
+    })
+    expect(result.current.pending).toHaveLength(1)
+
+    act(() => {
+      result.current.sendMedia({
+        attachmentKey: 'k', mime: 'image/jpeg', sha256: 'h', mediaType: 'image', clientMsgId: 'cid-media',
+      })
+    })
+    // Reused — not a second bubble
+    expect(result.current.pending).toHaveLength(1)
+
+    await waitFor(() => expect(result.current.pending).toHaveLength(0))
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ client_msg_id: 'cid-media', attachment_key: 'k' }),
+    )
+  })
+
+  it('failMedia flips the media bubble to failed', async () => {
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => { result.current.startMedia({ clientMsgId: 'cid-x', mediaType: 'image' }) })
+    act(() => { result.current.failMedia('cid-x') })
+
+    expect(result.current.pending[0].state).toBe('failed')
+  })
+
+  // B6 — read receipts respect tab visibility/focus
+  it('advances the read cursor immediately when the tab is focused', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+
+    const { Wrapper } = makeWrapper()
+    renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+
+    await waitFor(() =>
+      expect(mockRead).toHaveBeenCalledWith(expect.objectContaining({ lastSeq: 2 })),
+    )
+    hasFocus.mockRestore()
+  })
+
+  it('defers read receipts while the tab is hidden, then flushes on focus', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useChatThread({ siteId: 'site-1' }), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current.messages).toHaveLength(2))
+
+    // Hidden → no read cursor advance yet
+    expect(mockRead).not.toHaveBeenCalled()
+
+    // Return to the tab → deferred read flushes
+    hasFocus.mockReturnValue(true)
+    act(() => { window.dispatchEvent(new Event('focus')) })
+
+    await waitFor(() =>
+      expect(mockRead).toHaveBeenCalledWith(expect.objectContaining({ lastSeq: 2 })),
+    )
+    hasFocus.mockRestore()
+  })
+})

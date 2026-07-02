@@ -16,19 +16,22 @@
  * Wired to real data via homeowner.home() + homeowner.requests() + homeowner.milestones().
  * Keeps the file's existing STR en/hi table, data hooks, and loading/error handling.
  */
+import { useCallback, useState } from 'react'
 import {
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   View,
   type ViewStyle,
 } from 'react-native'
 import { Link, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { homeowner, type HeadsUpAction } from '../../src/api/client'
+import { homeowner, type HeadsUp, type HeadsUpAction } from '../../src/api/client'
 import { HeadsUpSection } from './_heads_up'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
@@ -258,18 +261,16 @@ export default function Home() {
   const t = STR[lang]
 
   // ── Data queries ────────────────────────────────────────────────────────────
+  // All four fire in parallel — none consumes home's result, so gating them on
+  // homeQ removed a 2-hop waterfall (cards used to pop in one query at a time).
   const homeQ = useQuery({ queryKey: ['home'], queryFn: () => homeowner.home() })
-  // B2 — milestone strip (only fire if home query succeeded)
   const milestonesQ = useQuery({
     queryKey: ['home', 'milestones'],
     queryFn: () => homeowner.milestones(),
-    enabled: homeQ.isSuccess,
   })
-  // B3 — my requests (open only; only fire if home query succeeded)
   const requestsQ = useQuery({
     queryKey: ['home', 'requests'],
     queryFn: () => homeowner.requests(),
-    enabled: homeQ.isSuccess,
   })
   // Notification bell badge — the unread count for the in-app inbox.
   const notifQ = useQuery({ queryKey: ['notifications'], queryFn: () => homeowner.notifications() })
@@ -279,12 +280,34 @@ export default function Home() {
   const headsUpQ = useQuery({
     queryKey: ['home', 'headsUp'],
     queryFn: () => homeowner.headsUp(),
-    enabled: homeQ.isSuccess,
   })
   const qc = useQueryClient()
   const respondM = useMutation({
     mutationFn: (v: { id: string; action: HeadsUpAction }) =>
       homeowner.respondHeadsUp(v.id, v.action),
+    // Optimistically settle the card only for the two RESOLVING actions —
+    // 'show_more' leaves the finding open + respondable, so flipping it would
+    // glitch (buttons pop back on refetch).
+    onMutate: async (v) => {
+      if (v.action !== 'approved' && v.action !== 'disputed') return
+      await qc.cancelQueries({ queryKey: ['home', 'headsUp'] })
+      const prev = qc.getQueryData<HeadsUp>(['home', 'headsUp'])
+      qc.setQueryData<HeadsUp>(['home', 'headsUp'], (old) =>
+        old
+          ? {
+              ...old,
+              cards: old.cards.map((cd) =>
+                cd.finding_id === v.id ? { ...cd, respondable: false } : cd,
+              ),
+            }
+          : old,
+      )
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      const prev = (ctx as { prev?: HeadsUp } | undefined)?.prev
+      if (prev) qc.setQueryData(['home', 'headsUp'], prev)
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['home', 'headsUp'] })
       void qc.invalidateQueries({ queryKey: ['home', 'requests'] })
@@ -295,6 +318,21 @@ export default function Home() {
       homeowner.flagSomething('Something looks off on site — please take a look.'),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['home', 'requests'] }),
   })
+
+  // Pull-to-refresh — invalidate every home surface (prefix-matches the
+  // ['home', …] queries) plus the notification badge.
+  const [refreshing, setRefreshing] = useState(false)
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['home'] }),
+        qc.invalidateQueries({ queryKey: ['notifications'] }),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [qc])
 
   // ── Loading / error states ───────────────────────────────────────────────────
   if (homeQ.isLoading) {
@@ -393,6 +431,9 @@ export default function Home() {
         paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE,
         gap: SPACE.lg,
       }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+      }
     >
       {/* ── Top bar: Logo + greeting + settings ───────────────────────── */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -672,8 +713,12 @@ export default function Home() {
         <FadeInUp delay={35}>
           <HeadsUpSection
             data={headsUpQ.data}
-            busy={respondM.isPending || flagM.isPending}
-            onRespond={(id, action) => respondM.mutate({ id, action })}
+            busyId={respondM.isPending ? respondM.variables?.id : undefined}
+            flagBusy={flagM.isPending}
+            onRespond={(id, action) => {
+              void Haptics.selectionAsync()
+              respondM.mutate({ id, action })
+            }}
             onFlag={() => flagM.mutate()}
           />
         </FadeInUp>

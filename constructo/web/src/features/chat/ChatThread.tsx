@@ -12,7 +12,7 @@
  * Semantic tokens only — no hardcoded hex.  Neev light + neev-dark aware.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useLayoutEffect, useRef, useCallback, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChatThread } from './useChatThread'
 import { MessageBubble } from './MessageBubble'
@@ -94,6 +94,8 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     setReply,
     send,
     sendMedia,
+    startMedia,
+    failMedia,
     sendProposal,
     loadOlder,
     hasOlder,
@@ -102,25 +104,75 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     pending,
   } = useChatThread(address)
 
-  // ---- Autoscroll ----
+  // ---- Scroll management ----
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Pinned-to-bottom tracking so a new message never yanks a reader who has
+  // scrolled up into history; only own sends / an at-bottom view autoscroll.
+  const atBottomRef = useRef(true)
+  const loadingOlderRef = useRef(false)
+  const olderBeforeHeightRef = useRef<number | null>(null)
+  const prevFirstSeqRef = useRef<number | null>(null)
+  const prevPendingLenRef = useRef(pending.length)
+  const firstPaintRef = useRef(true)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const el = listRef.current
+    const firstSeq = messages.length > 0 ? messages[0].seq : null
+
+    // Older history just prepended (first seq shrank) → preserve reading
+    // position instead of teleporting to the bottom.
+    const prepended =
+      firstSeq !== null &&
+      prevFirstSeqRef.current !== null &&
+      firstSeq < prevFirstSeqRef.current
+
+    if (prepended) {
+      prevFirstSeqRef.current = firstSeq
+      prevPendingLenRef.current = pending.length
+      if (el && olderBeforeHeightRef.current !== null) {
+        const delta = el.scrollHeight - olderBeforeHeightRef.current
+        olderBeforeHeightRef.current = null
+        if (delta > 0) el.scrollTop += delta
+      }
+      return
+    }
+
+    prevFirstSeqRef.current = firstSeq
+
+    const ownSend = pending.length > prevPendingLenRef.current
+    prevPendingLenRef.current = pending.length
+
+    const shouldScroll = firstPaintRef.current || ownSend || atBottomRef.current
+    if (!shouldScroll) return
+
     // Guard: jsdom does not implement scrollIntoView; real browsers do.
     if (typeof bottomRef.current?.scrollIntoView === 'function') {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+      bottomRef.current.scrollIntoView({ behavior: firstPaintRef.current ? 'auto' : 'smooth' })
     }
-  }, [messages.length, pending.length])
+    if (firstSeq !== null || pending.length > 0) firstPaintRef.current = false
+  }, [messages, pending.length])
 
-  // ---- Scroll-to-top → loadOlder ----
+  // ---- Scroll-to-top → loadOlder (guarded against refire) ----
   const handleScroll = useCallback(() => {
     const el = listRef.current
-    if (!el || !hasOlder) return
-    if (el.scrollTop < 80) {
-      loadOlder()
+    if (!el) return
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    if (hasOlder && !loadingOlderRef.current && el.scrollTop < 80) {
+      loadingOlderRef.current = true
+      olderBeforeHeightRef.current = el.scrollHeight
+      void loadOlder().finally(() => {
+        loadingOlderRef.current = false
+      })
     }
   }, [hasOlder, loadOlder])
+
+  // ---- Load-older button: capture height first so position is preserved ----
+  const handleLoadOlderClick = useCallback(() => {
+    const el = listRef.current
+    if (el) olderBeforeHeightRef.current = el.scrollHeight
+    void loadOlder()
+  }, [loadOlder])
 
   // ---- resolveParent helper (stable — doesn't close over messages directly) ----
   const messagesRef = useRef(messages)
@@ -267,7 +319,7 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
                 <button
                   type="button"
                   data-testid="load-older-btn"
-                  onClick={loadOlder}
+                  onClick={handleLoadOlderClick}
                   className="rounded-full border border-edge bg-surface-card px-4 py-1 font-body text-small text-text-secondary hover:bg-surface-hover"
                 >
                   Load older messages
@@ -351,35 +403,51 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
             })}
 
             {/* Pending (optimistic) bubbles */}
-            {pending.map((p) => (
-              <div key={p.clientMsgId} className="group mb-1.5 flex flex-col">
-                {p.state === 'sending' ? (
-                  <div
-                    data-testid="pending-sending"
-                    className="ml-auto max-w-[80%] rounded-sheet bg-brand-subtle px-3 py-2 font-body text-small text-text-muted"
-                  >
-                    {p.body ?? '…'}
-                    <span className="ml-1.5 opacity-60">sending…</span>
-                  </div>
-                ) : (
-                  <div
-                    data-testid="pending-failed"
-                    className="ml-auto flex max-w-[80%] flex-col gap-1"
-                  >
-                    <div className="rounded-sheet border border-risk-fg/20 bg-risk-bg px-3 py-2 font-body text-small text-risk-fg">
-                      {p.body ?? '…'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => retry(p.clientMsgId)}
-                      className="self-end font-body text-micro text-brand-text hover:underline"
+            {pending.map((p) => {
+              // Reserve the same fixed-size box as a confirmed image bubble so
+              // the optimistic preview does not reflow when it swaps to the real row.
+              const preview = p.previewUrl ? (
+                <div className="mb-1 h-[180px] w-[240px] overflow-hidden rounded-md bg-surface-sunken">
+                  <img
+                    src={p.previewUrl}
+                    alt="attachment preview"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : null
+
+              return (
+                <div key={p.clientMsgId} className="group mb-1.5 flex flex-col">
+                  {p.state === 'sending' ? (
+                    <div
+                      data-testid="pending-sending"
+                      className="ml-auto flex max-w-[80%] flex-col rounded-sheet bg-brand-subtle px-3 py-2 font-body text-small text-text-muted"
                     >
-                      Tap to retry
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                      {preview}
+                      {p.body ? <span className="text-text-primary">{p.body}</span> : null}
+                      <span className="opacity-60">{preview ? 'Sending photo…' : 'sending…'}</span>
+                    </div>
+                  ) : (
+                    <div
+                      data-testid="pending-failed"
+                      className="ml-auto flex max-w-[80%] flex-col gap-1"
+                    >
+                      {preview}
+                      <div className="rounded-sheet border border-risk-fg/20 bg-risk-bg px-3 py-2 font-body text-small text-risk-fg">
+                        {p.body ?? (preview ? 'Photo failed to send' : '…')}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => retry(p.clientMsgId)}
+                        className="self-end font-body text-micro text-brand-text hover:underline"
+                      >
+                        Tap to retry
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             {/* Autoscroll anchor */}
             <div ref={bottomRef} aria-hidden />
@@ -391,6 +459,8 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
       <ChatComposer
         onSend={send}
         onSendMedia={sendMedia}
+        onMediaStart={startMedia}
+        onMediaError={failMedia}
         onSendProposal={sendProposal}
         reply={reply}
         onCancelReply={() => setReply(null)}

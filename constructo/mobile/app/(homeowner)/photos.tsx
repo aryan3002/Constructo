@@ -33,6 +33,7 @@ import {
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   TextInput,
@@ -803,11 +804,24 @@ export default function Photos() {
   const [active, setActive] = useState<Photo | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [policy, setPolicy] = useState<Pick<PhotoPolicy, 'keepStarredAndMilestone' | 'retentionDays'>>({
     keepStarredAndMilestone: DEFAULT_POLICY.keepStarredAndMilestone,
     retentionDays: DEFAULT_POLICY.retentionDays,
   })
   const queryClient = useQueryClient()
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['photos'] }),
+        queryClient.invalidateQueries({ queryKey: ['homeowner', 'quietPeriods'] }),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [queryClient])
 
   // Grouping mode for the curated tabs ("My visits" + "feed" have no grouping).
   const view: ViewMode = tab === 'mine' || tab === 'feed' ? 'all' : tab
@@ -1081,7 +1095,12 @@ export default function Photos() {
   }, [activeQuiet, lang, s])
 
   return (
-    <Screen style={{ paddingBottom: navClearance }}>
+    <Screen
+      style={{ paddingBottom: navClearance }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+      }
+    >
       <FadeInUp style={{ gap: 2 }}>
         <Display>{s.title}</Display>
         <Small muted>{s.subtitle}</Small>

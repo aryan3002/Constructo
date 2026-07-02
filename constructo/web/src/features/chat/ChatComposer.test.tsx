@@ -124,6 +124,19 @@ describe('ChatComposer — text send', () => {
     expect(textarea).toHaveValue('')
   })
 
+  // B8 — clicking Send returns focus to the composer (WhatsApp Web parity)
+  it('keeps focus in the textarea after clicking Send', async () => {
+    const user = userEvent.setup()
+    renderComposer()
+
+    const textarea = screen.getByRole('textbox')
+    await user.click(textarea)
+    await user.type(textarea, 'hello')
+    await user.click(screen.getByRole('button', { name: /send message/i }))
+
+    expect(textarea).toHaveFocus()
+  })
+
   it('Send is disabled when textarea is empty', () => {
     renderComposer()
     expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled()
@@ -358,6 +371,75 @@ describe('ChatComposer — media affordance', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
     expect(screen.getByRole('alert')).toHaveTextContent('Network timeout')
+  })
+
+  // B5 — an optimistic bubble is requested at upload START (before the send),
+  // and the eventual send reuses the same clientMsgId.
+  it('fires onMediaStart with a preview at upload start, then sends with the same id', async () => {
+    const onMediaStart = vi.fn()
+    const onSendMedia = vi.fn()
+
+    mockPresign.mockResolvedValue({
+      key: 'chat/site-test-1/img.jpg',
+      put_url: 'https://r2.example.com/put',
+      upload_mode: 'presigned',
+    })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    const origCreate = URL.createObjectURL
+    URL.createObjectURL = vi.fn(() => 'blob:preview') as typeof URL.createObjectURL
+
+    render(
+      <ChatComposer
+        onSend={vi.fn()}
+        onSendMedia={onSendMedia}
+        onMediaStart={onMediaStart}
+        onSendProposal={vi.fn()}
+        address={ADDRESS}
+      />,
+    )
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'p.jpg', { type: 'image/jpeg' })] } })
+
+    await waitFor(() => expect(onMediaStart).toHaveBeenCalledOnce())
+    const startArg = onMediaStart.mock.calls[0][0]
+    expect(startArg.previewUrl).toBe('blob:preview')
+    expect(startArg.mediaType).toBe('image')
+    expect(typeof startArg.clientMsgId).toBe('string')
+
+    await waitFor(() => expect(onSendMedia).toHaveBeenCalledOnce())
+    expect(onSendMedia.mock.calls[0][0].clientMsgId).toBe(startArg.clientMsgId)
+
+    URL.createObjectURL = origCreate
+    fetchSpy.mockRestore()
+  })
+
+  it('fires onMediaError with the same id when the upload rejects', async () => {
+    const onMediaStart = vi.fn()
+    const onMediaError = vi.fn()
+    mockPresign.mockRejectedValue(new Error('boom'))
+    const origCreate = URL.createObjectURL
+    URL.createObjectURL = vi.fn(() => 'blob:preview') as typeof URL.createObjectURL
+
+    render(
+      <ChatComposer
+        onSend={vi.fn()}
+        onSendMedia={vi.fn()}
+        onMediaStart={onMediaStart}
+        onMediaError={onMediaError}
+        onSendProposal={vi.fn()}
+        address={ADDRESS}
+      />,
+    )
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'p.jpg', { type: 'image/jpeg' })] } })
+
+    await waitFor(() => expect(onMediaError).toHaveBeenCalledOnce())
+    const cid = onMediaStart.mock.calls[0][0].clientMsgId
+    expect(onMediaError).toHaveBeenCalledWith(cid)
+
+    URL.createObjectURL = origCreate
   })
 })
 

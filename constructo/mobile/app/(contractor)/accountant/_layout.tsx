@@ -25,6 +25,7 @@ export default function AccountantLayout() {
   return (
     <Tabs
       initialRouteName="reconcile"
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,

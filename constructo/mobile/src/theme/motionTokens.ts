@@ -27,3 +27,18 @@ export const DUR = {
 
 /** Press = scale(.97) only — no bounce, no spring. */
 export const PRESS_SCALE = 0.97
+
+/**
+ * Bottom-tabs navigator-default transition for pushed detail (`href: null`)
+ * screens — a calm "settle in" shift on the app ease. Set as the navigator
+ * `screenOptions` default and override the real tab screens with
+ * `animation: 'none'` so tab-to-tab switches stay instant. Skip it entirely
+ * under Reduce Motion so screens simply appear.
+ */
+export const TAB_DETAIL_TRANSITION = {
+  animation: 'shift',
+  transitionSpec: {
+    animation: 'timing',
+    config: { duration: DUR.default, easing: EASE },
+  },
+} as const

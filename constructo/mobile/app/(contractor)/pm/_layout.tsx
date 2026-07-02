@@ -26,6 +26,7 @@ export default function PmLayout() {
   return (
     <Tabs
       initialRouteName="dpr"
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,

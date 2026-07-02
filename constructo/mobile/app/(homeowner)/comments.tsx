@@ -6,7 +6,7 @@
  * a comment — commenting is always open (authority.py). The author's name + role
  * are shown so the family always knows who said what.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Image,
   KeyboardAvoidingView,
@@ -62,6 +62,7 @@ export default function PhotoCommentsScreen() {
   const photoId = params.id
 
   const [text, setText] = useState('')
+  const scrollRef = useRef<ScrollView>(null)
 
   const q = useQuery({
     queryKey: ['photo-comments', photoId],
@@ -71,13 +72,37 @@ export default function PhotoCommentsScreen() {
 
   const addMut = useMutation({
     mutationFn: (body: string) => homeowner.addPhotoComment(photoId as string, body),
-    onSuccess: () => {
+    // Optimistically append the comment + clear the composer immediately, so
+    // the thread feels instant (a scroll-to-bottom follows via onContentSizeChange).
+    onMutate: async (body: string) => {
+      await qc.cancelQueries({ queryKey: ['photo-comments', photoId] })
+      const prev = qc.getQueryData<PhotoComment[]>(['photo-comments', photoId])
+      const optimistic: PhotoComment = {
+        id: `temp-${Date.now()}`,
+        photo_id: photoId as string,
+        author_name: null,
+        author_role: null,
+        body,
+        created_at: new Date().toISOString(),
+        is_mine: true,
+      }
+      qc.setQueryData<PhotoComment[]>(['photo-comments', photoId], (old) => [
+        ...(old ?? []),
+        optimistic,
+      ])
       setText('')
+      return { prev, body }
+    },
+    onError: (_e, _body, ctx) => {
+      const c2 = ctx as { prev?: PhotoComment[]; body?: string } | undefined
+      if (c2?.prev) qc.setQueryData(['photo-comments', photoId], c2.prev)
+      // Restore the text so they can retry — and tell them it failed.
+      if (c2?.body) setText(c2.body)
+      toast(t.failed)
+    },
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['photo-comments', photoId] })
     },
-    // The composer text is preserved (only cleared on success), so the user can
-    // retry — but they MUST be told it failed (was a silent no-op before).
-    onError: () => toast(t.failed),
   })
 
   const comments: PhotoComment[] = q.data ?? []
@@ -92,16 +117,21 @@ export default function PhotoCommentsScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={insets.top}
+      // paddingTop: insets.top is inside this KAV and already part of its frame,
+      // so no compensation is needed — a non-zero offset floats the composer a
+      // status-bar height above the keyboard (the "gap bug").
+      keyboardVerticalOffset={0}
     >
       <View style={{ paddingHorizontal: SPACE.lg }}>
         <SubHeader title={t.title} onBack={() => router.back()} />
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.md }}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
         {/* Photo thumbnail — what the thread is about */}
         {params.uri ? (

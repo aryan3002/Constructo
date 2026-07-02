@@ -156,6 +156,7 @@ export function ChatPage() {
               </div>
 
               <ChatThread
+                key={selectedConv.id}
                 address={chatAddress}
                 title={threadTitle}
                 hasHomeowner={hasHomeowner}

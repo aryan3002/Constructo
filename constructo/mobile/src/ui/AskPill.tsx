@@ -10,6 +10,7 @@
  */
 import { Pressable, StyleSheet, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -37,7 +38,10 @@ export function AskPill({ label, href = '/ask' }: AskPillProps) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
-        onPress={() => router.push(href)}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+          router.push(href)
+        }}
         style={({ pressed }) => [
           styles.pill,
           {

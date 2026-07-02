@@ -14,9 +14,9 @@
  *
  * Data hooks + i18n kept intact. Composition upgraded to match prototype exactly.
  */
-import { useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, TextInput, View, type TextStyle } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useState } from 'react'
+import { Pressable, RefreshControl, ScrollView, TextInput, View, type TextStyle } from 'react-native'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
@@ -45,6 +45,7 @@ import {
   Small,
   StatusPill,
   Screen,
+  ScreenLoader,
   WeeklySummaryCard,
   FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
@@ -223,11 +224,35 @@ export default function Updates() {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
   const c = theme.colors
+  const qc = useQueryClient()
   const [tab, setTab] = useState<SubTab>('timeline')
+  // Keep each visited tab MOUNTED (toggle visibility) so switching back doesn't
+  // re-run its queries / lose scroll + expanded/filter state (spinner re-flash).
+  const [visited, setVisited] = useState<Set<SubTab>>(() => new Set<SubTab>(['timeline']))
+  const [refreshing, setRefreshing] = useState(false)
   const str = STR[lang]
 
+  const showTab = useCallback((key: SubTab) => {
+    setTab(key)
+    setVisited((v) => (v.has(key) ? v : new Set(v).add(key)))
+  }, [])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await qc.invalidateQueries({ queryKey: ['homeowner'] })
+    } finally {
+      setRefreshing(false)
+    }
+  }, [qc])
+
   return (
-    <Screen style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}>
+    <Screen
+      style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+      }
+    >
       <View>
         <Display>{t('nav.updates')}</Display>
         <Body muted style={{ marginTop: SPACE.xs }}>
@@ -255,7 +280,7 @@ export default function Updates() {
               key={key}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
-              onPress={() => setTab(key)}
+              onPress={() => showTab(key)}
               style={{
                 flex: 1,
                 minHeight: 48,
@@ -274,20 +299,37 @@ export default function Updates() {
         })}
       </View>
 
-      {tab === 'timeline' ? <TimelineTab onSwitchToChanges={() => setTab('changes')} /> : null}
-      {tab === 'milestones' ? <MilestonesTab /> : null}
-      {tab === 'changes' ? <ChangesTab /> : null}
-      {tab === 'property' ? <PropertyTab /> : null}
+      {/* Each visited tab stays mounted; only the active one is displayed. */}
+      {visited.has('timeline') ? (
+        <View style={{ display: tab === 'timeline' ? 'flex' : 'none' }}>
+          <TimelineTab onSwitchToChanges={() => showTab('changes')} />
+        </View>
+      ) : null}
+      {visited.has('milestones') ? (
+        <View style={{ display: tab === 'milestones' ? 'flex' : 'none' }}>
+          <MilestonesTab />
+        </View>
+      ) : null}
+      {visited.has('changes') ? (
+        <View style={{ display: tab === 'changes' ? 'flex' : 'none' }}>
+          <ChangesTab />
+        </View>
+      ) : null}
+      {visited.has('property') ? (
+        <View style={{ display: tab === 'property' ? 'flex' : 'none' }}>
+          <PropertyTab />
+        </View>
+      ) : null}
     </Screen>
   )
 }
 
 // ---- shared state views ----
 function Loading() {
-  const { theme } = useTheme()
+  // Calm breathing mark (doctrine) rather than a raw racing spinner.
   return (
-    <View style={{ paddingVertical: SPACE.xl, alignItems: 'center' }}>
-      <ActivityIndicator color={theme.colors.accent} />
+    <View style={{ paddingVertical: SPACE.xl }}>
+      <ScreenLoader fill={false} />
     </View>
   )
 }

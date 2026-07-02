@@ -138,6 +138,7 @@ function AskInner() {
   const [asking, setAsking] = useState(false)
   const [forwardingId, setForwardingId] = useState<string | null>(null)
   const seq = useRef(0)
+  const scrollRef = useRef<ScrollView>(null)
 
   // The durable team thread (handed-off questions + the team's status replies).
   const q = useQuery({ queryKey: ['ask', 'requests'], queryFn: () => homeowner.requests() })
@@ -294,12 +295,18 @@ function AskInner() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={insets.top + 56}
+        // The KAV bottom is the window bottom; the header above it is outside
+        // the KAV frame, so no compensation is needed. A non-zero offset adds
+        // that many px of empty space above the keyboard (the "gap bug").
+        keyboardVerticalOffset={0}
       >
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: SPACE.gutter, gap: SPACE.lg }}
           keyboardShouldPersistTaps="handled"
+          // Auto-scroll to the just-sent question / streamed answer.
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {q.isLoading ? (
             <ScreenLoader fill={false} />

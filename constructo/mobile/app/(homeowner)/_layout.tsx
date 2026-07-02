@@ -16,11 +16,13 @@ import { Redirect, Tabs, usePathname } from 'expo-router'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
-import { AskPill, FloatingTabBar, ToastProvider } from '../../src/ui'
+import { TAB_DETAIL_TRANSITION } from '../../src/theme/motionTokens'
+import { AskPill, FloatingTabBar, ToastProvider, useReducedMotion } from '../../src/ui'
 
 function HomeownerTabs() {
   const { t } = useT()
   const { theme } = useTheme()
+  const reduce = useReducedMotion()
   const askLabel = t('nav.ask')
   // Show the Ask pill ONLY on the 5 top-level tabs. On every pushed full-screen
   // route (chat thread, markup canvas, issue report, settings…) it would collide
@@ -32,6 +34,9 @@ function HomeownerTabs() {
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Tabs
         initialRouteName="home"
+        // Android hardware back retraces the actual navigation history
+        // (thread → inbox → home) instead of jumping straight to Home.
+        backBehavior="history"
         tabBar={(props) => <FloatingTabBar {...props} />}
         screenOptions={{
           headerShown: false,
@@ -41,13 +46,16 @@ function HomeownerTabs() {
           // its scroll content, so the warm canvas fills to the edge and there
           // is no grey band.
           sceneStyle: { backgroundColor: theme.colors.bg },
+          // Pushed detail (href:null) screens settle in with the app's motion;
+          // the real tabs below opt back to instant. Skipped under Reduce Motion.
+          ...(reduce ? {} : TAB_DETAIL_TRANSITION),
         }}
       >
-        <Tabs.Screen name="home" options={{ title: t('nav.home') }} />
-        <Tabs.Screen name="photos" options={{ title: t('nav.photos') }} />
-        <Tabs.Screen name="updates" options={{ title: t('nav.updates') }} />
-        <Tabs.Screen name="messages" options={{ title: t('nav.messages') }} />
-        <Tabs.Screen name="design" options={{ title: t('nav.design') }} />
+        <Tabs.Screen name="home" options={{ title: t('nav.home'), animation: 'none' }} />
+        <Tabs.Screen name="photos" options={{ title: t('nav.photos'), animation: 'none' }} />
+        <Tabs.Screen name="updates" options={{ title: t('nav.updates'), animation: 'none' }} />
+        <Tabs.Screen name="messages" options={{ title: t('nav.messages'), animation: 'none' }} />
+        <Tabs.Screen name="design" options={{ title: t('nav.design'), animation: 'none' }} />
         {/* Thread detail — pushed from the Messages inbox, no tab bar entry */}
         <Tabs.Screen name="messages/[id]" options={{ href: null }} />
         {/* Design write sub-routes — pushed from the Design tab, no tab bar entry */}

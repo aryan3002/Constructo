@@ -489,15 +489,32 @@ export default function HomeownerThread() {
               An online dot + participant list mirrors the prototype's header. */}
           {kind === 'homeowner' ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.xs }}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent }} />
+              {/* Green dot only when connected — grey + "Connecting…" when the
+                  socket/network is down, so the dot never lies. */}
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 4,
+                  backgroundColor: thread.online ? c.accent : c.textMute,
+                }}
+              />
               <Small muted numberOfLines={1}>
-                {siteName
-                  ? siteName
-                  : lang === 'hi'
-                    ? 'साइट टीम · आप · सह-मालिक'
-                    : 'Site team · You · Co-owner'}
+                {!thread.online
+                  ? lang === 'hi'
+                    ? 'कनेक्ट हो रहा है…'
+                    : 'Connecting…'
+                  : siteName
+                    ? siteName
+                    : lang === 'hi'
+                      ? 'साइट टीम · आप · सह-मालिक'
+                      : 'Site team · You · Co-owner'}
               </Small>
             </View>
+          ) : !thread.online ? (
+            <Small muted numberOfLines={1}>
+              {lang === 'hi' ? 'कनेक्ट हो रहा है…' : 'Connecting…'}
+            </Small>
           ) : siteName ? (
             <Small muted numberOfLines={1}>
               {siteName}

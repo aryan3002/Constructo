@@ -192,6 +192,8 @@ function LoginInner() {
               keyboardType="number-pad"
               autoFocus
               maxLength={6}
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
               style={[inputStyle, { letterSpacing: 8, textAlign: 'center' }]}
               placeholder="••••••"
               placeholderTextColor={theme.colors.textMute}

@@ -22,6 +22,7 @@ function ArchitectTabs() {
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Tabs
         initialRouteName="home"
+        backBehavior="history"
         tabBar={(props) => <DesTabBar {...props} />}
         screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: theme.colors.bg } }}
       >

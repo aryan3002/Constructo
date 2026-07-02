@@ -4,14 +4,15 @@
  * role; here we only set up Query, i18n, auth, safe-area, and load fonts.
  */
 import { useEffect, useMemo } from 'react'
-import { View } from 'react-native'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AppState, View } from 'react-native'
+import { QueryClient, QueryClientProvider, focusManager, useQueryClient } from '@tanstack/react-query'
 import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext'
+import { chatApi } from '../src/api/chat'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { I18nProvider } from '../src/i18n/I18nProvider'
 import { useAppFonts } from '../src/theme/fonts'
@@ -19,6 +20,15 @@ import { useAppFonts } from '../src/theme/fonts'
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useAppFonts()
   const client = useMemo(() => new QueryClient(), [])
+
+  // React Query refetches stale queries when the app returns to the foreground
+  // (the RN equivalent of refetchOnWindowFocus). Keeps daily screens fresh.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (status) => {
+      focusManager.setFocused(status === 'active')
+    })
+    return () => sub.remove()
+  }, [])
 
   // Hold on a warm canvas until fonts are ready (avoid a flash of system font).
   if (!fontsLoaded && !fontError) {
@@ -32,6 +42,7 @@ export default function RootLayout() {
           <AuthProvider>
             <StatusBar style="dark" />
             <ChatPushDeepLink />
+            <ChatPushForeground />
             <ChatOutboxLaunchDrain />
             <Stack screenOptions={{ headerShown: false }} />
           </AuthProvider>
@@ -61,6 +72,40 @@ function ChatOutboxLaunchDrain() {
     if (!authed) return
     void drainChatOutboxOnLaunch().catch(() => undefined)
   }, [authed])
+  return null
+}
+
+/**
+ * Foreground push receipts. `addNotificationReceivedListener` fires while the
+ * app is OPEN (any screen). For a chat push we (a) advance the DELIVERED cursor
+ * so the sender's ✓✓ isn't hours late even when this thread screen isn't
+ * mounted, and (b) bump the inbox so an unopened thread's row/unread updates
+ * without waiting for the 15s poll. Best-effort: malformed payloads are ignored.
+ * (Backgrounded/killed delivery needs a registered background task — out of
+ * scope here; this closes the "app open on another screen" case.)
+ */
+function ChatPushForeground() {
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notif) => {
+      const data = notif.request.content.data as
+        | { conversation_id?: string; seq?: number }
+        | undefined
+      const convId = data?.conversation_id
+      if (!convId) return
+
+      if (typeof data?.seq === 'number') {
+        void chatApi
+          .delivered({ conversationId: convId, lastSeq: data.seq })
+          .catch(() => undefined)
+      }
+      void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
+      void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
+    })
+    return () => sub.remove()
+  }, [qc])
+
   return null
 }
 

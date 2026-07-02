@@ -18,11 +18,13 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { Feather } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
+import * as Haptics from 'expo-haptics'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '../theme/ThemeProvider'
 import { SPACE } from '../theme/tokens'
 import { Micro } from './Typography'
+import { useAndroidKeyboardVisible } from './useKeyboardVisible'
 
 /** Premium Feather glyph per destination (§8: icons, never emoji). */
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
@@ -49,6 +51,7 @@ export const FLOATING_NAV_CLEARANCE = 12 + 64 + 12 + 48 + 16
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
+  const keyboardUp = useAndroidKeyboardVisible()
 
   // Only the 5 top-level destinations. A custom tabBar receives *every* route
   // in `state.routes`; Expo Router consumes `href: null` and does NOT surface it
@@ -63,6 +66,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   // one of the 5 top-level tabs is focused again.
   const activeName = state.routes[state.index]?.name
   if (!activeName || !(activeName in TAB_ICONS)) return null
+
+  // Android: hide the floating bar while the keyboard is up so it never rises
+  // to sit between the composer and the keyboard (iOS keeps it — no-op there).
+  if (keyboardUp) return null
 
   return (
     <View
@@ -84,6 +91,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             const iconName = TAB_ICONS[route.name] ?? 'circle'
 
             const onPress = () => {
+              void Haptics.selectionAsync()
               const event = navigation.emit({
                 type: 'tabPress',
                 target: route.key,

@@ -3,8 +3,8 @@
  * and (by default) scrolls with comfortable padding. The optional sticky
  * {@link SyncStatus} can be rendered above content by screens that need it.
  */
-import type { ReactNode } from 'react'
-import { ScrollView, View, type ViewStyle } from 'react-native'
+import type { ReactElement, ReactNode } from 'react'
+import { ScrollView, View, type RefreshControlProps, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '../theme/ThemeProvider'
@@ -17,6 +17,7 @@ export function Screen({
   padded = true,
   floatingNav = false,
   style,
+  refreshControl,
 }: {
   children: ReactNode
   scroll?: boolean
@@ -31,6 +32,8 @@ export function Screen({
    */
   floatingNav?: boolean
   style?: ViewStyle
+  /** Optional pull-to-refresh control (only used when `scroll` is true). */
+  refreshControl?: ReactElement<RefreshControlProps>
 }) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -57,6 +60,10 @@ export function Screen({
         style,
       ]}
       keyboardShouldPersistTaps="handled"
+      // iOS: auto-inset the scroll content when the keyboard opens so bottom
+      // fields/CTAs can always be scrolled into view (no-op on Android).
+      automaticallyAdjustKeyboardInsets
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>

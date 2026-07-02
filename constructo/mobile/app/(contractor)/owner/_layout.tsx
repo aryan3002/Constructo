@@ -17,7 +17,8 @@ import { Tabs } from 'expo-router'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
-import { ToastProvider } from '../../../src/ui'
+import { TAB_DETAIL_TRANSITION } from '../../../src/theme/motionTokens'
+import { ToastProvider, useReducedMotion } from '../../../src/ui'
 
 const LABELS = {
   en: { brief: 'Brief', sites: 'Sites', chat: 'Chat', specs: 'Specs', approvals: 'Approvals', more: 'More', search: 'Search' },
@@ -32,11 +33,14 @@ const tabIcon =
 function OwnerTabs() {
   const { lang } = useT()
   const { theme } = useTheme()
+  const reduce = useReducedMotion()
   const L = LABELS[lang]
 
   return (
     <Tabs
       initialRouteName="brief"
+      // Android hardware back retraces navigation history, not straight to Brief.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,
@@ -49,13 +53,15 @@ function OwnerTabs() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12 },
+        // Pushed detail (href:null) screens settle in; real tabs stay instant.
+        ...(reduce ? {} : TAB_DETAIL_TRANSITION),
       }}
     >
-      <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: tabIcon('grid-outline') }} />
-      <Tabs.Screen name="sites" options={{ title: L.sites, tabBarIcon: tabIcon('business-outline') }} />
-      <Tabs.Screen name="chat" options={{ title: L.chat, tabBarIcon: tabIcon('chatbubble-ellipses-outline') }} />
-      <Tabs.Screen name="specs" options={{ title: L.specs, tabBarIcon: tabIcon('color-palette-outline') }} />
-      <Tabs.Screen name="approvals" options={{ title: L.approvals, tabBarIcon: tabIcon('checkbox-outline') }} />
+      <Tabs.Screen name="brief" options={{ title: L.brief, tabBarIcon: tabIcon('grid-outline'), animation: 'none' }} />
+      <Tabs.Screen name="sites" options={{ title: L.sites, tabBarIcon: tabIcon('business-outline'), animation: 'none' }} />
+      <Tabs.Screen name="chat" options={{ title: L.chat, tabBarIcon: tabIcon('chatbubble-ellipses-outline'), animation: 'none' }} />
+      <Tabs.Screen name="specs" options={{ title: L.specs, tabBarIcon: tabIcon('color-palette-outline'), animation: 'none' }} />
+      <Tabs.Screen name="approvals" options={{ title: L.approvals, tabBarIcon: tabIcon('checkbox-outline'), animation: 'none' }} />
       {/* More hub — pushed from the Brief header, off-tab. */}
       <Tabs.Screen name="more" options={{ href: null }} />
       {/* Search stays routable (pushed from More / Brief), off-tab. */}
