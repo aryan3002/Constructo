@@ -19,12 +19,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.chat.access import can_access
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
+from app.extraction.vision import caption_photo
 from app.homeowner.ai import draft_caption, draft_weekly_summary, get_llm
 from app.homeowner.quiet import confirm_quiet_period
 from app.homeowner.router import (
+    _bucket_photos_by_milestone,
     _member_out,
     _milestone_out,
     _photo_out,
@@ -45,7 +48,9 @@ from app.homeowner.schemas import (
 )
 from app.models import (
     Change,
+    ChatMessage,
     Component,
+    Conversation,
     HomeownerMember,
     Milestone,
     Property,
@@ -58,18 +63,24 @@ from app.models import (
     User,
     WeeklySummary,
 )
+from app.models.user import UserRole
 from app.publish.schemas import (
     ChangeCreateIn,
     ComponentCreateIn,
     ComponentUpdateIn,
+    ContractorPhotoOut,
     DrawingPresignIn,
     DrawingPresignOut,
     DrawingRegisterOut,
+    EnrichIn,
+    EnrichOut,
     MilestoneCreateIn,
     MilestoneUpdateIn,
+    PhotoPatchIn,
     PropertyCreateIn,
     PropertyUpdateIn,
     PublishDrawingIn,
+    PublishFromChatIn,
     PublishPhotoIn,
     PublishUpdateIn,
     PublishWeeklySummaryIn,
@@ -95,6 +106,13 @@ async def _assert_site(session: AsyncSession, user: User, site_id: UUID) -> None
     raise AppError(403, "forbidden", "Site not in scope")
 
 
+def _assert_can_manage(photo: PublishedPhoto, user: User) -> None:
+    """Owner manages any shared photo; a crew member manages only their own."""
+    if user.role == UserRole.owner or photo.published_by == user.id:
+        return
+    raise AppError(403, "forbidden", "Only the owner or the original sharer can change this photo")
+
+
 async def _space_in_scope(session: AsyncSession, user: User, space_id: UUID) -> Space:
     space = await session.get(Space, space_id)
     if space is None:
@@ -109,11 +127,16 @@ async def _space_in_scope(session: AsyncSession, user: User, space_id: UUID) -> 
 @router.post("/photo", response_model=PhotoOut, status_code=201)
 async def publish_photo(
     body: PublishPhotoIn,
+    with_draft: bool = True,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> PhotoOut:
     """Curate a photo into the homeowner feed (optionally promoted from an event).
+
+    ``with_draft=false`` skips the synchronous AI caption draft so the publish
+    returns immediately (the contractor app fetches the suggestion via
+    ``/photo/enrich`` separately) — a slow vision call must never delay the share.
 
     Honest-AI caption gate (Slice V / red-team): a CONTRACTOR-supplied caption is
     a reviewed, grounded fact → it is published verbatim and the homeowner sees
@@ -130,18 +153,27 @@ async def publish_photo(
 
     caption = body.caption  # contractor-reviewed → homeowner-visible
     draft = None  # AI suggestion → contractor reviews, never auto-published
-    if caption is None:
+    if with_draft and caption is None:
         summary = body.event_summary
         if summary is None and body.source_event_id is not None:
             event = await session.get(SiteEventModel, body.source_event_id)
             summary = event.summary if event is not None else None
         if summary or body.image_url:
-            draft = await draft_caption(
-                llm,
-                summary=summary or "",
-                image_url=body.image_url,
-                room_tag=body.room_tag,
+            # Resolve a bare storage key to a fetchable URL — a real vision
+            # provider (prod) cannot fetch a bare R2 key. And the draft is
+            # advisory: a vision failure must NEVER 500 the publish.
+            image_for_vision = (
+                get_storage().url_for(body.image_url) if body.image_url else None
             )
+            try:
+                draft = await draft_caption(
+                    llm,
+                    summary=summary or "",
+                    image_url=image_for_vision,
+                    room_tag=body.room_tag,
+                )
+            except Exception:
+                draft = None
 
     photo = PublishedPhoto(
         site_id=body.site_id,
@@ -167,6 +199,191 @@ async def publish_photo(
     )
     out = _photo_out(photo)
     return out.model_copy(update={"draft_caption": draft})
+
+
+@router.post("/photo/enrich", response_model=EnrichOut)
+async def enrich_photo(
+    body: EnrichIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> EnrichOut:
+    """Advisory pre-fill for the Share sheet: a caption DRAFT + a room hint from
+    the image. Persists nothing; the contractor confirms with a tap. Vision is a
+    Fake today, so this is a suggestion only — never auto-applied."""
+    await _assert_site(session, user, body.site_id)
+    try:
+        # Vision needs a fetchable URL, not a bare R2 key (see publish_photo).
+        image_for_vision = get_storage().url_for(body.image_url) or body.image_url
+        result = await caption_photo(image_for_vision, llm=llm, user_hint=body.room_tag or "")
+    except Exception:
+        return EnrichOut(caption_draft=None, room_hint=None)
+    return EnrichOut(
+        caption_draft=(result.get("caption") or None),
+        room_hint=(result.get("room_hint") or None),
+    )
+
+
+@router.patch("/photo/{photo_id}", response_model=PhotoOut)
+async def edit_photo(
+    photo_id: UUID,
+    body: PhotoPatchIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PhotoOut:
+    """Edit caption / room / pin on a shared photo (owner-any, crew-own)."""
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None:
+        raise AppError(404, "not_found", "Photo not found")
+    await _assert_site(session, user, photo.site_id)
+    _assert_can_manage(photo, user)
+    for key, value in body.model_dump(exclude_unset=True).items():
+        if key == "is_starred" and value is None:
+            continue  # is_starred is NOT NULL; explicit null is a no-op, not a clear
+        setattr(photo, key, value)
+    await session.commit()
+    await session.refresh(photo)
+    return _photo_out(photo)
+
+
+@router.delete("/photo/{photo_id}", status_code=204)
+async def delete_photo(
+    photo_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Remove a photo from the homeowner feed (owner-any / crew-own) — the safety
+    valve for a wrongly-shared photo. Hard-deletes the published_photos row only;
+    the underlying R2 object is left intact (it may be shared with a chat message)."""
+    photo = await session.get(PublishedPhoto, photo_id)
+    if photo is None:
+        raise AppError(404, "not_found", "Photo not found")
+    await _assert_site(session, user, photo.site_id)
+    _assert_can_manage(photo, user)
+    await session.delete(photo)
+    await session.commit()
+
+
+@router.get("/photos", response_model=list[ContractorPhotoOut])
+async def list_published_photos(
+    site_id: UUID,
+    view: str = "all",
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ContractorPhotoOut]:
+    """The contractor's view of the homeowner feed for a site, with attribution,
+    for the album/management screen."""
+    await _assert_site(session, user, site_id)
+    stmt = (
+        select(PublishedPhoto, User.name)
+        .join(User, PublishedPhoto.published_by == User.id, isouter=True)
+        .where(PublishedPhoto.site_id == site_id)
+    )
+    if view == "room":
+        stmt = stmt.order_by(PublishedPhoto.room_tag, PublishedPhoto.published_at.desc())
+    elif view == "milestone":
+        stmt = stmt.order_by(PublishedPhoto.milestone_id, PublishedPhoto.published_at.desc())
+    else:
+        stmt = stmt.order_by(PublishedPhoto.published_at.desc())
+    rows = (await session.execute(stmt)).all()
+    base = await _bucket_photos_by_milestone(
+        session, site_id, [_photo_out(p) for p, _ in rows]
+    )
+    return [
+        ContractorPhotoOut(**out.model_dump(), shared_by_name=name)
+        for (_, name), out in zip(rows, base, strict=True)
+    ]
+
+
+@router.post("/photo/from-chat", response_model=ContractorPhotoOut, status_code=201)
+async def publish_photo_from_chat(
+    body: PublishFromChatIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ContractorPhotoOut:
+    """Publish an existing chat photo into the homeowner feed ("Send to feed").
+
+    The fast path: the image already lives in storage (a chat attachment), so
+    this reuses ``attachment_key`` verbatim and skips the synchronous vision
+    draft entirely — the contractor is deliberately curating a known photo.
+
+    Access is by the message's CONVERSATION (``can_access`` — a member of the
+    crew site thread / group / homeowner channel), and homeowner-role callers are
+    rejected (only the contractor publishes into the feed). Idempotent: the
+    ``published_photos.source_chat_message_id`` unique link means a re-send of the
+    same message returns the existing feed photo instead of duplicating it.
+    """
+    msg = await session.get(ChatMessage, body.message_id)
+    if msg is None:
+        raise AppError(404, "not_found", "Message not found")
+    # A message is a photo iff it carries an image attachment.
+    is_image = msg.attachment_key is not None and (msg.attachment_mime or "").startswith("image/")
+    if not is_image:
+        raise AppError(400, "not_an_image", "This message is not a photo")
+
+    conv = await session.get(Conversation, msg.conversation_id)
+    if conv is None:
+        raise AppError(404, "not_found", "Conversation not found")
+    # Only the contractor publishes into the homeowner feed — never a homeowner.
+    if user.role is UserRole.homeowner:
+        raise AppError(403, "forbidden", "Only the contractor can publish to the feed")
+    if not await can_access(session, user, conv):
+        raise AppError(403, "forbidden", "You cannot access this conversation")
+
+    if conv.site_id is None:
+        raise AppError(400, "no_site", "This conversation has no site to publish to")
+
+    # Idempotent: a message maps to at most one feed photo. A re-send returns it.
+    existing = (
+        await session.execute(
+            select(PublishedPhoto).where(
+                PublishedPhoto.source_chat_message_id == body.message_id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return await _from_chat_out(session, existing)
+
+    # Blank caption/room are stored as NULL (an empty string is not a caption).
+    caption = (body.caption or "").strip() or None
+    room_tag = (body.room_tag or "").strip() or None
+
+    photo = PublishedPhoto(
+        site_id=conv.site_id,
+        image_url=msg.attachment_key,  # reuse the chat attachment as-is
+        source_chat_message_id=body.message_id,
+        published_by=user.id,
+        caption=caption,
+        room_tag=room_tag,
+    )
+    session.add(photo)
+    await session.flush()  # assign id + defaults before we serialize
+    await session.commit()
+    await session.refresh(photo)
+    # Best-effort push — a new photo is a "site_updates" event (honours cadence).
+    await notify_site_homeowners(
+        session,
+        conv.site_id,
+        "New photo from your site",
+        caption or "Your builder shared a new photo.",
+        category="site_updates",
+        data={"type": "photo", "photo_id": str(photo.id)},
+    )
+    return await _from_chat_out(session, photo)
+
+
+async def _from_chat_out(
+    session: AsyncSession, photo: PublishedPhoto
+) -> ContractorPhotoOut:
+    """Serialize a feed photo with its publisher's name (contractor album shape)."""
+    name = None
+    if photo.published_by is not None:
+        name = (
+            await session.execute(
+                select(User.name).where(User.id == photo.published_by)
+            )
+        ).scalar_one_or_none()
+    return ContractorPhotoOut(**_photo_out(photo).model_dump(), shared_by_name=name)
 
 
 @router.post("/update", response_model=UpdateOut, status_code=201)

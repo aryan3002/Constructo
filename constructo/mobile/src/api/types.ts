@@ -283,6 +283,11 @@ export interface Home {
   spend_summary: SpendSummary | null
   /** Present when the site is in a confirmed quiet period. Null otherwise. */
   quiet: QuietPeriod | null
+  /** Phase 2 heartbeat — site liveness. Count of contractor photos shared in
+   *  the last 7 days, and the ISO timestamp of the most recent one (null if the
+   *  site has never had a shared photo). Powers the Hero card's pulse line. */
+  photos_this_week: number
+  last_photo_at: string | null
 }
 
 // ---- H0: design ----

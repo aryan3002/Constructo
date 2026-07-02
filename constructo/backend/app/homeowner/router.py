@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import apply_action
@@ -51,6 +51,7 @@ from app.homeowner.design_fingerprint import (
     build_fingerprint,
 )
 from app.homeowner.milestone_reference import typical_duration_days
+from app.homeowner.nudge import NUDGE_TAG, surface_request_now
 from app.homeowner.quiet import current_confirmed_quiet, visible_quiet_update_ids
 from app.homeowner.render import get_translation, render_text
 from app.homeowner.schemas import (
@@ -867,6 +868,9 @@ async def home(
             .where(
                 Decision.site_id == sid,
                 Decision.state.in_([DecisionState.pending, DecisionState.escalated]),
+                # Contractor-facing request-nudges surface on the owner Brief, not
+                # on the homeowner's own "Needs your input".
+                Decision.title.not_like(f"{NUDGE_TAG}%"),
             )
             .order_by(Decision.created_at)
         )
@@ -937,6 +941,21 @@ async def home(
             session, translation, user.language, _quiet_out(quiet_window)
         )
 
+    # Heartbeat: how alive is the photo channel this week (receive-first signal).
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    photos_this_week = (
+        await session.execute(
+            select(func.count())
+            .select_from(PublishedPhoto)
+            .where(PublishedPhoto.site_id == sid, PublishedPhoto.published_at >= week_ago)
+        )
+    ).scalar_one()
+    last_photo_at = (
+        await session.execute(
+            select(func.max(PublishedPhoto.published_at)).where(PublishedPhoto.site_id == sid)
+        )
+    ).scalar_one_or_none()
+
     return HomeOut(
         property=prop,
         milestone_now=_milestone_out(milestone_now) if milestone_now else None,
@@ -954,6 +973,8 @@ async def home(
         recent_activity=recent_activity,
         spend_summary=spend,
         quiet=quiet_out,
+        photos_this_week=photos_this_week,
+        last_photo_at=last_photo_at,
     )
 
 
@@ -2210,6 +2231,12 @@ async def create_request(
         sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
     )
     session.add(req)
+    # Surface to the site team's Brief / approval inbox immediately — not only once
+    # the SLA lapses and the overdue sweep escalates it (stamps nudged_at so that
+    # sweep never raises a duplicate). Flush first so the row has its id, then a
+    # single commit persists the request + its decision together.
+    await session.flush()
+    await surface_request_now(session, req)
     await session.commit()
     await session.refresh(req)
     await _alert_site_leads(session, sid, user, req)
@@ -2328,6 +2355,8 @@ async def my_decisions(
                 Decision.state.in_(
                     [DecisionState.pending, DecisionState.acknowledged, DecisionState.escalated]
                 ),
+                # Hide contractor-facing request-nudges from the homeowner's asks.
+                Decision.title.not_like(f"{NUDGE_TAG}%"),
             )
             .order_by(Decision.created_at)
         )

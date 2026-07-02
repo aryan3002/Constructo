@@ -119,6 +119,16 @@ const STR = {
     // Quiet
     quietTitle: 'Quiet on site right now',
     quietNextPrefix: 'Next update expected around',
+    // Phase 2 heartbeat — site-liveness pulse in the Hero card.
+    newPhoto: 'new photo',
+    newPhotos: 'new photos',
+    photosThisWeek: 'this week',
+    lastSitePhoto: 'Last site photo',
+    rdToday: 'today',
+    rdYesterday: 'yesterday',
+    rdDaysAgo: 'days ago',
+    rdLastWeek: 'last week',
+    rdWeeksAgo: 'weeks ago',
   },
   hi: {
     finishesEyebrow: 'आपकी सामग्री',
@@ -171,6 +181,15 @@ const STR = {
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
     quietNextPrefix: 'अगला अपडेट लगभग',
+    newPhoto: 'नई फ़ोटो',
+    newPhotos: 'नई फ़ोटो',
+    photosThisWeek: 'इस हफ़्ते',
+    lastSitePhoto: 'आख़िरी साइट फ़ोटो',
+    rdToday: 'आज',
+    rdYesterday: 'कल',
+    rdDaysAgo: 'दिन पहले',
+    rdLastWeek: 'पिछले हफ़्ते',
+    rdWeeksAgo: 'हफ़्ते पहले',
   },
 } as const
 
@@ -211,6 +230,21 @@ function shortDate(iso: string | null): string | null {
 function handoverDate(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** Soft, day-granular relative time for the Phase 2 heartbeat: "today",
+ *  "yesterday", "3 days ago", "last week", "2 weeks ago". Calm-cockpit tone —
+ *  day granularity, never hours/minutes. Localized via the STR table. */
+function relativeDay(iso: string | null, t: (typeof STR)['en'] | (typeof STR)['hi']): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const days = Math.floor((Date.now() - then) / 86_400_000)
+  if (days <= 0) return t.rdToday
+  if (days === 1) return t.rdYesterday
+  if (days < 7) return `${days} ${t.rdDaysAgo}`
+  if (days < 14) return t.rdLastWeek
+  return `${Math.floor(days / 7)} ${t.rdWeeksAgo}`
 }
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
@@ -294,6 +328,16 @@ export default function Home() {
 
   const milestones = milestonesQ.data ?? []
   const openRequests = (requestsQ.data ?? []).filter((r) => r.status !== 'done').slice(0, 3)
+
+  // ── Phase 2 heartbeat — site liveness from shared contractor photos ────────
+  const photosThisWeek = homeQ.data.photos_this_week ?? 0
+  const lastPhotoAt = homeQ.data.last_photo_at ?? null
+  const heartbeatText =
+    photosThisWeek > 0
+      ? `${photosThisWeek} ${photosThisWeek === 1 ? t.newPhoto : t.newPhotos} ${t.photosThisWeek}${lastPhotoAt ? ` · ${relativeDay(lastPhotoAt, t)}` : ''}`
+      : lastPhotoAt
+        ? `${t.lastSitePhoto} ${relativeDay(lastPhotoAt, t)}`
+        : ''
 
   // ── Hero / state resolution ───────────────────────────────────────────────
   const startOn = property?.started_on ?? null
@@ -467,6 +511,35 @@ export default function Home() {
               {subline}
             </Body>
           )}
+
+          {/* Phase 2 heartbeat — quiet proof-of-life: N photos this week + last
+              update, tap → Photos. Hidden when the site has no photos yet. */}
+          {lastPhotoAt ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={heartbeatText}
+              onPress={() => router.push('/(homeowner)/photos')}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.xs,
+                marginTop: SPACE.md,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Feather name="camera" size={14} color={clay} />
+              <Small
+                style={{
+                  color: photosThisWeek > 0 ? c.text : c.textMute,
+                  fontWeight: photosThisWeek > 0 ? '600' : '500',
+                }}
+              >
+                {heartbeatText}
+              </Small>
+              <Feather name="chevron-right" size={14} color={c.textMute} style={{ marginLeft: 2 }} />
+            </Pressable>
+          ) : null}
 
           {/* TimeBar — start → handover with you-are-here dot */}
           {startLabel && endLabel ? (

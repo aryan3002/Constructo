@@ -67,6 +67,7 @@ from app.models import (
     HomeownerMember,
     MessageAck,
     MessageSide,
+    PublishedPhoto,
     RawMessageModel,
     SenderKind,
     Site,
@@ -185,6 +186,10 @@ class ChatMessageOut(BaseModel):
     # Set when this attachment duplicates an earlier one (1.7) — the UI flags it
     # and it never books a second event.
     duplicate_of_id: UUID | None = None
+    # The homeowner-feed photo this message was published to ("Send to feed"),
+    # if any — lets the UI show an "In feed" badge + a dedupe affordance. None
+    # until the message is published to the feed.
+    feed_photo_id: UUID | None = None
     # The events this message minted via extraction (latest version only). Empty
     # for plain human talk (a bubble) or before extraction has run.
     events: list[ChatEventOut] = Field(default_factory=list)
@@ -840,6 +845,29 @@ _MEDIA_CONTENT_TYPE = {"image": "image/jpeg", "document": "application/pdf", "vo
 CHAT_MAX_MEDIA_BYTES = 15 * 1024 * 1024
 
 
+def _downsize_image(data: bytes, *, max_dim: int = 1600, quality: int = 80) -> bytes:
+    """Downsize an uploaded photo so the mobile feed serves small images (fast
+    load, low decode memory — 4000px phone photos crashed the RN feed). Best
+    effort: any decode failure (HEIC without a plugin, corrupt bytes) returns the
+    original bytes untouched — never breaks the upload."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image, ImageOps
+
+        img = Image.open(BytesIO(data))
+        img = ImageOps.exif_transpose(img)  # bake in orientation before stripping EXIF
+        img.thumbnail((max_dim, max_dim))  # preserves aspect ratio, in place
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        out = BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        resized = out.getvalue()
+        return resized if len(resized) < len(data) else data
+    except Exception:
+        return data
+
+
 @router.post("/media", response_model=MediaUploadOut, status_code=201)
 async def upload_media(
     file: UploadFile = File(...),
@@ -874,9 +902,14 @@ async def upload_media(
         raise AppError(422, "empty_file", "No file content")
     if len(data) > CHAT_MAX_MEDIA_BYTES:
         raise AppError(413, "media_too_large", "Attachment exceeds 15 MB")
+    content_type = file.content_type or "application/octet-stream"
+    if kind == "image":
+        # Serve small images to the mobile feed (fast + no big-image memory crash).
+        data = _downsize_image(data)
+        content_type = "image/jpeg"
     ext = _MEDIA_EXT.get(kind, "bin")
     key = f"chat/{site_id}/{uuid4().hex}.{ext}"
-    get_storage().put_bytes(key, data, file.content_type or "application/octet-stream")
+    get_storage().put_bytes(key, data, content_type)
     media_type = kind if kind in _CHAT_MEDIA_TYPES else "document"
     return MediaUploadOut(key=key, media_type=media_type, sha256=hashlib.sha256(data).hexdigest())
 
@@ -1003,6 +1036,20 @@ async def list_messages(
         users_by_id = {
             u.id: (u.name, u.role.value if u.role else None) for u in urows
         }
+    # Batch-resolve which messages have been published to the homeowner feed
+    # ("Send to feed") so the UI can badge them — one query for the whole page
+    # (no N+1). Maps source chat message id → feed photo id.
+    msg_ids = [r.id for r in rows]
+    feed_photo_by_msg: dict[UUID, UUID] = {}
+    if msg_ids:
+        feed_rows = (
+            await session.execute(
+                select(
+                    PublishedPhoto.source_chat_message_id, PublishedPhoto.id
+                ).where(PublishedPhoto.source_chat_message_id.in_(msg_ids))
+            )
+        ).all()
+        feed_photo_by_msg = {row[0]: row[1] for row in feed_rows}
     storage = get_storage()
     out: list[ChatMessageOut] = []
     for r in rows:
@@ -1012,6 +1059,7 @@ async def list_messages(
         name, role = users_by_id.get(r.sender_id, (None, None))
         msg_out.sender_name = name
         msg_out.sender_role = role
+        msg_out.feed_photo_id = feed_photo_by_msg.get(r.id)
         events = []
         for e in events_by_raw.get(r.raw_message_id, []):
             eo = ChatEventOut.model_validate(e)

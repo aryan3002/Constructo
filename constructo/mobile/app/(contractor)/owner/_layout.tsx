@@ -80,6 +80,9 @@ function OwnerTabs() {
       <Tabs.Screen name="permits" options={{ href: null }} />
       {/* Dispute pack — pushed from the site detail, off-tab. */}
       <Tabs.Screen name="dispute-pack" options={{ href: null }} />
+      {/* Photo album + share screens — off-tab, reached via site detail. */}
+      <Tabs.Screen name="album" options={{ href: null }} />
+      <Tabs.Screen name="share" options={{ href: null }} />
     </Tabs>
   )
 }

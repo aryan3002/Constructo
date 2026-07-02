@@ -14,9 +14,26 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.homeowner.schemas import PhotoOut
 from app.models import ComponentStatus, DrawingKind, MilestoneStatus, SpaceKind, UpdateType
 
 # ---- publish to the feed ---------------------------------------------------
+
+
+class PhotoPatchIn(BaseModel):
+    """Partial edit of a published photo. Only provided fields change. A
+    contractor-supplied caption is a reviewed, homeowner-visible fact."""
+
+    caption: str | None = None
+    room_tag: str | None = None
+    is_starred: bool | None = None
+
+
+class ContractorPhotoOut(PhotoOut):
+    """A published photo as the CONTRACTOR sees it — adds the audit attribution
+    the homeowner-facing PhotoOut deliberately omits."""
+
+    shared_by_name: str | None = None
 
 
 class PublishPhotoIn(BaseModel):
@@ -58,6 +75,19 @@ class PublishUpdateIn(BaseModel):
             raise ValueError("revised_date / impact_days / impact_cost_delta / reason are only "
                              "valid on type=delay updates")
         return self
+
+
+class PublishFromChatIn(BaseModel):
+    """Publish an existing chat photo into the homeowner feed ("Send to feed").
+
+    Points at a chat message (which must be an image); the image is reused as-is.
+    Caption/room are optional overrides the contractor supplies at share time —
+    unlike the /photo path there is NO AI draft (the fast path: the image already
+    exists, the contractor is deliberately curating it)."""
+
+    message_id: UUID
+    caption: str | None = None
+    room_tag: str | None = None
 
 
 class PublishWeeklySummaryIn(BaseModel):
@@ -188,6 +218,17 @@ class DrawingRegisterOut(BaseModel):
     supersedes_id: UUID | None = None
     is_current: bool
     file_url: str
+
+
+class EnrichIn(BaseModel):
+    site_id: UUID
+    image_url: str = Field(min_length=1)
+    room_tag: str | None = None
+
+
+class EnrichOut(BaseModel):
+    caption_draft: str | None = None
+    room_hint: str | None = None
 
 
 class DrawingPresignIn(BaseModel):

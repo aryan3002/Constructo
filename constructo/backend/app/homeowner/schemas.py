@@ -302,6 +302,11 @@ class HomeOut(BaseModel):
     # The current confirmed quiet card, or null. Lets Home/Updates/Photos render
     # a calm empty state ("nothing new to see — here's why") instead of silence.
     quiet: QuietPeriodOut | None = None
+    # Phase 2 heartbeat: makes the channel's liveness visible so silence reads as
+    # a "slow day", not "hiding". Contractor photos shared in the last 7 days, and
+    # when the most recent one landed.
+    photos_this_week: int = 0
+    last_photo_at: datetime | None = None
 
 
 # ---- design ----------------------------------------------------------------

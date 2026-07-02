@@ -43,6 +43,10 @@ export interface ChatMessage {
   created_at: string
   /** Short-lived presigned GET for an attachment (challan photo), else null. */
   attachment_url: string | null
+  /** Set to the PublishedPhoto id when this message's photo is already in the
+   *  homeowner feed (contractor "Send to feed" flow) — else null. Populated via a
+   *  left-join server-side, so the "✓ In feed" badge is durable across reloads. */
+  feed_photo_id?: string | null
   /** Events this message minted; empty for plain human talk (a bubble). */
   events: ChatEvent[]
   /** Extraction status of the message's raw row (queued|processing|done|failed),

@@ -60,7 +60,7 @@ export function SiteHealthCard({
       </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.sm }}>
-        <Body style={{ fontSize: 30, fontWeight: '700', color: theme.colors[BAND_TO_STATUS[data.band]] }}>
+        <Body style={{ fontSize: 30, lineHeight: 38, fontWeight: '700', color: theme.colors[BAND_TO_STATUS[data.band]] }}>
           {data.score}
           <Body style={{ color: theme.colors.textMute }}> / 100</Body>
         </Body>
