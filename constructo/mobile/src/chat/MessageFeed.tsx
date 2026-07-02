@@ -56,6 +56,7 @@ export function MessageFeed({
   onEndReached,
   myUserId,
   replySnippetFor,
+  photoActionFor,
 }: {
   items: FeedRow[]
   /** Which `sender_side` is "me" for bubble alignment/tint. */
@@ -81,6 +82,14 @@ export function MessageFeed({
   /** Optional quoted-parent snippet for a replied-to message — rendered above the
    *  bubble (quote-reply). Return null/'' for no quote. */
   replySnippetFor?: (m: ChatMessage) => string | null
+  /** Contractor-only: per-photo-message "Send to feed" capability. Return
+   *  `{ onSendToFeed, feedPhotoId }` to enable the long-press-to-publish affordance
+   *  + "✓ In feed" badge on that message's bubble; return undefined for no affordance.
+   *  Only the contractor chat screens pass this — homeowner threads never do, so the
+   *  affordance stays contractor-only. */
+  photoActionFor?: (
+    m: ChatMessage,
+  ) => { onSendToFeed?: () => void; feedPhotoId?: string | null } | undefined
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -186,6 +195,7 @@ export function MessageFeed({
           </Small>
         </View>
       ) : null
+      const photoAction = photoActionFor?.(m)
       const bubble = (
         <MessageBubble
           body={m.body}
@@ -196,6 +206,8 @@ export function MessageFeed({
           onLongPress={onLongPressMessage ? () => onLongPressMessage(m) : undefined}
           showSenderName={showSender}
           senderName={senderNameFor(m)}
+          onSendToFeed={photoAction?.onSendToFeed}
+          feedPhotoId={photoAction?.feedPhotoId}
         />
       )
       // Tighter spacing inside a run; full gap when the run ends.
@@ -232,7 +244,7 @@ export function MessageFeed({
       )
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper, c.accent, c.textMute, replySnippetFor],
+    [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper, c.accent, c.textMute, replySnippetFor, photoActionFor],
   )
 
   return (

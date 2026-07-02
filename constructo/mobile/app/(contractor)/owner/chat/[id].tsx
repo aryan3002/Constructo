@@ -28,6 +28,7 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
 import { MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
+import { SendToFeedSheet } from '../../../../src/contractor/SendToFeedSheet'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
 import { MessageFeed, useChatThread, type FeedRow } from '../../../../src/chat'
 import { enqueueChatSend } from '../../../../src/chat/outbox'
@@ -131,6 +132,12 @@ export default function OwnerConversation() {
 
   const [text, setText] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
+  // "Send to feed" sheet (contractor in-chat photo-share). Holds the target
+  // message + its presigned photo URL; `sentToFeed` optimistically flips a
+  // bubble to "✓ In feed" the instant it publishes (the durable state arrives
+  // on the next poll via the message-out `feed_photo_id`).
+  const [feedSheet, setFeedSheet] = useState<{ messageId: string; photoUri: string | null } | null>(null)
+  const [sentToFeed, setSentToFeed] = useState<Set<string>>(() => new Set())
 
   // For group threads, learn the roster to gate the "Manage" action on the
   // caller actually being an admin (the sheet's mutations are admin-only).
@@ -183,6 +190,23 @@ export default function OwnerConversation() {
   const replySnippetFor = useCallback(
     (m: ChatMessage) => (m.reply_to_id ? msgSnippet(byId.get(m.reply_to_id)) || null : null),
     [byId],
+  )
+
+  // Contractor-only "Send to feed" capability per photo message. A message with
+  // an image attachment gets a long-press → open the sheet; once it's in the feed
+  // (server `feed_photo_id`, or the optimistic `sentToFeed` set) it shows the
+  // "✓ In feed" badge and long-press reverts to the normal reply action. Only
+  // this contractor screen passes it to MessageFeed, so homeowners never see it.
+  const photoActionFor = useCallback(
+    (m: ChatMessage) => {
+      if (!m.attachment_url) return undefined
+      const feedPhotoId = m.feed_photo_id ?? (sentToFeed.has(m.id) ? m.id : null)
+      return {
+        feedPhotoId,
+        onSendToFeed: () => setFeedSheet({ messageId: m.id, photoUri: m.attachment_url }),
+      }
+    },
+    [sentToFeed],
   )
 
   // Send a photo: pick → push the preview route (caption + markup) → on return,
@@ -403,6 +427,7 @@ export default function OwnerConversation() {
             onLongPressMessage={onReply}
             deliveryStateFor={thread.deliveryState}
             replySnippetFor={replySnippetFor}
+            photoActionFor={photoActionFor}
             emptyState={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Small muted>{str.empty}</Small>
@@ -530,6 +555,20 @@ export default function OwnerConversation() {
           siteId={siteId ?? ''}
         />
       ) : null}
+
+      {/* Send-to-feed sheet — publishes a chat photo to the homeowner feed.
+          On success we optimistically add the message id to `sentToFeed` so the
+          bubble flips to "✓ In feed" immediately. */}
+      <SendToFeedSheet
+        visible={feedSheet !== null}
+        photoUri={feedSheet?.photoUri ?? null}
+        messageId={feedSheet?.messageId ?? null}
+        onClose={() => setFeedSheet(null)}
+        onSent={(messageId) => {
+          setSentToFeed((prev) => new Set(prev).add(messageId))
+          setFeedSheet(null)
+        }}
+      />
     </KeyboardAvoidingView>
   )
 }

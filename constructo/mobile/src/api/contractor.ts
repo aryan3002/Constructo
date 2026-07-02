@@ -52,6 +52,25 @@ export const contractor = {
   publishedPhotos: (siteId: string, view: 'all' | 'room' | 'milestone' = 'all') =>
     request<ContractorPhoto[]>(`/api/v1/publish/photos${q({ site_id: siteId, view })}`),
 
+  /**
+   * "Send to feed" from a chat photo — the deferred half of the photo-share hybrid.
+   * Server-authoritative: we pass a chat MESSAGE id (never a raw key); the backend
+   * reuses that message's existing R2 attachment as the published photo's image_url,
+   * records `source_chat_message_id` (UNIQUE → idempotent dedup), and publishes it to
+   * the homeowner feed + contractor Album. Honest-AI gate: the caption is NEVER the
+   * chat body — only what the contractor types in the sheet. Returns the published
+   * photo (ContractorPhotoOut = Photo + shared_by_name).
+   */
+  sendChatPhotoToFeed: (messageId: string, body: { caption?: string; roomTag?: string }) =>
+    request<ContractorPhoto>('/api/v1/publish/photo/from-chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message_id: messageId,
+        caption: body.caption,
+        room_tag: body.roomTag,
+      }),
+    }),
+
   editPhoto: (id: string, patch: { caption?: string; room_tag?: string; is_starred?: boolean }) =>
     request<Photo>(`/api/v1/publish/photo/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 

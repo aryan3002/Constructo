@@ -351,6 +351,13 @@ export function NivaanProposalCard({
 // renders crew threads identically.
 // ---------------------------------------------------------------------------
 
+/** Send-to-feed chrome on a photo bubble. Kept English (app-chrome, like the
+ *  timestamps/ticks) — the localized flow copy lives in the SendToFeedSheet. */
+const SEND_TO_FEED_STR = {
+  badge: 'In feed',
+  hint: 'Long-press to send this photo to the homeowner feed',
+} as const
+
 export function MessageBubble({
   body,
   mine,
@@ -361,6 +368,8 @@ export function MessageBubble({
   nivaan,
   showSenderName,
   senderName,
+  onSendToFeed,
+  feedPhotoId,
 }: {
   body: string | null
   mine: boolean
@@ -376,6 +385,15 @@ export function MessageBubble({
   showSenderName?: boolean
   /** The author's display name (from sender_name on the message). */
   senderName?: string | null
+  /** Contractor-only "Send to feed" (photo bubbles). When provided AND this bubble
+   *  has an attachment, long-press publishes the photo to the homeowner feed — UNLESS
+   *  it is already in the feed (`feedPhotoId` set), in which case long-press falls back
+   *  to the normal reply action. Never passed on homeowner screens, so they never see
+   *  the affordance. */
+  onSendToFeed?: () => void
+  /** The PublishedPhoto id when this photo is already in the feed — renders a small
+   *  "✓ In feed" badge on the bubble and disables re-sending. */
+  feedPhotoId?: string | null
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -478,6 +496,30 @@ export function MessageBubble({
               />
             </View>
           ) : null}
+          {/* "✓ In feed" badge — a small ok-tinted pill pinned to the photo's
+              bottom-left once the contractor has published it to the homeowner
+              feed. Durable: driven by feedPhotoId (message-out left-join). */}
+          {feedPhotoId ? (
+            <View
+              style={{
+                position: 'absolute',
+                left: 6,
+                bottom: 6,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingVertical: 3,
+                paddingHorizontal: 8,
+                borderRadius: 9999,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+              }}
+            >
+              <Feather name="check" size={12} color={c.ok} />
+              <Micro style={{ color: '#ffffff', fontWeight: '600' }}>
+                {SEND_TO_FEED_STR.badge}
+              </Micro>
+            </View>
+          ) : null}
         </View>
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
@@ -503,8 +545,19 @@ export function MessageBubble({
     </>
   )
 
-  return onLongPress ? (
-    <Pressable onLongPress={onLongPress} style={bubbleStyle}>
+  // A photo bubble the contractor can publish to the feed (and hasn't yet) makes
+  // "Send to feed" the primary long-press action; once in the feed (feedPhotoId set)
+  // long-press falls back to the normal reply handler. Non-photo bubbles and the
+  // homeowner (no onSendToFeed) keep the plain reply long-press.
+  const canSendToFeed = !!onSendToFeed && !!attachmentUrl && !feedPhotoId
+  const longPress = canSendToFeed ? onSendToFeed : onLongPress
+
+  return longPress ? (
+    <Pressable
+      onLongPress={longPress}
+      accessibilityHint={canSendToFeed ? SEND_TO_FEED_STR.hint : undefined}
+      style={bubbleStyle}
+    >
       {content}
     </Pressable>
   ) : (
