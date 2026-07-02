@@ -43,6 +43,8 @@ export interface ChatMessage {
   created_at: string
   /** Short-lived presigned GET for an attachment (challan photo), else null. */
   attachment_url: string | null
+  attachment_width?: number
+  attachment_height?: number
   /** CLIENT-ONLY: the local file uri a just-sent photo was uploaded from —
    *  stamped into the thread cache when the send confirms so the bubble keeps
    *  rendering the local bytes instead of re-downloading its own upload. Never

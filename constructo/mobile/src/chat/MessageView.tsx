@@ -381,6 +381,9 @@ export const MessageBubble = memo(function MessageBubble({
   senderName,
   onSendToFeed,
   feedPhotoId,
+  attachmentWidth,
+  attachmentHeight,
+  onPressAttachment,
 }: {
   body: string | null
   mine: boolean
@@ -408,6 +411,9 @@ export const MessageBubble = memo(function MessageBubble({
   /** The PublishedPhoto id when this photo is already in the feed — renders a small
    *  "✓ In feed" badge on the bubble and disables re-sending. */
   feedPhotoId?: string | null
+  attachmentWidth?: number
+  attachmentHeight?: number
+  onPressAttachment?: () => void
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -480,6 +486,12 @@ export const MessageBubble = memo(function MessageBubble({
     mine ? ownBubble : otherBubble,
   ]
 
+  const hasDims = !!attachmentWidth && !!attachmentHeight
+  const ar = hasDims ? Math.max(0.6, Math.min(1.5, attachmentWidth / attachmentHeight)) : 4 / 3
+  const imgW = Math.min(280, 280) // 280 is approx bubble max width
+  const imgH = imgW / ar
+  const dimStyle = hasDims ? { width: imgW, height: imgH } : { width: 200, height: 150 }
+
   const content = (
     <>
       {nivaan ? (
@@ -493,11 +505,15 @@ export const MessageBubble = memo(function MessageBubble({
         </Micro>
       ) : null}
       {src ? (
-        <View style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4, overflow: 'hidden' }}>
+        <Pressable 
+          onPress={onPressAttachment}
+          disabled={!onPressAttachment}
+          style={[{ borderRadius: 8, marginBottom: 4, overflow: 'hidden' }, dimStyle]}
+        >
           {imgState !== 'failed' ? (
             <CachedImage
               source={{ uri: src, ...(stableCacheKey(src) ? { cacheKey: stableCacheKey(src) } : {}) }}
-              style={{ width: 200, height: 150 }}
+              style={dimStyle}
               contentFit="cover"
               cachePolicy="memory-disk"
               recyclingKey={stableCacheKey(src) ?? src}
@@ -553,7 +569,7 @@ export const MessageBubble = memo(function MessageBubble({
               </Micro>
             </View>
           ) : null}
-        </View>
+        </Pressable>
       ) : null}
       {body ? <Body style={{ color: c.text }}>{body}</Body> : null}
       {timestamp ? (

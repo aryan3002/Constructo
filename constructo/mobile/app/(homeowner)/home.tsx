@@ -49,6 +49,7 @@ import {
   MonoSm,
   Screen,
   ScreenLoader,
+  Skeleton,
   Small,
   StatusPill,
   TimeBar,
@@ -337,9 +338,27 @@ export default function Home() {
   // ── Loading / error states ───────────────────────────────────────────────────
   if (homeQ.isLoading) {
     return (
-      <Screen>
-        <ScreenLoader fill={false} />
-      </Screen>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: c.bg }}
+        contentContainerStyle={{
+          paddingTop: insets.top + SPACE.sm,
+          paddingHorizontal: SPACE.gutter,
+          paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE,
+          gap: SPACE.lg,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Logo size={40} />
+            <BodyLg style={{ fontWeight: '600', marginTop: SPACE.sm }}>{greetingFor(t)}</BodyLg>
+            <Small muted style={{ marginTop: 2 }} numberOfLines={1}>
+              {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Small>
+          </View>
+        </View>
+        <Skeleton height={180} radius={theme.radii.card} />
+        <Skeleton height={120} radius={theme.radii.card} />
+      </ScrollView>
     )
   }
   if (homeQ.error || !homeQ.data) {

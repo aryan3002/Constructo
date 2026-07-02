@@ -23,8 +23,13 @@ export class ChatSocket {
   private closedByUser = false
   private connecting = false
   private pingTimer: ReturnType<typeof setInterval> | null = null
+  private pongTimeout: ReturnType<typeof setTimeout> | null = null
 
   constructor(private opts: ChatSocketOpts) {}
+
+  public get isLive(): boolean {
+    return !!this.ws && this.ws.readyState === 1
+  }
 
   async connect(): Promise<void> {
     // In-flight guard: a reconnect timer can fire while a prior connect()'s
@@ -48,14 +53,22 @@ export class ChatSocket {
       this.connecting = false
       this.attempts = 0
       this.sendSubs()
-      this.pingTimer = setInterval(
-        () => this.send({ v: 1, type: 'ping' }),
-        this.opts.pingIntervalMs ?? 30_000,
-      )
+      this.pingTimer = setInterval(() => {
+        this.send({ v: 1, type: 'ping' })
+        this.pongTimeout = setTimeout(() => {
+          // Missed pong after 10s: close socket to force reconnect
+          this.ws?.close()
+        }, 10_000)
+      }, this.opts.pingIntervalMs ?? 30_000)
     }
     ws.onmessage = (e) => {
       try {
-        this.opts.onFrame(JSON.parse(String(e.data)))
+        const frame = JSON.parse(String(e.data))
+        if (frame.type === 'pong' && this.pongTimeout) {
+          clearTimeout(this.pongTimeout)
+          this.pongTimeout = null
+        }
+        this.opts.onFrame(frame)
       } catch {
         /* malformed frame: ignore; REST resync covers it */
       }
@@ -87,11 +100,19 @@ export class ChatSocket {
     this.send({ v: 1, type: 'read', conv: convId, seq })
   }
 
+  typing(convId: string): void {
+    this.send({ v: 1, type: 'typing', conv: convId })
+  }
+
   close(): void {
     this.closedByUser = true
     if (this.pingTimer) {
       clearInterval(this.pingTimer)
       this.pingTimer = null
+    }
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout)
+      this.pongTimeout = null
     }
     this.ws?.close()
   }
@@ -113,6 +134,10 @@ export class ChatSocket {
     if (this.pingTimer) {
       clearInterval(this.pingTimer)
       this.pingTimer = null
+    }
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout)
+      this.pongTimeout = null
     }
     if (this.closedByUser) return
     this.attempts += 1

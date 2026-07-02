@@ -73,15 +73,15 @@ export function SettleBar({
       toValue: 1,
       duration: 300,
       easing: Easing.out(Easing.cubic),
-      // width is a layout prop → cannot use the native driver.
-      useNativeDriver: false,
+      useNativeDriver: true,
     })
     anim.start()
     return () => anim.stop()
   }, [grow, reduced, fill])
-  const fillWidth = grow.interpolate({
+
+  const scaleX = grow.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', `${fill * 100}%`],
+    outputRange: [0, fill],
   })
 
   return (
@@ -103,9 +103,11 @@ export function SettleBar({
             left: 0,
             top: 0,
             bottom: 0,
-            width: fillWidth,
+            width: '100%',
             borderRadius: height / 2,
             backgroundColor: color,
+            transformOrigin: 'left',
+            transform: [{ scaleX }],
           }}
         />
         {/* Next-milestone tick (a thin upright marker, never a number) */}

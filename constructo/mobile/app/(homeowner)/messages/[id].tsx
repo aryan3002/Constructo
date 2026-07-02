@@ -22,6 +22,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../../src/theme/tokens'
 import { Avatar, BodyStrong, BreathingDots, QuietState, Small } from '../../../src/ui'
+import { FadeInUp } from '../../../src/ui/motion'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -570,12 +571,32 @@ export default function HomeownerThread() {
         </View>
       )}
 
+      {thread.isTyping && (
+        <FadeInUp
+          style={{
+            position: 'absolute',
+            left: SPACE.lg,
+            bottom: Math.max(insets.bottom, SPACE.sm) + 64, // above composer
+            backgroundColor: c.paper,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: c.line,
+            zIndex: 10,
+          }}
+        >
+          <BreathingDots />
+        </FadeInUp>
+      )}
+
       <ChatComposer
         value={text}
         onChange={setText}
         onSend={onSend}
         placeholder={t.placeholder}
         sendAccessibilityLabel={t.send}
+        sendTyping={thread.sendTyping}
         reply={thread.reply ? { snippet: thread.reply.body ?? '' } : null}
         onCancelReply={() => thread.setReply(null)}
         insetsBottom={insets.bottom}

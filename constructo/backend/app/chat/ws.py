@@ -76,6 +76,13 @@ class ChatSocketSession:
                 task.cancel()
         elif kind in ("delivered", "read"):
             await self._cursor(frame, read=(kind == "read"))
+        elif kind == "typing":
+            conv_id = self._conv_id(frame)
+            if conv_id and conv_id in self._pumps:
+                await self._broadcaster.publish(
+                    conv_id,
+                    {"v": _V, "type": "typing", "conv": str(conv_id), "user_id": str(self._user.id)}
+                )
 
     @staticmethod
     def _conv_id(frame: dict) -> UUID | None:
