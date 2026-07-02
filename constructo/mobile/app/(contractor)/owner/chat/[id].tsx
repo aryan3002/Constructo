@@ -199,7 +199,9 @@ export default function OwnerConversation() {
   // this contractor screen passes it to MessageFeed, so homeowners never see it.
   const photoActionFor = useCallback(
     (m: ChatMessage) => {
-      if (!m.attachment_url) return undefined
+      // Photos only — a document/PDF attachment also presigns an attachment_url,
+      // but it isn't feed material (and would render as a broken <Image>).
+      if (!m.attachment_url || m.media_type !== 'image') return undefined
       const feedPhotoId = m.feed_photo_id ?? (sentToFeed.has(m.id) ? m.id : null)
       return {
         feedPhotoId,
