@@ -8,11 +8,13 @@
  * on neev).
  */
 import { type ReactNode } from 'react'
-import { ActivityIndicator, Pressable, TextInput, View } from 'react-native'
+import { Platform, Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 
 import { useT } from '../i18n/I18nProvider'
 import { useTheme } from '../theme/ThemeProvider'
+import { PRESS_SCALE } from '../theme/motionTokens'
 import { SPACE, TAP } from '../theme/tokens'
 import { Mono, Small } from '../ui'
 
@@ -25,7 +27,6 @@ export function ChatComposer({
   value,
   onChange,
   onSend,
-  sending,
   placeholder,
   sendAccessibilityLabel,
   reply,
@@ -37,7 +38,11 @@ export function ChatComposer({
   value: string
   onChange: (s: string) => void
   onSend: () => void
-  sending: boolean
+  /** DEPRECATED — ignored. The composer never locks while a send is in flight:
+   *  the outbox is FIFO + idempotent, so queuing the next message while the
+   *  previous one is on the wire is always safe (WhatsApp parity). The pending
+   *  bubble's "Send…" carries the in-flight state instead. */
+  sending?: boolean
   placeholder: string
   sendAccessibilityLabel: string
   /** Quote-reply target snippet, or null. */
@@ -53,7 +58,16 @@ export function ChatComposer({
   const { theme } = useTheme()
   const c = theme.colors
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
-  const canSend = !!value.trim() && !sending
+  const canSend = !!value.trim()
+
+  const handleSend = () => {
+    if (!canSend) return
+    // Cheap physical ack on the tap frame (no-op where unsupported, e.g. web).
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined)
+    }
+    onSend()
+  }
 
   return (
     <View
@@ -139,7 +153,7 @@ export function ChatComposer({
           accessibilityLabel={sendAccessibilityLabel}
           accessibilityState={{ disabled: !canSend }}
           disabled={!canSend}
-          onPress={onSend}
+          onPress={handleSend}
           style={({ pressed }) => [
             {
               width: TAP,
@@ -149,16 +163,12 @@ export function ChatComposer({
               alignItems: 'center',
               justifyContent: 'center',
               opacity: !canSend ? 0.5 : 1,
-              transform: [{ scale: pressed && canSend ? 0.96 : 1 }],
+              transform: [{ scale: pressed && canSend ? PRESS_SCALE : 1 }],
             },
             canSend ? theme.shadowCard : null,
           ]}
         >
-          {sending ? (
-            <ActivityIndicator color={c.onAccent} />
-          ) : (
-            <Feather name="arrow-up" size={22} color={c.onAccent} />
-          )}
+          <Feather name="arrow-up" size={22} color={c.onAccent} />
         </Pressable>
       </View>
 

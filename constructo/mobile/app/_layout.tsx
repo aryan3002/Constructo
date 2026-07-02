@@ -12,6 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext'
+import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { I18nProvider } from '../src/i18n/I18nProvider'
 import { useAppFonts } from '../src/theme/fonts'
 
@@ -31,6 +32,7 @@ export default function RootLayout() {
           <AuthProvider>
             <StatusBar style="dark" />
             <ChatPushDeepLink />
+            <ChatOutboxLaunchDrain />
             <Stack screenOptions={{ headerShown: false }} />
           </AuthProvider>
         </I18nProvider>
@@ -47,6 +49,21 @@ export default function RootLayout() {
  * Routes by role. Best-effort: a malformed/unknown payload is ignored. Mounted
  * inside AuthProvider so `role` + router are ready.
  */
+/**
+ * Messages queued in a prior session (composed in a dead zone, app killed) send
+ * on the NEXT LAUNCH — not only when the user happens to re-open a chat screen.
+ * Auth-gated: an unauthenticated drain would just 401 every item into backoff.
+ */
+function ChatOutboxLaunchDrain() {
+  const { me } = useAuth()
+  const authed = !!me
+  useEffect(() => {
+    if (!authed) return
+    void drainChatOutboxOnLaunch().catch(() => undefined)
+  }, [authed])
+  return null
+}
+
 function ChatPushDeepLink() {
   const router = useRouter()
   const { role } = useAuth()

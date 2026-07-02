@@ -20,11 +20,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
+import { PRESS_SCALE } from '../../../../src/theme/motionTokens'
 import { SPACE, TAP } from '../../../../src/theme/tokens'
 import { BodyStrong, Small } from '../../../../src/ui'
 import { MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src/chat/MessageView'
@@ -164,7 +166,13 @@ export default function OwnerConversation() {
 
   const onSend = async () => {
     const body = text.trim()
-    if (!body || thread.sending) return
+    // Never gate on thread.sending: the outbox is FIFO + idempotent, so queuing
+    // the next message while the previous is on the wire is safe — and blocking
+    // here made rapid sends silent dead taps (WhatsApp never locks the composer).
+    if (!body) return
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined)
+    }
     setText('')
     try {
       // Durable: enqueues to the persisted outbox (reply target handled by the
@@ -531,8 +539,8 @@ export default function OwnerConversation() {
           accessibilityRole="button"
           accessibilityLabel={str.send}
           onPress={() => void onSend()}
-          disabled={!text.trim() || thread.sending}
-          style={{
+          disabled={!text.trim()}
+          style={({ pressed }) => ({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
@@ -542,7 +550,8 @@ export default function OwnerConversation() {
             borderRadius: theme.radii.control,
             justifyContent: 'center',
             backgroundColor: text.trim() ? c.accent : c.line,
-          }}
+            transform: [{ scale: pressed && text.trim() ? PRESS_SCALE : 1 }],
+          })}
         >
           <Feather name="send" size={16} color={text.trim() ? c.onAccent : c.textMute} />
           <BodyStrong style={{ color: text.trim() ? c.onAccent : c.textMute }}>{str.send}</BodyStrong>

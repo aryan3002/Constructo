@@ -39,10 +39,12 @@ import { SPACE } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
 import {
   chatApi,
+  newClientMsgId,
   type AskResult,
   type ChatEvent,
   type ChatMessage,
 } from '../../../src/api/chat'
+import { enqueueChatSend } from '../../../src/chat/outbox'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { vendorConfirmApi } from '../../../src/api/vendorConfirm'
@@ -464,7 +466,10 @@ export default function CrewChat() {
   )
 
   // Camera-as-Sensor: snap a challan → PREVIEW route (confirm + optional caption)
-  // → on return, upload + send as a document; the worker OCRs it into a card.
+  // → on return, enqueue with the LOCAL uri (durable outbox uploads on drain) so
+  // the pending bubble shows the scan INSTANTLY — no dead seconds while a site
+  // network uploads. `exactKind` keeps it a `document` (the worker OCRs it into
+  // a card); without it the outbox would coerce image-mime documents to photos.
   // Markup is off (bill scanner, not photo-sharing). Consume-once → no double-send.
   useFocusEffect(
     useCallback(() => {
@@ -472,18 +477,13 @@ export default function CrewChat() {
       if (!s || !site) return
       void (async () => {
         try {
-          const uploaded = await chatApi.uploadMedia(
-            { siteId: site.id },
-            { uri: s.uri, name: 'challan.jpg', type: s.mime },
-            'document',
-          )
-          await thread.sendMedia({
-            attachmentKey: uploaded.key,
-            mime: s.mime,
-            sha256: uploaded.sha256,
-            mediaType: 'document',
+          await enqueueChatSend({
+            clientMsgId: newClientMsgId(),
+            address: { site_id: site.id },
             ...(s.caption ? { body: s.caption } : {}),
+            media: { kind: 'document', mime: s.mime, localUri: s.uri, exactKind: true },
           })
+          await thread.flush()
           scrollToEnd()
         } catch {
           Alert.alert(str.scanBill, str.uploadFailed)
@@ -517,20 +517,19 @@ export default function CrewChat() {
     })
   }, [site, router, str])
 
-  // Voice-to-Card: hold-to-talk → upload the .m4a as voice media → send; the
-  // worker runs STT + numeral-repair into a card.
+  // Voice-to-Card: hold-to-talk → enqueue the .m4a with its local uri; the
+  // durable outbox uploads + sends on drain (instant pending bubble, retries
+  // survive a dead zone). The worker runs STT + numeral-repair into a card.
   const onVoice = useCallback(
     async (audio: RecordedAudio) => {
       if (!site) return
       try {
-        const uploaded = await chatApi.uploadMedia(
-          { siteId: site.id },
-          { uri: audio.uri, name: audio.name, type: audio.mime },
-          'voice',
-        )
-        await thread.sendMedia({
-          attachmentKey: uploaded.key, mime: audio.mime, sha256: uploaded.sha256, mediaType: 'voice',
+        await enqueueChatSend({
+          clientMsgId: newClientMsgId(),
+          address: { site_id: site.id },
+          media: { kind: 'voice', mime: audio.mime, localUri: audio.uri },
         })
+        await thread.flush()
         scrollToEnd()
       } catch {
         Alert.alert(str.title, str.askFailed)

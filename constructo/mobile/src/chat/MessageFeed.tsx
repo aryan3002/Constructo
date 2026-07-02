@@ -1,20 +1,29 @@
 /**
- * MessageFeed — the homeowner thread's message list (the only consumer of this
- * component). An INVERTED FlatList: newest row at the visual bottom, sticky by
- * construction, with cheap scroll-up. Renders bubbles, capture cards, screen-
- * supplied custom rows, plus derived day separators and same-sender grouping
- * (names/avatars + clustered timestamps) from the pure `annotateFeed` helper.
+ * MessageFeed — the shared thread message list. An INVERTED FlatList: newest
+ * row at the visual bottom, sticky by construction, with cheap scroll-up.
+ * Renders bubbles, capture cards, screen-supplied custom rows, plus derived
+ * day separators and same-sender grouping (names/avatars + clustered
+ * timestamps) from the pure `annotateFeed` helper.
+ *
+ * Perf contract (WhatsApp-smooth): every prop a screen passes should be
+ * referentially stable across keystrokes — the list itself keeps its
+ * keyExtractor/styles stable, anchors the viewport while history loads or new
+ * rows arrive (`maintainVisibleContentPosition`), and only re-renders rows
+ * whose data actually changed.
  */
-import { useCallback, useMemo, useRef, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   FlatList,
+  Pressable,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   View,
 } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 
 import { SPACE } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
+import { FadeInUp } from '../ui/motion'
 import { Avatar, Small } from '../ui'
 import type { ChatMessage } from '../api/chat'
 import { CaptureCard, MessageBubble } from './MessageView'
@@ -42,7 +51,9 @@ function defaultDayLabel(iso: string): string {
   return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
 }
 
-export function MessageFeed({
+const keyExtractor = (item: RenderRow) => item.key
+
+export const MessageFeed = memo(function MessageFeed({
   items,
   mineSide,
   time,
@@ -57,6 +68,7 @@ export function MessageFeed({
   myUserId,
   replySnippetFor,
   photoActionFor,
+  newMessagesLabel = 'New messages',
 }: {
   items: FeedRow[]
   /** Which `sender_side` is "me" for bubble alignment/tint. */
@@ -90,15 +102,23 @@ export function MessageFeed({
   photoActionFor?: (
     m: ChatMessage,
   ) => { onSendToFeed?: () => void; feedPhotoId?: string | null } | undefined
+  /** Localized label for the scrolled-up "new messages" pill. */
+  newMessagesLabel?: string
 }) {
   const { theme } = useTheme()
   const c = theme.colors
   const listRef = useRef<FlatList<RenderRow>>(null)
   const atBottom = useRef(true)
 
+  // "New messages" pill: shown only when a new row lands while the reader is
+  // scrolled up in history — never a persistent arrow (calm, not chrome).
+  const [hasNew, setHasNew] = useState(false)
+
   // Track whether the user is at the bottom (inverted: offset.y near 0).
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    atBottom.current = e.nativeEvent.contentOffset.y <= 24
+    const y = e.nativeEvent.contentOffset.y
+    atBottom.current = y <= 24
+    if (y <= 24) setHasNew(false)
   }, [])
 
   const senderNameFor = (m: ChatMessage) => m.sender_name ?? null
@@ -137,6 +157,20 @@ export function MessageFeed({
     }
     return inverted ? out.reverse() : out
   }, [items, annotations, inverted])
+
+  // A new newest-row while the reader is up in history → offer the pill.
+  const newestKey = data.length ? data[inverted ? 0 : data.length - 1].key : null
+  const prevNewestKey = useRef(newestKey)
+  useEffect(() => {
+    if (prevNewestKey.current === newestKey) return
+    prevNewestKey.current = newestKey
+    if (!atBottom.current && newestKey) setHasNew(true)
+  }, [newestKey])
+
+  const jumpToLatest = useCallback(() => {
+    setHasNew(false)
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+  }, [])
 
   const renderItem = useCallback(
     ({ item }: { item: RenderRow }) => {
@@ -201,6 +235,7 @@ export function MessageFeed({
           body={m.body}
           mine={mine}
           attachmentUrl={m.attachment_url}
+          attachmentLocalUri={m.attachment_local_uri}
           timestamp={isRunEnd ? time(m.created_at) : undefined}
           deliveryState={deliveryStateFor?.(m)}
           onLongPress={onLongPressMessage ? () => onLongPressMessage(m) : undefined}
@@ -247,27 +282,74 @@ export function MessageFeed({
     [mineSide, myUserId, time, onLongPressMessage, deliveryStateFor, annotations, theme, c.paper, c.accent, c.textMute, replySnippetFor, photoActionFor],
   )
 
-  return (
-    <FlatList
-      ref={listRef}
-      data={data}
-      inverted={inverted}
-      keyExtractor={(item) => item.key}
-      renderItem={renderItem}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
-      keyboardShouldPersistTaps="handled"
-      onEndReached={onEndReached}
-      onEndReachedThreshold={0.5}
-      contentContainerStyle={{
-        paddingTop: SPACE.lg,
-        paddingBottom: contentPaddingBottom,
-        flexGrow: 1,
-      }}
-      ListHeaderComponent={header ? <>{header}</> : null}
-      ListEmptyComponent={
-        emptyState ? <View style={{ flexGrow: 1 }}>{emptyState}</View> : null
-      }
-    />
+  const contentContainerStyle = useMemo(
+    () => ({
+      paddingTop: SPACE.lg,
+      paddingBottom: contentPaddingBottom,
+      flexGrow: 1,
+    }),
+    [contentPaddingBottom],
   )
-}
+
+  return (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        ref={listRef}
+        data={data}
+        inverted={inverted}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        // Anchor the viewport: a reader up in history is NOT shifted when new
+        // rows land at index 0; within 64px of the newest row the list keeps
+        // auto-following (WhatsApp behavior).
+        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 64 }}
+        // An inverted thread renders newest-first: a moderate window keeps
+        // scroll 60fps on long seeded threads without blank-cell flashes.
+        windowSize={11}
+        initialNumToRender={14}
+        maxToRenderPerBatch={8}
+        contentContainerStyle={contentContainerStyle}
+        ListHeaderComponent={header ? <>{header}</> : null}
+        ListEmptyComponent={
+          emptyState ? <View style={{ flexGrow: 1 }}>{emptyState}</View> : null
+        }
+      />
+      {hasNew ? (
+        <FadeInUp
+          duration={140}
+          style={{ position: 'absolute', bottom: SPACE.lg, alignSelf: 'center' }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={newMessagesLabel}
+            onPress={jumpToLatest}
+            style={({ pressed }) => [
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingVertical: 8,
+                paddingHorizontal: 14,
+                borderRadius: theme.radii.pill,
+                backgroundColor: c.card,
+                borderWidth: 1,
+                borderColor: c.line,
+                opacity: pressed ? 0.85 : 1,
+              },
+              theme.shadowCard,
+            ]}
+          >
+            <Feather name="arrow-down" size={14} color={c.accentDeep} />
+            <Small style={{ color: c.accentDeep, fontWeight: '600' }}>{newMessagesLabel}</Small>
+          </Pressable>
+        </FadeInUp>
+      ) : null}
+    </View>
+  )
+})

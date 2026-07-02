@@ -11,7 +11,7 @@
  * camera/voice/@ask arrive with their slices.
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
+import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
@@ -21,7 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../../src/theme/tokens'
-import { Avatar, BodyStrong, QuietState, Small } from '../../../src/ui'
+import { Avatar, BodyStrong, BreathingDots, QuietState, Small } from '../../../src/ui'
 import { homeowner } from '../../../src/api/client'
 import { actionItemsApi } from '../../../src/api/actionItems'
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -179,15 +179,19 @@ export default function HomeownerThread() {
 
   // Long-press a message → Reply or Make a to-do. Memoized so it stays a stable
   // prop to MessageFeed (an unstable ref would re-run its renderItem each keystroke).
+  // Depends on thread.setReply (a raw useState setter, identity-stable), never on
+  // the `thread` object itself — that changes when messages/pending move, which
+  // includes every keystroke-adjacent poll tick.
+  const setReply = thread.setReply
   const onLongPress = useCallback(
     (m: ChatMessage) => {
       Alert.alert(headerTitle, undefined, [
-        { text: t.reply, onPress: () => thread.setReply(m) },
+        { text: t.reply, onPress: () => setReply(m) },
         { text: t.makeTodo, onPress: () => void makeTodo(m) },
         { text: t.cancel, style: 'cancel' },
       ])
     },
-    [headerTitle, t, thread, makeTodo],
+    [headerTitle, t, setReply, makeTodo],
   )
 
   // Stable day-separator labeler — a fresh closure here would re-run MessageFeed's
@@ -263,6 +267,17 @@ export default function HomeownerThread() {
   const [asks, setAsks] = useState<AskEntry[]>([])
   const askId = useRef(0)
 
+  // Stable element — an inline JSX child would hand MessageFeed a fresh
+  // ListEmptyComponent every keystroke (composer state lives in this screen).
+  const emptyState = useMemo(
+    () => (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />
+      </View>
+    ),
+    [t],
+  )
+
   // Abstained answers can be promoted into the durable builder request thread.
   const askBuilder = async (entry: AskEntry) => {
     try {
@@ -309,23 +324,28 @@ export default function HomeownerThread() {
       .map((x) => x.row)
     // Durable-outbox pending bubbles — a storage-backed message that hasn't yet
     // confirmed from the server. Rendered as her own bubble with a calm status.
-    // A failed_permanent bubble is wrapped in a Pressable so she can tap to retry.
+    // EVERY pending bubble is tappable: failed_permanent re-queues it; a still-
+    // queued one just nudges the drain ("send now" beats waiting out a backoff).
     const pendingRows: FeedRow[] = thread.pending.map((p) => ({
       kind: 'custom',
       key: `pending:${p.clientMsgId}`,
-      node:
-        p.state === 'failed_permanent' ? (
-          <Pressable
-            onPress={() => void thread.retry(p.clientMsgId)}
-            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
-          >
-            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.tapRetry} />
-          </Pressable>
-        ) : (
-          <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
-            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={t.send + '…'} />
-          </View>
-        ),
+      node: (
+        <Pressable
+          onPress={() =>
+            p.state === 'failed_permanent'
+              ? void thread.retry(p.clientMsgId)
+              : void thread.flush()
+          }
+          style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+        >
+          <MessageBubble
+            body={p.body}
+            attachmentUrl={p.mediaUri}
+            mine
+            timestamp={p.state === 'failed_permanent' ? t.tapRetry : t.send + '…'}
+          />
+        </Pressable>
+      ),
     }))
     // Pending are the very latest (in-flight) — they belong at the bottom.
     return [...timeline, ...pendingRows]
@@ -509,7 +529,7 @@ export default function HomeownerThread() {
 
       {thread.isLoading && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={c.accent} />
+          <BreathingDots />
         </View>
       ) : thread.error && thread.messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.lg }}>
@@ -527,11 +547,8 @@ export default function HomeownerThread() {
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
             replySnippetFor={replySnippetFor}
-            emptyState={
-              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <QuietState icon="message-circle" title={t.emptyTitle} message={t.empty} />
-              </View>
-            }
+            newMessagesLabel={lang === 'hi' ? 'नए संदेश' : 'New messages'}
+            emptyState={emptyState}
           />
         </View>
       )}
@@ -540,7 +557,6 @@ export default function HomeownerThread() {
         value={text}
         onChange={setText}
         onSend={onSend}
-        sending={thread.sending}
         placeholder={t.placeholder}
         sendAccessibilityLabel={t.send}
         reply={thread.reply ? { snippet: thread.reply.body ?? '' } : null}

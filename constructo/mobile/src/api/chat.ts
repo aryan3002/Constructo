@@ -43,6 +43,11 @@ export interface ChatMessage {
   created_at: string
   /** Short-lived presigned GET for an attachment (challan photo), else null. */
   attachment_url: string | null
+  /** CLIENT-ONLY: the local file uri a just-sent photo was uploaded from —
+   *  stamped into the thread cache when the send confirms so the bubble keeps
+   *  rendering the local bytes instead of re-downloading its own upload. Never
+   *  sent by the server; preserved across merges by the cache layer. */
+  attachment_local_uri?: string | null
   /** Set to the PublishedPhoto id when this message's photo is already in the
    *  homeowner feed (contractor "Send to feed" flow) — else null. Populated via a
    *  left-join server-side, so the "✓ In feed" badge is durable across reloads. */

@@ -6,9 +6,12 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { loadThreadCache, maxCachedSeq, mergeMessages } from '../cache'
+import { __resetChatCacheForTests, loadThreadCache, maxCachedSeq, mergeMessages } from '../cache'
 
-beforeEach(() => AsyncStorage.clear())
+beforeEach(() => {
+  __resetChatCacheForTests()
+  return AsyncStorage.clear()
+})
 
 const m = (seq: number, body = `m${seq}`) => ({ id: `id-${seq}`, seq, body }) as never
 

@@ -7,6 +7,8 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
+import type { ChatMessage } from '../api/chat'
+
 const STORAGE_KEY = 'constructo.chat.outbox'
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 5 * 60_000
@@ -27,6 +29,12 @@ export interface ChatOutboxItem {
     mime?: string
     key?: string
     sha256?: string
+    /** Send `kind` verbatim — skip the document→image mime coercion. The
+     *  supervisor challan scan deliberately sends a JPEG as `document` so the
+     *  worker OCRs it into a card; coercing it to `image` would change the
+     *  extraction path. exactKind uploads go straight to the multipart endpoint
+     *  (the server sets the stored content-type, so nothing can mismatch). */
+    exactKind?: boolean
   }
   state: 'queued' | 'sending' | 'failed_permanent'
   attempts: number
@@ -35,7 +43,10 @@ export interface ChatOutboxItem {
 }
 
 export type SendResult =
-  | { ok: true; seq: number }
+  /** `msg` is the created server row (chatApi.send's response) — the drain
+   *  merges it into the thread cache BEFORE the pending bubble is removed, so
+   *  the swap is atomic (no vanish-for-one-RTT blink). */
+  | { ok: true; seq: number; msg?: ChatMessage }
   | { ok: false; permanent: boolean }
 
 async function readAll(): Promise<ChatOutboxItem[]> {
@@ -57,19 +68,32 @@ export function nextAttemptDelayMs(attempts: number): number {
   return exp + Math.floor(Math.random() * 250)
 }
 
-export async function enqueueChatSend(
+/** Build a queued item synchronously (no storage I/O) — lets the send path put
+ *  the pending bubble on screen on the TAP FRAME, then persist. */
+export function newOutboxItem(
   item: Omit<ChatOutboxItem, 'state' | 'attempts' | 'nextAttemptAt' | 'createdAt'>,
-): Promise<ChatOutboxItem> {
-  const full: ChatOutboxItem = {
+): ChatOutboxItem {
+  return {
     ...item,
     state: 'queued',
     attempts: 0,
     nextAttemptAt: 0,
     createdAt: Date.now(),
   }
+}
+
+/** Durably append an already-built item (see {@link newOutboxItem}). */
+export async function appendChatOutbox(full: ChatOutboxItem): Promise<void> {
   const items = await readAll()
   items.push(full)
   await writeAll(items)
+}
+
+export async function enqueueChatSend(
+  item: Omit<ChatOutboxItem, 'state' | 'attempts' | 'nextAttemptAt' | 'createdAt'>,
+): Promise<ChatOutboxItem> {
+  const full = newOutboxItem(item)
+  await appendChatOutbox(full)
   return full
 }
 
@@ -79,6 +103,22 @@ export async function listChatOutbox(): Promise<ChatOutboxItem[]> {
 
 export async function removeChatOutbox(clientMsgId: string): Promise<void> {
   await writeAll((await readAll()).filter((i) => i.clientMsgId !== clientMsgId))
+}
+
+/** Connectivity is back: make every queued item due NOW (attempts are kept so a
+ *  server that is still failing backs off again from where it left off). Without
+ *  this, a send that failed offline waits out the remainder of its up-to-5-min
+ *  backoff even though the network has returned. */
+export async function resetBackoff(): Promise<void> {
+  const items = await readAll()
+  let changed = false
+  for (const i of items) {
+    if (i.state === 'queued' && i.nextAttemptAt > 0) {
+      i.nextAttemptAt = 0
+      changed = true
+    }
+  }
+  if (changed) await writeAll(items)
 }
 
 export async function retryPermanent(clientMsgId: string): Promise<void> {

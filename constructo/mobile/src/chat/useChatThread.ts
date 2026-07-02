@@ -38,9 +38,11 @@ import { loadThreadCache, maxCachedSeq, mergeMessages } from './cache'
 import { effectiveMediaKind, signedMediaContentType } from './media'
 import { drainPages } from './paging'
 import {
+  appendChatOutbox,
   drainChatOutbox,
-  enqueueChatSend,
   listChatOutbox,
+  newOutboxItem,
+  resetBackoff,
   retryPermanent,
   type ChatAddressBody,
   type ChatOutboxItem,
@@ -49,6 +51,7 @@ import {
 import { ChatSocket } from './socket'
 import {
   deliveryStateMap,
+  outboxConvKey,
   pendingForThread,
   syncOrCache,
   type DeliveryState,
@@ -170,15 +173,28 @@ function addrToBody(address: ChatAddress): ChatAddressBody {
     : { site_id: address.siteId }
 }
 
+function bodyToAddr(body: ChatAddressBody): ChatAddress {
+  return body.conversation_id
+    ? { conversationId: body.conversation_id }
+    : { siteId: body.site_id ?? '' }
+}
+
 /**
  * The drain `send` callback: perform the idempotent POST. For a media item the
  * upload step runs first (presign → PUT → fallback multipart), persisting the
  * resolved key/sha256 back onto the item so a retry re-uses the same object.
+ *
+ * Addressing comes from the ITEM (its own conversation), never from whichever
+ * thread happens to be mounted — a queued send for thread A drained while
+ * thread B is open must presign/post against A. This also lets the app-launch
+ * drain run with no thread mounted at all.
+ *
+ * On success the result carries the created server row (`msg`) so the caller
+ * can merge it into the thread cache BEFORE the pending bubble is dropped —
+ * the pending→confirmed swap happens in one commit, no blink.
  */
-export async function performSend(
-  item: ChatOutboxItem,
-  address: ChatAddress,
-): Promise<SendResult> {
+export async function performSend(item: ChatOutboxItem): Promise<SendResult> {
+  const address = bodyToAddr(item.address)
   try {
     // Media two-step: resolve a stored key if this item carries a local file.
     let attachmentKey = item.media?.key
@@ -189,32 +205,40 @@ export async function performSend(
       // content-type) 403s and the send sticks on "Send…" forever. Then send the
       // EXACT content-type the backend signs for that kind (NOT the raw file mime,
       // which may be image/heic etc.) so the R2 signature matches. See ./media.
-      const kind = effectiveMediaKind(item.media.kind, item.media.mime)
+      // exactKind items (challan-as-document) skip the coercion — their kind is
+      // extraction-semantic — and upload multipart only (nothing to mismatch).
+      const kind = item.media.exactKind
+        ? (item.media.kind ?? 'document')
+        : effectiveMediaKind(item.media.kind, item.media.mime)
       item.media.kind = kind
-      const contentType = signedMediaContentType(kind)
+      const contentType = item.media.exactKind
+        ? (item.media.mime ?? signedMediaContentType(kind))
+        : signedMediaContentType(kind)
       const file: UploadFile = {
         uri: item.media.localUri,
-        name: `${item.clientMsgId}.${kind === 'image' ? 'jpg' : kind === 'voice' ? 'm4a' : 'bin'}`,
+        name: `${item.clientMsgId}.${kind === 'voice' ? 'm4a' : (item.media.mime ?? '').startsWith('image/') || kind === 'image' ? 'jpg' : 'bin'}`,
         type: contentType,
       }
-      const presign = await chatApi.presignMedia({ ...address, kind })
       let putOk = false
-      if (presign.upload_mode === 'presigned' && presign.put_url) {
-        try {
-          const blob = await (await fetch(file.uri)).blob()
-          const putRes = await fetch(presign.put_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': contentType },
-            body: blob,
-          })
-          if (putRes.ok) {
-            attachmentKey = presign.key
-            // The presign path returns no sha256; the server dedupes on key here.
-            attachmentSha = item.media.sha256
-            putOk = true
+      if (!item.media.exactKind) {
+        const presign = await chatApi.presignMedia({ ...address, kind })
+        if (presign.upload_mode === 'presigned' && presign.put_url) {
+          try {
+            const blob = await (await fetch(file.uri)).blob()
+            const putRes = await fetch(presign.put_url, {
+              method: 'PUT',
+              headers: { 'Content-Type': contentType },
+              body: blob,
+            })
+            if (putRes.ok) {
+              attachmentKey = presign.key
+              // The presign path returns no sha256; the server dedupes on key here.
+              attachmentSha = item.media.sha256
+              putOk = true
+            }
+          } catch {
+            // network / blob-read failure → fall through to the multipart upload.
           }
-        } catch {
-          // network / blob-read failure → fall through to the multipart upload.
         }
       }
       if (!putOk) {
@@ -256,7 +280,13 @@ export async function performSend(
           }
         : { media_type: 'text' }),
     })
-    return { ok: true, seq: msg.seq }
+    // Stamp the local file uri onto the confirmed row (client-only field, kept
+    // by the cache across merges) so the just-sent photo keeps rendering from
+    // local bytes instead of flashing to a placeholder while it re-downloads.
+    const withLocal: ChatMessage = item.media?.localUri
+      ? { ...msg, attachment_local_uri: item.media.localUri }
+      : msg
+    return { ok: true, seq: msg.seq, msg: withLocal }
   } catch (err) {
     // A 4xx (validation / forbidden) is permanent — parking beats infinite retry.
     const status = (err as { status?: number })?.status
@@ -283,13 +313,41 @@ export function useChatThread(
     setOutbox(await listChatOutbox())
   }, [])
 
-  // Drain the durable outbox (serialized app-wide), then refresh both the local
-  // outbox snapshot and the server feed so confirmed sends replace pending ones.
+  // A single armed timer for the earliest still-queued retry, so a transiently
+  // failed send actually re-attempts on schedule instead of waiting for the next
+  // incidental trigger (mount/reconnect/foreground).
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Drain the durable outbox (serialized app-wide). Each confirmed item is
+  // merged into its OWN thread's cache + query data BEFORE the pending bubble
+  // is dropped — the pending→confirmed swap lands in one commit (no blink, no
+  // refetch round-trip). Failures re-arm the retry timer for their backoff.
   const flush = useCallback(async () => {
-    await guardedDrain((item) => performSend(item, addressRef.current))
+    await guardedDrain(async (item) => {
+      const result = await performSend(item)
+      if (result.ok && result.msg) {
+        const convKey = outboxConvKey(item.address)
+        const merged = await mergeMessages(convKey, [result.msg])
+        qc.setQueryData(['chat', 'thread', convKey], merged)
+        // Same commit: the confirmed row is in the feed, the pending bubble goes.
+        setOutbox((prev) => prev.filter((i) => i.clientMsgId !== item.clientMsgId))
+      }
+      return result
+    })
     await refreshOutbox()
-    void qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
-  }, [qc, addrKey, refreshOutbox])
+    // Re-arm the retry timer for the earliest queued backoff, if any remain.
+    const queued = (await listChatOutbox()).filter((i) => i.state === 'queued')
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current)
+      retryTimer.current = null
+    }
+    if (queued.length) {
+      const dueIn = Math.max(250, Math.min(...queued.map((i) => i.nextAttemptAt)) - Date.now())
+      retryTimer.current = setTimeout(() => void flushRef.current(), dueIn)
+    }
+  }, [qc, refreshOutbox])
+  const flushRef = useRef(flush)
+  flushRef.current = flush
 
   const retry = useCallback(
     async (clientMsgId: string) => {
@@ -400,62 +458,81 @@ export function useChatThread(
   const fetchCursors = useCallback(async () => {
     if (!addrKey) return
     try {
-      setCursors(await chatApi.cursors(addressRef.current))
+      const next = await chatApi.cursors(addressRef.current)
+      // Identity-preserve when nothing moved: an unchanged cursor set otherwise
+      // cascades (new array → new deliveryStates Map → new deliveryState
+      // callback → every visible bubble re-renders) on every receipt frame.
+      setCursors((prev) =>
+        JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
+      )
     } catch {
       /* ticks are best-effort */
     }
   }, [addrKey])
 
   // --- durable send + drain ------------------------------------------------
+  // The pending bubble goes up on the TAP FRAME (synchronous setOutbox with the
+  // locally-built item), then the item is persisted and the drain kicked. The
+  // storage write still happens before any network, so durability is unchanged —
+  // only the render no longer waits on two AsyncStorage round-trips.
+  const enqueueOptimistic = useCallback(
+    async (item: ChatOutboxItem) => {
+      setOutbox((prev) => [...prev, item])
+      await appendChatOutbox(item)
+      void flushRef.current()
+    },
+    [],
+  )
+
   const send = useCallback(
     async (body: string) => {
       const text = body.trim()
       if (!text) return
       const replyToId = reply?.id
       setReply(null)
-      await enqueueChatSend({
-        clientMsgId: newClientMsgId(),
-        address: addrToBody(addressRef.current),
-        body: text,
-        ...(replyToId ? { replyToId } : {}),
-      })
-      await refreshOutbox()
-      void flush()
+      await enqueueOptimistic(
+        newOutboxItem({
+          clientMsgId: newClientMsgId(),
+          address: addrToBody(addressRef.current),
+          body: text,
+          ...(replyToId ? { replyToId } : {}),
+        }),
+      )
     },
-    [reply, refreshOutbox, flush],
+    [reply, enqueueOptimistic],
   )
 
   const sendProposal = useCallback(
     async (captureType: string, fields: Record<string, unknown>) => {
-      await enqueueChatSend({
-        clientMsgId: newClientMsgId(),
-        address: addrToBody(addressRef.current),
-        captureType,
-        fields,
-      })
-      await refreshOutbox()
-      void flush()
+      await enqueueOptimistic(
+        newOutboxItem({
+          clientMsgId: newClientMsgId(),
+          address: addrToBody(addressRef.current),
+          captureType,
+          fields,
+        }),
+      )
     },
-    [refreshOutbox, flush],
+    [enqueueOptimistic],
   )
 
   const sendMedia = useCallback<UseChatThread['sendMedia']>(
     async (mediaOpts) => {
-      await enqueueChatSend({
-        clientMsgId: newClientMsgId(),
-        address: addrToBody(addressRef.current),
-        ...(mediaOpts.body ? { body: mediaOpts.body } : {}),
-        media: {
-          kind: mediaOpts.mediaType,
-          mime: mediaOpts.mime,
-          key: mediaOpts.attachmentKey,
-          sha256: mediaOpts.sha256,
-        },
-      })
-      await refreshOutbox()
-      void flush()
+      await enqueueOptimistic(
+        newOutboxItem({
+          clientMsgId: newClientMsgId(),
+          address: addrToBody(addressRef.current),
+          ...(mediaOpts.body ? { body: mediaOpts.body } : {}),
+          media: {
+            kind: mediaOpts.mediaType,
+            mime: mediaOpts.mime,
+            key: mediaOpts.attachmentKey,
+            sha256: mediaOpts.sha256,
+          },
+        }),
+      )
     },
-    [refreshOutbox, flush],
+    [enqueueOptimistic],
   )
 
   // --- drain triggers: mount, NetInfo reconnect, AppState→active ----------
@@ -465,7 +542,11 @@ export function useChatThread(
     void flush() // drain on mount (recovers stuck items from a prior session)
 
     const netSub = NetInfo.addEventListener((s) => {
-      if (s.isConnected) void flush()
+      if (s.isConnected) {
+        // Connectivity is back: retry NOW — don't make the user wait out the
+        // remainder of an up-to-5-minute backoff earned while offline.
+        void resetBackoff().then(() => flushRef.current())
+      }
     })
     const appSub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
@@ -476,6 +557,10 @@ export function useChatThread(
     return () => {
       netSub()
       appSub.remove()
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current)
+        retryTimer.current = null
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addrKey])
@@ -491,8 +576,11 @@ export function useChatThread(
       if (type === 'msg') {
         const payload = frame.payload as ChatMessage | undefined
         if (payload && typeof payload.seq === 'number') {
-          void mergeMessages(addrKey, [payload]).then(() => {
-            qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
+          // The frame carries the full row — put it straight into the feed.
+          // (Invalidate-then-refetch would add a whole network round-trip to
+          // every socket-delivered message; the poll still covers seq gaps.)
+          void mergeMessages(addrKey, [payload]).then((merged) => {
+            qc.setQueryData(['chat', 'thread', addrKey], merged)
           })
           socket.markDelivered(addrKey, payload.seq)
         } else {
@@ -543,23 +631,64 @@ export function useChatThread(
   )
 
   // `sending` is true while any outbox item for this thread is still in flight.
+  // NOTE: never used to disable the composer — WhatsApp parity means you can
+  // queue the next message while the previous one is still on the wire.
   const sending = pending.some((p) => p.state !== 'failed_permanent')
 
-  return {
-    messages,
-    isLoading: q.isLoading,
-    error: q.error,
-    sending,
-    reply,
-    setReply,
-    send,
-    sendMedia,
-    sendProposal,
-    refetch: q.refetch,
-    pending,
-    deliveryStates,
-    deliveryState,
-    flush,
-    retry,
-  }
+  // Stable object identity when nothing changed, so screens can safely list
+  // `thread` pieces in hook deps without re-rendering the feed per keystroke.
+  const isLoading = q.isLoading
+  const error = q.error
+  const refetch = q.refetch
+  return useMemo(
+    () => ({
+      messages,
+      isLoading,
+      error,
+      sending,
+      reply,
+      setReply,
+      send,
+      sendMedia,
+      sendProposal,
+      refetch,
+      pending,
+      deliveryStates,
+      deliveryState,
+      flush,
+      retry,
+    }),
+    [
+      messages,
+      isLoading,
+      error,
+      sending,
+      reply,
+      send,
+      sendMedia,
+      sendProposal,
+      refetch,
+      pending,
+      deliveryStates,
+      deliveryState,
+      flush,
+      retry,
+    ],
+  )
+}
+
+/**
+ * App-launch drain (root layout): recover + send messages queued in a prior
+ * session WITHOUT waiting for a chat screen to mount. Confirmed rows are merged
+ * into each conversation's persisted cache so any thread opened later seeds
+ * with them already present. Serialized through the same guard as hook flushes.
+ */
+export async function drainChatOutboxOnLaunch(): Promise<void> {
+  await guardedDrain(async (item) => {
+    const result = await performSend(item)
+    if (result.ok && result.msg) {
+      await mergeMessages(outboxConvKey(item.address), [result.msg])
+    }
+    return result
+  })
 }

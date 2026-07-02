@@ -11,6 +11,7 @@ import {
   enqueueChatSend,
   listChatOutbox,
   nextAttemptDelayMs,
+  resetBackoff,
   type ChatOutboxItem,
 } from '../outbox'
 
@@ -51,6 +52,18 @@ test('4xx parks the item as failed_permanent (never silently dropped)', async ()
   await drainChatOutbox(async () => ({ ok: false, permanent: true }))
   const [item] = await listChatOutbox()
   expect(item.state).toBe('failed_permanent')
+})
+
+test('resetBackoff makes queued items due NOW but preserves attempts (reconnect path)', async () => {
+  await enqueueChatSend({ address: addr, body: 'x', clientMsgId: 'c1' })
+  await drainChatOutbox(async () => ({ ok: false, permanent: false }))
+  let [item] = await listChatOutbox()
+  expect(item.nextAttemptAt).toBeGreaterThan(Date.now())
+
+  await resetBackoff()
+  ;[item] = await listChatOutbox()
+  expect(item.nextAttemptAt).toBe(0) // sends immediately on the reconnect flush
+  expect(item.attempts).toBe(1) // a still-failing server keeps backing off from here
 })
 
 test('backoff is exponential with a 5-minute cap', () => {

@@ -11,9 +11,11 @@
  * - {@link MessageBubble}: a plain chat bubble (own = amber bg, other = card bg)
  *   with an optional attachment image, body text and a Mono timestamp.
  */
-import { useEffect, useState, type ComponentProps } from 'react'
-import { Image, LayoutAnimation, Platform, Pressable, UIManager, View } from 'react-native'
+import { memo, useEffect, useState, type ComponentProps } from 'react'
+import { Image, Platform, Pressable, View } from 'react-native'
+import { Image as CachedImage } from 'expo-image'
 import { Feather } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 
 import { useTheme } from '../theme/ThemeProvider'
 import { AP, SPACE, STATUS, TAP } from '../theme/tokens'
@@ -22,10 +24,6 @@ import type { ChatEvent } from '../api/chat'
 import { tickGlyph, isReadTick } from './tick'
 import type { DeliveryState } from './threadState'
 import type { NivaanProposalView } from './nivaanProposal'
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true)
-}
 
 // ---------------------------------------------------------------------------
 // SystemNotice — a centered, full-width informational row for sender_kind=system
@@ -127,7 +125,7 @@ function keyFields(eventType: string, f: Record<string, unknown>, lang: EvLang):
   }
 }
 
-export function CaptureCard({
+export const CaptureCard = memo(function CaptureCard({
   event,
   lang,
   sourceText,
@@ -150,10 +148,11 @@ export function CaptureCard({
   const fieldsLine = keyFields(event.event_type, event.fields, lang)
   const pct = Math.round(event.confidence * 100)
 
-  const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-    setOpen((o) => !o)
-  }
+  // No LayoutAnimation here: configureNext is GLOBAL — it animated every layout
+  // change in the frame, visibly sliding the whole inverted feed whenever a
+  // proof panel toggled. The reveal renders immediately instead (the doctrine:
+  // motion never delays reading).
+  const toggle = () => setOpen((o) => !o)
 
   return (
     <View
@@ -242,7 +241,7 @@ export function CaptureCard({
       ) : null}
     </View>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // NivaanProposalCard — a left-aligned card for a Nivaan-drafted proposal.
@@ -358,10 +357,22 @@ const SEND_TO_FEED_STR = {
   hint: 'Long-press to send this photo to the homeowner feed',
 } as const
 
-export function MessageBubble({
+/** A stable disk-cache key for a presigned R2 GET: the object path without the
+ *  rotating signature query. Presigns are re-issued on every thread focus, so
+ *  caching by full URL would re-download every photo on every focus. Local
+ *  file:// sources need no key. */
+function stableCacheKey(url: string): string | undefined {
+  if (!url.startsWith('http')) return undefined
+  const clean = url.split('?')[0]
+  // Last two path segments (bucket-agnostic object key tail) — unique per object.
+  return clean.split('/').slice(-2).join('/') || undefined
+}
+
+export const MessageBubble = memo(function MessageBubble({
   body,
   mine,
   attachmentUrl,
+  attachmentLocalUri,
   timestamp,
   deliveryState,
   onLongPress,
@@ -374,6 +385,9 @@ export function MessageBubble({
   body: string | null
   mine: boolean
   attachmentUrl?: string | null
+  /** Local file the photo was sent from (client-only cache field) — preferred
+   *  over the remote URL so a just-sent photo never re-downloads itself. */
+  attachmentLocalUri?: string | null
   timestamp?: string
   deliveryState?: DeliveryState
   onLongPress?: () => void
@@ -398,17 +412,33 @@ export function MessageBubble({
   const { theme } = useTheme()
   const c = theme.colors
   const daylight = theme.name === 'daylight'
-  // Attachment image load state — show a graceful placeholder instead of a blank
-  // box when the image is loading or its (possibly expired presigned) URL fails.
+  // Attachment image source + load state. Two rules keep photos from flashing:
+  //  1. Prefer the LOCAL file a just-sent photo was uploaded from — never
+  //     re-download our own upload.
+  //  2. HOLD the currently-loaded URL when a fresh presign rotates in on focus
+  //     (imgState==='ok' → keep rendering what's on screen); adopt the fresh
+  //     URL only when we have nothing loaded or the current one FAILED (the
+  //     expired-presign case the on-focus refresh exists for).
+  const preferredSrc = attachmentLocalUri ?? attachmentUrl ?? null
+  const [src, setSrc] = useState(preferredSrc)
   const [imgState, setImgState] = useState<'loading' | 'ok' | 'failed'>('loading')
-  // Reset load state when the URL changes. Without this, a bubble that first
-  // rendered from cache with an EXPIRED presigned URL fails (imgState='failed',
-  // Image unmounted) and never retries — so the FRESH URL delivered by the
-  // thread's on-focus refresh is never attempted and the photo stays a blank
-  // placeholder forever. Re-arming on URL change lets the fresh URL load.
   useEffect(() => {
-    setImgState('loading')
-  }, [attachmentUrl])
+    if (preferredSrc === src) return
+    if (!src || imgState === 'failed') {
+      setSrc(preferredSrc)
+      setImgState('loading')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferredSrc])
+  const onImgError = () => {
+    // A failed local file (cleared cache dir) falls back to the remote URL once.
+    if (attachmentLocalUri && src === attachmentLocalUri && attachmentUrl) {
+      setSrc(attachmentUrl)
+      setImgState('loading')
+      return
+    }
+    setImgState('failed')
+  }
 
   // Own bubble: neev keeps its translucent amber (unchanged); daylight uses
   // the warm sage chip the homeowner DaylightBubble used, so the look is preserved
@@ -462,15 +492,18 @@ export function MessageBubble({
           {senderName}
         </Micro>
       ) : null}
-      {attachmentUrl ? (
+      {src ? (
         <View style={{ width: 200, height: 150, borderRadius: 8, marginBottom: 4, overflow: 'hidden' }}>
           {imgState !== 'failed' ? (
-            <Image
-              source={{ uri: attachmentUrl }}
+            <CachedImage
+              source={{ uri: src, ...(stableCacheKey(src) ? { cacheKey: stableCacheKey(src) } : {}) }}
               style={{ width: 200, height: 150 }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={stableCacheKey(src) ?? src}
+              transition={140}
               onLoad={() => setImgState('ok')}
-              onError={() => setImgState('failed')}
+              onError={onImgError}
             />
           ) : null}
           {imgState !== 'ok' ? (
@@ -554,13 +587,20 @@ export function MessageBubble({
 
   return longPress ? (
     <Pressable
-      onLongPress={longPress}
+      onLongPress={() => {
+        // The menu/sheet appears out of nowhere otherwise — a light tap says
+        // "the press registered" the instant the gesture is recognized.
+        if (Platform.OS !== 'web') {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
+        }
+        longPress()
+      }}
       accessibilityHint={canSendToFeed ? SEND_TO_FEED_STR.hint : undefined}
-      style={bubbleStyle}
+      style={({ pressed }) => [...bubbleStyle, pressed ? { opacity: 0.82 } : null]}
     >
       {content}
     </Pressable>
   ) : (
     <View style={bubbleStyle}>{content}</View>
   )
-}
+})

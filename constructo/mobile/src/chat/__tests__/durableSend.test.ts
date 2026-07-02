@@ -21,8 +21,9 @@ import { drainChatOutbox, enqueueChatSend, listChatOutbox, retryPermanent } from
 import { performSend } from '../useChatThread'
 import { pendingForThread } from '../threadState'
 
-const address = { siteId: 'site-1' } as const
-const drain = () => drainChatOutbox((item) => performSend(item, address))
+// performSend derives the address from the ITEM (its own conversation) — a
+// queued send drains correctly no matter which thread (if any) is mounted.
+const drain = () => drainChatOutbox((item) => performSend(item))
 
 beforeEach(async () => {
   await AsyncStorage.clear()
@@ -59,6 +60,18 @@ test('a successful drain sends the message and removes the outbox item', async (
   const outbox = await listChatOutbox()
   expect(outbox).toHaveLength(0) // confirmed → the real server message replaces it
   expect(pendingForThread('site-1', outbox, [])).toHaveLength(0)
+})
+
+test('a successful send returns the created server row (the atomic pending→confirmed swap)', async () => {
+  await enqueueChatSend({ clientMsgId: 'c1', address: { site_id: 'site-1' }, body: 'hi' })
+  mockSend.mockResolvedValueOnce({ id: 'srv-1', seq: 9, body: 'hi' })
+
+  const [item] = await listChatOutbox()
+  const result = await performSend(item)
+
+  // The drain merges `msg` into the thread cache BEFORE dropping the pending
+  // bubble — losing it would bring back the vanish-for-one-RTT blink.
+  expect(result).toMatchObject({ ok: true, seq: 9, msg: { id: 'srv-1', seq: 9 } })
 })
 
 test('a 4xx parks the item as failed_permanent (never silently dropped)', async () => {
