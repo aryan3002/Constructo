@@ -83,4 +83,17 @@ describe('NewProjectModal', () => {
     renderWithProviders(<NewProjectModal open onClose={() => {}} />)
     expect((screen.getByLabelText(/project type/i) as HTMLSelectElement).value).toBe('residential')
   })
+
+  it('omits location from the create payload when left blank', async () => {
+    mockCreate.mockResolvedValue(SITE)
+    renderWithProviders(<NewProjectModal open onClose={() => {}} />)
+
+    // Only fill name; leave location blank and type at its default.
+    fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'Tower B' } })
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled())
+    expect(mockCreate.mock.calls[0][0]).not.toHaveProperty('location')
+    expect(mockCreate).toHaveBeenCalledWith({ name: 'Tower B', type: 'residential' })
+  })
 })
