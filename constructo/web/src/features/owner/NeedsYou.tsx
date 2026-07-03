@@ -1,101 +1,97 @@
-// Col-1 of the Owner Command Center (W1-B): "Needs You" — the ≤3 ranked
-// exceptions the owner must act on, each with inline decision chips, then a calm
-// divider, then the append-only Decision Log. This is the product's "aha": the
-// owner clears their brief here and closes the tab — never scrolls a feed.
+// Col-1 of the activity-first OwnerHome: "Needs you" — ONLY the genuine pending
+// owner decisions (kind approval / hold_payment) read straight from the
+// decisions query (qk.decisions() → approvalsApi.list()). Each row carries the
+// existing capability-gated Approve/Hold/Assign chips wired to useDecide's
+// optimistic path. Honest empty: "Nothing needs a decision right now."
 //
-// Capability gate (W1): an owner sees binding [Approve ₹]/[Hold]/[Assign]; any
-// other role (PM/accountant/…) sees a single "Propose to owner →" — the server
-// stays the authorization source of truth (vault 11/04 §5.1).
+// This replaces the old brief/SiteCard-driven NeedsYou. Homeowner questions and
+// site-health flags are NO LONGER decisions here — they live in the activity
+// stream / Requests surface.
 import { useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { approvalsApi, type Decision } from '../../api/approvals'
+import { qk } from '../../api/queryKeys'
 import { useDecide, type DecideInput } from './useDecide'
 import { DecisionLog } from './DecisionLog'
 import { useCan } from '../../auth/useCan'
-import type { DashRisk, OwnerHome, SiteCard } from '../../api/dashboard'
-import { toEvidenceItems } from '../../lib/evidence'
-import { useT } from '../../i18n'
-import {
-  BriefCommandCard,
-  Body,
-  StatusPill,
-  type BriefRisk,
-  type Status,
-} from '../../ui'
+import { useT, type TFunction } from '../../i18n'
+import { Body, Mono, StatusPill, StatusDot, type Status } from '../../ui'
 import { CheckIcon, PauseIcon, UserPlusIcon } from '../../ui/icons'
+import { Spinner } from '../../components/states'
 import type { TranslationKey } from '../../i18n'
 
-const RISK_KIND_KEY: Record<string, TranslationKey> = {
-  labor_shortfall: 'brief.risk.labor_shortfall',
-  unverified_invoice: 'brief.risk.unverified_invoice',
-  pending_approval: 'brief.risk.pending_approval',
-  data_quality: 'brief.risk.data_quality',
+const ACTION_LABEL: Record<'approve' | 'hold' | 'assign', TranslationKey> = {
+  approve: 'action.approve',
+  hold: 'action.hold',
+  assign: 'action.assign',
 }
 
-/** Money-bearing exception kinds get the explicit ₹ glyph on the Approve chip. */
-const MONEY_KINDS = new Set(['unverified_invoice', 'pending_approval'])
+/** The only decision kinds the owner actually decides here. */
+function isOwnerDecision(d: Decision): boolean {
+  return d.state === 'pending' && (d.kind === 'approval' || d.kind === 'hold_payment')
+}
 
-const STATUS_RANK: Record<Status, number> = { risk: 0, warn: 1, info: 2, ok: 3, done: 3 }
-const MAX_CARDS = 3
-
-/** Worst-status-first, then busiest; only sites that actually need attention. */
-function rankExceptionSites(sites: SiteCard[]): SiteCard[] {
-  return sites
-    .filter((s) => s.top_risks.length > 0)
-    .sort((a, b) => {
-      const r = STATUS_RANK[a.status as Status] - STATUS_RANK[b.status as Status]
-      return r !== 0 ? r : b.counts.total - a.counts.total
-    })
+function relativeTime(iso: string, t: TFunction): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const secs = Math.round((Date.now() - then) / 1000)
+  if (secs < 60) return t('activity.rel.just_now')
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return t('activity.rel.mins_ago', { n: mins })
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return t('activity.rel.hrs_ago', { n: hrs })
+  const days = Math.round(hrs / 24)
+  return t('activity.rel.days_ago', { n: days })
 }
 
 export function NeedsYou({
-  home,
   date,
   selectedSiteId,
+  siteNames,
 }: {
-  home: OwnerHome
   date: string
   selectedSiteId: string | null
+  /** site_id → display name, so a card reads "Tower B" not a UUID. */
+  siteNames: Record<string, string>
 }) {
   const t = useT()
   const canApprove = useCan('approve_money')
   const { decide } = useDecide(date)
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
+  // Locally-hidden ids so an actioned card vanishes instantly (honest optimism);
+  // the useDecide onSettled refetch reconciles server truth.
+  const [actioned, setActioned] = useState<Set<string>>(() => new Set())
 
-  const siteNames = useMemo(
-    () => Object.fromEntries(home.sites.map((s) => [s.site_id, s.name])),
-    [home.sites],
-  )
+  const { data, isLoading, isError } = useQuery({
+    queryKey: qk.decisions(),
+    queryFn: () => approvalsApi.list(),
+  })
 
-  const ranked = useMemo(() => {
-    const all = rankExceptionSites(home.sites)
-    return selectedSiteId
-      ? all.filter((s) => s.site_id === selectedSiteId)
-      : all
-  }, [home.sites, selectedSiteId])
+  const pending = useMemo(() => {
+    const all = (data?.items ?? []).filter(isOwnerDecision).filter((d) => !actioned.has(d.id))
+    return selectedSiteId ? all.filter((d) => d.site_id === selectedSiteId) : all
+  }, [data?.items, selectedSiteId, actioned])
 
-  const shown = ranked.slice(0, MAX_CARDS)
-  const overflowSites = ranked.length - shown.length
-  const calmSites = home.sites_total - ranked.length
-
-  function act(site: SiteCard, risk: DashRisk, riskKey: string, action: DecideInput['action']) {
+  function act(d: Decision, action: DecideInput['action']) {
+    const siteName = (d.site_id && siteNames[d.site_id]) || ''
     const input: DecideInput = {
-      siteId: site.site_id,
-      siteName: site.name,
-      riskKey,
+      siteId: d.site_id ?? '',
+      siteName,
+      riskKey: d.id,
       action,
-      title: risk.message,
-      evidenceEventIds: risk.evidence_event_ids,
+      title: d.title,
+      evidenceEventIds: d.evidence_event_ids,
     }
     decide(input, {
-      onSuccess: () =>
+      onSuccess: () => {
+        setActioned((prev) => new Set(prev).add(d.id))
         setToast({
           status: 'ok',
           msg: canApprove
-            ? t('owner.home.action_done', {
-                action: t(ACTION_LABEL[action]),
-                site: site.name,
-              })
-            : t('owner.needs.proposed', { site: site.name }),
-        }),
+            ? t('owner.home.action_done', { action: t(ACTION_LABEL[action]), site: siteName })
+            : t('owner.needs.proposed', { site: siteName }),
+        })
+      },
       onError: () => setToast({ status: 'risk', msg: t('owner.home.action_failed') }),
     })
   }
@@ -103,17 +99,11 @@ export function NeedsYou({
   return (
     <section aria-labelledby="owner-needs-heading" className="flex flex-col gap-4">
       <header className="flex items-baseline justify-between gap-3">
-        <h2
-          id="owner-needs-heading"
-          className="font-display text-h1 font-bold text-text"
-        >
+        <h2 id="owner-needs-heading" className="font-display text-h1 font-bold text-text">
           {t('owner.needs.title')}
         </h2>
-        {home.needs_attention_count > 0 ? (
-          <StatusPill
-            status="risk"
-            label={t('owner.needs.count', { n: home.needs_attention_count })}
-          />
+        {pending.length > 0 ? (
+          <StatusPill status="risk" label={t('owner.needs.count', { n: pending.length })} />
         ) : null}
       </header>
 
@@ -123,70 +113,58 @@ export function NeedsYou({
         </p>
       ) : null}
 
-      {shown.length === 0 ? (
+      {isLoading ? (
+        <Spinner label={t('owner.home.loading')} />
+      ) : isError ? (
         <section className="rounded-sheet border border-line bg-card p-6 text-center shadow-card">
-          <StatusPill status="ok" label={t('owner.home.all_calm')} />
-          <Body className="mt-2 !text-text-mute">{t('owner.home.all_calm_hint')}</Body>
+          <StatusPill status="warn" label={t('owner.home.error')} />
+        </section>
+      ) : pending.length === 0 ? (
+        <section className="rounded-sheet border border-line bg-card p-6 text-center shadow-card">
+          <StatusPill status="ok" label={t('owner.needs.empty_clean')} />
         </section>
       ) : (
-        <ul className="flex flex-col gap-4">
-          {shown.map((site) => (
-            <li key={site.site_id}>
-              <BriefCommandCard
-                siteName={site.name}
-                siteStatus={site.status as Status}
-                meta={`${site.counts.attendance} present · ${site.counts.deliveries} del · ${site.counts.issues} issues`}
-                risks={toBriefRisks(site, t)}
-                renderActions={(brisk) => {
-                  const idx = Number(brisk.id.slice(site.site_id.length + 1))
-                  const risk = site.top_risks[idx]
-                  if (!risk) return null
-                  return (
-                    <DecisionChips
-                      canApprove={canApprove}
-                      money={MONEY_KINDS.has(risk.kind)}
-                      onApprove={() => act(site, risk, brisk.id, 'approve')}
-                      onHold={() => act(site, risk, brisk.id, 'hold')}
-                      onAssign={() => act(site, risk, brisk.id, 'assign')}
-                      onPropose={() => act(site, risk, brisk.id, 'approve')}
-                    />
-                  )
-                }}
-              />
-            </li>
-          ))}
+        <ul className="flex flex-col gap-3">
+          {pending.map((d) => {
+            const site = d.site_id ? siteNames[d.site_id] : null
+            return (
+              <li
+                key={d.id}
+                className="rounded-card border border-line bg-card p-3 shadow-card"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5">
+                    <StatusDot status={d.kind === 'hold_payment' ? 'warn' : 'risk'} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Body className="font-semibold text-text">{d.title}</Body>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 font-body text-micro text-text-mute">
+                      {site ? <span className="truncate">{site}</span> : null}
+                      <Mono className="text-micro text-text-mute">
+                        {relativeTime(d.created_at, t)}
+                      </Mono>
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <DecisionChips
+                    canApprove={canApprove}
+                    money={d.kind === 'approval'}
+                    onApprove={() => act(d, 'approve')}
+                    onHold={() => act(d, 'hold')}
+                    onAssign={() => act(d, 'assign')}
+                    onPropose={() => act(d, 'approve')}
+                  />
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
-
-      {(overflowSites > 0 || calmSites > 0) && shown.length > 0 ? (
-        <p className="text-center font-body text-small text-text-mute">
-          <span aria-hidden>· · · </span>
-          {overflowSites > 0
-            ? t('owner.needs.more_sites', { n: overflowSites })
-            : t('owner.needs.rest_calm', { n: calmSites })}
-          <span aria-hidden> · · ·</span>
-        </p>
-      ) : null}
 
       <DecisionLog siteNames={siteNames} />
     </section>
   )
-}
-
-const ACTION_LABEL: Record<'approve' | 'hold' | 'assign', TranslationKey> = {
-  approve: 'action.approve',
-  hold: 'action.hold',
-  assign: 'action.assign',
-}
-
-function toBriefRisks(site: SiteCard, t: ReturnType<typeof useT>): BriefRisk[] {
-  return site.top_risks.map((r, i) => ({
-    id: `${site.site_id}-${i}`,
-    claim: r.message,
-    status: r.status as Status,
-    detail: t(RISK_KIND_KEY[r.kind] ?? 'brief.risk.data_quality'),
-    evidence: toEvidenceItems(r.evidence, r.evidence_event_ids, t),
-  }))
 }
 
 /** Capability-gated chip cluster — owner acts, everyone else proposes. */
