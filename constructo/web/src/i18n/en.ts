@@ -11,8 +11,10 @@ export const en = {
 
   // Navigation (bottom tabs / shell)
   'nav.brief': 'Brief',
+  'nav.latest': 'Latest',
   'nav.today': 'Today',
   'nav.sites': 'Sites',
+  'nav.projects': 'Projects',
   'nav.specs': 'Spec desk',
   'nav.my_sites': 'My Sites',
   'nav.my_site': 'My Site',

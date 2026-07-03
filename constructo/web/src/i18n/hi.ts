@@ -7,8 +7,10 @@ export const hi: Record<TranslationKey, string> = {
   'app.name': 'कंस्ट्रक्टो',
 
   'nav.brief': 'ब्रीफ़',
+  'nav.latest': 'नवीनतम',
   'nav.today': 'आज',
   'nav.sites': 'साइट',
+  'nav.projects': 'प्रोजेक्ट',
   'nav.specs': 'स्पेक',
   'nav.my_sites': 'मेरी साइटें',
   'nav.my_site': 'मेरी साइट',

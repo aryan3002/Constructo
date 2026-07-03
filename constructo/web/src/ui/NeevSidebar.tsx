@@ -6,7 +6,7 @@ import { labelKeyFor, type NavIconName, type NavItem, type NavZones } from './na
 import {
   GridIcon, CheckIcon, ScaleIcon, CashIcon, CompassIcon, CameraIcon,
   BuildingIcon, MessageIcon, DocIcon, ShieldIcon, ChartBarIcon, SearchIcon,
-  UsersIcon, SettingsIcon,
+  UsersIcon, SettingsIcon, BellIcon,
 } from './icons'
 
 export interface NeevSidebarProps {
@@ -21,6 +21,7 @@ const NAV_ICONS: Record<NavIconName, ReactNode> = {
   compass: <CompassIcon />, camera: <CameraIcon />, building: <BuildingIcon />,
   message: <MessageIcon />, doc: <DocIcon />, shield: <ShieldIcon />,
   chart: <ChartBarIcon />, search: <SearchIcon />, users: <UsersIcon />, settings: <SettingsIcon />,
+  inbox: <BellIcon />,
 }
 
 function NavRow({ item, role, collapsed, t }: {

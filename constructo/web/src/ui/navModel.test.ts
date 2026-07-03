@@ -8,7 +8,9 @@ describe('navForRole', () => {
     const z = navForRole('owner')
     // Reconcile + Finance are intentionally hidden from the owner nav for the
     // pilot (chat-derived data not structured enough yet); routes still exist.
-    expect(routes(z.primary)).toEqual(['/owner', '/approvals'])
+    // Requests (homeowner-side) is in the owner PRIMARY cockpit alongside
+    // Dashboard + Approvals (E4).
+    expect(routes(z.primary)).toEqual(['/owner', '/approvals', '/requests'])
     expect(routes(z.shared)).toEqual([
       '/sites', '/chat', '/settings/documents', '/permits', '/reports', '/search',
     ])
@@ -28,11 +30,31 @@ describe('navForRole', () => {
     expect(routes(z.shared)).toEqual(['/sites', '/chat', '/settings/documents', '/permits', '/search'])
     const sites = z.shared.find((i) => i.to === '/sites')!
     expect(labelKeyFor(sites, 'supervisor')).toBe('nav.my_sites')
-    expect(labelKeyFor(sites, 'owner')).toBe('nav.sites')
+    // owner has its own override (Projects, E4); a role with no override (pm)
+    // still falls through to the shared default.
+    expect(labelKeyFor(sites, 'owner')).toBe('nav.projects')
+    expect(labelKeyFor(sites, 'pm')).toBe('nav.sites')
   })
 
   it('Settings uses exact match; Drawings/Admin do not', () => {
     const settings = navForRole('owner').admin.find((i) => i.to === '/settings')!
     expect(settings.end).toBe(true)
+  })
+})
+
+describe('navForRole(owner) — Requests entry', () => {
+  it('includes a Requests item pointing at /requests', () => {
+    const zones = navForRole('owner')
+    const all = [...zones.primary, ...zones.shared, ...zones.admin]
+    const requests = all.find((i) => i.to === '/requests')
+    expect(requests).toBeDefined()
+    expect(requests?.labelKey).toBe('nav.requests')
+    expect(requests?.iconName).toBe('inbox')
+  })
+
+  it('owner Sites row uses the Projects label key', () => {
+    const sites = navForRole('owner').shared.find((i) => i.to === '/sites')
+    // owner sees "Projects"; supervisor still sees "My Sites"
+    expect(sites?.labelKeyByRole?.owner).toBe('nav.projects')
   })
 })

@@ -20,7 +20,7 @@ describe('NeevSidebar', () => {
   it('owner: renders all three zones with zone dividers and Settings last', () => {
     renderSidebar('owner')
     const nav = screen.getByRole('navigation', { name: /primary/i })
-    for (const label of ['Brief', 'Approvals', 'Sites', 'Drawings', 'Reports', 'Admin', 'Settings']) {
+    for (const label of ['Latest', 'Approvals', 'Requests', 'Projects', 'Drawings', 'Reports', 'Admin', 'Settings']) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument()
     }
     // Reconcile + Finance are hidden from the owner nav for the pilot.
@@ -42,7 +42,7 @@ describe('NeevSidebar', () => {
 
   it('collapsed: labels are hidden but exposed via title for a11y', () => {
     renderSidebar('owner', true)
-    const link = screen.getByRole('link', { name: 'Brief' }) // accessible name from title
-    expect(link).toHaveAttribute('title', 'Brief')
+    const link = screen.getByRole('link', { name: 'Latest' }) // accessible name from title
+    expect(link).toHaveAttribute('title', 'Latest')
   })
 })

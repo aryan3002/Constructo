@@ -5,6 +5,7 @@ import { useUiStore } from '../store/ui'
 import { navForRole } from './navModel'
 import type { Role as CanonicalRole } from '../api/auth'
 import {
+  BellIcon,
   CameraIcon,
   CheckIcon,
   DocIcon,
@@ -59,10 +60,10 @@ const CashIcon = <span className="cstk-mono text-[1.05em] font-semibold">₹</sp
  */
 export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
-    { to: '/', labelKey: 'nav.brief', label: 'Brief', icon: <GridIcon />, end: true },
-    { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
+    { to: '/', labelKey: 'nav.latest', label: 'Latest', icon: <GridIcon />, end: true },
+    { to: '/sites', labelKey: 'nav.projects', label: 'Projects', icon: <ListIcon /> },
+    { to: '/requests', labelKey: 'nav.requests', label: 'Requests', icon: <BellIcon /> },
     { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
-    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
     { to: '/settings/documents', labelKey: 'nav.documents', label: 'Drawings', icon: <DocIcon /> },
     { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
