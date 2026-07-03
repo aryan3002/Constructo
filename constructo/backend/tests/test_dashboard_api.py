@@ -67,9 +67,9 @@ async def test_home_cold_start_for_owner_with_no_sites(client, owner):
     assert body["sites_total"] == 0
     assert body["needs_attention_count"] == 0
     assert {s["key"] for s in body["setup_checklist"]} == {
-        "add_site",
-        "connect_whatsapp",
-        "set_baseline",
+        "add_project",
+        "invite_team",
+        "start_chat",
     }
 
 

@@ -69,7 +69,7 @@ const NON_COLD_START = {
 const COLD_START = {
   cold_start: true,
   setup_checklist: [
-    { key: 'add_site', done: false, title_key: 'owner.setup.add_site' },
+    { key: 'add_project', done: false, title_key: 'owner.setup.add_project' },
   ],
   sites: [],
   sites_total: 0,

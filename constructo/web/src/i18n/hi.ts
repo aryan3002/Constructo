@@ -336,12 +336,9 @@ export const hi: Record<TranslationKey, string> = {
 
   'owner.setup.title': 'सेटअप पूरा करें',
   'owner.setup.hint': 'कुछ कदम और आपका रोज़ का ब्रीफ़ चालू हो जाएगा।',
-  'owner.setup.add_site': 'अपनी पहली साइट जोड़ें',
-  'owner.setup.connect_whatsapp': 'एक WhatsApp साइट ग्रुप जोड़ें',
-  'owner.setup.set_baseline': 'अपेक्षित दैनिक हाज़िरी तय करें',
   'owner.setup.done': 'हो गया',
   'owner.setup.todo': 'बाकी',
-  // Owner setup checklist (activity-first cold start) — replaces connect_whatsapp.
+  // Owner setup checklist (activity-first cold start).
   'owner.setup.add_project': 'अपना पहला प्रोजेक्ट जोड़ें',
   'owner.setup.invite_team': 'अपनी साइट टीम को जोड़ें',
   'owner.setup.start_chat': 'साइट चैट शुरू करें',

@@ -139,19 +139,20 @@ def test_cold_start_checklist_when_no_sites():
     assert home["cold_start"] is True
     assert home["needs_attention_count"] == 0
     keys = {step["key"] for step in home["setup_checklist"]}
-    assert keys == {"add_site", "connect_whatsapp", "set_baseline"}
+    assert keys == {"add_project", "invite_team", "start_chat"}
     assert all(step["done"] is False for step in home["setup_checklist"])
 
 
-def test_cold_start_when_sites_but_no_baseline():
+def test_warmed_up_as_soon_as_a_site_exists_even_without_baseline():
+    # The setup checklist is an activity-first cold-start gate: once a project
+    # (site) exists, the owner is past cold-start regardless of whether a
+    # baseline is configured yet — baselines are a risk-detection input, not a
+    # setup-completion gate.
     site = _site()
     events = {site.id: [_event(site.id, "attendance", fields={"headcount": 5})]}
     home = build_home([site], events, {})
-    assert home["cold_start"] is True
-    steps = {s["key"]: s["done"] for s in home["setup_checklist"]}
-    assert steps["add_site"] is True
-    assert steps["connect_whatsapp"] is True
-    assert steps["set_baseline"] is False
+    assert home["cold_start"] is False
+    assert home["setup_checklist"] == []
 
 
 def test_warmed_up_once_site_has_events_and_baseline():

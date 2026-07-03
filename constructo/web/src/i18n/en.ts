@@ -359,14 +359,9 @@ export const en = {
 
   'owner.setup.title': 'Finish setting up',
   'owner.setup.hint': 'A few steps and your daily brief starts working.',
-  'owner.setup.add_site': 'Add your first site',
-  'owner.setup.connect_whatsapp': 'Connect a WhatsApp site group',
-  'owner.setup.set_baseline': 'Set the expected daily headcount',
   'owner.setup.done': 'Done',
   'owner.setup.todo': 'To do',
-  // Owner setup checklist (activity-first cold start) — replaces connect_whatsapp.
-  // NOTE: connect_whatsapp/add_site/set_baseline above stay defined (still
-  // referenced by the current SetupChecklist until E5 removes them).
+  // Owner setup checklist (activity-first cold start).
   'owner.setup.add_project': 'Add your first project',
   'owner.setup.invite_team': 'Invite your site team',
   'owner.setup.start_chat': 'Start the site chat',
