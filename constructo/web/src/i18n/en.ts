@@ -11,8 +11,10 @@ export const en = {
 
   // Navigation (bottom tabs / shell)
   'nav.brief': 'Brief',
+  'nav.latest': 'Latest',
   'nav.today': 'Today',
   'nav.sites': 'Sites',
+  'nav.projects': 'Projects',
   'nav.specs': 'Spec desk',
   'nav.my_sites': 'My Sites',
   'nav.my_site': 'My Site',
@@ -34,6 +36,7 @@ export const en = {
   'nav.documents': 'Drawings',
   'nav.settings': 'Settings',
   'nav.chat': 'Chat',
+  'nav.requests': 'Requests',
   'nav.more': 'More',
 
   // "More" hub (overflow menu of secondary destinations)
@@ -75,6 +78,23 @@ export const en = {
   'site.timeline.empty.title': 'No events for today',
   'site.timeline.empty.hint': 'Events from site WhatsApp groups show up here.',
   'site.mock_badge': 'Mock events',
+
+  // Owner Command Center — New project + Projects strip
+  'projects.new.title': 'New project',
+  'projects.new.name_label': 'Project name',
+  'projects.new.name_placeholder': 'e.g. Green Acres Tower B',
+  'projects.new.type_label': 'Project type',
+  'projects.new.location_label': 'Location',
+  'projects.new.location_placeholder': 'e.g. Bandra West, Mumbai',
+  'projects.new.location_hint': 'Optional — you can add this later.',
+  'projects.new.submit': 'Create project',
+  'projects.new.cancel': 'Cancel',
+  'projects.new.name_required': 'Give the project a name to continue.',
+  'projects.new.error': "Couldn't create the project. Please try again.",
+  'projects.new.cta': 'New project',
+  'projects.strip.title': 'Your projects',
+  'projects.strip.people': '{count} people',
+  'projects.strip.no_activity': 'No activity yet',
 
   // WhatsApp groups mapping (retrofitted)
   'groups.title': 'WhatsApp Groups',
@@ -303,9 +323,28 @@ export const en = {
   'owner.log.hrs_ago': '{n}h ago',
   'owner.log.days_ago': '{n}d ago',
 
-  // Owner Command Center — Col-2 "Portfolio"
-  'owner.portfolio.title': 'Portfolio',
-  'owner.portfolio.linked': '{n} linked',
+  // ---- activity-first OwnerHome (hero + stream) ----
+  'owner.hero.eyebrow': 'Owner · {date}',
+  'owner.hero.all_quiet': 'All quiet — last update {rel}',
+  'owner.hero.all_quiet_never': 'All quiet — no activity yet',
+  'owner.hero.one_update': '1 update today',
+  'owner.hero.many_updates': '{count} updates today',
+  'owner.hero.and_one_decision': ' · 1 needs you',
+  'owner.hero.and_many_decisions': ' · {count} need you',
+  'activity.title': 'Latest',
+  'activity.loading': 'Loading activity…',
+  'activity.error': 'Could not load activity.',
+  'activity.empty.title': 'No activity yet',
+  'activity.empty.hint': 'Photos, updates and decisions will appear here as work happens.',
+  'activity.load_more': 'Load more',
+  'activity.loading_more': 'Loading…',
+  'activity.filter_all': 'All projects',
+  'activity.reply': 'Reply',
+  'activity.rel.just_now': 'just now',
+  'activity.rel.mins_ago': '{n}m ago',
+  'activity.rel.hrs_ago': '{n}h ago',
+  'activity.rel.days_ago': '{n}d ago',
+  'owner.needs.empty_clean': 'Nothing needs a decision right now.',
 
   // Owner Command Center — Col-3 "This Week"
   'owner.week.title': 'This week',
@@ -320,11 +359,28 @@ export const en = {
 
   'owner.setup.title': 'Finish setting up',
   'owner.setup.hint': 'A few steps and your daily brief starts working.',
-  'owner.setup.add_site': 'Add your first site',
-  'owner.setup.connect_whatsapp': 'Connect a WhatsApp site group',
-  'owner.setup.set_baseline': 'Set the expected daily headcount',
   'owner.setup.done': 'Done',
   'owner.setup.todo': 'To do',
+  // Owner setup checklist (activity-first cold start).
+  'owner.setup.add_project': 'Add your first project',
+  'owner.setup.invite_team': 'Invite your site team',
+  'owner.setup.start_chat': 'Start the site chat',
+
+  // Requests view (homeowner requests, owner-side).
+  'requests.title': 'Requests',
+  'requests.group.overdue': 'Overdue',
+  'requests.group.open': 'Open',
+  'requests.group.resolved': 'Resolved',
+  'requests.reply': 'Reply in chat',
+  'requests.status.sent': 'New',
+  'requests.status.seen': 'Seen',
+  'requests.status.in_progress': 'In progress',
+  'requests.status.done': 'Resolved',
+  'requests.overdue_since': 'Due {when}',
+  'requests.raised': 'Raised {when}',
+  'requests.error': 'Could not load requests.',
+  'requests.empty.title': 'No requests yet',
+  'requests.empty.hint': 'When a homeowner asks for a photo or flags something, it lands here. Nothing needs you right now.',
 
   'brief.risk.labor_shortfall': 'Labor shortfall',
   'brief.risk.unverified_invoice': 'Unverified invoice',

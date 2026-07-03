@@ -1,9 +1,12 @@
 """One-nudge SLA sweep for homeowner requests.
 
 A homeowner request carries an optional ``sla_due_at``. When it passes and the
-request is still open, the sweep raises EXACTLY ONE nudge — a contractor-facing
-:class:`Decision` (kind ``generic``) — and stamps ``nudged_at`` so a later sweep
-never nudges the same request twice (the "one-nudge" rule, anti-spam).
+request is still open, the sweep raises EXACTLY ONE nudge and stamps
+``nudged_at`` so a later sweep never nudges the same request twice (the
+"one-nudge" rule, anti-spam). The nudge is a push notification to the site's
+leads (company owner/PM), NOT a shadow Decision — see
+:func:`app.homeowner.router._alert_site_leads` for the identical at-creation
+path.
 
 Like :mod:`app.approvals.sla` and :mod:`app.permits.alerts`, this only exposes
 the callable; wiring it onto the scheduler is H3's job. The clock is injected
@@ -11,6 +14,7 @@ the callable; wiring it onto the scheduler is H3's job. The clock is injected
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -18,15 +22,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    Decision,
-    DecisionKind,
-    DecisionState,
     HomeownerRequest,
     HomeownerRequestStatus,
     Site,
+    User,
+    UserRole,
 )
 
-# Stable prefix so a nudge Decision is recognisable (and never duplicated).
+# Legacy tag prefix from the retired shadow-Decision nudge. Kept only so the
+# router's decision-surface filters and the one-off cleanup script can still
+# recognise (and purge) any pre-existing tagged Decision rows from before this
+# module switched to pushing site leads directly.
 NUDGE_TAG = "[homeowner-request-nudge]"
 
 _OPEN = (
@@ -40,39 +46,48 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
-def _request_decision(req: HomeownerRequest, company_id: UUID, *, overdue: bool) -> Decision:
-    """The single contractor-facing Decision for a homeowner request. Tagged so
-    it is recognisable and de-duplicated; surfaces in the owner Brief / approval
-    inbox. ``overdue`` only changes the wording — immediate surfacing at creation
-    vs SLA escalation — the row is otherwise identical either way."""
-    lead = (
-        "A homeowner request is overdue and still open. "
-        if overdue
-        else "A homeowner request is open and waiting for the team. "
-    )
-    return Decision(
-        company_id=company_id,
-        site_id=req.site_id,
-        kind=DecisionKind.generic,
-        title=f"{NUDGE_TAG}[{req.id}] {req.title}",
-        detail=f"{lead}Original: {req.detail or req.title}",
-        state=DecisionState.pending,
-    )
+async def _push_overdue_nudge(session: AsyncSession, req: HomeownerRequest, site: Site) -> None:
+    """Push the site's leads (company owner/PM) that an open homeowner request is
+    overdue — Option (a): a real notification, never a shadow Decision. Mirrors
+    ``app.homeowner.router._alert_site_leads``; best-effort, never raises."""
+    from app.push.sender import notify_user
+
+    lead_ids = (
+        await session.execute(
+            select(User.id).where(
+                User.company_id == site.company_id,
+                User.role.in_([UserRole.owner, UserRole.pm]),
+            )
+        )
+    ).scalars().all()
+    for uid in lead_ids:
+        await notify_user(
+            session,
+            uid,
+            "Homeowner request overdue",
+            f"Still open: {req.title}",
+            data={
+                "type": "homeowner_request",
+                "request_id": str(req.id),
+                "site_id": str(req.site_id),
+                "overdue": True,
+            },
+        )
 
 
 async def surface_request_now(
     session: AsyncSession, req: HomeownerRequest, *, now: datetime | None = None
 ) -> bool:
-    """Surface a freshly-created request to the site team immediately — the same
-    one Decision the overdue sweep would raise — and stamp ``nudged_at`` so the
-    sweep never double-surfaces it. Best-effort: returns ``False`` (never raises)
-    if the site is missing. The caller owns the commit."""
+    """Mark a freshly-created request as already surfaced so the overdue sweep
+    never re-nudges it. The team-facing signal is the push fired by the router's
+    ``_alert_site_leads`` at creation — we deliberately create NO shadow Decision
+    (Option (a) de-pollution). Stamps ``nudged_at`` and returns ``False`` (never
+    raises) if the site is missing. The caller owns the commit."""
     moment = _aware(now) if now is not None else datetime.now(UTC)
     site = await session.get(Site, req.site_id)
     if site is None:
         return False
     req.nudged_at = moment
-    session.add(_request_decision(req, site.company_id, overdue=False))
     return True
 
 
@@ -100,7 +115,18 @@ async def run_request_nudge_sweep(
         if site is None:
             continue  # orphaned request; nothing to escalate to
         req.nudged_at = moment
-        session.add(_request_decision(req, site.company_id, overdue=True))
+        try:
+            await _push_overdue_nudge(session, req, site)
+        except Exception:  # pragma: no cover - defensive
+            # Isolate one request's push failure from the rest of the batch —
+            # mirrors app.homeowner.router._alert_site_leads (log-and-continue,
+            # never let a notify hiccup fail the whole sweep). The nudged_at
+            # stamp above is kept either way: this stays a best-effort,
+            # one-nudge-per-request rule, not a retry-until-success one — a
+            # request whose push failed is not re-nudged on the next sweep.
+            logging.getLogger(__name__).exception(
+                "push_overdue_nudge failed for request %s", req.id
+            )
         nudged.append(req.id)
 
     if nudged:

@@ -7,8 +7,10 @@ export const hi: Record<TranslationKey, string> = {
   'app.name': 'कंस्ट्रक्टो',
 
   'nav.brief': 'ब्रीफ़',
+  'nav.latest': 'नवीनतम',
   'nav.today': 'आज',
   'nav.sites': 'साइट',
+  'nav.projects': 'प्रोजेक्ट',
   'nav.specs': 'स्पेक',
   'nav.my_sites': 'मेरी साइटें',
   'nav.my_site': 'मेरी साइट',
@@ -30,6 +32,7 @@ export const hi: Record<TranslationKey, string> = {
   'nav.documents': 'ड्रॉइंग',
   'nav.settings': 'सेटिंग्स',
   'nav.chat': 'चैट',
+  'nav.requests': 'अनुरोध',
   'nav.more': 'और',
 
   'more.title': 'और',
@@ -67,6 +70,23 @@ export const hi: Record<TranslationKey, string> = {
   'site.timeline.empty.title': 'आज कोई घटना नहीं',
   'site.timeline.empty.hint': 'साइट व्हाट्सऐप ग्रुप की घटनाएँ यहाँ दिखेंगी।',
   'site.mock_badge': 'मॉक घटनाएँ',
+
+  // Owner Command Center — New project + Projects strip
+  'projects.new.title': 'नया प्रोजेक्ट',
+  'projects.new.name_label': 'प्रोजेक्ट का नाम',
+  'projects.new.name_placeholder': 'जैसे Green Acres Tower B',
+  'projects.new.type_label': 'प्रोजेक्ट का प्रकार',
+  'projects.new.location_label': 'स्थान',
+  'projects.new.location_placeholder': 'जैसे बांद्रा वेस्ट, मुंबई',
+  'projects.new.location_hint': 'वैकल्पिक — इसे बाद में जोड़ सकते हैं।',
+  'projects.new.submit': 'प्रोजेक्ट बनाएं',
+  'projects.new.cancel': 'रद्द करें',
+  'projects.new.name_required': 'आगे बढ़ने के लिए प्रोजेक्ट का नाम दें।',
+  'projects.new.error': 'प्रोजेक्ट नहीं बन सका। फिर से प्रयास करें।',
+  'projects.new.cta': 'नया प्रोजेक्ट',
+  'projects.strip.title': 'आपके प्रोजेक्ट',
+  'projects.strip.people': '{count} लोग',
+  'projects.strip.no_activity': 'अभी कोई गतिविधि नहीं',
 
   'groups.title': 'व्हाट्सऐप ग्रुप',
   'groups.subtitle':
@@ -280,9 +300,28 @@ export const hi: Record<TranslationKey, string> = {
   'owner.log.hrs_ago': '{n} घंटे पहले',
   'owner.log.days_ago': '{n} दिन पहले',
 
-  // Owner Command Center — Col-2 "Portfolio"
-  'owner.portfolio.title': 'पोर्टफ़ोलियो',
-  'owner.portfolio.linked': '{n} जुड़े',
+  // ---- activity-first OwnerHome (hero + stream) ----
+  'owner.hero.eyebrow': 'मालिक · {date}',
+  'owner.hero.all_quiet': 'सब शांत — पिछला अपडेट {rel}',
+  'owner.hero.all_quiet_never': 'सब शांत — अभी कोई गतिविधि नहीं',
+  'owner.hero.one_update': 'आज 1 अपडेट',
+  'owner.hero.many_updates': 'आज {count} अपडेट',
+  'owner.hero.and_one_decision': ' · 1 पर आपका निर्णय चाहिए',
+  'owner.hero.and_many_decisions': ' · {count} पर आपका निर्णय चाहिए',
+  'activity.title': 'ताज़ा',
+  'activity.loading': 'गतिविधि लोड हो रही है…',
+  'activity.error': 'गतिविधि लोड नहीं हो सकी।',
+  'activity.empty.title': 'अभी कोई गतिविधि नहीं',
+  'activity.empty.hint': 'काम होते ही फ़ोटो, अपडेट और निर्णय यहाँ दिखेंगे।',
+  'activity.load_more': 'और देखें',
+  'activity.loading_more': 'लोड हो रहा है…',
+  'activity.filter_all': 'सभी प्रोजेक्ट',
+  'activity.reply': 'जवाब दें',
+  'activity.rel.just_now': 'अभी',
+  'activity.rel.mins_ago': '{n} मिनट पहले',
+  'activity.rel.hrs_ago': '{n} घंटे पहले',
+  'activity.rel.days_ago': '{n} दिन पहले',
+  'owner.needs.empty_clean': 'अभी किसी निर्णय की ज़रूरत नहीं है।',
 
   // Owner Command Center — Col-3 "This Week"
   'owner.week.title': 'इस हफ़्ते',
@@ -297,11 +336,28 @@ export const hi: Record<TranslationKey, string> = {
 
   'owner.setup.title': 'सेटअप पूरा करें',
   'owner.setup.hint': 'कुछ कदम और आपका रोज़ का ब्रीफ़ चालू हो जाएगा।',
-  'owner.setup.add_site': 'अपनी पहली साइट जोड़ें',
-  'owner.setup.connect_whatsapp': 'एक WhatsApp साइट ग्रुप जोड़ें',
-  'owner.setup.set_baseline': 'अपेक्षित दैनिक हाज़िरी तय करें',
   'owner.setup.done': 'हो गया',
   'owner.setup.todo': 'बाकी',
+  // Owner setup checklist (activity-first cold start).
+  'owner.setup.add_project': 'अपना पहला प्रोजेक्ट जोड़ें',
+  'owner.setup.invite_team': 'अपनी साइट टीम को जोड़ें',
+  'owner.setup.start_chat': 'साइट चैट शुरू करें',
+
+  // Requests view (homeowner requests, owner-side).
+  'requests.title': 'अनुरोध',
+  'requests.group.overdue': 'समय बीत गया',
+  'requests.group.open': 'खुले',
+  'requests.group.resolved': 'हल हो गए',
+  'requests.reply': 'चैट में जवाब दें',
+  'requests.status.sent': 'नया',
+  'requests.status.seen': 'देखा गया',
+  'requests.status.in_progress': 'चल रहा है',
+  'requests.status.done': 'हल हो गया',
+  'requests.overdue_since': 'नियत {when}',
+  'requests.raised': 'दर्ज {when}',
+  'requests.error': 'अनुरोध लोड नहीं हो सके।',
+  'requests.empty.title': 'अभी कोई अनुरोध नहीं',
+  'requests.empty.hint': 'जब कोई गृहस्वामी फोटो मांगे या कुछ बताए, वह यहाँ आएगा। अभी आपके लिए कुछ नहीं है।',
 
   'brief.risk.labor_shortfall': 'मज़दूरों की कमी',
   'brief.risk.unverified_invoice': 'असत्यापित बिल',

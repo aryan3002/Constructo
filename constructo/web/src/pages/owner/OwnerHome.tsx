@@ -1,62 +1,76 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { todayIso } from '../../api/config'
 import { qk } from '../../api/queryKeys'
-import { dashboardApi, type OwnerHome as OwnerHomeData } from '../../api/dashboard'
+import { dashboardApi } from '../../api/dashboard'
+import { activityApi, type ActivityItem } from '../../api/activity'
+import { useSites } from '../../api/hooks'
 import { useT } from '../../i18n'
-import { formatDate } from '../../lib/format'
 import { ErrorState, Spinner } from '../../components/states'
 import { SetupChecklist } from './SetupChecklist'
-import { CommandCenter } from '../../features/owner/CommandCenter'
-import {
-  AppShell,
-  Display,
-  Mono,
-  Small,
-  type SiteSummary,
-  type Status,
-} from '../../ui'
-import { useSkin } from '../../ui/ThemeModeProvider'
+import { HonestHero } from '../../features/owner/HonestHero'
+import { NeedsYou } from '../../features/owner/NeedsYou'
+import { ActivityStream } from '../../features/owner/ActivityStream'
+import { ProjectsStrip } from '../../features/owner/ProjectsStrip'
+import { AppShell, type SiteSummary, type Status } from '../../ui'
 
 /**
- * OwnerHome — the Owner Command Center shell (W1). A cold start routes to the
- * setup checklist (never a blank grid); otherwise the brief explodes into the
- * 3-column CommandCenter (Needs You · Portfolio · This Week). This page stays
- * thin: it owns the home query (`qk.home`), the AppShell chrome, and the site
- * selection that the columns share — the columns own their own behavior.
+ * OwnerHome (activity-first) — the owner lands on a running feed of what
+ * changed, not a 3-column brief. Composition, top-to-bottom priority:
+ *   HonestHero (summary-driven headline) · NeedsYou (genuine pending
+ *   decisions) · ActivityStream (the primary union feed) · ProjectsStrip
+ *   (project cards).
+ * A cold start (no sites / zero activity — `dashboardApi.getHome`'s
+ * `cold_start` flag) still routes to the SetupChecklist instead of a blank
+ * composition.
+ * This page stays thin: it owns the hero-summary query (`qk.activitySummary()`
+ * — NOT `qk.activity()`, which is a separate cache entry per the query-key
+ * factory's own docstring), the site selection the panels share, and the
+ * AppShell chrome; each panel owns its own data.
  */
-function useOwnerHome(date: string) {
-  return useQuery({
-    queryKey: qk.home(date),
-    queryFn: () => dashboardApi.getHome(date),
-  })
-}
-
 export function OwnerHome() {
   const t = useT()
+  const navigate = useNavigate()
   const date = todayIso()
-  const { data: home, isLoading, isError, error, refetch } = useOwnerHome(date)
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
-  const neev = useSkin() === 'neev'
 
-  const sites = home?.sites ?? []
+  // Cold-start gate (unchanged source: the dashboard home aggregation).
+  const home = useQuery({ queryKey: qk.home(date), queryFn: () => dashboardApi.getHome(date) })
+
+  // Hero summary — a single tiny activity page gives the counts + newest ts.
+  // Deliberately its own cache entry (qk.activitySummary()): ActivityStream's
+  // useInfiniteQuery lives under qk.activity(selectedSiteId), and the two do
+  // NOT share invalidation (see queryKeys.ts).
+  const summaryQ = useQuery({
+    queryKey: qk.activitySummary(),
+    queryFn: () => activityApi.page({ limit: 1 }),
+  })
+
+  // Sites → names for NeedsYou + the AppShell switcher + ProjectsStrip cards.
+  const sitesQ = useSites()
+  const siteNames = useMemo(
+    () => Object.fromEntries((sitesQ.data?.items ?? []).map((s) => [s.id, s.name])),
+    [sitesQ.data?.items],
+  )
   const siteSummaries = useMemo<SiteSummary[]>(
     () =>
-      sites.map((s) => ({
-        id: s.site_id,
+      (sitesQ.data?.items ?? []).map((s) => ({
+        id: s.id,
         name: s.name,
-        status: s.status as Status,
-        meta:
-          s.top_risks.length > 0
-            ? `${s.top_risks.length + s.risk_overflow} risk${
-                s.top_risks.length + s.risk_overflow === 1 ? '' : 's'
-              }`
-            : undefined,
+        status: (s.status as Status) ?? 'ok',
       })),
-    [sites],
+    [sitesQ.data?.items],
   )
 
-  const headline = renderHeadline(home, t)
+  const lastActivityAt = summaryQ.data?.items[0]?.occurred_at ?? null
+
+  // A request-kind activity row's Reply button hands off to the dedicated
+  // Requests surface (E3) — same destination as the row's own linkFor('request'),
+  // so the whole-row click and the explicit Reply button never diverge.
+  function handleReply(_item: ActivityItem) {
+    navigate('/requests')
+  }
 
   return (
     <AppShell
@@ -66,59 +80,26 @@ export function OwnerHome() {
       onSelectSite={setSelectedSiteId}
       roleBadge={{ name: 'Owner', initials: 'OW' }}
     >
-      {neev ? (
-        // Neev: editorial hero — clay eyebrow + a larger Eczar serif headline.
-        <header>
-          <p className="font-body text-micro font-semibold uppercase tracking-[0.14em] text-[var(--celebrate-text)]">
-            {t('owner.home.title')} · {formatDate(date)}
-          </p>
-          <Display className="mt-2 !text-[2.1rem] !leading-[1.1]">{headline}</Display>
-        </header>
-      ) : (
-        <header>
-          <Small className="!text-text-mute">{t('owner.home.title')}</Small>
-          <Display className="mt-1">{headline}</Display>
-          <Mono className="mt-1 block text-small text-text-mute">{formatDate(date)}</Mono>
-        </header>
-      )}
+      <HonestHero summary={summaryQ.data?.summary} lastActivityAt={lastActivityAt} date={date} />
 
       <div className="mt-6">
-        {isLoading && <Spinner label={t('owner.home.loading')} />}
-
-        {isError && (
+        {home.isLoading ? (
+          <Spinner label={t('owner.home.loading')} />
+        ) : home.isError ? (
           <ErrorState
-            message={(error as Error)?.message ?? t('owner.home.error')}
-            onRetry={() => refetch()}
+            message={(home.error as Error)?.message ?? t('owner.home.error')}
+            onRetry={() => home.refetch()}
           />
-        )}
-
-        {!isLoading && !isError && home && (
-          <>
-            {home.cold_start ? (
-              <SetupChecklist steps={home.setup_checklist} />
-            ) : (
-              <CommandCenter
-                home={home}
-                date={date}
-                selectedSiteId={selectedSiteId}
-                onSelectSite={setSelectedSiteId}
-              />
-            )}
-          </>
+        ) : home.data?.cold_start ? (
+          <SetupChecklist steps={home.data.setup_checklist} />
+        ) : (
+          <div className="flex flex-col gap-8">
+            <NeedsYou date={date} selectedSiteId={selectedSiteId} siteNames={siteNames} />
+            <ActivityStream selectedSiteId={selectedSiteId} onReply={handleReply} />
+            <ProjectsStrip sites={sitesQ.data?.items ?? []} />
+          </div>
         )}
       </div>
     </AppShell>
   )
-}
-
-function renderHeadline(home: OwnerHomeData | undefined, t: ReturnType<typeof useT>) {
-  if (!home || home.needs_attention_count === 0) return t('owner.home.all_calm')
-  const key =
-    home.needs_attention_count === 1
-      ? 'owner.home.needs_you_one'
-      : 'owner.home.needs_you_many'
-  return t(key, {
-    count: home.needs_attention_count,
-    sites: home.sites_total,
-  })
 }

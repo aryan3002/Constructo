@@ -309,36 +309,38 @@ def _setup_checklist(
 ) -> list[dict] | None:
     """A guided setup checklist for cold-start, or ``None`` once warmed up.
 
-    Cold-start = the owner has no sites, OR has sites but no events have flowed
-    in, OR no baselines are configured (so labor-shortfall can't fire). We show
-    the checklist (not a blank grid) until there is at least one site with both
-    a baseline and some events.
+    Cold-start = the owner has no sites (projects) yet. Once a project exists
+    the owner is past cold-start — a baseline is a risk-detection input, not a
+    setup-completion gate, so we no longer block the checklist on it.
+
+    ``baselines_by_site`` is accepted (unused) to keep this function's call
+    shape identical to ``build_home``'s call site.
     """
     has_sites = len(sites) > 0
     any_events = any(events_by_site.get(s.id) for s in sites)
-    any_baseline = any(
-        (baselines_by_site.get(s.id) is not None)
-        and (baselines_by_site[s.id].expected_daily_headcount is not None)
-        for s in sites
-    )
 
-    if has_sites and any_events and any_baseline:
+    if has_sites:
         return None
 
     return [
         {
-            "key": "add_site",
+            "key": "add_project",
             "done": has_sites,
-            "title_key": "owner.setup.add_site",
+            "title_key": "owner.setup.add_project",
         },
         {
-            "key": "connect_whatsapp",
+            # `any_events` is the honest proxy for "team is on site" — real
+            # events only land once a supervisor/PM starts capturing.
+            "key": "invite_team",
             "done": any_events,
-            "title_key": "owner.setup.connect_whatsapp",
+            "title_key": "owner.setup.invite_team",
         },
         {
-            "key": "set_baseline",
-            "done": any_baseline,
-            "title_key": "owner.setup.set_baseline",
+            # No chat-message signal is in scope here; `any_events` is the
+            # same honest proxy — the first captured event *is* the first
+            # message that produced it.
+            "key": "start_chat",
+            "done": any_events,
+            "title_key": "owner.setup.start_chat",
         },
     ]

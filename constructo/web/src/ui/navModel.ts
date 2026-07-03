@@ -7,7 +7,7 @@ import type { TranslationKey } from '../i18n'
 export type NavIconName =
   | 'grid' | 'check' | 'scale' | 'cash' | 'compass' | 'camera'
   | 'building' | 'message' | 'doc' | 'shield' | 'chart' | 'search'
-  | 'users' | 'settings'
+  | 'users' | 'settings' | 'inbox'
 
 export interface NavItem {
   to: string
@@ -28,8 +28,9 @@ export interface NavZones {
 }
 
 // --- the destinations (route · cap · icon) ---
-const DASHBOARD: NavItem = { to: '/owner', labelKey: 'nav.brief', iconName: 'grid', end: true }
+const DASHBOARD: NavItem = { to: '/owner', labelKey: 'nav.brief', labelKeyByRole: { owner: 'nav.latest' }, iconName: 'grid', end: true }
 const APPROVALS: NavItem = { to: '/approvals', labelKey: 'nav.approvals', iconName: 'check' }
+const REQUESTS: NavItem = { to: '/requests', labelKey: 'nav.requests', iconName: 'inbox' }
 // Reconcile + Finance are HIDDEN from the owner nav for the pilot — they read
 // off AI-extracted chat data that isn't structured enough yet (mostly "Unknown
 // vendor / ₹0 / Missing proof"). The routes + the accountant/procurement nav
@@ -42,7 +43,7 @@ const CAPTURE: NavItem = { to: '/supervisor/capture', labelKey: 'nav.capture', i
 
 const SITES: NavItem = {
   to: '/sites', labelKey: 'nav.sites',
-  labelKeyByRole: { supervisor: 'nav.my_sites' }, iconName: 'building',
+  labelKeyByRole: { owner: 'nav.projects', supervisor: 'nav.my_sites' }, iconName: 'building',
 }
 const CHAT: NavItem = { to: '/chat', labelKey: 'nav.chat', iconName: 'message' }
 const DRAWINGS: NavItem = { to: '/settings/documents', labelKey: 'nav.documents', iconName: 'doc' }
@@ -56,7 +57,7 @@ const SETTINGS: NavItem = { to: '/settings', labelKey: 'nav.settings', iconName:
 // PRIMARY is the role's cockpit (curated — the owner holds every cap but must
 // not see "Capture"). SHARED/ADMIN are universal, cap-filtered.
 const PRIMARY_BY_ROLE: Partial<Record<Role, NavItem[]>> = {
-  owner: [DASHBOARD, APPROVALS],
+  owner: [DASHBOARD, APPROVALS, REQUESTS],
   pm: [DASHBOARD, APPROVALS],
   architect: [DESIGNER],
   supervisor: [CAPTURE],
