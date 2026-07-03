@@ -93,6 +93,63 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
     assert sender.dry_run_log() == []
 
 
+async def test_request_nudge_sweep_isolates_per_request_push_failures(
+    client, ctx, db_session, monkeypatch
+):
+    """A push failure for ONE overdue request must not abort the whole sweep —
+    mirrors app.homeowner.router._alert_site_leads's log-and-continue. Before
+    this fix, `_push_overdue_nudge` had no try/except around its call in the
+    loop, so an exception mid-batch propagated out of run_request_nudge_sweep
+    entirely: nothing after the failing request got nudged/stamped, and since
+    the exception happened before session.commit(), even the earlier
+    successfully-processed requests in the same run lost their nudged_at (the
+    whole batch was rolled back with the failed transaction)."""
+    import app.homeowner.nudge as nudge_module
+
+    now = datetime.now(UTC)
+    overdue = now - timedelta(days=1)
+    requests = [
+        HomeownerRequest(
+            site_id=ctx.site.id, raised_by=ctx.homeowner.id, title=f"Overdue ask {i}",
+            status=HomeownerRequestStatus.sent, sla_due_at=overdue,
+        )
+        for i in range(3)
+    ]
+    db_session.add_all(requests)
+    await db_session.flush()
+    boom_id = requests[1].id  # the middle request's push raises
+
+    real_push = nudge_module._push_overdue_nudge
+    calls: list = []
+
+    async def flaky_push(session, req, site):
+        calls.append(req.id)
+        if req.id == boom_id:
+            raise RuntimeError("push provider is down")
+        await real_push(session, req, site)
+
+    monkeypatch.setattr(nudge_module, "_push_overdue_nudge", flaky_push)
+
+    nudged = await run_request_nudge_sweep(db_session, now=now)
+
+    # Every request was attempted (the failure did not short-circuit the loop).
+    assert set(calls) == {r.id for r in requests}
+    # All three are still reported nudged — the nudged_at stamp is best-effort
+    # (one-nudge-per-attempt), not gated on the push actually succeeding.
+    assert set(nudged) == {r.id for r in requests}
+
+    # The sweep committed: every row's nudged_at survived (a mid-batch raise
+    # with no isolation would have rolled the whole transaction back instead).
+    for r in requests:
+        await db_session.refresh(r)
+        assert r.nudged_at is not None
+
+    # A second sweep re-nudges nothing — including the one whose push failed:
+    # it is still governed by the one-nudge rule, not retried until success.
+    again = await run_request_nudge_sweep(db_session, now=now + timedelta(hours=1))
+    assert again == []
+
+
 async def test_create_request_surfaces_to_contractor_immediately(client, ctx, db_session):
     """De-pollution (Option a): a fresh homeowner request reaches the team via a
     push (see test_create_request_alerts_site_leads), NOT via a shadow pending

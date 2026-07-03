@@ -147,8 +147,10 @@ def _map_request(r: HomeownerRequest, site: Site, now: dt.datetime) -> dict:
 
 
 def _map_decision(d: Decision, site: Site) -> dict:
+    # Decision.detail is always a present attribute (nullable in value, not in
+    # existence) — the old hasattr(d, "detail") guard was always True and dead.
     return _item(kind=KIND_DECISION, row_id=d.id, site=site,
-                 title=d.title, subtitle=d.detail if hasattr(d, "detail") else None,
+                 title=d.title, subtitle=d.detail,
                  occurred_at=d.created_at, actor=None,
                  link_type=LINK_DECISION, link_id=d.id, severity="info")
 

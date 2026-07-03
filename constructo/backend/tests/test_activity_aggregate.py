@@ -47,9 +47,14 @@ def _request(site_id, *, at, status="sent", overdue=False, title="Photo of kitch
                            sla_due_at=sla, created_at=at)
 
 
-def _decision(site_id, *, at, kind="approval", state="pending", title="Approve advance"):
+def _decision(site_id, *, at, kind="approval", state="pending", title="Approve advance",
+              detail=None):
+    # detail defaults to None (not omitted): Decision.detail is always a
+    # present attribute on the real ORM model (nullable in value, not in
+    # existence) — _map_decision reads d.detail unconditionally, so a fake
+    # standing in for a Decision must have the attribute too.
     return SimpleNamespace(id=uuid4(), site_id=site_id, kind=kind, state=state,
-                           title=title, created_at=at)
+                           title=title, created_at=at, detail=detail)
 
 
 def _finding(site_id, *, on, status="open", severity="high", headline="Schedule drift"):

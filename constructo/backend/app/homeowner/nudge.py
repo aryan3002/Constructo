@@ -14,6 +14,7 @@ the callable; wiring it onto the scheduler is H3's job. The clock is injected
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -114,7 +115,18 @@ async def run_request_nudge_sweep(
         if site is None:
             continue  # orphaned request; nothing to escalate to
         req.nudged_at = moment
-        await _push_overdue_nudge(session, req, site)
+        try:
+            await _push_overdue_nudge(session, req, site)
+        except Exception:  # pragma: no cover - defensive
+            # Isolate one request's push failure from the rest of the batch —
+            # mirrors app.homeowner.router._alert_site_leads (log-and-continue,
+            # never let a notify hiccup fail the whole sweep). The nudged_at
+            # stamp above is kept either way: this stays a best-effort,
+            # one-nudge-per-request rule, not a retry-until-success one — a
+            # request whose push failed is not re-nudged on the next sweep.
+            logging.getLogger(__name__).exception(
+                "push_overdue_nudge failed for request %s", req.id
+            )
         nudged.append(req.id)
 
     if nudged:
