@@ -101,4 +101,40 @@ describe('<ActivityStream>', () => {
     await waitFor(() => expect(page).toHaveBeenCalled())
     expect(page).toHaveBeenCalledWith(expect.objectContaining({ siteId: 'site-a' }))
   })
+
+  it('renders the Reply button as a sibling of the row link, not nested inside it, and keeps both affordances working', async () => {
+    page.mockResolvedValueOnce(
+      pageOf(
+        [item({ id: 'homeowner_request:1', title: 'Homeowner asked a question', kind: 'homeowner_request', link: { type: 'request', id: 'r1' } })],
+        null,
+      ),
+    )
+    const onReply = vi.fn()
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <LanguageProvider defaultLanguage="en">
+            <ActivityStream selectedSiteId={null} onReply={onReply} />
+          </LanguageProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const link = await screen.findByRole('link', { name: /Homeowner asked a question/i })
+    const replyButton = screen.getByRole('button', { name: /reply/i })
+
+    // Structural invariant: a <button> must never be a descendant of an <a> —
+    // interactive-in-interactive is invalid HTML and creates nested tab stops.
+    expect(link.contains(replyButton)).toBe(false)
+    expect(replyButton.closest('a')).toBeNull()
+
+    // Behavioral invariant: Reply calls onReply and does not navigate...
+    await userEvent.click(replyButton)
+    expect(onReply).toHaveBeenCalledTimes(1)
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'homeowner_request:1' }))
+
+    // ...while the row's title/body link still resolves to linkFor's href.
+    expect(link).toHaveAttribute('href', '/chat')
+  })
 })

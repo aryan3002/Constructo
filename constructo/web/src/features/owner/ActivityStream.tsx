@@ -120,10 +120,13 @@ export function ActivityStream({
         <>
           <ol className="overflow-hidden rounded-card border border-line bg-card shadow-card">
             {items.map((item) => (
-              <li key={item.id} className="border-b border-line last:border-b-0">
+              <li
+                key={item.id}
+                className="flex items-start gap-3 border-b border-line px-3 py-3 last:border-b-0"
+              >
                 <Link
                   to={linkFor(item.link)}
-                  className="flex items-start gap-3 px-3 py-3 cstk-animate transition hover:bg-line/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                  className="flex min-w-0 flex-1 items-start gap-3 cstk-animate transition hover:bg-line/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 >
                   <span className="mt-0.5 flex items-center gap-1.5">
                     <StatusDot status={SEVERITY_STATUS[item.severity]} />
@@ -147,23 +150,21 @@ export function ActivityStream({
                       {item.actor ? <span className="truncate">· {item.actor}</span> : null}
                     </p>
                   </div>
-                  {item.link.type === 'request' && onReply ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        onReply(item)
-                      }}
-                      className="ml-2 inline-flex min-h-tap items-center rounded-pill border border-brand/50 bg-card px-3 font-body text-small font-semibold text-brand-text cstk-animate transition hover:bg-brand/10"
-                    >
-                      {t('activity.reply')}
-                    </button>
-                  ) : (
+                  {item.link.type === 'request' && onReply ? null : (
                     <span className="ml-2 mt-1 text-text-mute" aria-hidden>
                       ›
                     </span>
                   )}
                 </Link>
+                {item.link.type === 'request' && onReply ? (
+                  <button
+                    type="button"
+                    onClick={() => onReply(item)}
+                    className="ml-2 inline-flex min-h-tap shrink-0 items-center rounded-pill border border-brand/50 bg-card px-3 font-body text-small font-semibold text-brand-text cstk-animate transition hover:bg-brand/10"
+                  >
+                    {t('activity.reply')}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ol>
