@@ -25,6 +25,20 @@ export const qk = {
   materials: (includeArchived = false) => ['materials', includeArchived] as const,
   /** OwnerHome brief payload (migrated from `['owner-home', date]` in W1). */
   home: (date: string) => ['home', date] as const,
+  /** Owner activity stream page (keyed by optional site filter). */
+  activity: (siteId?: string) => ['activity', siteId ?? null] as const,
+  /**
+   * Owner activity hero summary (updates_today / needs_decision_count / sites_total).
+   *
+   * NOTE: `['activity', 'summary']` does NOT partial-match `qk.activity()`'s
+   * `['activity', null]` (or any `qk.activity(siteId)`) under React Query v5's
+   * positional array matching — the second element differs (`'summary'` vs
+   * `null`/`siteId`), so `invalidateQueries({ queryKey: qk.activity() })` alone
+   * will NOT refetch this. Callers that need both fresh (e.g. after creating a
+   * site) must invalidate both keys explicitly, same as `useDecide.ts` does for
+   * its home/log pair. See activity.test.ts for a verifying test.
+   */
+  activitySummary: () => ['activity', 'summary'] as const,
   brief: (date?: string) => ['brief', date] as const,
   /** Owner Command Center decision log (newest-first company decisions). */
   decisions: () => ['decisions'] as const,
