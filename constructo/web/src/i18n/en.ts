@@ -34,6 +34,7 @@ export const en = {
   'nav.documents': 'Drawings',
   'nav.settings': 'Settings',
   'nav.chat': 'Chat',
+  'nav.requests': 'Requests',
   'nav.more': 'More',
 
   // "More" hub (overflow menu of secondary destinations)
@@ -343,10 +344,6 @@ export const en = {
   'activity.rel.days_ago': '{n}d ago',
   'owner.needs.empty_clean': 'Nothing needs a decision right now.',
 
-  // Owner Command Center — Col-2 "Portfolio"
-  'owner.portfolio.title': 'Portfolio',
-  'owner.portfolio.linked': '{n} linked',
-
   // Owner Command Center — Col-3 "This Week"
   'owner.week.title': 'This week',
   'owner.week.export': 'Export CSV',
@@ -365,6 +362,28 @@ export const en = {
   'owner.setup.set_baseline': 'Set the expected daily headcount',
   'owner.setup.done': 'Done',
   'owner.setup.todo': 'To do',
+  // Owner setup checklist (activity-first cold start) — replaces connect_whatsapp.
+  // NOTE: connect_whatsapp/add_site/set_baseline above stay defined (still
+  // referenced by the current SetupChecklist until E5 removes them).
+  'owner.setup.add_project': 'Add your first project',
+  'owner.setup.invite_team': 'Invite your site team',
+  'owner.setup.start_chat': 'Start the site chat',
+
+  // Requests view (homeowner requests, owner-side).
+  'requests.title': 'Requests',
+  'requests.group.overdue': 'Overdue',
+  'requests.group.open': 'Open',
+  'requests.group.resolved': 'Resolved',
+  'requests.reply': 'Reply in chat',
+  'requests.status.sent': 'New',
+  'requests.status.seen': 'Seen',
+  'requests.status.in_progress': 'In progress',
+  'requests.status.done': 'Resolved',
+  'requests.overdue_since': 'Due {when}',
+  'requests.raised': 'Raised {when}',
+  'requests.error': 'Could not load requests.',
+  'requests.empty.title': 'No requests yet',
+  'requests.empty.hint': 'When a homeowner asks for a photo or flags something, it lands here. Nothing needs you right now.',
 
   'brief.risk.labor_shortfall': 'Labor shortfall',
   'brief.risk.unverified_invoice': 'Unverified invoice',

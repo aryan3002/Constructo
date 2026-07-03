@@ -30,6 +30,7 @@ export const hi: Record<TranslationKey, string> = {
   'nav.documents': 'ड्रॉइंग',
   'nav.settings': 'सेटिंग्स',
   'nav.chat': 'चैट',
+  'nav.requests': 'अनुरोध',
   'nav.more': 'और',
 
   'more.title': 'और',
@@ -320,10 +321,6 @@ export const hi: Record<TranslationKey, string> = {
   'activity.rel.days_ago': '{n} दिन पहले',
   'owner.needs.empty_clean': 'अभी किसी निर्णय की ज़रूरत नहीं है।',
 
-  // Owner Command Center — Col-2 "Portfolio"
-  'owner.portfolio.title': 'पोर्टफ़ोलियो',
-  'owner.portfolio.linked': '{n} जुड़े',
-
   // Owner Command Center — Col-3 "This Week"
   'owner.week.title': 'इस हफ़्ते',
   'owner.week.export': 'CSV निर्यात',
@@ -342,6 +339,26 @@ export const hi: Record<TranslationKey, string> = {
   'owner.setup.set_baseline': 'अपेक्षित दैनिक हाज़िरी तय करें',
   'owner.setup.done': 'हो गया',
   'owner.setup.todo': 'बाकी',
+  // Owner setup checklist (activity-first cold start) — replaces connect_whatsapp.
+  'owner.setup.add_project': 'अपना पहला प्रोजेक्ट जोड़ें',
+  'owner.setup.invite_team': 'अपनी साइट टीम को जोड़ें',
+  'owner.setup.start_chat': 'साइट चैट शुरू करें',
+
+  // Requests view (homeowner requests, owner-side).
+  'requests.title': 'अनुरोध',
+  'requests.group.overdue': 'समय बीत गया',
+  'requests.group.open': 'खुले',
+  'requests.group.resolved': 'हल हो गए',
+  'requests.reply': 'चैट में जवाब दें',
+  'requests.status.sent': 'नया',
+  'requests.status.seen': 'देखा गया',
+  'requests.status.in_progress': 'चल रहा है',
+  'requests.status.done': 'हल हो गया',
+  'requests.overdue_since': 'नियत {when}',
+  'requests.raised': 'दर्ज {when}',
+  'requests.error': 'अनुरोध लोड नहीं हो सके।',
+  'requests.empty.title': 'अभी कोई अनुरोध नहीं',
+  'requests.empty.hint': 'जब कोई गृहस्वामी फोटो मांगे या कुछ बताए, वह यहाँ आएगा। अभी आपके लिए कुछ नहीं है।',
 
   'brief.risk.labor_shortfall': 'मज़दूरों की कमी',
   'brief.risk.unverified_invoice': 'असत्यापित बिल',
