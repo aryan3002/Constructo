@@ -68,6 +68,23 @@ export const hi: Record<TranslationKey, string> = {
   'site.timeline.empty.hint': 'साइट व्हाट्सऐप ग्रुप की घटनाएँ यहाँ दिखेंगी।',
   'site.mock_badge': 'मॉक घटनाएँ',
 
+  // Owner Command Center — New project + Projects strip
+  'projects.new.title': 'नया प्रोजेक्ट',
+  'projects.new.name_label': 'प्रोजेक्ट का नाम',
+  'projects.new.name_placeholder': 'जैसे Green Acres Tower B',
+  'projects.new.type_label': 'प्रोजेक्ट का प्रकार',
+  'projects.new.location_label': 'स्थान',
+  'projects.new.location_placeholder': 'जैसे बांद्रा वेस्ट, मुंबई',
+  'projects.new.location_hint': 'वैकल्पिक — इसे बाद में जोड़ सकते हैं।',
+  'projects.new.submit': 'प्रोजेक्ट बनाएं',
+  'projects.new.cancel': 'रद्द करें',
+  'projects.new.name_required': 'आगे बढ़ने के लिए प्रोजेक्ट का नाम दें।',
+  'projects.new.error': 'प्रोजेक्ट नहीं बन सका। फिर से प्रयास करें।',
+  'projects.new.cta': 'नया प्रोजेक्ट',
+  'projects.strip.title': 'आपके प्रोजेक्ट',
+  'projects.strip.people': '{count} लोग',
+  'projects.strip.no_activity': 'अभी कोई गतिविधि नहीं',
+
   'groups.title': 'व्हाट्सऐप ग्रुप',
   'groups.subtitle':
     'किसी व्हाट्सऐप ग्रुप को साइट से जोड़ें ताकि उसके संदेश टाइमलाइन में आएँ।',

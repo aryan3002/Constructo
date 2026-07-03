@@ -76,6 +76,23 @@ export const en = {
   'site.timeline.empty.hint': 'Events from site WhatsApp groups show up here.',
   'site.mock_badge': 'Mock events',
 
+  // Owner Command Center — New project + Projects strip
+  'projects.new.title': 'New project',
+  'projects.new.name_label': 'Project name',
+  'projects.new.name_placeholder': 'e.g. Green Acres Tower B',
+  'projects.new.type_label': 'Project type',
+  'projects.new.location_label': 'Location',
+  'projects.new.location_placeholder': 'e.g. Bandra West, Mumbai',
+  'projects.new.location_hint': 'Optional — you can add this later.',
+  'projects.new.submit': 'Create project',
+  'projects.new.cancel': 'Cancel',
+  'projects.new.name_required': 'Give the project a name to continue.',
+  'projects.new.error': "Couldn't create the project. Please try again.",
+  'projects.new.cta': 'New project',
+  'projects.strip.title': 'Your projects',
+  'projects.strip.people': '{count} people',
+  'projects.strip.no_activity': 'No activity yet',
+
   // WhatsApp groups mapping (retrofitted)
   'groups.title': 'WhatsApp Groups',
   'groups.subtitle':
