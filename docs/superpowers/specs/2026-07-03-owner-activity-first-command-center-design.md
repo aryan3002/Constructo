@@ -86,6 +86,16 @@ Endpoints that already exist and can be reused: `POST /api/v1/sites` (create pro
   working features.
 - **Activity backbone:** **new dedicated `GET /api/v1/activity` union endpoint** (recommended
   below over broadening the bell-feed).
+- **De-pollution mechanism (resolved 2026-07-03, evidence-backed):** **option (a) — stop
+  creating the shadow `Decision` row for homeowner requests entirely**, and rewire the overdue
+  nudge to a push. Chosen over option (b) after an adversarial review proved the row leaks into
+  **three** owner surfaces (web inbox/log, the WhatsApp brief, the notification bell), so (b)
+  ("filter one query") is both incomplete and *more* work than not creating the row. See §4.2.
+- **Hero counts (resolved):** bundle into the `/activity` response `summary` (one round trip);
+  retire `GET /dashboard/home` for `/owner`. See §4.1.
+- **Project types (resolved):** reuse the existing owner-onboarding set verbatim —
+  `residential / commercial / villa / interior / infra` (lowercase values, i18n Title-Case
+  labels, default `residential`). See §4.3.
 
 ---
 
@@ -151,35 +161,73 @@ testable. (The bell-feed stays as-is for the notification bell.)
 **`occurred_at` per source:** `published_at` / `completed_on` / `week_start` / `created_at` /
 `detected_on` respectively (normalized to tz-aware UTC; dates → midnight UTC).
 
-**Hero counts (drives the honest headline):** the same router (or a lightweight
-`GET /api/v1/dashboard/home` reshape) returns `updates_today`, `sites_total`, and
-`needs_decision_count` (genuine pending owner decisions only). No fabricated numbers.
+**Hero counts (resolved — one round trip).** Bundle the honest headline numbers into the
+`/activity` response as a small `summary: { updates_today, needs_decision_count, sites_total }`,
+so a single request drives both the hero and the stream — no fabricated numbers. Project cards
+come from the existing `GET /sites`; genuine "Needs you" decisions from the existing
+approvals/decisions list. Consequently the page does **not** need the old `GET /dashboard/home`:
+it can be **retired for `/owner`** (verify during planning that no other surface still consumes
+it before removing; otherwise leave it dormant).
 
-### 4.2 Backend — approvals de-pollution (cleanup)
+### 4.2 Backend — approvals de-pollution (chosen: option (a), done completely)
 
-Problem: `homeowner/nudge.py::_request_decision` creates a `Decision(kind=generic,
-title="[homeowner-request-nudge][<uuid>] <req.title>")` for every homeowner request, which then
-lands in the Approval Inbox and Decision Log.
+**Problem:** `homeowner/nudge.py::_request_decision` creates a
+`Decision(kind=generic, title="[homeowner-request-nudge][<uuid>] <req.title>")` for **every**
+homeowner request (at creation via `surface_request_now`, and again when overdue via
+`run_request_nudge_sweep`). That shadow row is what pollutes the owner surfaces.
+
+**Decision:** a homeowner request must not exist as an owner `Decision` at all — its true home
+is `homeowner_requests`, surfaced via the Requests view (§4.4) and the activity stream (§4.1).
+We **stop creating the shadow row** and **rewire the overdue signal** so nothing is lost. This
+is the honest end-state per your principle "treat each thing as what it is."
+
+**Why not the lighter "re-type + filter" (option b) — proven by adversarial review:** the
+request-nudge `Decision` leaks into **three** owner-approval surfaces, not one:
+1. `app/approvals/router.py::list_decisions` — the web Approval Inbox **and** the owner Decision
+   Log (both read this one endpoint; no kind/tag filter today).
+2. `app/bot/brief_delivery.py::_open_decisions` → `app/bot/compose.py::compose_brief` — the
+   owner's **WhatsApp morning brief**, which selects *all* open decisions with **no kind/tag
+   filter** and renders each as a numbered approvable *faisle* printing the raw
+   `[homeowner-request-nudge][uuid]` title (verified: `compose.py:214` uses `d.get("title")`
+   with no `_strip_tag`).
+3. `app/notifications/feed.py::build_feed` — the owner **notification bell** (`generic`→owner,
+   severity `info`).
+Filtering only `list_decisions` would leave the request showing as approvable in the brief and
+the bell. Doing (b) *properly* = a new `DecisionKind` value + a non-transactional Postgres
+`ALTER TYPE … ADD VALUE` migration + exclusions in all three readers + web `Decision['kind']`
+union/`KIND_META` updates. That is **more** surface than simply not creating the row.
+
+**Crucial invariant (verified):** the overdue *timing* does not live in the decision ledger. It
+lives on `HomeownerRequest.sla_due_at` + `run_request_nudge_sweep` (which reads
+`homeowner_requests`), and `run_sla_sweep` provably ignores these rows (they never set
+`sla_due_at`). So deleting the row loses **no timing** — only the row's role as the in-app
+work-item + push trigger, which we replace.
 
 **Changes:**
-1. **Separate the lane.** Homeowner requests must not appear in the Approval Inbox. Options,
-   decided at plan time (both satisfy the goal — pick the lower-risk one against current callers):
-   - (a) **Stop creating `Decision` rows for requests entirely**; the activity endpoint reads
-     `homeowner_requests` directly (preferred — removes the whole class of pollution), **or**
-   - (b) tag them with a dedicated `DecisionKind` (e.g. `homeowner_request`) and **exclude that
-     kind** from the Approval Inbox + Decision Log queries, surfacing them only via activity.
-   The nudge's *purpose* (make sure a slipping request is seen) is preserved by the activity
-   stream's `homeowner_request` item with a `warning` severity when overdue.
-2. **Approval Inbox query** filters to genuine owner decisions
-   (`kind in {approval, hold_payment}`), so the inbox is "the few decisions that need you," as its
-   own subtitle promises.
-3. **Title hygiene (display + source):** never render the internal
-   `[homeowner-request-nudge][uuid]` tag. Title from the homeowner's real message
-   (`detail` first line, else `title`), trimmed. Apply at the source (request creation title
-   extraction) *and* defensively at display.
-4. **One-time data cleanup:** a script (`backend/scripts/`) that resolves/removes the existing
-   junk `generic` request-nudge decisions in the pilot DB so the inbox starts clean. Idempotent,
-   dry-run by default, `--apply` to write. (Mirrors existing `scripts/` conventions.)
+1. **Stop creating the row.** Remove the `_request_decision` write from `surface_request_now`
+   and from `run_request_nudge_sweep`. The at-creation site-team push already exists
+   independently (`_alert_site_leads`, `router.py:2246`) and stays.
+2. **Rewire the overdue nudge (non-negotiable).** `run_request_nudge_sweep` must still emit its
+   one-nudge signal when a request goes overdue — but as a **push/notification to site leads**
+   (reuse the `_alert_site_leads` pattern) instead of a `Decision`. Preserve the existing
+   contract: stamp `nudged_at` (one-nudge idempotency) and return the nudged request ids. The
+   overdue request also surfaces as an activity item (`homeowner_request`, `warning` severity)
+   and in the Requests view's overdue group.
+3. **Nothing to exclude.** With no row created, `list_decisions`, the WhatsApp brief, and the
+   bell are clean by construction — no kind filter, no enum migration, no web-union change. The
+   existing homeowner-side `not_like(NUDGE_TAG)` filters (`router.py:873`, `:2359`) become
+   harmless no-ops.
+4. **Leave `quiet.py` alone.** Its quiet-site abstain nudge is a genuine owner-facing `generic`
+   Decision (`[homeowner-quiet-nudge]`), not a homeowner request. Do not re-type or filter it.
+5. **One-time cleanup** (`backend/scripts/`): resolve/remove existing junk request-nudge
+   `Decision` rows (title `LIKE '[homeowner-request-nudge]%'`) in the pilot DB so every owner
+   surface starts clean. Idempotent, dry-run by default, `--apply` to write; must **not** touch
+   `[homeowner-quiet-nudge]` rows.
+
+**Title hygiene (still applies):** requests currently get a junk single-word `req.title`
+("Wall", "Boy"). The Requests view + activity `homeowner_request` items should title from the
+homeowner's real message (`detail` first line, else `title`), trimmed. Fix at the source
+(request-creation title extraction) and defensively at display.
 
 ### 4.3 Frontend — the new `OwnerHome`
 
@@ -203,11 +251,28 @@ top-to-bottom priority (stacks cleanly on mobile):
 5. **Removed:** `Portfolio` (pulse) and `ThisWeek` (ledger) are deleted from this page. Their
    files can remain in the tree only if referenced elsewhere; otherwise remove to avoid dead code.
 
-**`<NewProjectModal>`** — form: `name` (required), `type` (required; select:
-residential/commercial/…), `location` (optional). Submits to `POST /sites`; on success invalidates
-the sites + activity queries and (optionally) deep-links into the new project. Honest validation
-copy per CDS content rules ("Enter a project name"). RBAC: only roles permitted by the backend see
-the button; server remains the source of truth.
+**`<NewProjectModal>`** — form: `name` (required), `type` (required), `location` (optional).
+Submits to `POST /sites`; on success invalidates the sites + activity queries and (optionally)
+deep-links into the new project. Honest validation copy per CDS content rules ("Enter a project
+name"). RBAC: only roles permitted by the backend see the button; server remains the source of
+truth.
+
+**Type select — mirror the existing owner-onboarding set verbatim** (do not invent values). Reuse
+`web/src/pages/auth/OwnerFirstRun.tsx` `SITE_TYPES` and its i18n keys so the modal matches how
+sites are already created in-app:
+
+| Label (from `auth.onboard.site.type.*`) | value (stored) |
+| --- | --- |
+| Residential | `residential` |
+| Commercial | `commercial` |
+| Villa / Bungalow | `villa` |
+| Interior fit-out | `interior` |
+| Infrastructure | `infra` |
+
+Store the lowercase `value`, render the Title-Case label via the existing i18n keys (single-
+sourced — no hardcoded strings), default `residential`. `Site.type` is free-text in the backend
+(`str = Field(min_length=1)`), so these pass validation as-is; real stored data today is only
+`residential` and `villa`, both in this set (no data mismatch).
 
 **Cold-start / setup checklist** (`SetupChecklist`) — drop the dead **"Connect WhatsApp"** step.
 New steps: **Add a project → Invite your team → Start a chat.** Cold-start = no sites, or sites but
@@ -233,9 +298,10 @@ is hidden. Deliverable: a short verified nav map in the plan.
 
 ```
 Owner opens /owner
-  → GET /api/v1/dashboard/home (reshaped): hero counts + genuine needs-you decisions + projects
-  → GET /api/v1/activity?limit=20        : first page of the real stream
-  → renders HonestHero, NeedsYou, ActivityStream, ProjectsStrip
+  → GET /api/v1/activity?limit=20   : { summary: hero counts, items: first page of the stream }
+  → GET /api/v1/sites               : project cards for the Projects strip
+  → GET /api/v1/approvals?state=pending (existing) : genuine "Needs you" decisions
+  → renders HonestHero (from summary), NeedsYou, ActivityStream, ProjectsStrip
 
 Scroll ActivityStream → GET /api/v1/activity?cursor=… (keyset) → append
 Filter by project      → GET /api/v1/activity?site_id=… (fresh)
@@ -262,11 +328,18 @@ Approve/Hold in NeedsYou → POST /dashboard/decisions (existing useDecide optim
 **Backend**
 - `build_activity()` pure unit tests: correct union, ordering (newest first), per-kind title/link/
   severity mapping, `site_id` filter, keyset pagination boundaries, tz normalization.
-- Approvals de-pollution: request-nudge no longer appears in the Approval Inbox / Decision Log
-  query; genuine `approval`/`hold_payment` still do; overdue request still surfaces via activity.
-- Title hygiene: internal tag never present in any serialized title.
-- Cleanup script: dry-run reports N; `--apply` resolves exactly those rows; idempotent re-run
-  finds 0.
+- Approvals de-pollution (option a): a homeowner request creates **no** `Decision` row — assert
+  absent from `list_decisions` (`GET /api/v1/approvals`), the WhatsApp brief `_open_decisions`,
+  and `build_feed`; genuine `approval`/`hold_payment` decisions unaffected; `quiet.py` generic
+  nudge unaffected.
+- Overdue rewire: `run_request_nudge_sweep` fires its push exactly once, stamps `nudged_at`, and
+  returns the nudged ids — **without** creating a Decision. (Flips
+  `test_request_nudge_sweep_fires_once`, which today asserts a `Decision LIKE NUDGE_TAG%`.)
+- Surface-immediately flip: `test_create_request_surfaces_to_contractor_immediately` today asserts
+  the request appears in `/approvals`; rewrite to assert it appears in the Requests list / activity
+  and is **absent** from `/approvals`.
+- Cleanup script: dry-run reports N; `--apply` resolves exactly those `[homeowner-request-nudge]%`
+  rows; idempotent re-run finds 0; never touches `[homeowner-quiet-nudge]%` rows.
 - Regression: full backend suite stays green (target: 0 regressions).
 
 **Frontend** (Vitest + RTL)
@@ -285,14 +358,17 @@ Approve/Hold in NeedsYou → POST /dashboard/decisions (existing useDecide optim
 
 ## 8. Rollout / migration
 
-1. Backend: `GET /activity` + approvals de-pollution + dashboard-home reshape (additive; old
-   fields can remain until the web cuts over).
+1. Backend: `GET /activity` (with `summary`) + de-pollution (stop creating request `Decision`
+   rows + rewire the overdue nudge to a push) + updated homeowner tests.
 2. One-time cleanup script run against the pilot DB (dry-run → apply).
-3. Frontend: new `OwnerHome` composition behind the same route; delete dead pulse/ledger.
-4. Verify green CI, deploy web (Vercel) + backend (Azure Container Apps).
+3. Frontend: new `OwnerHome` composition behind the same route; delete dead pulse/ledger; add
+   `NewProjectModal` + Requests view; verify nav.
+4. Verify green CI (backend `pytest` + `ruff`; web `npm run build`), deploy web (Vercel) +
+   backend (Azure Container Apps).
 
-No destructive DB migration required (the cleanup script only resolves junk decision rows; it does
-not drop tables). Adding a new `DecisionKind` enum value (if option 4.2-b chosen) is additive.
+**No DB migration required** — option (a) creates no new enum value and the cleanup script only
+resolves junk decision rows (no schema/table changes). This is a deliberate advantage of (a) over
+(b), which would have needed a non-transactional `ALTER TYPE decision_kind ADD VALUE`.
 
 ---
 
@@ -303,16 +379,32 @@ not drop tables). Adding a new `DecisionKind` enum value (if option 4.2-b chosen
   sites in the pilot; revisit indexes if it grows.
 - **Removing pulse/ledger may hide something a stakeholder liked:** mitigated by keeping the code
   paths recoverable and documenting that reviving them is the separate chat-extraction project.
-- **De-pollution touching decision routing:** covered by tests asserting the bell-feed +
-  genuine-decision paths are unchanged.
+- **Overdue signal dropped in the rewire (the one real risk of option a):** if we delete the
+  request `Decision` but forget to rewire `run_request_nudge_sweep`'s nudge into a push, a slipping
+  request goes silent in-app. Mitigated by making the rewire a first-class, tested step (§7) — the
+  sweep must fire its push exactly once — and by the Requests view + activity being the honest
+  replacement work-item. Genuine `approval`/`hold_payment` and the `quiet.py` generic nudge are
+  untouched (tested).
 - **RBAC on create-project:** server stays the source of truth; the button is a convenience gate.
 
 ---
 
-## 10. Open questions (resolve during planning)
+## 10. Resolved decisions (were open questions)
 
-1. De-pollution mechanism: 4.2-(a) stop creating request Decisions vs 4.2-(b) dedicated kind +
-   query exclusion — pick by blast radius against current callers/tests.
-2. Whether to also reshape `GET /dashboard/home` or add hero counts to `GET /activity` (one round
-   trip vs two).
-3. Exact `type` select options for `NewProjectModal` (mirror whatever `sites` already stores).
+1. **De-pollution mechanism → option (a)** (stop creating the request `Decision` entirely + rewire
+   the overdue nudge to a push). Resolved 2026-07-03 via an evidence workflow + adversarial verify:
+   the shadow row leaks into three owner surfaces (web inbox/log, WhatsApp brief, bell), so (b)
+   "filter one query" is incomplete, and doing (b) properly is *more* work (enum value +
+   non-transactional migration + 3 reader exclusions + web union) than not creating the row. The
+   overdue *timing* never lived in the ledger, so (a) loses nothing provided the sweep's nudge is
+   rewired. See §4.2.
+2. **Hero counts → bundle into `/activity` `summary` (one round trip); retire `/dashboard/home`
+   for `/owner`.** See §4.1.
+3. **`NewProjectModal` types → reuse `OwnerFirstRun.tsx` `SITE_TYPES` verbatim**
+   (`residential / commercial / villa / interior / infra`, lowercase values, i18n Title-Case
+   labels, default `residential`). `Site.type` is free-text, so no migration/backfill. See §4.3.
+
+### Still to settle during planning (small)
+- Exact shape of the rewired overdue nudge (in-app notification row vs. existing push transport) —
+  pick whatever `_alert_site_leads` already uses, for consistency.
+- Confirm no non-`/owner` surface still depends on `GET /dashboard/home` before deleting it.
