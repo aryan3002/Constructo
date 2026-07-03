@@ -43,6 +43,15 @@ async def test_create_and_track_request(client, ctx):
 
 
 async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
+    """De-pollution (Option a): the overdue sweep raises NO shadow Decision — it
+    pushes the site leads instead — and still fires exactly once (nudged_at)."""
+    from app.models import PushToken
+    from app.push import sender
+
+    sender.reset_dry_run_log()
+    db_session.add(
+        PushToken(user_id=ctx.owner.id, token="ExponentPushToken[nudge-lead]", platform="ios")
+    )
     # An overdue, still-open request.
     req = HomeownerRequest(
         site_id=ctx.site.id,
@@ -60,7 +69,7 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
     await db_session.refresh(req)
     assert req.nudged_at is not None
 
-    # A contractor-facing nudge Decision was raised, tagged so it never dupes.
+    # (a) NO shadow Decision was created (Option a de-pollution).
     nudges = (
         await db_session.execute(
             select(Decision).where(
@@ -68,11 +77,20 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
             )
         )
     ).scalars().all()
-    assert len(nudges) == 1
+    assert nudges == []
 
-    # One-nudge rule: a second sweep raises nothing new.
+    # (b) The site lead (owner) got exactly one overdue push for this request.
+    hits = [m for m in sender.dry_run_log() if m["to"] == "ExponentPushToken[nudge-lead]"]
+    assert len(hits) == 1
+    assert hits[0]["data"]["type"] == "homeowner_request"
+    assert hits[0]["data"]["request_id"] == str(req.id)
+    assert hits[0]["data"].get("overdue") is True
+
+    # (c) One-nudge rule: a second sweep raises nothing new and pushes nothing new.
+    sender.reset_dry_run_log()
     second = await run_request_nudge_sweep(db_session, now=now + timedelta(hours=1))
     assert second == []
+    assert sender.dry_run_log() == []
 
 
 async def test_create_request_surfaces_to_contractor_immediately(client, ctx, db_session):

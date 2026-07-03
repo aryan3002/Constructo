@@ -2231,10 +2231,11 @@ async def create_request(
         sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
     )
     session.add(req)
-    # Surface to the site team's Brief / approval inbox immediately — not only once
-    # the SLA lapses and the overdue sweep escalates it (stamps nudged_at so that
-    # sweep never raises a duplicate). Flush first so the row has its id, then a
-    # single commit persists the request + its decision together.
+    # Surface to the site team immediately via the push below (NOT a shadow
+    # Decision — Option (a) de-pollution) — not only once the SLA lapses and the
+    # overdue sweep escalates it. surface_request_now stamps nudged_at so that
+    # later sweep never re-nudges this request. Flush first so the row has its
+    # id, then commit persists the request before the best-effort push fires.
     await session.flush()
     await surface_request_now(session, req)
     await session.commit()
