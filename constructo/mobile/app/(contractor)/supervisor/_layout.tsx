@@ -37,6 +37,8 @@ function SupervisorTabs() {
         <Tabs.Screen name="drawings" options={{ href: null }} />
         <Tabs.Screen name="drawing/[id]" options={{ href: null }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
+        {/* Full-screen photo lightbox opened from a chat bubble, off-tab. */}
+        <Tabs.Screen name="chat-viewer" options={{ href: null }} />
         {/* Pushed from chat (to-dos from a card). */}
         <Tabs.Screen name="action-items" options={{ href: null }} />
         {/* Legacy screen kept routable but off the field nav (prototype has no

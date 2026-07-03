@@ -424,6 +424,19 @@ export function useChatThread(
   })
   const messages = useMemo(() => q.data ?? [], [q.data])
 
+  // The WS relays by CONVERSATION id. For a conversationId address that IS
+  // `addrKey`; for a site (crew) address the conversation id isn't known up
+  // front — a raw site_id can't be mapped to a Conversation server-side — so we
+  // read it off the first loaded row (every ChatMessage carries it). Until it
+  // resolves the socket stays unsubscribed and the 8s poll covers the thread;
+  // once it resolves the crew thread goes fully live (msg/receipt/typing). The
+  // cache/query stay keyed by addrKey — only the socket identity uses this, so
+  // conversationId threads (owner/homeowner) are byte-for-byte unchanged.
+  const socketConvId =
+    'conversationId' in address
+      ? addrKey
+      : (messages.find((m) => m.conversation_id)?.conversation_id ?? null)
+
   // Re-refresh presigned attachment URLs whenever the thread regains focus, not
   // only on first mount. The mount-only refresh (urlsRefreshed) misses a thread
   // that stays mounted — a contractor tab the user returns to, or a screen kept
@@ -607,17 +620,17 @@ export function useChatThread(
 
   const lastTypingSent = useRef<number>(0)
   const sendTyping = useCallback(() => {
-    if (!addrKey) return
+    if (!socketConvId) return
     const now = Date.now()
     if (now - lastTypingSent.current > 3000) {
       lastTypingSent.current = now
-      getSharedSocket().typing(addrKey)
+      getSharedSocket().typing(socketConvId)
     }
-  }, [addrKey])
+  }, [socketConvId])
 
   // --- live socket: subscribe this thread; route frames -------------------
   useEffect(() => {
-    if (!addrKey) return
+    if (!socketConvId || !addrKey) return
     const socket = getSharedSocket()
     let cancelled = false
 
@@ -632,7 +645,7 @@ export function useChatThread(
           void mergeMessages(addrKey, [payload]).then((merged) => {
             qc.setQueryData(['chat', 'thread', addrKey], merged)
           })
-          socket.markDelivered(addrKey, payload.seq)
+          socket.markDelivered(socketConvId, payload.seq)
           // Optimistic cursor update for delivery
           if (myUserId) {
             setCursors((prev) => {
@@ -659,6 +672,13 @@ export function useChatThread(
         const last_seq = frame.last_seq as number
         void maxCachedSeq(addrKey).then(after => {
           if (last_seq > after) {
+            // Force the next queryFn run to actually hit the network. The poll
+            // gate (socket.isLive && urlsRefreshed) would otherwise return the
+            // stale cache and neuter this reconnect backfill, so clear the flag
+            // first — the refetch becomes a full after_seq=0 resync that pulls
+            // the messages that arrived while the socket was down (and renews
+            // presigned attachment URLs as a free side effect).
+            urlsRefreshed.current = false
             qc.invalidateQueries({ queryKey: ['chat', 'thread', addrKey] })
           }
         })
@@ -672,25 +692,33 @@ export function useChatThread(
       }
     }
 
-    const set = frameHandlers.get(addrKey) ?? new Set<FrameHandler>()
+    const set = frameHandlers.get(socketConvId) ?? new Set<FrameHandler>()
     set.add(handler)
-    frameHandlers.set(addrKey, set)
+    frameHandlers.set(socketConvId, set)
 
+    // Subscribe with the conversation id, at the addrKey-keyed cache watermark
+    // (the cache is keyed by addrKey — the site id for a crew thread).
     void maxCachedSeq(addrKey).then((after) => {
-      if (!cancelled) socket.subscribe(addrKey, after)
+      if (!cancelled) socket.subscribe(socketConvId, after)
     })
 
     return () => {
       cancelled = true
-      const s = frameHandlers.get(addrKey)
+      const s = frameHandlers.get(socketConvId)
       if (s) {
         s.delete(handler)
-        if (s.size === 0) frameHandlers.delete(addrKey)
+        if (s.size === 0) frameHandlers.delete(socketConvId)
       }
-      socket.unsubscribe(addrKey)
+      socket.unsubscribe(socketConvId)
+      // Clear any pending typing auto-expiry so it can't fire setIsTyping after
+      // the thread unmounts (a StrictMode / fast-navigate landmine).
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current)
+        typingTimer.current = null
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addrKey, qc, fetchCursors])
+  }, [socketConvId, addrKey, qc, fetchCursors])
 
   // --- derived: pending bubbles + delivery ticks --------------------------
   const pending = useMemo(

@@ -102,6 +102,10 @@ export default function HomeownerMessagesInbox() {
           if (timerRef.current) clearTimeout(timerRef.current)
           timerRef.current = setTimeout(() => {
             void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
+            // Also refresh the pinned builder-channel row. It's a SEPARATE query
+            // with staleTime:Infinity, so its unread badge would otherwise never
+            // move when a new message lands in that channel.
+            void qc.invalidateQueries({ queryKey: ['homeowner', 'channel'] })
           }, 500)
         }
       }
@@ -125,6 +129,11 @@ export default function HomeownerMessagesInbox() {
           }
           socket.unsubscribe(id)
         })
+        // Clear the pending debounce so it can't invalidate after blur/unmount.
+        if (timerRef.current) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
       }
     }, [conversations, builder, qc])
   )

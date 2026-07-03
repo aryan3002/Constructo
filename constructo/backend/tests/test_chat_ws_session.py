@@ -83,6 +83,57 @@ async def test_ping_pong_and_delivered_frame(db_session, conv_world):
     task.cancel()
 
 
+async def test_typing_frame_relays_to_subscribers_with_user_id(db_session, conv_world):
+    """A subscribed member's `typing` frame is fanned out to the conversation's
+    subscribers, carrying the sender's user_id so clients can drop their own.
+    (Asserted at the broadcaster boundary to avoid racing the pump's own queue
+    registration — the fan-out itself is exercised by the msg-stream test.)"""
+    owner, conv = conv_world
+    published: list[tuple] = []
+    bus = Broadcaster()
+    orig_publish = bus.publish
+
+    async def spy(cid, frame):
+        published.append((cid, frame))
+        await orig_publish(cid, frame)
+
+    bus.publish = spy  # type: ignore[method-assign]
+    sock = FakeSocket([
+        {"v": 1, "type": "sub", "convs": [{"id": str(conv.id), "after_seq": 0}]},
+        {"v": 1, "type": "typing", "conv": str(conv.id)},
+    ])
+    session_obj = ChatSocketSession(sock, owner, db_session, broadcaster=bus)
+    task = asyncio.create_task(session_obj.run())
+    await asyncio.sleep(0.15)
+    assert (
+        conv.id,
+        {"v": 1, "type": "typing", "conv": str(conv.id), "user_id": str(owner.id)},
+    ) in published
+    task.cancel()
+
+
+async def test_typing_frame_ignored_when_sender_not_subscribed(db_session, conv_world):
+    """Membership gate: a `typing` frame for a conversation the sender has NOT
+    subscribed to (no pump ⇒ access never proven) must NOT be relayed."""
+    owner, conv = conv_world
+    published: list[tuple] = []
+    bus = Broadcaster()
+    orig_publish = bus.publish
+
+    async def spy(cid, frame):
+        published.append((cid, frame))
+        await orig_publish(cid, frame)
+
+    bus.publish = spy  # type: ignore[method-assign]
+    sock = FakeSocket([{"v": 1, "type": "typing", "conv": str(conv.id)}])
+    session_obj = ChatSocketSession(sock, owner, db_session, broadcaster=bus)
+    task = asyncio.create_task(session_obj.run())
+    await asyncio.sleep(0.1)
+    assert not any(f.get("type") == "typing" for _, f in published)
+    assert not any(f.get("type") == "typing" for f in sock.sent)
+    task.cancel()
+
+
 async def test_disconnect_tears_down_idle_pump_promptly(db_session, conv_world):
     """A real disconnect (receive_json raises) must end run() even when a
     subscribed conversation is idle — no orphaned pump, no leaked session."""

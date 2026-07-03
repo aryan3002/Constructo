@@ -18,7 +18,8 @@ const BACKOFF_CAP_MS = 30_000
 
 export class ChatSocket {
   private ws: WebSocket | null = null
-  private subs = new Map<string, number>() // conv id → after_seq
+  private subs = new Map<string, number>() // conv id → after_seq watermark (for resubscribe)
+  private subRefs = new Map<string, number>() // conv id → active subscriber count (refcount)
   private attempts = 0
   private closedByUser = false
   private connecting = false
@@ -80,13 +81,34 @@ export class ChatSocket {
   }
 
   subscribe(convId: string, afterSeq: number): void {
-    this.subs.set(convId, afterSeq)
-    if (this.ws && this.ws.readyState === 1) {
-      this.send({ v: 1, type: 'sub', convs: [{ id: convId, after_seq: afterSeq }] })
+    // Refcount subscribers so two independent callers (a mounted thread screen
+    // AND the inbox list, which subscribes every conversation to light its
+    // unread badges) share ONE server subscription. Without this, the inbox's
+    // blur-unsubscribe would tear down the sub of the thread you just opened,
+    // silently freezing it to live messages.
+    const refs = (this.subRefs.get(convId) ?? 0) + 1
+    this.subRefs.set(convId, refs)
+    // Keep the HIGHEST watermark: after_seq is only a catch-up hint (sub_ok +
+    // REST are the real sync path), so a resubscribe should never ask the server
+    // to replay history a subscriber already has.
+    const prev = this.subs.get(convId)
+    const after = prev === undefined ? afterSeq : Math.max(prev, afterSeq)
+    this.subs.set(convId, after)
+    // Only the 0→1 transition emits a real sub frame; a second subscriber reuses
+    // the existing server-side subscription.
+    if (refs === 1 && this.ws && this.ws.readyState === 1) {
+      this.send({ v: 1, type: 'sub', convs: [{ id: convId, after_seq: after }] })
     }
   }
 
   unsubscribe(convId: string): void {
+    const refs = (this.subRefs.get(convId) ?? 0) - 1
+    if (refs > 0) {
+      // Other callers still need this conversation live — keep the server sub.
+      this.subRefs.set(convId, refs)
+      return
+    }
+    this.subRefs.delete(convId)
     this.subs.delete(convId)
     this.send({ v: 1, type: 'unsub', conv: convId })
   }
