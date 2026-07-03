@@ -154,9 +154,12 @@ def _map_decision(d: Decision, site: Site) -> dict:
 
 
 def _map_finding(f: SiteFinding, site: Site) -> dict:
+    # Deep-link via the site, not the finding row (mirrors _map_change): the
+    # web route is /health/:siteId (SiteHealth calls getSiteHealth(siteId)) —
+    # a finding id there 403/404s. link_id must be f.site_id.
     return _item(kind=KIND_FINDING, row_id=f.id, site=site,
                  title=f.headline, subtitle=None, occurred_at=f.detected_on,
-                 actor=None, link_type=LINK_FINDING, link_id=f.id,
+                 actor=None, link_type=LINK_FINDING, link_id=f.site_id,
                  severity=_finding_severity(f.severity))
 
 

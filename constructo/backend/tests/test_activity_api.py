@@ -13,6 +13,7 @@ from app.models import (
     HomeownerRequest,
     PublishedPhoto,
     Site,
+    SiteFinding,
     Update,
     UserRole,
 )
@@ -70,6 +71,17 @@ async def _decision(db_session, company_id, site_id, *, at, state="pending"):
     return d
 
 
+async def _finding(db_session, site_id, *, on, severity="high"):
+    f = SiteFinding(
+        site_id=site_id, finding_type="stale_milestone", severity=severity,
+        status="open", headline="Schedule drift", detail="", phase="plastering",
+        dedupe_key="stale_milestone:plastering", evidence=[], detected_on=on,
+    )
+    db_session.add(f)
+    await db_session.flush()
+    return f
+
+
 async def test_activity_requires_auth(client):
     resp = await client.get("/api/v1/activity")
     assert resp.status_code == 401
@@ -123,6 +135,21 @@ async def test_activity_summary_not_undercounted_by_page_limit(client, db_sessio
     body = (await client.get("/api/v1/activity?limit=1", headers=auth(owner))).json()
     assert len(body["items"]) == 1  # the page itself IS capped to 1...
     assert body["summary"]["needs_decision_count"] == 3  # ...but the summary is not
+
+
+async def test_activity_finding_link_id_is_site_id_not_finding_id(client, db_session, owner):
+    # End-to-end regression guard (real DB row -> real serialized JSON) for the
+    # web deep-link bug: linkFor('finding') builds `/health/${link.id}` and the
+    # route is /health/:siteId — a finding id there 403/404s. link.id must be
+    # the site id.
+    site = await _site(db_session, owner.company_id)
+    finding = await _finding(db_session, site.id, on=NOW.date())
+    await db_session.commit()
+
+    body = (await client.get("/api/v1/activity", headers=auth(owner))).json()
+    item = next(i for i in body["items"] if i["kind"] == "site_health_flag")
+    assert item["link"] == {"type": "finding", "id": str(site.id)}
+    assert item["link"]["id"] != str(finding.id)
 
 
 async def test_activity_site_id_filter(client, db_session, owner):

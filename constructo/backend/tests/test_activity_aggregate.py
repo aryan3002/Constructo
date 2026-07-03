@@ -130,9 +130,13 @@ def test_overdue_request_is_warning_and_finding_severity_maps():
     assert by_id[f"homeowner_request:{req.id}"]["severity"] == "warning"
     assert by_id[f"homeowner_request:{req.id}"]["link"] == {"type": "request", "id": str(req.id)}
     assert by_id[f"site_health_flag:{finding.id}"]["severity"] == "warning"
+    # The item's own id/kind stays keyed by the finding row, but link.id must
+    # be the SITE id, not the finding id: the web route is /health/:siteId
+    # (SiteHealth calls getSiteHealth(siteId)) — a finding id there 403/404s.
     assert by_id[f"site_health_flag:{finding.id}"]["link"] == {
-        "type": "finding", "id": str(finding.id),
+        "type": "finding", "id": str(site.id),
     }
+    assert by_id[f"site_health_flag:{finding.id}"]["link"]["id"] != str(finding.id)
 
 
 def test_scope_change_links_to_project_timeline_via_site_id():
