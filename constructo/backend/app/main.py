@@ -52,6 +52,7 @@ from app.profiler.router import router as profiler_router
 from app.publish.router import router as publish_router
 from app.reconcile.router import router as reconcile_router
 from app.reports.router import router as reports_router
+from app.requests.router import router as requests_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.search.router import router as search_router
 from app.sentinel.router import router as sentinel_router
@@ -123,6 +124,7 @@ app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
 app.include_router(activity_router)  # Owner activity-first command center feed
+app.include_router(requests_router)  # Owner/pm/architect-scoped read of homeowner requests
 app.include_router(attendance_router)  # phaseB capture/attendance
 app.include_router(reconcile_router)  # phaseB reconcile
 app.include_router(approvals_router)  # phaseB approvals

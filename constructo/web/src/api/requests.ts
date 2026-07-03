@@ -2,7 +2,9 @@
 //
 // Self-contained (mirrors api/approvals.ts): imports only ApiError / API_BASE /
 // USE_MOCKS / getToken and declares its own request helper + types. Mirrors the
-// backend JSON under GET /api/v1/homeowner/requests (list[RequestOut], newest-first).
+// backend JSON under GET /api/v1/requests (list[RequestOut], newest-first) — the
+// owner/pm/architect-scoped twin of app/homeowner/router.py's own /requests
+// (which is homeowner-gated and 403s an owner token; see app/requests/router.py).
 import { ApiError } from './client'
 import { API_BASE, USE_MOCKS } from './config'
 import { getToken } from './auth'
@@ -85,6 +87,6 @@ export const requestsApi = {
       return mockRequests.map((r) => ({ ...r }))
     }
     const q = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ''
-    return request<RequestOut[]>(`/api/v1/homeowner/requests${q}`)
+    return request<RequestOut[]>(`/api/v1/requests${q}`)
   },
 }
