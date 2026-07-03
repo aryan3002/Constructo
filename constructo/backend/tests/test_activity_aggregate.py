@@ -58,8 +58,15 @@ def _finding(site_id, *, on, status="open", severity="high", headline="Schedule 
 
 
 def _empty(**over):
+    # updates_today/needs_decision_count/sites_total default to 0: build_activity
+    # no longer computes these itself (the router's dedicated un-capped COUNT
+    # queries do — see test_activity_api.py::test_activity_summary_counts and
+    # test_activity_summary_not_undercounted_by_page_limit), it only threads
+    # whatever the caller passes straight through into the returned summary.
+    # Tests that care about the summary values pass them explicitly via `over`.
     base = dict(photos=[], updates=[], milestones=[], weekly_summaries=[],
-                changes=[], requests=[], decisions=[], findings=[])
+                changes=[], requests=[], decisions=[], findings=[],
+                updates_today=0, needs_decision_count=0, sites_total=0)
     base.update(over)
     return base
 
@@ -141,27 +148,24 @@ def test_scope_change_links_to_project_timeline_via_site_id():
     assert item["severity"] == "warning"
 
 
-def test_summary_counts():
+def test_summary_passes_through_caller_supplied_counts_unchanged():
+    # build_activity no longer DERIVES the summary counts from the (possibly
+    # page-capped) row lists it's given — the router computes them separately
+    # via dedicated un-capped COUNT queries (see test_activity_api.py) and
+    # passes them in. This asserts the pass-through: the returned summary must
+    # equal exactly what was supplied, regardless of how many/few rows are in
+    # the page's item lists (deliberately mismatched here — 1 photo row, but a
+    # caller-supplied updates_today of 47 — to prove there is no re-derivation
+    # from `items` happening under the hood).
     site = _site()
-    today_photo = _photo(site.id, at=NOW)
-    old_photo = _photo(site.id, at=NOW - dt.timedelta(days=3))
-    open_req = _request(site.id, at=NOW, status="sent")
-    done_req = _request(site.id, at=NOW, status="done")
-    pending_dec = _decision(site.id, at=NOW, state="pending")
-    resolved_dec = _decision(site.id, at=NOW, state="resolved")
+    photo = _photo(site.id, at=NOW)
     res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
-                         **_empty(photos=[today_photo, old_photo],
-                                  requests=[open_req, done_req],
-                                  decisions=[pending_dec, resolved_dec]))
+                         **_empty(photos=[photo], updates_today=47,
+                                  needs_decision_count=3, sites_total=5))
     summary = res["summary"]
-    # both decisions are kind=approval so both surface as items; only pending
-    # counts as needs_decision
-    assert summary["updates_today"] == sum(
-        1 for i in res["items"]
-        if dt.datetime.fromisoformat(i["occurred_at"]).date() == TODAY
-    )
-    assert summary["needs_decision_count"] == 2  # open_req + pending_dec
-    assert summary["sites_total"] == 1
+    assert summary["updates_today"] == 47
+    assert summary["needs_decision_count"] == 3
+    assert summary["sites_total"] == 5
 
 
 def test_keyset_trim_and_next_cursor():
@@ -196,7 +200,7 @@ def test_schemas_accept_aggregator_items():
 
     site = _site()
     res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
-                         **_empty(photos=[_photo(site.id, at=NOW)]))
+                         **_empty(photos=[_photo(site.id, at=NOW)], sites_total=1))
     # next_cursor tuple → encoded string is the router's job; here assert the
     # item/summary shapes validate.
     page = ActivityPageOut(items=res["items"], summary=res["summary"],

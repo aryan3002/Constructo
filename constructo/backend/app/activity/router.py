@@ -10,10 +10,15 @@ import datetime as dt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.activity.aggregate import build_activity
+from app.activity.aggregate import (
+    _DECISION_KINDS,
+    _OPEN_DECISION_STATES,
+    _OPEN_REQUEST_STATUSES,
+    build_activity,
+)
 from app.activity.schemas import ActivityPageOut
 from app.auth.deps import get_current_user
 from app.auth.scoping import visible_site_ids
@@ -83,6 +88,7 @@ async def get_activity(
             sites=[], photos=[], updates=[], milestones=[], weekly_summaries=[],
             changes=[], requests=[], decisions=[], findings=[],
             now=dt.datetime.now(dt.UTC), limit=page_size, cursor=decoded,
+            updates_today=0, needs_decision_count=0, sites_total=0,
         )
         return ActivityPageOut(
             items=empty["items"], summary=empty["summary"],
@@ -154,7 +160,7 @@ async def get_activity(
                     select(Decision).where(
                         Decision.company_id == user.company_id,
                         Decision.site_id.in_(visible),
-                        Decision.kind.in_(["approval", "hold_payment"]),
+                        Decision.kind.in_(_DECISION_KINDS),
                     ),
                     Decision.created_at,
                 )
@@ -168,13 +174,86 @@ async def get_activity(
         date_col=True, extra=(SiteFinding.status == "open",),
     )
 
+    now = dt.datetime.now(dt.UTC)
+    updates_today, needs_decision_count = await _summary_counts(session, visible, user, now)
+
     result = build_activity(
         sites=sites, photos=photos, updates=updates, milestones=milestones,
         weekly_summaries=weekly, changes=changes, requests=requests,
         decisions=decisions, findings=findings,
-        now=dt.datetime.now(dt.UTC), limit=page_size, cursor=decoded,
+        now=now, limit=page_size, cursor=decoded,
+        updates_today=updates_today, needs_decision_count=needs_decision_count,
+        sites_total=len(visible),
     )
     return ActivityPageOut(
         items=result["items"], summary=result["summary"],
         next_cursor=encode_activity_cursor(result["next_cursor"]),
     )
+
+
+async def _count(session: AsyncSession, model, *where) -> int:
+    stmt = select(func.count()).select_from(model).where(*where)
+    return (await session.execute(stmt)).scalar_one()
+
+
+async def _summary_counts(
+    session: AsyncSession, visible: list[UUID], user: User, now: dt.datetime,
+) -> tuple[int, int]:
+    """Un-capped ``(updates_today, needs_decision_count)`` for the summary.
+
+    Deliberately independent of the page's per-source ``cap`` (``page_size +
+    1``) — a dedicated ``COUNT(*)`` per source/condition, not a tally over the
+    (possibly-capped) rows already fetched for ``items``. Otherwise a small
+    ``limit`` (e.g. the OwnerHome hero's ``limit=1``) silently undercounts,
+    which is worst for ``needs_decision_count`` — it would hide real pending
+    work from the owner. ``visible`` is always non-empty here: the router
+    returns early (before this is called) when the caller has no visible
+    sites at all.
+    """
+    today_start = dt.datetime(now.year, now.month, now.day, tzinfo=dt.UTC)
+    today_end = today_start + dt.timedelta(days=1)
+    today_date = today_start.date()
+
+    def _in_scope(model):
+        return (model.site_id.in_(visible),)
+
+    # updates_today: one un-capped COUNT per activity source, each matching the
+    # exact same site-scope + item-eligibility filter build_activity applies
+    # when deciding whether a row becomes an item (see aggregate.py), windowed
+    # to "occurred today" in UTC. datetime columns use a half-open [start, end)
+    # window; date columns compare directly against today's date.
+    updates_today = sum([
+        await _count(session, PublishedPhoto, *_in_scope(PublishedPhoto),
+                     PublishedPhoto.published_at >= today_start,
+                     PublishedPhoto.published_at < today_end),
+        await _count(session, Update, *_in_scope(Update),
+                     Update.published_at >= today_start,
+                     Update.published_at < today_end),
+        await _count(session, Milestone, *_in_scope(Milestone),
+                     Milestone.status == "done", Milestone.completed_on == today_date),
+        await _count(session, WeeklySummary, *_in_scope(WeeklySummary),
+                     WeeklySummary.week_start == today_date),
+        await _count(session, Change, *_in_scope(Change),
+                     Change.created_at >= today_start, Change.created_at < today_end),
+        await _count(session, HomeownerRequest, *_in_scope(HomeownerRequest),
+                     HomeownerRequest.created_at >= today_start,
+                     HomeownerRequest.created_at < today_end),
+        await _count(session, Decision, Decision.company_id == user.company_id,
+                     *_in_scope(Decision), Decision.kind.in_(_DECISION_KINDS),
+                     Decision.created_at >= today_start, Decision.created_at < today_end),
+        await _count(session, SiteFinding, *_in_scope(SiteFinding),
+                     SiteFinding.status == "open", SiteFinding.detected_on == today_date),
+    ])
+
+    # needs_decision_count: open homeowner requests + open-state approval/
+    # hold_payment decisions — the same two sources build_activity used to tally
+    # from its (capped) input lists, now an un-capped COUNT instead.
+    needs_decision_count = (
+        await _count(session, HomeownerRequest, *_in_scope(HomeownerRequest),
+                     HomeownerRequest.status.in_(_OPEN_REQUEST_STATUSES))
+    ) + (
+        await _count(session, Decision, Decision.company_id == user.company_id,
+                     *_in_scope(Decision), Decision.kind.in_(_DECISION_KINDS),
+                     Decision.state.in_(_OPEN_DECISION_STATES))
+    )
+    return updates_today, needs_decision_count

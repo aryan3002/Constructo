@@ -3,9 +3,12 @@
 Side-effect-free: takes already-loaded ORM rows across nine homeowner-feed /
 decision / finding source tables, maps each to a uniform ActivityItem, merges
 them into ONE time-ordered feed (occurred_at DESC, id tiebreak), applies the
-keyset cursor, and computes the headline summary. The router (``router.py``) is
-the only place that touches the session; everything here is trivially unit
-testable without a DB (mirrors ``app/dashboard/aggregate.py``).
+keyset cursor, and threads the router's already-accurate summary counts
+through into the response. The router (``router.py``) is the only place that
+touches the session — it owns the un-capped COUNT queries the summary is
+built from (a capped/paged row list is not a safe basis for a headline
+count); everything here is trivially unit testable without a DB (mirrors
+``app/dashboard/aggregate.py``).
 """
 from __future__ import annotations
 
@@ -176,11 +179,25 @@ def build_activity(
     now: dt.datetime,
     limit: int,
     cursor: tuple[str, str] | None,
+    updates_today: int,
+    needs_decision_count: int,
+    sites_total: int,
 ) -> dict:
-    """Union → sort → keyset-trim → summarize. All rows must already be in scope.
+    """Union → sort → keyset-trim. All rows must already be in scope.
 
     ``cursor`` is the ``(occurred_at_iso, id)`` of the last item of the previous
     page; only strictly-older items (by the DESC sort key) are returned.
+
+    The per-source row lists passed in here (``photos``, ``updates``, ...) are
+    the PAGE's over-fetched-but-still-capped rows (``page_size + 1`` per
+    source in the router) — fine for building ``items``, but NOT a safe basis
+    for the headline ``summary`` counts, which must reflect the owner's TRUE
+    in-scope totals regardless of the page size. So ``updates_today``,
+    ``needs_decision_count`` and ``sites_total`` are dedicated, already-accurate
+    inputs computed by the router from un-capped COUNT queries (or, for
+    ``sites_total``, the already-un-capped visible-sites list) — this function
+    only threads them through into the returned ``summary``, it does not
+    derive them from the (possibly-capped) rows above.
     """
     sites_by_id: dict[UUID, Site] = {s.id: s for s in sites}
 
@@ -221,28 +238,13 @@ def build_activity(
     # occurred_at DESC, then id DESC as tiebreak (deterministic).
     items.sort(key=_item_sort_key, reverse=True)
 
-    # Summary is computed over the FULL in-scope set (before keyset trim), so the
-    # headline counts don't change as the owner pages.
-    today = now.astimezone(dt.UTC).date()
-    updates_today = sum(
-        1
-        for it in items
-        if dt.datetime.fromisoformat(it["occurred_at"]).astimezone(dt.UTC).date() == today
-    )
-    needs_decision = sum(
-        1 for r in requests
-        if sites_by_id.get(r.site_id) is not None
-        and str(r.status) in _OPEN_REQUEST_STATUSES
-    ) + sum(
-        1 for d in decisions
-        if sites_by_id.get(d.site_id) is not None
-        and str(d.kind) in _DECISION_KINDS
-        and str(d.state) in _OPEN_DECISION_STATES
-    )
+    # Pass the router's already-accurate, un-capped counts straight through —
+    # see the docstring above for why these must NOT be derived from `items`
+    # (or from the `requests`/`decisions` row lists) here.
     summary = {
         "updates_today": updates_today,
-        "needs_decision_count": needs_decision,
-        "sites_total": len(sites),
+        "needs_decision_count": needs_decision_count,
+        "sites_total": sites_total,
     }
 
     # Keyset: drop everything at-or-newer than the cursor (DESC), then take limit.

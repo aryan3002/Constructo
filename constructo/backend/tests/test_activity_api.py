@@ -105,6 +105,26 @@ async def test_activity_summary_counts(client, db_session, owner):
     assert s["updates_today"] >= 1
 
 
+async def test_activity_summary_not_undercounted_by_page_limit(client, db_session, owner):
+    # Regression guard: the per-source page cap is `page_size + 1`, so with
+    # `limit=1` each source query used to fetch only 2 rows — and the summary
+    # (specifically needs_decision_count) used to be tallied from those SAME
+    # capped rows, silently hiding real pending work. Seed strictly more
+    # pending decisions than the cap could ever return at limit=1 (3 pending
+    # decisions vs. a cap of 2) and assert the count is still exactly right.
+    site = await _site(db_session, owner.company_id)
+    for i in range(3):
+        await _decision(
+            db_session, owner.company_id, site.id,
+            at=NOW - dt.timedelta(minutes=i), state="pending",
+        )
+    await db_session.commit()
+
+    body = (await client.get("/api/v1/activity?limit=1", headers=auth(owner))).json()
+    assert len(body["items"]) == 1  # the page itself IS capped to 1...
+    assert body["summary"]["needs_decision_count"] == 3  # ...but the summary is not
+
+
 async def test_activity_site_id_filter(client, db_session, owner):
     a = await _site(db_session, owner.company_id, name="Site A")
     b = await _site(db_session, owner.company_id, name="Site B")
