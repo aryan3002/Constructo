@@ -65,11 +65,11 @@ export function OwnerHome() {
 
   const lastActivityAt = summaryQ.data?.items[0]?.occurred_at ?? null
 
-  // A request-kind activity row's Reply button hands off to the chat thread.
-  // TODO(nav/E3): retarget to a dedicated /requests surface when it lands —
-  // ActivityStream.linkFor already carries the same TODO for the row's own link.
+  // A request-kind activity row's Reply button hands off to the dedicated
+  // Requests surface (E3) — same destination as the row's own linkFor('request'),
+  // so the whole-row click and the explicit Reply button never diverge.
   function handleReply(_item: ActivityItem) {
-    navigate('/chat')
+    navigate('/requests')
   }
 
   return (

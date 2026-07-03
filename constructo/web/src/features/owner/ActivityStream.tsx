@@ -36,7 +36,7 @@ export function linkFor(link: ActivityLink): string {
     case 'milestone':
       return `/sites/${link.id}` // project-timeline surrogate = site detail
     case 'request':
-      return '/chat' // TODO(nav): dedicated /requests surface lands in a later slice (E3)
+      return '/requests'
     case 'decision':
       return '/approvals' // TODO(nav): no /decision/:id route yet
     case 'finding':

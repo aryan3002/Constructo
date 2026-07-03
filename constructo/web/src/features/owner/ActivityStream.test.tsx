@@ -51,7 +51,7 @@ describe('linkFor', () => {
     expect(linkFor({ type: 'feed_photo', id: 'p1' })).toBe('/chat')
     expect(linkFor({ type: 'update', id: 'site-a' })).toBe('/sites/site-a')
     expect(linkFor({ type: 'milestone', id: 'site-a' })).toBe('/sites/site-a')
-    expect(linkFor({ type: 'request', id: 'r1' })).toBe('/chat')
+    expect(linkFor({ type: 'request', id: 'r1' })).toBe('/requests')
     expect(linkFor({ type: 'decision', id: 'd1' })).toBe('/approvals')
     expect(linkFor({ type: 'finding', id: 'site-a' })).toBe('/health/site-a')
   })
@@ -135,6 +135,6 @@ describe('<ActivityStream>', () => {
     expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'homeowner_request:1' }))
 
     // ...while the row's title/body link still resolves to linkFor's href.
-    expect(link).toHaveAttribute('href', '/chat')
+    expect(link).toHaveAttribute('href', '/requests')
   })
 })

@@ -173,7 +173,7 @@ describe('<OwnerHome> (activity-first)', () => {
     expect(lastCall).not.toHaveProperty('onSelectSite')
   })
 
-  it('wires ActivityStream onReply to navigate a request item to /chat', async () => {
+  it('wires ActivityStream onReply to navigate a request item to /requests', async () => {
     getHome.mockResolvedValue(NON_COLD_START)
     activityPage.mockResolvedValue(page())
     renderHome()
@@ -184,6 +184,6 @@ describe('<OwnerHome> (activity-first)', () => {
     }
     expect(typeof lastCall.onReply).toBe('function')
     lastCall.onReply?.({ id: 'homeowner_request:1', link: { type: 'request', id: 'r1' } })
-    expect(mockNavigate).toHaveBeenCalledWith('/chat')
+    expect(mockNavigate).toHaveBeenCalledWith('/requests')
   })
 })

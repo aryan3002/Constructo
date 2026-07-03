@@ -67,6 +67,10 @@ const DocumentsPage = lazy(() =>
 const ChatPage = lazy(() =>
   import('./features/chat/ChatPage').then((m) => ({ default: m.ChatPage })),
 )
+// === requests (Slice E) === lazy: keeps the Requests surface out of the entry chunk
+const RequestsView = lazy(() =>
+  import('./features/requests/RequestsView').then((m) => ({ default: m.RequestsView })),
+)
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -168,6 +172,9 @@ export function App() {
 
       {/* Chat inbox (T13). */}
       <Route path="/chat" element={<Guarded><ChatPage /></Guarded>} />
+
+      {/* Homeowner requests (owner-side). */}
+      <Route path="/requests" element={<Guarded><RequestsView /></Guarded>} />
 
       {/* Per-role overflow hub. */}
       <Route path="/more" element={<Guarded><More /></Guarded>} />
