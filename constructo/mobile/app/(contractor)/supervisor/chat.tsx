@@ -36,7 +36,8 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
 import { SPACE } from '../../../src/theme/tokens'
-import { Body, BodyStrong, Mono, Small } from '../../../src/ui'
+import { Body, BodyStrong, BreathingDots, Mono, Small } from '../../../src/ui'
+import { FadeInUp } from '../../../src/ui/motion'
 import {
   chatApi,
   newClientMsgId,
@@ -1034,6 +1035,27 @@ export default function CrewChat() {
         </Pressable>
       ) : null}
 
+      {/* Someone else in the crew is typing — calm dots. Runs both directions,
+          matching the owner + homeowner rooms (only animates once the crew
+          thread's live socket has resolved its conversation id). */}
+      {thread.isTyping ? (
+        <FadeInUp
+          style={{
+            alignSelf: 'flex-start',
+            marginHorizontal: SPACE.lg,
+            marginBottom: SPACE.xs,
+            backgroundColor: c.paper,
+            borderWidth: 1,
+            borderColor: c.line,
+            borderRadius: 16,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+          }}
+        >
+          <BreathingDots />
+        </FadeInUp>
+      ) : null}
+
       {/* Voice-to-Card: hold-to-talk — the mukadam's primary input. */}
       <View style={{ marginHorizontal: SPACE.lg, marginBottom: SPACE.xs }}>
         <HoldToTalk
@@ -1080,7 +1102,10 @@ export default function CrewChat() {
         </Pressable>
         <TextInput
           value={text}
-          onChangeText={setText}
+          onChangeText={(next) => {
+            setText(next)
+            thread.sendTyping()
+          }}
           placeholder={str.placeholder}
           placeholderTextColor={c.textMute}
           multiline

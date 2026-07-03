@@ -115,6 +115,11 @@ export function ChatInbox({ detailHref }: { detailHref: string }) {
           }
           socket.unsubscribe(id)
         })
+        // Clear the pending debounce so it can't invalidate after blur/unmount.
+        if (timerRef.current) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
       }
     }, [items, qc])
   )

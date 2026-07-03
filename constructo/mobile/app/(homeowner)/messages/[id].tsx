@@ -565,6 +565,7 @@ export default function HomeownerThread() {
             onLongPressMessage={onLongPress}
             deliveryStateFor={thread.deliveryState}
             replySnippetFor={replySnippetFor}
+            onPressAttachment={(uri) => router.push({ pathname: '/(homeowner)/chat-viewer', params: { uri } })}
             newMessagesLabel={lang === 'hi' ? 'नए संदेश' : 'New messages'}
             emptyState={emptyState}
           />

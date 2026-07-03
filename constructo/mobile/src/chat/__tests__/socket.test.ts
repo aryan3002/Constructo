@@ -85,6 +85,30 @@ test('concurrent connect() calls do not create duplicate sockets', async () => {
   expect(FakeWS.instances.length).toBe(1)
 })
 
+test('refcounts subscribers: 2nd sub sends no frame, unsub waits for the last', async () => {
+  // The P0 bug: the inbox subscribes every conversation to light its unread
+  // badges, then unsubscribes them on blur. If a thread you just opened shares
+  // that conversation id, the inbox's blur must NOT kill its live subscription.
+  const { socket } = makeSocket()
+  await socket.connect()
+  const ws = FakeWS.instances[0]
+  ws.open()
+  await Promise.resolve()
+  const subFrames = () => ws.sent.map((s) => JSON.parse(s)).filter((f) => f.type === 'sub')
+  const unsubFrames = () => ws.sent.map((s) => JSON.parse(s)).filter((f) => f.type === 'unsub')
+  // Thread subscribes at its watermark; the inbox then subscribes the same conv @0.
+  socket.subscribe('conv-1', 42)
+  socket.subscribe('conv-1', 0)
+  // Only the 0→1 transition emits a sub frame — at the HIGHEST watermark (42, not 0).
+  expect(subFrames()).toEqual([{ v: 1, type: 'sub', convs: [{ id: 'conv-1', after_seq: 42 }] }])
+  // Inbox blurs → one unsubscribe. The thread still holds a ref → NO unsub frame.
+  socket.unsubscribe('conv-1')
+  expect(unsubFrames()).toEqual([])
+  // Thread closes → last ref released → the real unsub frame finally goes out.
+  socket.unsubscribe('conv-1')
+  expect(unsubFrames()).toEqual([{ v: 1, type: 'unsub', conv: 'conv-1' }])
+})
+
 test('reconnects with backoff and resubscribes', async () => {
   const { socket } = makeSocket()
   await socket.connect()

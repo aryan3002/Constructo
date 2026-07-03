@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -65,10 +66,12 @@ import {
   Display,
   Eyebrow,
   FadeInUp,
+  FullscreenPhoto,
   H2,
   MonoSm,
   QuietState,
   Screen,
+  ScreenLoader,
   SegmentedTabs,
   Small,
   PhotoTile,
@@ -622,162 +625,6 @@ function StandardCard({
   )
 }
 
-/**
- * FeedView — the chronological feed of real photos + real decisions + quiet
- * state. No importance ranking, no fake progress-confirmation cards (no data
- * source exists for that pattern — skipped honestly per spec).
- *
- * Interleaving strategy: decisions first (they need action), then photos in
- * published_at DESC order, with an in-feed QuietState when appropriate.
- */
-interface FeedViewProps {
-  photos: Photo[]
-  activeQuiet: QuietPeriod | null
-  hidden: Set<string>
-  pinnedIds: Set<string>
-  onTogglePin: (id: string) => void
-  onDismiss: (id: string) => void
-  onPressPhoto: (p: Photo) => void
-  onTranslate: () => void
-  isLoading: boolean
-  isError: boolean
-  onRetry: () => void
-  s: Strings
-  lang: 'en' | 'hi'
-  tileLabels: PhotoTileProps['labels']
-  quietBody: string | undefined
-  /** Count of photos published in the last 24 h (drives the "N new since yesterday" banner). */
-  newSinceCount: number
-}
-
-function FeedView({
-  photos,
-  activeQuiet,
-  hidden,
-  pinnedIds,
-  onTogglePin,
-  onDismiss,
-  onPressPhoto,
-  onTranslate,
-  isLoading,
-  isError,
-  onRetry,
-  s,
-  lang,
-  tileLabels,
-  quietBody,
-  newSinceCount,
-}: FeedViewProps) {
-  const { theme } = useTheme()
-  const c = theme.colors
-
-  if (isLoading) {
-    return (
-      <Card>
-        <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
-          <ActivityIndicator color={c.accent} />
-          <Small muted>{s.loading}</Small>
-        </View>
-      </Card>
-    )
-  }
-
-  if (isError) {
-    return (
-      <Card>
-        <View style={{ gap: SPACE.md }}>
-          <Body>{s.error}</Body>
-          <Button title={s.retry} variant="secondary" onPress={onRetry} />
-        </View>
-      </Card>
-    )
-  }
-
-  // Visible photos: not hidden, pinned floated to the top (stable within group
-  // so newest-first is preserved), de-duped by id so a repeated row never
-  // paints twice.
-  const seenIds = new Set<string>()
-  const visiblePhotos = photos
-    .filter((p) => !hidden.has(p.id))
-    .filter((p) => (seenIds.has(p.id) ? false : (seenIds.add(p.id), true)))
-    .sort((a, b) => Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)))
-
-  if (visiblePhotos.length === 0 && !activeQuiet) {
-    return (
-      <FadeInUp rise={false} linear>
-        <CalmCard status="quiet" title={s.feedEmpty} body={s.feedEmptyBody} />
-      </FadeInUp>
-    )
-  }
-
-  return (
-    <View style={{ gap: SPACE.lg }}>
-      {/* "N new since yesterday" banner — clay/sand tone (no blue in Daylight). */}
-      {newSinceCount > 0 ? (
-        <FadeInUp>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: SPACE.md,
-              padding: SPACE.md,
-              backgroundColor: c.secondaryContainer,
-              borderRadius: theme.radii.card,
-              borderWidth: 1,
-              borderColor: c.line,
-            }}
-          >
-            <View
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 15,
-                backgroundColor: c.secondary,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Feather name="arrow-down" size={16} color="#fff" />
-            </View>
-            <Small color={c.secondary} style={{ fontWeight: '600', flex: 1 }}>
-              {newSinceCount} new since yesterday
-            </Small>
-            <Feather name="chevron-right" size={18} color={c.secondary} />
-          </View>
-        </FadeInUp>
-      ) : null}
-
-      {/* In-feed quiet state (when site is quiet, shown before photos) */}
-      {activeQuiet ? (
-        <FadeInUp rise={false} linear>
-          <QuietState
-            icon="moon"
-            tone="quiet"
-            title={s.quietTitle}
-            message={quietBody}
-          />
-        </FadeInUp>
-      ) : null}
-
-      {/* Chronological photo cards */}
-      {visiblePhotos.map((photo) => (
-        <StandardCard
-          key={photo.id}
-          photo={photo}
-          pinned={pinnedIds.has(photo.id)}
-          onTogglePin={onTogglePin}
-          onDismiss={onDismiss}
-          onPress={onPressPhoto}
-          onTranslate={onTranslate}
-          s={s}
-          lang={lang}
-          tileLabels={tileLabels}
-        />
-      ))}
-    </View>
-  )
-}
-
 // Local-only persistence (no backend): pinned floats a photo to the top, hidden
 // removes it. Both survive refresh + relaunch so the user's curation sticks.
 const PINNED_KEY = 'homeowner.photos.pinned.v1'
@@ -1094,13 +941,42 @@ export default function Photos() {
     return parts.join(' ') || undefined
   }, [activeQuiet, lang, s])
 
-  return (
-    <Screen
-      style={{ paddingBottom: navClearance }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
-      }
-    >
+  // ── Feed virtualization ────────────────────────────────────────────────────
+  // Visible feed photos: not hidden, de-duped by id (so a repeated row never
+  // paints twice), pinned floated to the top (stable — newest-first preserved).
+  // Replicates the old FeedView `visiblePhotos` chain, now memoized so the
+  // FlatList `data` reference is stable across unrelated re-renders.
+  const feedPhotos: Photo[] = useMemo(() => {
+    const seen = new Set<string>()
+    return (query.data?.items ?? [])
+      .filter((p) => !hidden.has(p.id))
+      .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
+      .sort((a, b) => Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)))
+  }, [query.data, hidden, pinnedIds])
+
+  const renderFeedCard = useCallback(
+    ({ item }: { item: Photo }) => (
+      <StandardCard
+        photo={item}
+        pinned={pinnedIds.has(item.id)}
+        onTogglePin={togglePin}
+        onDismiss={hide}
+        onPress={setActive}
+        onTranslate={onTranslate}
+        s={s}
+        lang={lang}
+        tileLabels={tileLabels}
+      />
+    ),
+    [pinnedIds, togglePin, hide, onTranslate, s, lang, tileLabels],
+  )
+
+  // ── Shared chrome / footer / overlays (rendered once by BOTH branches) ──────
+
+  // Top chrome: the fade-in Display + subtitle, the search bar (grid tabs only —
+  // self-hides on the feed), and the segmented filter tabs.
+  const topChrome = (
+    <>
       <FadeInUp style={{ gap: 2 }}>
         <Display>{s.title}</Display>
         <Small muted>{s.subtitle}</Small>
@@ -1160,102 +1036,58 @@ export default function Photos() {
         onChange={(key) => setTab(key as FilterTab)}
         style={{ paddingHorizontal: 0, paddingVertical: 0 }}
       />
+    </>
+  )
 
-      {/* Pull-door — request a photo of a specific room. Creates a homeowner
-          request; the site team is notified and can share it back to the feed
-          (the push/pull counterpart to the contractor photo-share flow). */}
-      {tab === 'feed' ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={s.requestPhotoCta}
-          onPress={() => router.push('/(homeowner)/request-photo')}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: SPACE.md,
-            padding: SPACE.md,
-            borderRadius: theme.radii.card,
-            borderWidth: 1,
-            borderColor: c.line,
-            borderStyle: 'dashed',
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <View
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 17,
-              backgroundColor: c.secondaryContainer,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Feather name="camera" size={17} color={AP.clay} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Body style={{ fontWeight: '600', color: c.text }}>{s.requestPhotoCta}</Body>
-            <Small muted>{s.requestPhotoSub}</Small>
-          </View>
-          <Feather name="chevron-right" size={18} color={c.textMute} />
-        </Pressable>
-      ) : null}
+  // Feed-only pull-door — request a photo of a specific room. Creates a homeowner
+  // request; the site team is notified and can share it back to the feed.
+  const requestPhotoCta = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={s.requestPhotoCta}
+      onPress={() => router.push('/(homeowner)/request-photo')}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACE.md,
+        padding: SPACE.md,
+        borderRadius: theme.radii.card,
+        borderWidth: 1,
+        borderColor: c.line,
+        borderStyle: 'dashed',
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          backgroundColor: c.secondaryContainer,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Feather name="camera" size={17} color={AP.clay} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Body style={{ fontWeight: '600', color: c.text }}>{s.requestPhotoCta}</Body>
+        <Small muted>{s.requestPhotoSub}</Small>
+      </View>
+      <Feather name="chevron-right" size={18} color={c.textMute} />
+    </Pressable>
+  )
 
-      {/* ---- FEED TAB ---- */}
-      {tab === 'feed' ? (
-        <FeedView
-          photos={query.data?.items ?? []}
-          activeQuiet={activeQuiet}
-          hidden={hidden}
-          pinnedIds={pinnedIds}
-          onTogglePin={togglePin}
-          onDismiss={hide}
-          onPressPhoto={setActive}
-          onTranslate={onTranslate}
-          isLoading={query.isLoading}
-          isError={query.isError}
-          onRetry={() => { void query.refetch() }}
-          s={s}
-          lang={lang}
-          tileLabels={tileLabels}
-          quietBody={quietBody}
-          newSinceCount={newSinceCount}
-        />
-      ) : tab === 'mine' ? (
-        /* ---- MY VISITS TAB (unchanged) ---- */
-        query.isLoading ? (
-          <Card>
-            <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
-              <ActivityIndicator color={c.accent} />
-              <Small muted>{s.loading}</Small>
-            </View>
-          </Card>
-        ) : sitePhotos.length === 0 ? (
-          <FadeInUp rise={false} linear>
-            <CalmCard status="quiet" title={s.mine} body={s.emptyMine} />
-          </FadeInUp>
-        ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
-            {sitePhotos.map((p) => (
-              <PhotoTile
-                key={p.id}
-                photo={{
-                  id: p.id,
-                  imageUri: p.image_url,
-                  caption: p.caption ?? s.yourPhoto,
-                  date: shortDate(p.published_at, lang),
-                }}
-                size={cellSize}
-                labels={tileLabels}
-              />
-            ))}
-          </View>
-        )
-      ) : query.isLoading ? (
-        /* ---- GRID TABS loading / error / empty (unchanged) ---- */
+  // Feed non-card body — the "N new since yesterday" banner + in-feed quiet
+  // state + loading / error / empty states. Reproduces the old FeedView body
+  // (ScreenLoader replaces the old ActivityIndicator). Rendered inside the
+  // FlatList header so it scrolls with the list.
+  const feedExtras = (
+    <View style={{ gap: SPACE.lg }}>
+      {query.isLoading ? (
         <Card>
           <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
-            <ActivityIndicator color={c.accent} />
+            <ScreenLoader fill={false} />
             <Small muted>{s.loading}</Small>
           </View>
         </Card>
@@ -1263,102 +1095,115 @@ export default function Photos() {
         <Card>
           <View style={{ gap: SPACE.md }}>
             <Body>{s.error}</Body>
-            <Button title={s.retry} variant="secondary" onPress={() => query.refetch()} />
+            <Button title={s.retry} variant="secondary" onPress={() => { void query.refetch() }} />
           </View>
         </Card>
-      ) : sitePhotos.length === 0 ? (
-        // Empty / quiet / no-search-results — all calm designed states, never red.
-        q ? (
-          <FadeInUp rise={false} linear>
-            <CalmCard status="quiet" title={s.noResultsTitle} body={s.noResults} />
-          </FadeInUp>
-        ) : activeQuiet ? (
-          <FadeInUp rise={false} linear>
-            <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
-          </FadeInUp>
-        ) : (
-          <FadeInUp rise={false} linear>
-            <CalmCard status="quiet" title={s.emptyTitle} body={s.empty} />
-          </FadeInUp>
-        )
       ) : (
-        <View style={{ gap: SPACE.lg }}>
-          {/* "Latest" hero (only on All, no search) — calm rise on mount */}
-          {latest ? (
-            <FadeInUp style={{ gap: SPACE.sm }}>
-              <SectionKicker>{s.latest}</SectionKicker>
-              <PhotoTile
-                photo={toTile(latest)}
-                variant="hero"
-                labels={tileLabels}
-                onPress={() => setActive(latest)}
-                onTranslate={onTranslate}
-              />
-            </FadeInUp>
-          ) : null}
-
-          {/* Quiet tile when the site is sparse (calm, never red, fade only) */}
-          {!q && activeQuiet && sitePhotos.length <= SPARSE_THRESHOLD ? (
-            <FadeInUp rise={false} linear>
-              <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
-            </FadeInUp>
-          ) : null}
-
-          {/* Grouped grid — each group rises gently in sequence */}
-          {groups.map((group, i) => (
-            <FadeInUp key={group.key} delay={i * 40} style={{ gap: SPACE.sm }}>
-              {group.label ? <SectionKicker>{group.label}</SectionKicker> : null}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
-                {group.items.map((photo) => (
-                  <PhotoTile
-                    key={photo.id}
-                    photo={toTile(photo)}
-                    size={cellSize}
-                    labels={tileLabels}
-                    onPress={() => setActive(photo)}
-                    onTranslate={onTranslate}
-                  />
-                ))}
+        <>
+          {/* "N new since yesterday" banner — clay/sand tone (no blue). */}
+          {newSinceCount > 0 ? (
+            <FadeInUp>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.md,
+                  padding: SPACE.md,
+                  backgroundColor: c.secondaryContainer,
+                  borderRadius: theme.radii.card,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                }}
+              >
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    backgroundColor: c.secondary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather name="arrow-down" size={16} color="#fff" />
+                </View>
+                <Small color={c.secondary} style={{ fontWeight: '600', flex: 1 }}>
+                  {newSinceCount} new since yesterday
+                </Small>
+                <Feather name="chevron-right" size={18} color={c.secondary} />
               </View>
             </FadeInUp>
-          ))}
-        </View>
+          ) : null}
+
+          {/* In-feed quiet state (shown before photos when the site is quiet) */}
+          {activeQuiet ? (
+            <FadeInUp rise={false} linear>
+              <QuietState icon="moon" tone="quiet" title={s.quietTitle} message={quietBody} />
+            </FadeInUp>
+          ) : null}
+
+          {/* Empty state — no photos and no quiet period to explain the gap */}
+          {feedPhotos.length === 0 && !activeQuiet ? (
+            <FadeInUp rise={false} linear>
+              <CalmCard status="quiet" title={s.feedEmpty} body={s.feedEmptyBody} />
+            </FadeInUp>
+          ) : null}
+        </>
       )}
+    </View>
+  )
 
-      {/* Storage link — shows current retention window; taps into the full Storage screen */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={s.storageTitle}
-        onPress={() => router.push('/(homeowner)/storage')}
-        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-      >
-        <Card>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: SPACE.md,
-              minHeight: TAP,
-            }}
-          >
-            <Feather name="hard-drive" size={18} color={c.textMute} />
-            <View style={{ flex: 1 }}>
-              <Body style={{ fontWeight: '600' }}>{s.storageTitle}</Body>
-              <Small muted>
-                {policy.retentionDays === 'all'
-                  ? s.keepAll
-                  : policy.retentionDays === 7
-                    ? s.days7
-                    : policy.retentionDays === 90
-                      ? s.days90
-                      : s.days30}
-              </Small>
-            </View>
-            <Feather name="chevron-right" size={18} color={c.textMute} />
+  // FlatList header — the shared top chrome + feed CTA + feed extras, wrapped so
+  // the internal pieces keep SPACE.md spacing (the list's own gap is SPACE.lg).
+  const feedHeader = (
+    <View style={{ gap: SPACE.md }}>
+      {topChrome}
+      {requestPhotoCta}
+      {feedExtras}
+    </View>
+  )
+
+  // Storage link — shows current retention window; taps into the Storage screen.
+  const storageLink = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={s.storageTitle}
+      onPress={() => router.push('/(homeowner)/storage')}
+      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+    >
+      <Card>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.md,
+            minHeight: TAP,
+          }}
+        >
+          <Feather name="hard-drive" size={18} color={c.textMute} />
+          <View style={{ flex: 1 }}>
+            <Body style={{ fontWeight: '600' }}>{s.storageTitle}</Body>
+            <Small muted>
+              {policy.retentionDays === 'all'
+                ? s.keepAll
+                : policy.retentionDays === 7
+                  ? s.days7
+                  : policy.retentionDays === 90
+                    ? s.days90
+                    : s.days30}
+            </Small>
           </View>
-        </Card>
-      </Pressable>
+          <Feather name="chevron-right" size={18} color={c.textMute} />
+        </View>
+      </Card>
+    </Pressable>
+  )
 
+  // Overlays — the FAB + both Modals. Rendered ONCE, shared by both branches
+  // (the viewer Modal is the single sink for `active`, so a feed-card tap and a
+  // grid-tile tap open the same fullscreen viewer).
+  const overlays = (
+    <>
       {/* Floating "+" upload FAB (above the floating nav) */}
       <Pressable
         accessibilityRole="button"
@@ -1406,12 +1251,7 @@ export default function Photos() {
           >
             {active ? (
               <View style={{ gap: SPACE.lg }}>
-                <Image
-                  source={{ uri: active.image_url }}
-                  resizeMode="contain"
-                  accessibilityIgnoresInvertColors
-                  style={{ width: '100%', height: width, borderRadius: theme.radii.card }}
-                />
+                <FullscreenPhoto uri={active.image_url} retryLabel={s.retry} />
 
                 {/* Caption + ⓘ translate */}
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
@@ -1584,6 +1424,150 @@ export default function Photos() {
           </Pressable>
         </Pressable>
       </Modal>
-    </Screen>
+    </>
+  )
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      {tab === 'feed' ? (
+        <FlatList
+          data={query.isLoading || query.isError ? [] : feedPhotos}
+          keyExtractor={(p) => p.id}
+          renderItem={renderFeedCard}
+          ListHeaderComponent={feedHeader}
+          ListFooterComponent={storageLink}
+          contentContainerStyle={{
+            paddingHorizontal: SPACE.lg,
+            paddingTop: insets.top + SPACE.md,
+            paddingBottom: navClearance,
+            gap: SPACE.lg,
+          }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+          }
+          removeClippedSubviews
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : (
+        <Screen
+          style={{ paddingBottom: navClearance }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+          }
+        >
+          {topChrome}
+
+          {/* ---- GRID TABS (all / room / milestone / mine) ---- */}
+          {tab === 'mine' ? (
+        /* ---- MY VISITS TAB (unchanged) ---- */
+        query.isLoading ? (
+          <Card>
+            <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
+              <ScreenLoader fill={false} />
+              <Small muted>{s.loading}</Small>
+            </View>
+          </Card>
+        ) : sitePhotos.length === 0 ? (
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.mine} body={s.emptyMine} />
+          </FadeInUp>
+        ) : (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
+            {sitePhotos.map((p) => (
+              <PhotoTile
+                key={p.id}
+                photo={{
+                  id: p.id,
+                  imageUri: p.image_url,
+                  caption: p.caption ?? s.yourPhoto,
+                  date: shortDate(p.published_at, lang),
+                }}
+                size={cellSize}
+                labels={tileLabels}
+              />
+            ))}
+          </View>
+        )
+      ) : query.isLoading ? (
+        /* ---- GRID TABS loading / error / empty (unchanged) ---- */
+        <Card>
+          <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
+            <ActivityIndicator color={c.accent} />
+            <Small muted>{s.loading}</Small>
+          </View>
+        </Card>
+      ) : query.isError ? (
+        <Card>
+          <View style={{ gap: SPACE.md }}>
+            <Body>{s.error}</Body>
+            <Button title={s.retry} variant="secondary" onPress={() => query.refetch()} />
+          </View>
+        </Card>
+      ) : sitePhotos.length === 0 ? (
+        // Empty / quiet / no-search-results — all calm designed states, never red.
+        q ? (
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.noResultsTitle} body={s.noResults} />
+          </FadeInUp>
+        ) : activeQuiet ? (
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
+          </FadeInUp>
+        ) : (
+          <FadeInUp rise={false} linear>
+            <CalmCard status="quiet" title={s.emptyTitle} body={s.empty} />
+          </FadeInUp>
+        )
+      ) : (
+        <View style={{ gap: SPACE.lg }}>
+          {/* "Latest" hero (only on All, no search) — calm rise on mount */}
+          {latest ? (
+            <FadeInUp style={{ gap: SPACE.sm }}>
+              <SectionKicker>{s.latest}</SectionKicker>
+              <PhotoTile
+                photo={toTile(latest)}
+                variant="hero"
+                labels={tileLabels}
+                onPress={() => setActive(latest)}
+                onTranslate={onTranslate}
+              />
+            </FadeInUp>
+          ) : null}
+
+          {/* Quiet tile when the site is sparse (calm, never red, fade only) */}
+          {!q && activeQuiet && sitePhotos.length <= SPARSE_THRESHOLD ? (
+            <FadeInUp rise={false} linear>
+              <CalmCard status="quiet" title={s.quietTitle} body={quietBody} />
+            </FadeInUp>
+          ) : null}
+
+          {/* Grouped grid — each group rises gently in sequence */}
+          {groups.map((group, i) => (
+            <FadeInUp key={group.key} delay={i * 40} style={{ gap: SPACE.sm }}>
+              {group.label ? <SectionKicker>{group.label}</SectionKicker> : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gridGap }}>
+                {group.items.map((photo) => (
+                  <PhotoTile
+                    key={photo.id}
+                    photo={toTile(photo)}
+                    size={cellSize}
+                    labels={tileLabels}
+                    onPress={() => setActive(photo)}
+                    onTranslate={onTranslate}
+                  />
+                ))}
+              </View>
+            </FadeInUp>
+          ))}
+        </View>
+      )}
+
+          {storageLink}
+        </Screen>
+      )}
+
+      {overlays}
+    </View>
   )
 }

@@ -122,6 +122,10 @@ export function PhotoMarkupCanvas({
   colorRef.current = color
   const pointsRef = useRef<Pt[]>([])
   const frameRef = useRef<number | null>(null)
+  // The in-progress stroke as a ref = the source of truth. The release handler
+  // commits it from here at the top level, so it never nests setStrokes inside a
+  // setCurrent updater (StrictMode double-invokes updaters → duplicate stroke).
+  const liveStrokeRef = useRef<Stroke | null>(null)
 
   const pan = useRef(
     PanResponder.create({
@@ -132,9 +136,10 @@ export function PhotoMarkupCanvas({
         const tl = toolRef.current
         const col = colorRef.current
         pointsRef.current = []
-        setCurrent(
-          tl === 'draw' ? { tool: 'draw', color: col, pts: [p] } : { tool: tl, color: col, a: p, b: p },
-        )
+        const stroke: Stroke =
+          tl === 'draw' ? { tool: 'draw', color: col, pts: [p] } : { tool: tl, color: col, a: p, b: p }
+        liveStrokeRef.current = stroke
+        setCurrent(stroke)
       },
       onPanResponderMove: (e: GestureResponderEvent) => {
         const p = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }
@@ -143,17 +148,15 @@ export function PhotoMarkupCanvas({
         if (frameRef.current === null) {
           frameRef.current = requestAnimationFrame(() => {
             frameRef.current = null
-            setCurrent((cur) => {
-              if (!cur || pointsRef.current.length === 0) return cur
-              let nextCur = cur
-              if (cur.tool === 'draw') {
-                nextCur = { ...cur, pts: [...cur.pts, ...pointsRef.current] }
-              } else {
-                nextCur = { ...cur, b: pointsRef.current[pointsRef.current.length - 1] }
-              }
-              pointsRef.current = []
-              return nextCur
-            })
+            const cur = liveStrokeRef.current
+            if (!cur || pointsRef.current.length === 0) return
+            const next: Stroke =
+              cur.tool === 'draw'
+                ? { ...cur, pts: [...cur.pts, ...pointsRef.current] }
+                : { ...cur, b: pointsRef.current[pointsRef.current.length - 1] }
+            pointsRef.current = []
+            liveStrokeRef.current = next
+            setCurrent(next)
           })
         }
       },
@@ -162,20 +165,20 @@ export function PhotoMarkupCanvas({
           cancelAnimationFrame(frameRef.current)
           frameRef.current = null
         }
-        setCurrent((cur) => {
-          if (!cur) return null
-          let finalCur = cur
-          if (pointsRef.current.length > 0) {
-            if (cur.tool === 'draw') {
-              finalCur = { ...cur, pts: [...cur.pts, ...pointsRef.current] }
-            } else {
-              finalCur = { ...cur, b: pointsRef.current[pointsRef.current.length - 1] }
-            }
-          }
-          pointsRef.current = []
-          setStrokes((s) => [...s, finalCur])
-          return null
-        })
+        // Commit the in-progress stroke from the ref (flushing any trailing
+        // points) at the top level — NOT inside a setCurrent updater — so
+        // StrictMode's double-invoked updaters can't add the stroke twice.
+        let finalCur = liveStrokeRef.current
+        if (finalCur && pointsRef.current.length > 0) {
+          finalCur =
+            finalCur.tool === 'draw'
+              ? { ...finalCur, pts: [...finalCur.pts, ...pointsRef.current] }
+              : { ...finalCur, b: pointsRef.current[pointsRef.current.length - 1] }
+        }
+        pointsRef.current = []
+        liveStrokeRef.current = null
+        if (finalCur) setStrokes((s) => [...s, finalCur])
+        setCurrent(null)
       },
     }),
   ).current

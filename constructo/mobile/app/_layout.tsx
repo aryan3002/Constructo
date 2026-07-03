@@ -112,6 +112,7 @@ function ChatPushForeground() {
 function ChatPushDeepLink() {
   const router = useRouter()
   const { role } = useAuth()
+  const qc = useQueryClient()
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -120,9 +121,14 @@ function ChatPushDeepLink() {
         | undefined
       if (!data) return
 
-      // Chat notification → open the thread.
+      // Chat notification → open the thread. Invalidate the inbox + the thread
+      // we're about to land on FIRST, so a tap while foregrounded doesn't open
+      // onto stale data the poll/socket hasn't caught up to yet.
       const convId = data.conversation_id
       if (convId) {
+        void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
+        void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
+        void qc.invalidateQueries({ queryKey: ['chat', 'thread', convId] })
         if (role === 'homeowner') {
           router.push({
             pathname: '/(homeowner)/messages/[id]',
@@ -136,23 +142,28 @@ function ChatPushDeepLink() {
         return
       }
 
-      // Homeowner content notification → the matching surface.
+      // Homeowner content notification → the matching surface. Invalidate its
+      // query first so the screen renders fresh, not the last cached grid/list.
       if (role !== 'homeowner') return
       switch (data.type) {
         case 'photo':
+          void qc.invalidateQueries({ queryKey: ['photos'] })
           router.push('/(homeowner)/photos')
           break
         case 'request':
+          void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
           router.push('/(homeowner)/requests')
           break
         case 'update':
         case 'weekly_summary':
+          void qc.invalidateQueries({ queryKey: ['homeowner', 'updates'] })
+          void qc.invalidateQueries({ queryKey: ['homeowner', 'weeklySummary'] })
           router.push('/(homeowner)/updates')
           break
       }
     })
     return () => sub.remove()
-  }, [role, router])
+  }, [role, router, qc])
 
   return null
 }

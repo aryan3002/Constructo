@@ -139,6 +139,10 @@ function AskInner() {
   const [forwardingId, setForwardingId] = useState<string | null>(null)
   const seq = useRef(0)
   const scrollRef = useRef<ScrollView>(null)
+  // Only auto-scroll when the session GROWS (a new question/exchange) — not on
+  // every content-size change (an answer swapping in, or the keyboard resizing,
+  // would otherwise yank a reader who has scrolled up into earlier answers).
+  const prevSessionLen = useRef(0)
 
   // The durable team thread (handed-off questions + the team's status replies).
   const q = useQuery({ queryKey: ['ask', 'requests'], queryFn: () => homeowner.requests() })
@@ -305,8 +309,13 @@ function AskInner() {
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: SPACE.gutter, gap: SPACE.lg }}
           keyboardShouldPersistTaps="handled"
-          // Auto-scroll to the just-sent question / streamed answer.
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          // Auto-scroll only when the session grows (a new question), so a
+          // streamed answer or keyboard resize doesn't yank a scrolled-up reader.
+          onContentSizeChange={() => {
+            const grew = session.length > prevSessionLen.current
+            prevSessionLen.current = session.length
+            if (grew) scrollRef.current?.scrollToEnd({ animated: true })
+          }}
         >
           {q.isLoading ? (
             <ScreenLoader fill={false} />

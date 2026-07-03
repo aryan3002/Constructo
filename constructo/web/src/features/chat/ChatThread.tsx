@@ -153,26 +153,30 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     if (firstSeq !== null || pending.length > 0) firstPaintRef.current = false
   }, [messages, pending.length])
 
-  // ---- Scroll-to-top → loadOlder (guarded against refire) ----
+  // ---- loadOlder trigger — ONE guarded path shared by the scroll-to-top
+  // auto-load and the manual button. The loadingOlderRef guard means neither can
+  // double-fire, and the scroll-restore height (olderBeforeHeightRef) is captured
+  // exactly once per load — a second trigger mid-load can't overwrite it with a
+  // post-prepend height and corrupt the delta. ----
+  const triggerLoadOlder = useCallback(() => {
+    const el = listRef.current
+    if (!el || !hasOlder || loadingOlderRef.current) return
+    loadingOlderRef.current = true
+    olderBeforeHeightRef.current = el.scrollHeight
+    void loadOlder().finally(() => {
+      loadingOlderRef.current = false
+    })
+  }, [hasOlder, loadOlder])
+
   const handleScroll = useCallback(() => {
     const el = listRef.current
     if (!el) return
     atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-    if (hasOlder && !loadingOlderRef.current && el.scrollTop < 80) {
-      loadingOlderRef.current = true
-      olderBeforeHeightRef.current = el.scrollHeight
-      void loadOlder().finally(() => {
-        loadingOlderRef.current = false
-      })
-    }
-  }, [hasOlder, loadOlder])
+    if (el.scrollTop < 80) triggerLoadOlder()
+  }, [triggerLoadOlder])
 
-  // ---- Load-older button: capture height first so position is preserved ----
-  const handleLoadOlderClick = useCallback(() => {
-    const el = listRef.current
-    if (el) olderBeforeHeightRef.current = el.scrollHeight
-    void loadOlder()
-  }, [loadOlder])
+  // ---- Load-older button: the same guarded path (captures height first). ----
+  const handleLoadOlderClick = triggerLoadOlder
 
   // ---- resolveParent helper (stable — doesn't close over messages directly) ----
   const messagesRef = useRef(messages)

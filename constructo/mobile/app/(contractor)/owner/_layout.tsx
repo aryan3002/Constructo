@@ -68,6 +68,9 @@ function OwnerTabs() {
       <Tabs.Screen name="search" options={{ href: null }} />
       {/* Conversation detail, off-tab. */}
       <Tabs.Screen name="chat/[id]" options={{ href: null }} />
+      {/* Full-screen photo lightbox opened from a chat bubble, off-tab.
+          Without this the stock tab bar renders it as a visible 6th tab. */}
+      <Tabs.Screen name="chat-viewer" options={{ href: null }} />
       {/* Nested site-detail route, off-tab. */}
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
       {/* Audit hub + site audit + survey (Site Audit / SiteSync), off-tab. */}
