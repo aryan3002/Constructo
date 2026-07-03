@@ -492,6 +492,27 @@ export const MessageBubble = memo(function MessageBubble({
   const imgH = imgW / ar
   const dimStyle = hasDims ? { width: imgW, height: imgH } : { width: 200, height: 150 }
 
+  // A photo bubble the contractor can publish to the feed (and hasn't yet) makes
+  // "Send to feed" the primary long-press action; once in the feed (feedPhotoId set)
+  // long-press falls back to the normal reply handler. Non-photo bubbles and the
+  // homeowner (no onSendToFeed) keep the plain reply long-press.
+  const canSendToFeed = !!onSendToFeed && !!attachmentUrl && !feedPhotoId
+  const longPress = canSendToFeed ? onSendToFeed : onLongPress
+  // Shared by the whole bubble AND the inner photo Pressable. The photo MUST get
+  // its own onLongPress: the tap-to-open Pressable captures the touch responder,
+  // so without this a long-press on the photo never reaches the bubble's handler
+  // and "Send to feed" (only reachable by long-pressing a photo) is dead.
+  const handleLongPress = longPress
+    ? () => {
+        // A light tap the instant the gesture is recognized, so the menu/sheet
+        // doesn't appear out of nowhere.
+        if (Platform.OS !== 'web') {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
+        }
+        longPress()
+      }
+    : undefined
+
   const content = (
     <>
       {nivaan ? (
@@ -505,8 +526,9 @@ export const MessageBubble = memo(function MessageBubble({
         </Micro>
       ) : null}
       {src ? (
-        <Pressable 
+        <Pressable
           onPress={onPressAttachment}
+          onLongPress={handleLongPress}
           disabled={!onPressAttachment}
           style={[{ borderRadius: 8, marginBottom: 4, overflow: 'hidden' }, dimStyle]}
         >
@@ -594,23 +616,9 @@ export const MessageBubble = memo(function MessageBubble({
     </>
   )
 
-  // A photo bubble the contractor can publish to the feed (and hasn't yet) makes
-  // "Send to feed" the primary long-press action; once in the feed (feedPhotoId set)
-  // long-press falls back to the normal reply handler. Non-photo bubbles and the
-  // homeowner (no onSendToFeed) keep the plain reply long-press.
-  const canSendToFeed = !!onSendToFeed && !!attachmentUrl && !feedPhotoId
-  const longPress = canSendToFeed ? onSendToFeed : onLongPress
-
   return longPress ? (
     <Pressable
-      onLongPress={() => {
-        // The menu/sheet appears out of nowhere otherwise — a light tap says
-        // "the press registered" the instant the gesture is recognized.
-        if (Platform.OS !== 'web') {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
-        }
-        longPress()
-      }}
+      onLongPress={handleLongPress}
       accessibilityHint={canSendToFeed ? SEND_TO_FEED_STR.hint : undefined}
       style={({ pressed }) => [...bubbleStyle, pressed ? { opacity: 0.82 } : null]}
     >
