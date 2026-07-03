@@ -106,9 +106,15 @@ async def get_activity(
     # pre-filter so each page's fetch is anchored at the right depth. The
     # cursor's datetime is used directly for `datetime` columns; `date`-typed
     # columns (Milestone, WeeklySummary, SiteFinding) compare against its
-    # `.date()` with `<=` — a safe superset (`_as_utc` normalizes a `date` to
-    # midnight, which is always <= a same-day cursor timestamp); the
-    # aggregator's own exact tuple comparison applies the precise trim after.
+    # `.date()`. Both branches use `<=`, not `<`: this is deliberately a safe
+    # superset, not the exact boundary — a row whose occurred_at equals the
+    # cursor's timestamp but whose id sorts before the cursor's id must still
+    # come back (the date-column case additionally needs `<=` because `_as_utc`
+    # normalizes a `date` to midnight, which is always <= a same-day cursor
+    # timestamp). The aggregator's own exact tuple comparison
+    # (`(occurred_at_iso, id) < cursor`) applies the precise trim after, so the
+    # over-fetched equal-timestamp rows are resolved correctly instead of a
+    # strict SQL `<` silently dropping one of them ahead of that trim.
     cap = page_size + 1
     cursor_dt: dt.datetime | None = None
     if decoded is not None:
@@ -124,8 +130,7 @@ async def get_activity(
         if cursor_dt is None:
             return stmt
         bound = cursor_dt.date() if date_col else cursor_dt
-        op = order_col.__le__ if date_col else order_col.__lt__
-        return stmt.where(op(bound))
+        return stmt.where(order_col.__le__(bound))
 
     async def _load(model, order_col, *, date_col: bool = False, extra=()):
         stmt = select(model).where(model.site_id.in_(visible), *extra)

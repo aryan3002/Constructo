@@ -144,6 +144,40 @@ async def test_activity_keyset_pagination_boundary(client, db_session, owner):
     assert all(i["occurred_at"] <= last1 for i in page2["items"])
 
 
+async def test_activity_keyset_pagination_same_timestamp_tiebreak(client, db_session, owner):
+    # Two rows from the SAME source with the EXACT same occurred_at (down to the
+    # microsecond) straddling a page boundary. The SQL per-source prefilter
+    # (`_cursor_filter`) must over-fetch equal-timestamp rows and let the
+    # aggregator's exact `(occurred_at_iso, id) < cursor` tuple trim do the
+    # precise cut — a strict `<` at the SQL layer would silently drop whichever
+    # of the two rows sorts before the cursor's id, even though it was never
+    # returned on page 1 either.
+    site = await _site(db_session, owner.company_id)
+    tied_at = NOW.replace(microsecond=123456)
+    a = await _photo(db_session, site.id, at=tied_at, caption="tied-a")
+    b = await _photo(db_session, site.id, at=tied_at, caption="tied-b")
+    await db_session.commit()
+
+    page1 = (await client.get("/api/v1/activity?limit=1", headers=auth(owner))).json()
+    assert len(page1["items"]) == 1
+    assert page1["next_cursor"] is not None
+    seen_ids = {i["id"] for i in page1["items"]}
+
+    page2 = (
+        await client.get(
+            f"/api/v1/activity?limit=1&cursor={page1['next_cursor']}",
+            headers=auth(owner),
+        )
+    ).json()
+    assert len(page2["items"]) == 1
+    seen_ids |= {i["id"] for i in page2["items"]}
+
+    expected_ids = {f"photo_shared:{a.id}", f"photo_shared:{b.id}"}
+    assert seen_ids == expected_ids, (
+        f"expected both same-timestamp rows across the two pages, got {seen_ids}"
+    )
+
+
 async def test_activity_bad_cursor_is_400(client, owner):
     resp = await client.get("/api/v1/activity?cursor=%21%21bad", headers=auth(owner))
     assert resp.status_code == 400
