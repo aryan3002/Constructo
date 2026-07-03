@@ -187,3 +187,21 @@ def test_last_page_returns_null_cursor():
     res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
                          **_empty(photos=[_photo(site.id, at=NOW)]))
     assert res["next_cursor"] is None
+
+
+def test_schemas_accept_aggregator_items():
+    from types import SimpleNamespace as NS
+
+    from app.activity.schemas import ActivityPageOut
+
+    site = _site()
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(photos=[_photo(site.id, at=NOW)]))
+    # next_cursor tuple → encoded string is the router's job; here assert the
+    # item/summary shapes validate.
+    page = ActivityPageOut(items=res["items"], summary=res["summary"],
+                           next_cursor=None)
+    assert page.items[0].kind == "photo_shared"
+    assert page.items[0].link.type == "feed_photo"
+    assert page.summary.sites_total == 1
+    _ = NS  # keep import local, no external dep
