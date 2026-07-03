@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, Spinner } from '../components/states'
 import { useT, type TranslationKey } from '../i18n'
 import {
   AppShell,
+  Button,
   Display,
   H2,
   Small,
@@ -16,6 +17,7 @@ import {
   type SiteSummary,
   type Status,
 } from '../ui'
+import { NewProjectModal } from '../features/owner/NewProjectModal'
 
 const STATUS_TO_SPINE: Record<string, Status> = {
   active: 'ok',
@@ -40,6 +42,7 @@ export function Sites() {
   const role: Role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
+  const [newOpen, setNewOpen] = useState(false)
 
   const items = data?.items ?? []
   const siteSummaries = useMemo<SiteSummary[]>(
@@ -65,12 +68,19 @@ export function Sites() {
       selectedSiteId={selectedSiteId}
       onSelectSite={setSelectedSiteId}
     >
-      <header className="mb-5">
-        <Display as="h1" className="!text-h1">
-          {t('sites.title')}
-        </Display>
-        <Small className="mt-1 block">{t('sites.subtitle')}</Small>
+      <header className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <Display as="h1" className="!text-h1">
+            {t('sites.title')}
+          </Display>
+          <Small className="mt-1 block">{t('sites.subtitle')}</Small>
+        </div>
+        <Button variant="primary" type="button" onClick={() => setNewOpen(true)}>
+          {t('projects.new.cta')}
+        </Button>
       </header>
+
+      <NewProjectModal open={newOpen} onClose={() => setNewOpen(false)} />
 
       {isLoading && <Spinner label={t('sites.loading')} />}
       {isError && (
