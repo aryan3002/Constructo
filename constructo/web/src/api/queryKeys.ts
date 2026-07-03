@@ -47,6 +47,8 @@ export const qk = {
   financials: (siteId: string) => ['financials', siteId] as const,
   permits: () => ['permits'] as const,
   approvals: (tab?: string) => ['approvals', tab] as const,
+  /** Homeowner requests for the owner Requests view (keyed by optional site). */
+  requests: (siteId?: string) => (siteId ? (['requests', siteId] as const) : (['requests'] as const)),
   /** Notification feed + the bell's unread badge (W3.3). The two share the
    *  `['notifications']` prefix so a single invalidate refetches both. */
   notifications: () => ['notifications', 'feed'] as const,
