@@ -110,9 +110,15 @@ async def get_activity(
     # midnight, which is always <= a same-day cursor timestamp); the
     # aggregator's own exact tuple comparison applies the precise trim after.
     cap = page_size + 1
-    cursor_dt: dt.datetime | None = (
-        dt.datetime.fromisoformat(decoded[0]) if decoded is not None else None
-    )
+    cursor_dt: dt.datetime | None = None
+    if decoded is not None:
+        try:
+            cursor_dt = dt.datetime.fromisoformat(decoded[0])
+        except ValueError as exc:
+            # decode_activity_cursor only checks for the "|" delimiter, not that
+            # the occurred_at half is a valid timestamp — a syntactically-shaped
+            # but semantically-garbage cursor must still 400, not 500.
+            raise AppError(400, "invalid_cursor", "Malformed pagination cursor") from exc
 
     def _cursor_filter(stmt, order_col, *, date_col: bool = False):
         if cursor_dt is None:

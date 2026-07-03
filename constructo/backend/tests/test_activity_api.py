@@ -1,6 +1,7 @@
 """API tests for GET /api/v1/activity (DB, no network)."""
 from __future__ import annotations
 
+import base64
 import datetime as dt
 
 import pytest_asyncio
@@ -145,6 +146,20 @@ async def test_activity_keyset_pagination_boundary(client, db_session, owner):
 
 async def test_activity_bad_cursor_is_400(client, owner):
     resp = await client.get("/api/v1/activity?cursor=%21%21bad", headers=auth(owner))
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "invalid_cursor"
+
+
+async def test_activity_cursor_with_garbage_timestamp_is_400(client, db_session, owner):
+    # decode_activity_cursor only validates the "occurred_at|id" shape (the "|"
+    # delimiter); a cursor that has that shape but a non-ISO occurred_at half
+    # must still 400 cleanly rather than 500 when the endpoint parses it — and
+    # only reaches that parse once the user has >=1 visible site, so seed one.
+    await _site(db_session, owner.company_id)
+    await db_session.commit()
+
+    token = base64.urlsafe_b64encode(b"not-a-date|photo_shared:123").decode("ascii")
+    resp = await client.get(f"/api/v1/activity?cursor={token}", headers=auth(owner))
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "invalid_cursor"
 
