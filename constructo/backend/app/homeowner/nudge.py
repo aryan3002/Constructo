@@ -63,16 +63,16 @@ def _request_decision(req: HomeownerRequest, company_id: UUID, *, overdue: bool)
 async def surface_request_now(
     session: AsyncSession, req: HomeownerRequest, *, now: datetime | None = None
 ) -> bool:
-    """Surface a freshly-created request to the site team immediately — the same
-    one Decision the overdue sweep would raise — and stamp ``nudged_at`` so the
-    sweep never double-surfaces it. Best-effort: returns ``False`` (never raises)
-    if the site is missing. The caller owns the commit."""
+    """Mark a freshly-created request as already surfaced so the overdue sweep
+    never re-nudges it. The team-facing signal is the push fired by the router's
+    ``_alert_site_leads`` at creation — we deliberately create NO shadow Decision
+    (Option (a) de-pollution). Stamps ``nudged_at`` and returns ``False`` (never
+    raises) if the site is missing. The caller owns the commit."""
     moment = _aware(now) if now is not None else datetime.now(UTC)
     site = await session.get(Site, req.site_id)
     if site is None:
         return False
     req.nudged_at = moment
-    session.add(_request_decision(req, site.company_id, overdue=False))
     return True
 
 

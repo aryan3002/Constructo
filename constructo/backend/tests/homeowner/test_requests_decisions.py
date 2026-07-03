@@ -76,10 +76,14 @@ async def test_request_nudge_sweep_fires_once(client, ctx, db_session):
 
 
 async def test_create_request_surfaces_to_contractor_immediately(client, ctx, db_session):
-    """Root cause fix: a fresh homeowner request must reach the site team's Brief
-    on creation (an immediate pending Decision), not only after the 3-day SLA
-    lapses. Being contractor-facing, it must NOT appear on the homeowner's own
-    'Needs your input', and the later overdue sweep must not duplicate it."""
+    """De-pollution (Option a): a fresh homeowner request reaches the team via a
+    push (see test_create_request_alerts_site_leads), NOT via a shadow pending
+    Decision. It must therefore be ABSENT from every decision surface — the
+    approvals inbox, the brief's _open_decisions, and the contractor bell feed —
+    and the later overdue sweep must not duplicate it."""
+    from app.bot.brief_delivery import _open_decisions
+    from app.notifications.feed import build_feed
+
     created = await client.post(
         "/api/v1/homeowner/requests",
         json={
@@ -90,24 +94,41 @@ async def test_create_request_surfaces_to_contractor_immediately(client, ctx, db
     )
     assert created.status_code == 201, created.text
 
-    # (a) The contractor's approval inbox (the Brief source) shows it right away.
+    # (a) No shadow Decision exists at all for this request.
+    rows = (
+        await db_session.execute(
+            select(Decision).where(Decision.title.like(f"{NUDGE_TAG}%"))
+        )
+    ).scalars().all()
+    assert rows == [], [r.title for r in rows]
+
+    # (b) The contractor approvals inbox does NOT show it.
     inbox = await client.get("/api/v1/approvals?state=pending", headers=auth(ctx.owner))
     assert inbox.status_code == 200, inbox.text
-    assert any(
+    assert not any(
         "Photo request — Kitchen" in it["title"] for it in inbox.json()["items"]
     ), inbox.text
 
-    # (b) It does NOT leak onto the homeowner's own Home "Needs your input".
+    # (c) The brief's decision source (_open_decisions) does NOT include it.
+    open_dec = await _open_decisions(db_session, ctx.company.id)
+    assert all("Photo request — Kitchen" not in d.title for d in open_dec)
+
+    # (d) The contractor bell feed (build_feed) does NOT include it.
+    feed = await build_feed(db_session, company_id=ctx.company.id, recipient=ctx.owner)
+    assert all("Photo request — Kitchen" not in it.title for it in feed)
+
+    # (e) It does NOT leak onto the homeowner's own Home "Needs your input".
     home = await client.get("/api/v1/homeowner/home", headers=auth(ctx.homeowner))
     assert home.status_code == 200, home.text
     assert all(
         "Photo request — Kitchen" not in a["title"] for a in home.json()["needs_attention"]
     ), home.json()["needs_attention"]
 
-    # (c) The later overdue sweep raises no duplicate (already surfaced).
+    # (f) The later overdue sweep raises no duplicate decision (there is none to raise).
     swept = await run_request_nudge_sweep(
         db_session, now=datetime.now(UTC) + timedelta(days=365)
     )
+    # Already surfaced at creation (nudged_at stamped) → no re-nudge.
     assert swept == []
 
 
