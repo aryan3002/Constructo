@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  register ORM models
 from app.action_items.router import router as action_items_router
+from app.activity.router import router as activity_router
 from app.admin.router import router as admin_router
 from app.agent.router import router as ask_router
 from app.approvals.router import router as approvals_router
@@ -121,6 +122,7 @@ app.include_router(billing_router)
 app.include_router(brief_router)
 app.include_router(dpr_router)  # C4 PM Auto-DPR
 app.include_router(dashboard_router)  # phaseB brief/owner
+app.include_router(activity_router)  # Owner activity-first command center feed
 app.include_router(attendance_router)  # phaseB capture/attendance
 app.include_router(reconcile_router)  # phaseB reconcile
 app.include_router(approvals_router)  # phaseB approvals
