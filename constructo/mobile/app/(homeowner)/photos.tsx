@@ -1493,7 +1493,7 @@ export default function Photos() {
         /* ---- GRID TABS loading / error / empty (unchanged) ---- */
         <Card>
           <View style={{ alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg }}>
-            <ActivityIndicator color={c.accent} />
+            <ScreenLoader fill={false} />
             <Small muted>{s.loading}</Small>
           </View>
         </Card>
