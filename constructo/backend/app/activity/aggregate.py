@@ -75,7 +75,14 @@ def _item(
     link_type: str,
     link_id: UUID,
     severity: str,
+    scroll_message_id: str | None = None,
 ) -> dict:
+    link: dict = {"type": link_type, "id": str(link_id)}
+    if scroll_message_id is not None:
+        # Only present when there is a real scroll target (feed_photo). Kept off
+        # the other links so the aggregate dicts stay minimal; the Pydantic
+        # schema normalizes the field to null in the serialized API response.
+        link["scroll_message_id"] = scroll_message_id
     return {
         "id": f"{kind}:{row_id}",
         "kind": kind,
@@ -85,7 +92,7 @@ def _item(
         "subtitle": subtitle,
         "occurred_at": _as_utc(occurred_at).isoformat(),
         "actor": actor,
-        "link": {"type": link_type, "id": str(link_id)},
+        "link": link,
         "severity": severity,
     }
 
@@ -98,7 +105,9 @@ def _map_photo(p: PublishedPhoto, site: Site) -> dict:
     return _item(kind=KIND_PHOTO, row_id=p.id, site=site,
                  title=p.caption or "New photo", subtitle=None,
                  occurred_at=p.published_at, actor=None,
-                 link_type=LINK_FEED_PHOTO, link_id=p.id, severity="success")
+                 link_type=LINK_FEED_PHOTO, link_id=p.id, severity="success",
+                 scroll_message_id=(str(p.source_chat_message_id)
+                                    if p.source_chat_message_id else None))
 
 
 def _map_update(u: Update, site: Site) -> dict:
@@ -142,7 +151,7 @@ def _request_overdue(r: HomeownerRequest, now: dt.datetime) -> bool:
 def _map_request(r: HomeownerRequest, site: Site, now: dt.datetime) -> dict:
     sev = "warning" if _request_overdue(r, now) else "info"
     return _item(kind=KIND_REQUEST, row_id=r.id, site=site,
-                 title=r.title, subtitle=None, occurred_at=r.created_at,
+                 title=r.title, subtitle=(r.detail or None), occurred_at=r.created_at,
                  actor=None, link_type=LINK_REQUEST, link_id=r.id, severity=sev)
 
 

@@ -29,6 +29,10 @@ Severity = Literal["info", "success", "warning"]
 class ActivityLinkOut(BaseModel):
     type: LinkType
     id: str
+    # Optional scroll target for feed_photo items — the source chat message id, so
+    # the web deep-link can open the thread AND scroll to the photo. None for
+    # direct uploads / non-photo links.
+    scroll_message_id: str | None = None
 
 
 class ActivityItemOut(BaseModel):
