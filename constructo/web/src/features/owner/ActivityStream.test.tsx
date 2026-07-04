@@ -48,12 +48,15 @@ function renderStream(selectedSiteId: string | null = null) {
 
 describe('linkFor', () => {
   it('maps every link type to a live route', () => {
-    expect(linkFor({ type: 'feed_photo', id: 'p1' })).toBe('/chat')
-    expect(linkFor({ type: 'update', id: 'site-a' })).toBe('/sites/site-a')
-    expect(linkFor({ type: 'milestone', id: 'site-a' })).toBe('/sites/site-a')
-    expect(linkFor({ type: 'request', id: 'r1' })).toBe('/requests')
-    expect(linkFor({ type: 'decision', id: 'd1' })).toBe('/approvals')
-    expect(linkFor({ type: 'finding', id: 'site-a' })).toBe('/health/site-a')
+    expect(
+      linkFor(item({ link: { type: 'feed_photo', id: 'p1', scroll_message_id: 'msg-1' } })),
+    ).toBe('/chat?site=site-a&msg=msg-1')
+    expect(linkFor(item({ link: { type: 'feed_photo', id: 'p1' } }))).toBe('/chat?site=site-a')
+    expect(linkFor(item({ link: { type: 'update', id: 'site-a' } }))).toBe('/sites/site-a')
+    expect(linkFor(item({ link: { type: 'milestone', id: 'site-a' } }))).toBe('/sites/site-a')
+    expect(linkFor(item({ link: { type: 'request', id: 'r1' } }))).toBe('/requests')
+    expect(linkFor(item({ link: { type: 'decision', id: 'd1' } }))).toBe('/approvals')
+    expect(linkFor(item({ link: { type: 'finding', id: 'site-a' } }))).toBe('/health/site-a')
   })
 })
 
@@ -66,7 +69,7 @@ describe('<ActivityStream>', () => {
     expect(await screen.findByText('New site photo shared')).toBeInTheDocument()
     expect(screen.getByText(/Tower B/)).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /New site photo shared/i })
-    expect(link).toHaveAttribute('href', '/chat')
+    expect(link).toHaveAttribute('href', '/chat?site=site-a')
   })
 
   it('shows the honest empty state when the first page is empty', async () => {

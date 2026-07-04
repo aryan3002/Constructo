@@ -258,6 +258,14 @@ export const chatApi = {
     return request<ConversationSummary[]>('/api/v1/chat/conversations')
   },
 
+  /** Get-or-create the per-site homeowner 1:1 channel; returns its inbox row. */
+  openHomeownerChannel(siteId: string): Promise<ConversationSummary> {
+    return request<ConversationSummary>('/api/v1/chat/homeowner-channel', {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId }),
+    })
+  },
+
   /**
    * A thread's messages, oldest→newest.  Pass `afterSeq` for incremental sync
    * (reconnect / pagination).  `beforeSeq`, `order`, `limit` are optional.

@@ -338,6 +338,7 @@ export const hi: Record<TranslationKey, string> = {
   'owner.setup.hint': 'कुछ कदम और आपका रोज़ का ब्रीफ़ चालू हो जाएगा।',
   'owner.setup.done': 'हो गया',
   'owner.setup.todo': 'बाकी',
+  'owner.setup.add_project_cta': 'प्रोजेक्ट जोड़ें',
   // Owner setup checklist (activity-first cold start).
   'owner.setup.add_project': 'अपना पहला प्रोजेक्ट जोड़ें',
   'owner.setup.invite_team': 'अपनी साइट टीम को जोड़ें',

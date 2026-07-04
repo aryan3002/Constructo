@@ -361,6 +361,7 @@ export const en = {
   'owner.setup.hint': 'A few steps and your daily brief starts working.',
   'owner.setup.done': 'Done',
   'owner.setup.todo': 'To do',
+  'owner.setup.add_project_cta': 'Add project',
   // Owner setup checklist (activity-first cold start).
   'owner.setup.add_project': 'Add your first project',
   'owner.setup.invite_team': 'Invite your site team',

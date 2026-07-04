@@ -1,5 +1,5 @@
 import { useT } from '../../i18n'
-import { Body, H2, Small, StatusPill, Icons } from '../../ui'
+import { Body, Button, H2, Small, StatusPill, Icons } from '../../ui'
 import type { SetupStep } from '../../api/dashboard'
 import type { TranslationKey } from '../../i18n'
 
@@ -8,7 +8,13 @@ import type { TranslationKey } from '../../i18n'
  * sees the concrete steps that make the daily brief start working, with each
  * step marked done/to-do from real backend signal (sites, events, baselines).
  */
-export function SetupChecklist({ steps }: { steps: SetupStep[] }) {
+export function SetupChecklist({
+  steps,
+  onAddProject,
+}: {
+  steps: SetupStep[]
+  onAddProject?: () => void
+}) {
   const t = useT()
 
   return (
@@ -20,32 +26,44 @@ export function SetupChecklist({ steps }: { steps: SetupStep[] }) {
       <Small className="mt-1 block">{t('owner.setup.hint')}</Small>
 
       <ol className="mt-4 space-y-2">
-        {steps.map((step) => (
-          <li
-            key={step.key}
-            className="flex items-center gap-3 rounded-card border border-line bg-paper px-3 py-3"
-          >
-            <span
-              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[0.95rem] ${
-                step.done ? 'bg-ok/15 text-ok' : 'bg-card text-text-mute'
-              }`}
-              aria-hidden
+        {steps.map((step) => {
+          const canAddProject = step.key === 'add_project' && !step.done && onAddProject
+
+          return (
+            <li
+              key={step.key}
+              className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper px-3 py-3"
             >
-              {step.done ? <Icons.CheckIcon /> : '•'}
-            </span>
-            <Body
-              as="span"
-              className={`flex-1 font-semibold ${step.done ? '!text-text-mute line-through' : '!text-text'}`}
-            >
-              {t(step.title_key as TranslationKey)}
-            </Body>
-            <StatusPill
-              status={step.done ? 'ok' : 'info'}
-              size="sm"
-              label={step.done ? t('owner.setup.done') : t('owner.setup.todo')}
-            />
-          </li>
-        ))}
+              <span
+                className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[0.95rem] ${
+                  step.done ? 'bg-ok/15 text-ok' : 'bg-card text-text-mute'
+                }`}
+                aria-hidden
+              >
+                {step.done ? <Icons.CheckIcon /> : '•'}
+              </span>
+              <Body
+                as="span"
+                className={`min-w-[12rem] flex-1 font-semibold ${step.done ? '!text-text-mute line-through' : '!text-text'}`}
+              >
+                {t(step.title_key as TranslationKey)}
+              </Body>
+              <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {canAddProject ? (
+                  <Button variant="primary" onClick={onAddProject} className="px-4 text-small">
+                    {t('owner.setup.add_project_cta')}
+                  </Button>
+                ) : (
+                  <StatusPill
+                    status={step.done ? 'ok' : 'info'}
+                    size="sm"
+                    label={step.done ? t('owner.setup.done') : t('owner.setup.todo')}
+                  />
+                )}
+              </div>
+            </li>
+          )
+        })}
       </ol>
     </section>
   )

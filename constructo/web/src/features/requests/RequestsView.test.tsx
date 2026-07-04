@@ -11,6 +11,11 @@ vi.mock('react-router-dom', async (orig) => ({
   useNavigate: () => navigate,
 }))
 
+const openHomeownerChannelMutate = vi.fn()
+vi.mock('../chat/useOpenHomeownerChannel', () => ({
+  useOpenHomeownerChannel: () => ({ mutate: openHomeownerChannelMutate }),
+}))
+
 const listMock = vi.fn<() => Promise<RequestOut[]>>()
 vi.mock('../../api/requests', () => ({
   requestsApi: { list: (...a: unknown[]) => listMock(...(a as [])) },
@@ -85,11 +90,12 @@ describe('RequestsView', () => {
     expect(screen.getAllByRole('button', { name: 'Reply in chat' })).toHaveLength(2)
   })
 
-  it('Reply navigates to /chat', async () => {
-    listMock.mockResolvedValue([req({ id: 'a', title: 'Open one', status: 'sent' })])
+  it('Reply opens the row site homeowner channel', async () => {
+    listMock.mockResolvedValue([req({ id: 'a', site_id: 'site-a', title: 'Open one', status: 'sent' })])
     renderView()
     fireEvent.click(await screen.findByRole('button', { name: 'Reply in chat' }))
-    expect(navigate).toHaveBeenCalledWith('/chat')
+    expect(openHomeownerChannelMutate).toHaveBeenCalledWith('site-a')
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('shows the error state when the list call rejects', async () => {

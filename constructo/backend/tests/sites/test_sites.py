@@ -65,6 +65,28 @@ async def test_owner_can_create_site_minimal(client, owner):
     assert body["company_id"] == str(owner.company_id)
 
 
+async def test_create_site_provisions_crew_chat_conversation(client, owner):
+    # Creating a project must eager-provision its crew chat thread so the project
+    # is reachable in chat immediately — not only after the first message send.
+    # (The inbox lists only sites that already have a Conversation row.)
+    create = await client.post(
+        "/api/v1/sites",
+        json={"name": "Chatable Villa", "type": "villa"},
+        headers=auth(owner),
+    )
+    assert create.status_code == 201, create.text
+    site_id = create.json()["id"]
+
+    inbox = await client.get("/api/v1/chat/conversations", headers=auth(owner))
+    assert inbox.status_code == 200, inbox.text
+    site_threads = [
+        c for c in inbox.json() if c["site_id"] == site_id and c["kind"] == "site"
+    ]
+    assert len(site_threads) == 1, (
+        "a new project must appear exactly once as a site thread in the owner inbox"
+    )
+
+
 async def test_pm_can_create_site(client, factory):
     company = await factory.company()
     pm = await factory.user(company=company, role=UserRole.pm)

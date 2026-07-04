@@ -16,9 +16,10 @@ def _site(name="Tower B"):
     return SimpleNamespace(id=uuid4(), name=name)
 
 
-def _photo(site_id, *, at):
+def _photo(site_id, *, at, source_chat_message_id=None):
     return SimpleNamespace(id=uuid4(), site_id=site_id, caption="Slab poured",
-                           published_at=at)
+                           published_at=at,
+                           source_chat_message_id=source_chat_message_id)
 
 
 def _update(site_id, *, at, type="progress", title="Wall done"):
@@ -41,10 +42,11 @@ def _change(site_id, *, at, description="Add powder room"):
                            created_at=at)
 
 
-def _request(site_id, *, at, status="sent", overdue=False, title="Photo of kitchen"):
+def _request(site_id, *, at, status="sent", overdue=False, title="Photo of kitchen",
+             detail=None):
     sla = NOW - dt.timedelta(hours=1) if overdue else NOW + dt.timedelta(days=2)
     return SimpleNamespace(id=uuid4(), site_id=site_id, title=title, status=status,
-                           sla_due_at=sla, created_at=at)
+                           sla_due_at=sla, created_at=at, detail=detail)
 
 
 def _decision(site_id, *, at, kind="approval", state="pending", title="Approve advance",
@@ -90,6 +92,36 @@ def test_maps_each_source_to_activity_item():
     assert item["link"] == {"type": "feed_photo", "id": str(photo.id)}
     assert item["severity"] == "success"
     assert item["occurred_at"] == NOW.isoformat()
+
+
+def test_photo_item_carries_scroll_message_id():
+    # A "Send to feed" photo keeps a source_chat_message_id → the web deep-link
+    # opens the site thread AND scrolls to that message.
+    site = _site()
+    msg_id = uuid4()
+    photo = _photo(site.id, at=NOW, source_chat_message_id=msg_id)
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(photos=[photo]))
+    assert res["items"][0]["link"]["scroll_message_id"] == str(msg_id)
+
+
+def test_photo_without_source_message_omits_scroll_id():
+    # A direct upload has no source message → no scroll-target key on the link.
+    site = _site()
+    photo = _photo(site.id, at=NOW)
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(photos=[photo]))
+    assert "scroll_message_id" not in res["items"][0]["link"]
+
+
+def test_request_item_subtitle_is_detail():
+    # The homeowner-request row carries its detail as the subtitle so a terse
+    # title ("Boy") reads with its context (room / urgency / message).
+    site = _site()
+    req = _request(site.id, at=NOW, detail="Room: Kitchen Urgency: Normal")
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(requests=[req]))
+    assert res["items"][0]["subtitle"] == "Room: Kitchen Urgency: Normal"
 
 
 def test_orders_all_sources_by_occurred_at_desc_id_tiebreak():

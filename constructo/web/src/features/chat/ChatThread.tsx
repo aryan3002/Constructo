@@ -74,13 +74,15 @@ export interface ChatThreadProps {
   onManageGroup?: () => void
   /** The thread's site (Phase D) — enables the brief pin + Radar/Recap/To-dos + card dispute/to-do. */
   siteId?: string
+  /** Best-effort: scroll this message id into view on open (activity deep-link). */
+  scrollToMessageId?: string
 }
 
 // ---------------------------------------------------------------------------
 // ChatThread
 // ---------------------------------------------------------------------------
 
-export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId }: ChatThreadProps) {
+export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId, scrollToMessageId }: ChatThreadProps) {
   const { data: me } = useMe()
   const { show } = useToast()
   const queryClient = useQueryClient()
@@ -115,6 +117,11 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
   const prevFirstSeqRef = useRef<number | null>(null)
   const prevPendingLenRef = useRef(pending.length)
   const firstPaintRef = useRef(true)
+  // Deep-link scroll target (activity feed → a specific photo/message). While a
+  // target is pending we suppress the bottom-autoscroll so the view lands on the
+  // message, not the newest row. Best-effort: no-op if the id isn't in the thread.
+  const scrolledToRef = useRef<string | null>(null)
+  const pendingScroll = Boolean(scrollToMessageId && scrolledToRef.current !== scrollToMessageId)
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -143,7 +150,8 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     const ownSend = pending.length > prevPendingLenRef.current
     prevPendingLenRef.current = pending.length
 
-    const shouldScroll = firstPaintRef.current || ownSend || atBottomRef.current
+    const shouldScroll =
+      (firstPaintRef.current || ownSend || atBottomRef.current) && !pendingScroll
     if (!shouldScroll) return
 
     // Guard: jsdom does not implement scrollIntoView; real browsers do.
@@ -152,6 +160,20 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
     }
     if (firstSeq !== null || pending.length > 0) firstPaintRef.current = false
   }, [messages, pending.length])
+
+  // ---- Deep-link scroll: bring a target message into view once it's loaded ----
+  useLayoutEffect(() => {
+    if (!scrollToMessageId || scrolledToRef.current === scrollToMessageId) return
+    if (messages.length === 0) return
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-msgid="${scrollToMessageId}"]`,
+    )
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'center' })
+      scrolledToRef.current = scrollToMessageId
+      firstPaintRef.current = false // don't let the bottom anchor override the landing
+    }
+  }, [scrollToMessageId, messages])
 
   // ---- loadOlder trigger — ONE guarded path shared by the scroll-to-top
   // auto-load and the manual button. The loadingOlderRef guard means neither can

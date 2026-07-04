@@ -39,7 +39,7 @@ describe('NewProjectModal', () => {
     expect(screen.getByRole('button', { name: /create project/i })).toBeDisabled()
   })
 
-  it('creates, invalidates sites + activity + activitySummary, calls onCreated, and closes', async () => {
+  it('creates, invalidates sites + activity + activitySummary + chat conversations, calls onCreated, and closes', async () => {
     mockCreate.mockResolvedValue(SITE)
     const onClose = vi.fn()
     const onCreated = vi.fn()
@@ -62,6 +62,7 @@ describe('NewProjectModal', () => {
     // qk.activitySummary() in RQv5 (['activity', null] vs ['activity','summary']),
     // so the summary key must be invalidated explicitly too.
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: qk.activitySummary() })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['chat', 'conversations'] })
     expect(onClose).toHaveBeenCalled()
   })
 

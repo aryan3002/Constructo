@@ -1,7 +1,7 @@
 // ActivityStream — the primary surface of the activity-first OwnerHome. An
 // infinite, keyset-paged list of the union feed (GET /activity). Each row is a
 // severity-tinted status dot + kind icon, the title, `site · relative-time`, and
-// a trailing chevron; the whole row deep-links via linkFor(item.link). Four
+// a trailing chevron; the whole row deep-links via linkFor(item). Four
 // states (loading / empty / error+retry / populated) + an optional per-project
 // filter fed by `selectedSiteId`. Non-blocking by design (OwnerHome still shows
 // hero + needs-you if this errors).
@@ -10,7 +10,6 @@ import { Link } from 'react-router-dom'
 import {
   activityApi,
   type ActivityItem,
-  type ActivityLink,
   type ActivityPage,
   type ActivitySeverity,
 } from '../../api/activity'
@@ -28,19 +27,21 @@ import {
 import type { ReactNode } from 'react'
 
 /** Deep-link an activity row to a live web route (single source of truth). */
-export function linkFor(link: ActivityLink): string {
-  switch (link.type) {
+export function linkFor(item: ActivityItem): string {
+  switch (item.link.type) {
     case 'feed_photo':
-      return '/chat' // TODO(nav): no /feed/photo web route yet — retarget when it lands
+      return item.link.scroll_message_id
+        ? `/chat?site=${encodeURIComponent(item.site_id)}&msg=${encodeURIComponent(item.link.scroll_message_id)}`
+        : `/chat?site=${encodeURIComponent(item.site_id)}`
     case 'update':
     case 'milestone':
-      return `/sites/${link.id}` // project-timeline surrogate = site detail
+      return `/sites/${item.link.id}` // project-timeline surrogate = site detail
     case 'request':
       return '/requests'
     case 'decision':
       return '/approvals' // TODO(nav): no /decision/:id route yet
     case 'finding':
-      return `/health/${link.id}`
+      return `/health/${item.link.id}`
     default:
       return '/owner'
   }
@@ -125,7 +126,7 @@ export function ActivityStream({
                 className="flex items-start gap-3 border-b border-line px-3 py-3 last:border-b-0"
               >
                 <Link
-                  to={linkFor(item.link)}
+                  to={linkFor(item)}
                   className="flex min-w-0 flex-1 items-start gap-3 cstk-animate transition hover:bg-line/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 >
                   <span className="mt-0.5 flex items-center gap-1.5">

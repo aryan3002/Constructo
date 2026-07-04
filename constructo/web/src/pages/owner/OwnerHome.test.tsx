@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { LanguageProvider } from '../../i18n'
@@ -49,6 +49,11 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return { ...actual, useNavigate: () => mockNavigate }
 })
+
+const openHomeownerChannelMutate = vi.fn()
+vi.mock('../../features/chat/useOpenHomeownerChannel', () => ({
+  useOpenHomeownerChannel: () => ({ mutate: openHomeownerChannelMutate }),
+}))
 
 const { OwnerHome } = await import('./OwnerHome')
 
@@ -124,6 +129,7 @@ describe('<OwnerHome> (activity-first)', () => {
     activityStreamProps.mockReset()
     projectsStripProps.mockReset()
     mockNavigate.mockReset()
+    openHomeownerChannelMutate.mockReset()
     listSites.mockResolvedValue({ items: SITES, next_cursor: null })
   })
 
@@ -159,6 +165,15 @@ describe('<OwnerHome> (activity-first)', () => {
     expect(screen.queryByTestId('projects-strip')).not.toBeInTheDocument()
   })
 
+  it('cold start Add project opens OwnerHome-owned NewProjectModal', async () => {
+    getHome.mockResolvedValue(COLD_START)
+    activityPage.mockResolvedValue(page({ summary: { updates_today: 0, needs_decision_count: 0, sites_total: 0 } }))
+    renderHome()
+
+    fireEvent.click(await screen.findByRole('button', { name: /add project/i }))
+    expect(screen.getByRole('dialog', { name: /new project/i })).toBeInTheDocument()
+  })
+
   it('passes only { sites } to ProjectsStrip (D4 contract — no selectedSiteId/onSelectSite)', async () => {
     getHome.mockResolvedValue(NON_COLD_START)
     activityPage.mockResolvedValue(page())
@@ -173,7 +188,7 @@ describe('<OwnerHome> (activity-first)', () => {
     expect(lastCall).not.toHaveProperty('onSelectSite')
   })
 
-  it('wires ActivityStream onReply to navigate a request item to /requests', async () => {
+  it('wires ActivityStream onReply to open the request site homeowner channel', async () => {
     getHome.mockResolvedValue(NON_COLD_START)
     activityPage.mockResolvedValue(page())
     renderHome()
@@ -183,7 +198,8 @@ describe('<OwnerHome> (activity-first)', () => {
       onReply?: (item: unknown) => void
     }
     expect(typeof lastCall.onReply).toBe('function')
-    lastCall.onReply?.({ id: 'homeowner_request:1', link: { type: 'request', id: 'r1' } })
-    expect(mockNavigate).toHaveBeenCalledWith('/requests')
+    lastCall.onReply?.({ id: 'homeowner_request:1', site_id: 'site-a', link: { type: 'request', id: 'r1' } })
+    expect(openHomeownerChannelMutate).toHaveBeenCalledWith('site-a')
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

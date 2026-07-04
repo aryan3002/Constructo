@@ -18,6 +18,7 @@ const REQUIRED = [
   'projects.strip.title',
   'projects.strip.people',
   'projects.strip.no_activity',
+  'owner.setup.add_project_cta',
 ] as const
 
 describe('projects i18n keys', () => {

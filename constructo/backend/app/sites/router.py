@@ -21,6 +21,8 @@ from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor,
 from app.db import get_session
 from app.models import (
     Company,
+    Conversation,
+    ConversationKind,
     PublishedPhoto,
     Site,
     SiteBaseline,
@@ -145,7 +147,21 @@ async def create_site(
         status=body.status or "active",
     )
     session.add(site)
+    await session.flush()  # populate site.id before building the conversation
+    # Eager-provision the crew chat thread so the project is reachable in chat
+    # immediately — the inbox lists only sites that already have a Conversation
+    # (otherwise it is created lazily on the first message send, so a brand-new
+    # project would be invisible in chat until someone messages it).
+    session.add(
+        Conversation(
+            company_id=user.company_id,
+            site_id=site.id,
+            kind=ConversationKind.site,
+            created_by=user.id,
+        )
+    )
     await session.commit()
+    await session.refresh(site)
     return _site_out(site)
 
 

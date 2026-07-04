@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import { todayIso } from '../../api/config'
 import { qk } from '../../api/queryKeys'
 import { dashboardApi } from '../../api/dashboard'
@@ -12,7 +11,9 @@ import { SetupChecklist } from './SetupChecklist'
 import { HonestHero } from '../../features/owner/HonestHero'
 import { NeedsYou } from '../../features/owner/NeedsYou'
 import { ActivityStream } from '../../features/owner/ActivityStream'
+import { NewProjectModal } from '../../features/owner/NewProjectModal'
 import { ProjectsStrip } from '../../features/owner/ProjectsStrip'
+import { useOpenHomeownerChannel } from '../../features/chat/useOpenHomeownerChannel'
 import { AppShell, type SiteSummary, type Status } from '../../ui'
 
 /**
@@ -31,9 +32,10 @@ import { AppShell, type SiteSummary, type Status } from '../../ui'
  */
 export function OwnerHome() {
   const t = useT()
-  const navigate = useNavigate()
   const date = todayIso()
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
+  const [showNewProject, setShowNewProject] = useState(false)
+  const openHomeownerChannel = useOpenHomeownerChannel()
 
   // Cold-start gate (unchanged source: the dashboard home aggregation).
   const home = useQuery({ queryKey: qk.home(date), queryFn: () => dashboardApi.getHome(date) })
@@ -65,11 +67,10 @@ export function OwnerHome() {
 
   const lastActivityAt = summaryQ.data?.items[0]?.occurred_at ?? null
 
-  // A request-kind activity row's Reply button hands off to the dedicated
-  // Requests surface (E3) — same destination as the row's own linkFor('request'),
-  // so the whole-row click and the explicit Reply button never diverge.
-  function handleReply(_item: ActivityItem) {
-    navigate('/requests')
+  // A request-kind activity row's Reply button opens the project's homeowner
+  // 1:1 channel; the row itself still links to the full Requests surface.
+  function handleReply(item: ActivityItem) {
+    openHomeownerChannel.mutate(item.site_id)
   }
 
   return (
@@ -91,7 +92,13 @@ export function OwnerHome() {
             onRetry={() => home.refetch()}
           />
         ) : home.data?.cold_start ? (
-          <SetupChecklist steps={home.data.setup_checklist} />
+          <>
+            <SetupChecklist
+              steps={home.data.setup_checklist}
+              onAddProject={() => setShowNewProject(true)}
+            />
+            <NewProjectModal open={showNewProject} onClose={() => setShowNewProject(false)} />
+          </>
         ) : (
           <div className="flex flex-col gap-8">
             <NeedsYou date={date} selectedSiteId={selectedSiteId} siteNames={siteNames} />

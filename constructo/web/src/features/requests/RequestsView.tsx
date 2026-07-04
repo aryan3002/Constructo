@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../ui/AppShell'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { useT, type TranslationKey } from '../../i18n'
 import { qk } from '../../api/queryKeys'
 import { requestsApi, type RequestOut } from '../../api/requests'
 import { Body, H1, H2, Small, StatusPill } from '../../ui'
+import { useOpenHomeownerChannel } from '../chat/useOpenHomeownerChannel'
 
 const STATUS_LABEL_KEY: Record<RequestOut['status'], TranslationKey> = {
   sent: 'requests.status.sent',
@@ -49,7 +49,7 @@ function RequestRow({
   r, onReply, t,
 }: {
   r: RequestOut
-  onReply: (() => void) | null
+  onReply: ((r: RequestOut) => void) | null
   t: ReturnType<typeof useT>
 }) {
   return (
@@ -68,7 +68,7 @@ function RequestRow({
         {onReply ? (
           <button
             type="button"
-            onClick={onReply}
+            onClick={() => onReply(r)}
             className="inline-flex min-h-tap items-center rounded-control border border-line bg-card px-3 font-body text-small font-semibold text-text cstk-animate hover:bg-surface-hover"
           >
             {t('requests.reply')}
@@ -85,7 +85,7 @@ function Group({
   titleKey: TranslationKey
   rows: RequestOut[]
   replyable: boolean
-  onReply: () => void
+  onReply: (r: RequestOut) => void
   t: ReturnType<typeof useT>
 }) {
   if (rows.length === 0) return null
@@ -103,14 +103,13 @@ function Group({
 
 /**
  * RequestsView — the owner's "what did homeowners ask for" surface. Lists real
- * homeowner_requests (E1's requestsApi.list) grouped overdue / open / resolved;
- * each open row offers a Reply that drops the owner into the chat inbox (the
- * honest deep-link today — ChatPage has no site-thread URL param yet). Four
- * honest states: loading / error+retry / empty / populated.
+ * homeowner_requests (E1's requestsApi.list) grouped overdue / open / resolved.
+ * Each open row offers a Reply that opens the row's project homeowner channel.
+ * Four honest states: loading / error+retry / empty / populated.
  */
 export function RequestsView() {
   const t = useT()
-  const navigate = useNavigate()
+  const openHomeownerChannel = useOpenHomeownerChannel()
   const query = useQuery({ queryKey: qk.requests(), queryFn: () => requestsApi.list() })
 
   const grouped = useMemo(
@@ -118,7 +117,7 @@ export function RequestsView() {
     [query.data],
   )
 
-  const openReply = () => navigate('/chat')
+  const openReply = (r: RequestOut) => openHomeownerChannel.mutate(r.site_id)
 
   let body: React.ReactNode
   if (query.isLoading) {
