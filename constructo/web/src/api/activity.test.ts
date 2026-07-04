@@ -36,6 +36,12 @@ describe('activityApi (mock branch)', () => {
     )
   })
 
+  it('mock feed_photo items include a scroll_message_id target', async () => {
+    const page = await activityApi.page({ limit: 20 })
+    const photo = page.items.find((item) => item.link.type === 'feed_photo')
+    expect(photo?.link.scroll_message_id).toBe('msg-photo-1')
+  })
+
   it('page() paginates: passing the returned cursor yields a different (or empty) page and eventually a null cursor', async () => {
     const first = await activityApi.page({ limit: 3 })
     expect(first.items).toHaveLength(3)

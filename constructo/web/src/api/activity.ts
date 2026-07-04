@@ -33,6 +33,7 @@ export type ActivityLinkType =
 export interface ActivityLink {
   type: ActivityLinkType
   id: string
+  scroll_message_id?: string | null
 }
 
 export interface ActivityItem {
@@ -108,7 +109,11 @@ const mockItems: ActivityItem[] = [
     subtitle: 'Slab shuttering, east face',
     occurred_at: '2026-07-03T09:40:00Z',
     actor: 'Suresh (supervisor)',
-    link: { type: 'feed_photo', id: '11111111-0000-0000-0000-000000000001' },
+    link: {
+      type: 'feed_photo',
+      id: '11111111-0000-0000-0000-000000000001',
+      scroll_message_id: 'msg-photo-1',
+    },
     severity: 'success',
   },
   {

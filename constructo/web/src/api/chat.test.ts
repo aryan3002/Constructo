@@ -85,3 +85,34 @@ describe('chatApi.send', () => {
     })
   })
 })
+
+describe('chatApi.openHomeownerChannel', () => {
+  beforeEach(() => {
+    mockFetch.mockClear()
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'conv-homeowner-1',
+        kind: 'homeowner',
+        site_id: 'site-42',
+        title: null,
+        site_name: 'Green Valley',
+        last_message_at: null,
+        unread_count: 0,
+        has_homeowner: true,
+      }),
+    })
+  })
+
+  it('POSTs to /api/v1/chat/homeowner-channel with the site id', async () => {
+    await chatApi.openHomeownerChannel('site-42')
+
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('http://localhost:8000/api/v1/chat/homeowner-channel')
+    expect((init as RequestInit).method).toBe('POST')
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      site_id: 'site-42',
+    })
+  })
+})

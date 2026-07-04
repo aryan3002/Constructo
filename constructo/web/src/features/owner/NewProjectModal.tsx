@@ -2,8 +2,9 @@
  * NewProjectModal — the owner's "create a project (site)" form for the Command
  * Center. Reuses the shared `Modal` chrome, submits via `useMutation` →
  * `sitesApi.create`, and on success invalidates `qk.sites()`, `qk.activity()`,
- * AND `qk.activitySummary()` (so the projects strip, the activity feed, and the
- * hero summary counters all refresh) then closes.
+ * `qk.activitySummary()`, and chat conversations (so the projects strip, the
+ * activity feed, the hero summary counters, and chat targets all refresh) then
+ * closes.
  *
  * The third invalidation is deliberate, not redundant: `qk.activity()` resolves
  * to `['activity', null]` while `qk.activitySummary()` is `['activity',
@@ -48,6 +49,7 @@ export function NewProjectModal({ open, onClose, onCreated }: NewProjectModalPro
       qc.invalidateQueries({ queryKey: qk.sites() })
       qc.invalidateQueries({ queryKey: qk.activity() })
       qc.invalidateQueries({ queryKey: qk.activitySummary() })
+      qc.invalidateQueries({ queryKey: ['chat', 'conversations'] })
       onCreated?.(site)
       reset()
       onClose()

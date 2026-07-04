@@ -18,7 +18,7 @@
 
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationSummary } from '../../api/chat'
@@ -26,6 +26,21 @@ import type { ConversationSummary } from '../../api/chat'
 // ---------------------------------------------------------------------------
 // Mocks — must be hoisted before any import of the mocked module
 // ---------------------------------------------------------------------------
+
+const chatApiMocks = vi.hoisted(() => ({
+  conversations: vi.fn(),
+}))
+
+vi.mock('../../api/chat', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../api/chat')>()
+  return {
+    ...original,
+    chatApi: {
+      ...original.chatApi,
+      conversations: chatApiMocks.conversations,
+    },
+  }
+})
 
 // --- ChatInbox ---
 vi.mock('./ChatInbox', () => ({
@@ -101,12 +116,14 @@ vi.mock('./ChatThread', () => ({
       hasHomeowner,
       onManageGroup,
       siteId,
+      scrollToMessageId,
     }: {
       address: unknown
       title?: string
       hasHomeowner?: boolean
       onManageGroup?: () => void
       siteId?: string
+      scrollToMessageId?: string
     }) => (
       <div
         data-testid="mock-chat-thread"
@@ -115,6 +132,7 @@ vi.mock('./ChatThread', () => ({
         data-has-homeowner={String(hasHomeowner ?? false)}
         data-has-manage={String(!!onManageGroup)}
         data-site={siteId ?? ''}
+        data-scroll={scrollToMessageId ?? ''}
       >
         {onManageGroup ? (
           <button type="button" data-testid="thread-manage-btn" onClick={onManageGroup}>
@@ -152,12 +170,14 @@ import { ChatPage } from './ChatPage'
 // Wrapper
 // ---------------------------------------------------------------------------
 
-function makeWrapper() {
+function makeWrapper(
+  initialEntries: React.ComponentProps<typeof MemoryRouter>['initialEntries'] = ['/chat'],
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={qc}>
-        <MemoryRouter>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
       </QueryClientProvider>
     )
   }
@@ -171,7 +191,34 @@ function makeWrapper() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  chatApiMocks.conversations.mockResolvedValue([])
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: 1024,
+  })
 })
+
+const SITE_DEEP_LINK_CONV: ConversationSummary = {
+  id: 'conv-site-deep',
+  kind: 'site',
+  site_id: 'site-deep',
+  title: 'Deep Link Crew',
+  site_name: 'Deep Link Villa',
+  last_message_at: '2026-07-04T08:00:00Z',
+  unread_count: 0,
+  has_homeowner: true,
+}
+
+const HOMEOWNER_DEEP_LINK_CONV: ConversationSummary = {
+  id: 'conv-homeowner-deep',
+  kind: 'homeowner',
+  site_id: 'site-deep',
+  title: null,
+  site_name: 'Deep Link Villa',
+  last_message_at: '2026-07-04T08:01:00Z',
+  unread_count: 0,
+  has_homeowner: true,
+}
 
 describe('ChatPage', () => {
   it('renders ChatInbox in the inbox pane on mount', () => {
@@ -275,5 +322,119 @@ describe('ChatPage', () => {
     render(<ChatPage />, { wrapper: makeWrapper() })
     fireEvent.click(screen.getByTestId('select-group-conv'))
     expect(screen.getByTestId('mock-chat-thread').getAttribute('data-site')).toBe('')
+  })
+
+  it('resolves ?conversation= against the conversations list', async () => {
+    chatApiMocks.conversations.mockResolvedValue([HOMEOWNER_DEEP_LINK_CONV])
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper(['/chat?conversation=conv-homeowner-deep']),
+    })
+
+    const thread = await screen.findByTestId('mock-chat-thread')
+    expect(JSON.parse(thread.getAttribute('data-address') ?? '{}')).toEqual({
+      conversationId: 'conv-homeowner-deep',
+    })
+    expect(screen.getByTestId('mock-chat-inbox')).toHaveAttribute(
+      'data-selected',
+      'conv-homeowner-deep',
+    )
+  })
+
+  it('resolves ?site= against the conversations list', async () => {
+    chatApiMocks.conversations.mockResolvedValue([
+      HOMEOWNER_DEEP_LINK_CONV,
+      SITE_DEEP_LINK_CONV,
+    ])
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper(['/chat?site=site-deep']),
+    })
+
+    const thread = await screen.findByTestId('mock-chat-thread')
+    expect(JSON.parse(thread.getAttribute('data-address') ?? '{}')).toEqual({
+      siteId: 'site-deep',
+    })
+    expect(thread.getAttribute('data-title')).toBe('Deep Link Crew')
+    expect(screen.getByTestId('mock-chat-inbox')).toHaveAttribute(
+      'data-selected',
+      'conv-site-deep',
+    )
+  })
+
+  it('uses location state conversation before the conversations query resolves', async () => {
+    chatApiMocks.conversations.mockReturnValue(new Promise(() => {}))
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper([
+        {
+          pathname: '/chat',
+          search: '?conversation=conv-homeowner-deep',
+          state: { conversation: HOMEOWNER_DEEP_LINK_CONV },
+        },
+      ]),
+    })
+
+    const thread = await screen.findByTestId('mock-chat-thread')
+    expect(JSON.parse(thread.getAttribute('data-address') ?? '{}')).toEqual({
+      conversationId: 'conv-homeowner-deep',
+    })
+  })
+
+  it('does not treat a homeowner state conversation as resolving a ?site= deep link', () => {
+    chatApiMocks.conversations.mockReturnValue(new Promise(() => {}))
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper([
+        {
+          pathname: '/chat',
+          search: '?site=site-deep',
+          state: { conversation: HOMEOWNER_DEEP_LINK_CONV },
+        },
+      ]),
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Opening conversation')
+    expect(screen.queryByTestId('mock-chat-thread')).not.toBeInTheDocument()
+  })
+
+  it('auto-selects the most recent conversation on bare /chat for desktop', async () => {
+    chatApiMocks.conversations.mockResolvedValue([
+      HOMEOWNER_DEEP_LINK_CONV,
+      SITE_DEEP_LINK_CONV,
+    ])
+
+    render(<ChatPage />, { wrapper: makeWrapper(['/chat']) })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mock-chat-inbox')).toHaveAttribute(
+        'data-selected',
+        'conv-homeowner-deep',
+      ),
+    )
+    expect(JSON.parse(screen.getByTestId('mock-chat-thread').getAttribute('data-address') ?? '{}')).toEqual({
+      conversationId: 'conv-homeowner-deep',
+    })
+  })
+
+  it('passes msg query param through to ChatThread as scrollToMessageId', async () => {
+    chatApiMocks.conversations.mockResolvedValue([SITE_DEEP_LINK_CONV])
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper(['/chat?conversation=conv-site-deep&msg=msg-42']),
+    })
+
+    expect(await screen.findByTestId('mock-chat-thread')).toHaveAttribute('data-scroll', 'msg-42')
+  })
+
+  it('shows a spinner instead of the empty state while a deep-link target is unresolved', () => {
+    chatApiMocks.conversations.mockReturnValue(new Promise(() => {}))
+
+    render(<ChatPage />, {
+      wrapper: makeWrapper(['/chat?conversation=conv-missing']),
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Opening conversation')
+    expect(screen.queryByTestId('chat-empty-state')).not.toBeInTheDocument()
   })
 })
