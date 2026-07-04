@@ -14,7 +14,7 @@ import { ActivityStream } from '../../features/owner/ActivityStream'
 import { NewProjectModal } from '../../features/owner/NewProjectModal'
 import { ProjectsStrip } from '../../features/owner/ProjectsStrip'
 import { useOpenHomeownerChannel } from '../../features/chat/useOpenHomeownerChannel'
-import { AppShell, type SiteSummary, type Status } from '../../ui'
+import { AppShell, siteStatusToStatus, type SiteSummary } from '../../ui'
 
 /**
  * OwnerHome (activity-first) — the owner lands on a running feed of what
@@ -60,7 +60,7 @@ export function OwnerHome() {
       (sitesQ.data?.items ?? []).map((s) => ({
         id: s.id,
         name: s.name,
-        status: (s.status as Status) ?? 'ok',
+        status: siteStatusToStatus(s.status),
       })),
     [sitesQ.data?.items],
   )
