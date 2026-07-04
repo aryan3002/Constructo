@@ -104,10 +104,11 @@ async def test_activity_unions_and_orders_desc(client, db_session, owner):
 
 
 async def test_activity_summary_counts(client, db_session, owner):
+    now = dt.datetime.now(dt.UTC)
     site = await _site(db_session, owner.company_id)
-    await _photo(db_session, site.id, at=NOW)
-    await _request(db_session, site.id, at=NOW, status="sent")
-    await _decision(db_session, owner.company_id, site.id, at=NOW, state="pending")
+    await _photo(db_session, site.id, at=now)
+    await _request(db_session, site.id, at=now, status="sent")
+    await _decision(db_session, owner.company_id, site.id, at=now, state="pending")
     await db_session.commit()
 
     body = (await client.get("/api/v1/activity", headers=auth(owner))).json()

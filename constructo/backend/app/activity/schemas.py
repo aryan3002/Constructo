@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ActivityKind = Literal[
     "photo_shared",
@@ -32,7 +32,7 @@ class ActivityLinkOut(BaseModel):
     # Optional scroll target for feed_photo items — the source chat message id, so
     # the web deep-link can open the thread AND scroll to the photo. None for
     # direct uploads / non-photo links.
-    scroll_message_id: str | None = None
+    scroll_message_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class ActivityItemOut(BaseModel):
