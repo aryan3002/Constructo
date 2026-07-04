@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { StatusDot, StatusPill, severityToStatus } from './StatusPill'
+import { StatusDot, StatusPill, severityToStatus, siteStatusToStatus, type Status } from './StatusPill'
 
 describe('StatusPill', () => {
   it('renders the default label and an icon (color is never alone)', () => {
@@ -49,5 +49,37 @@ describe('severityToStatus', () => {
     expect(severityToStatus('med')).toBe('warn')
     expect(severityToStatus('low')).toBe('info')
     expect(severityToStatus('???')).toBe('info')
+  })
+})
+
+describe('StatusDot / StatusPill are crash-proof on an unknown status', () => {
+  // Regression: a raw backend site status ("active") is not a canonical Status.
+  // The site switcher rendered <StatusDot status={site.status}/> and blanked the
+  // whole page (STATUS_META["active"] was undefined → undefined.label threw).
+  it('StatusDot renders a fallback dot for an unknown status instead of throwing', () => {
+    render(<StatusDot status={'active' as unknown as Status} />)
+    expect(screen.getByRole('img')).toBeInTheDocument()
+  })
+
+  it('StatusPill renders a fallback for an unknown status instead of throwing', () => {
+    render(<StatusPill status={'active' as unknown as Status} />)
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+})
+
+describe('siteStatusToStatus', () => {
+  it('maps backend site lifecycle statuses onto the canonical spine', () => {
+    expect(siteStatusToStatus('active')).toBe('ok')
+    expect(siteStatusToStatus('building')).toBe('ok')
+    expect(siteStatusToStatus('completed')).toBe('done')
+    expect(siteStatusToStatus('on_hold')).toBe('warn')
+    expect(siteStatusToStatus('planning')).toBe('info')
+    expect(siteStatusToStatus(null)).toBe('info')
+    expect(siteStatusToStatus(undefined)).toBe('info')
+  })
+
+  it('passes an already-canonical status through unchanged', () => {
+    expect(siteStatusToStatus('warn')).toBe('warn')
+    expect(siteStatusToStatus('done')).toBe('done')
   })
 })

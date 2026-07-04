@@ -9,7 +9,7 @@ export { Display, H1, H2, Body, Small, Micro, Mono } from './Typography'
 export { Button } from './Button'
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button'
 
-export { StatusPill, StatusDot, STATUS_META, severityToStatus } from './StatusPill'
+export { StatusPill, StatusDot, STATUS_META, severityToStatus, siteStatusToStatus } from './StatusPill'
 export type { Status, StatusPillProps } from './StatusPill'
 
 export { EvidenceCard } from './EvidenceCard'

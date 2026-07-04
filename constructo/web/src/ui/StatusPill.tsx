@@ -77,7 +77,7 @@ export function StatusPill({
   size = 'md',
   className,
 }: StatusPillProps) {
-  const meta = STATUS_META[status]
+  const meta = STATUS_META[status] ?? STATUS_META.info
   const pad = size === 'sm' ? 'px-2 py-0.5 text-micro' : 'px-2.5 py-1 text-small'
   return (
     <span
@@ -107,7 +107,7 @@ export function StatusDot({
   status: Status
   className?: string
 }) {
-  const meta = STATUS_META[status]
+  const meta = STATUS_META[status] ?? STATUS_META.info
   return (
     <span
       role="img"
@@ -129,6 +129,33 @@ export function severityToStatus(severity: string): Status {
       return 'warn'
     case 'low':
       return 'info'
+    default:
+      return 'info'
+  }
+}
+
+/**
+ * Map a backend Site lifecycle status (a free string: active / building /
+ * completed / on_hold / planning / …) onto the canonical Status spine for a dot.
+ * An already-canonical value passes through; unknown / null falls back to a
+ * neutral 'info'. This must never throw — a raw site status flows straight into
+ * <StatusDot> in the site switcher, and an unmapped value there blanked the page.
+ */
+export function siteStatusToStatus(raw: string | null | undefined): Status {
+  if (raw && raw in STATUS_META) return raw as Status
+  switch (raw) {
+    case 'active':
+    case 'building':
+    case 'in_progress':
+      return 'ok'
+    case 'completed':
+    case 'handover':
+    case 'closed':
+      return 'done'
+    case 'on_hold':
+    case 'paused':
+    case 'blocked':
+      return 'warn'
     default:
       return 'info'
   }
