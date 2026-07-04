@@ -273,4 +273,36 @@ describe('ChatThread', () => {
       ),
     )
   })
+
+  it('scrolls the target message into view when scrollToMessageId is set', () => {
+    // jsdom has no scrollIntoView — install a mock on the prototype (spyOn can't
+    // wrap a non-existent method).
+    const scrolled: Element[] = []
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this)
+    }) as unknown as typeof HTMLElement.prototype.scrollIntoView
+    try {
+      renderThread(<ChatThread address={address} scrollToMessageId="msg-2" />)
+      // The message row wrapper carries data-msgid; assert we landed on msg-2.
+      expect(
+        scrolled.some((el) => (el as HTMLElement).getAttribute('data-msgid') === 'msg-2'),
+      ).toBe(true)
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original
+    }
+  })
+
+  it('does not throw when scrollToMessageId is not in the thread', () => {
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView =
+      vi.fn() as unknown as typeof HTMLElement.prototype.scrollIntoView
+    try {
+      expect(() =>
+        renderThread(<ChatThread address={address} scrollToMessageId="nope-999" />),
+      ).not.toThrow()
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original
+    }
+  })
 })
