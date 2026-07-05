@@ -246,6 +246,19 @@ class ClarificationAnswerIn(BaseModel):
     answer: str = Field(min_length=1)
 
 
+class InboxSummaryOut(BaseModel):
+    """Designer badge counts for the caller's company (contractor-side cockpit).
+
+    State-computed, no read-tracking: briefs currently awaiting the architect's
+    sign-off, clarifications answered by the homeowner side that the architect
+    hasn't acted on yet (profile's latest brief not yet locked), and taste
+    conflicts the homeowner side deferred to the architect to break.
+    """
+    briefs_awaiting_signoff: int
+    answered_clarifications: int
+    deferred_conflicts: int
+
+
 class MaterializeOut(BaseModel):
     materials_created: int
     materials_reused: int

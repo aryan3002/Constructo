@@ -82,6 +82,17 @@ vi.mock('../../../features/notifications/useUnreadCount', () => ({
 }))
 
 // ---------------------------------------------------------------------------
+// Mock designApi.inboxSummary — default: reject (endpoint unavailable → no
+// badge, so the exact-name 'Intake' assertions above stay valid). The badge
+// test overrides with a resolved summary before rendering.
+// ---------------------------------------------------------------------------
+
+const inboxSummaryMock = vi.fn().mockRejectedValue(new Error('unavailable'))
+vi.mock('../../../api/design', () => ({
+  designApi: { inboxSummary: (...a: unknown[]) => inboxSummaryMock(...a) },
+}))
+
+// ---------------------------------------------------------------------------
 // Dynamic import after mocks
 // ---------------------------------------------------------------------------
 
@@ -270,5 +281,27 @@ describe('DesignerWorkspace (D4)', () => {
       'true',
     )
     expect(screen.getByTestId('selections-surface')).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 10. Inbox badge: Intake tab label carries the summed count when > 0
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('suffixes the Intake tab with the inbox count when something waits', async () => {
+    inboxSummaryMock.mockResolvedValueOnce({
+      briefs_awaiting_signoff: 1,
+      answered_clarifications: 2,
+      deferred_conflicts: 0,
+    })
+    renderWorkspace()
+    expect(await screen.findByRole('tab', { name: 'Intake (3)' })).toBeInTheDocument()
+  })
+
+  it('keeps the plain Intake label when the inbox fetch fails', async () => {
+    // default mock rejects — the label must stay un-suffixed
+    renderWorkspace()
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Intake' })).toBeInTheDocument(),
+    )
   })
 })

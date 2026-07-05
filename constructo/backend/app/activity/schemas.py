@@ -19,9 +19,11 @@ ActivityKind = Literal[
     "homeowner_request",
     "decision_made",
     "site_health_flag",
+    "design_update",
 ]
 LinkType = Literal[
-    "feed_photo", "update", "milestone", "request", "decision", "finding"
+    "feed_photo", "update", "milestone", "request", "decision", "finding",
+    "design_brief",
 ]
 Severity = Literal["info", "success", "warning"]
 

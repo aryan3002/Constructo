@@ -64,6 +64,19 @@ def _finding(site_id, *, on, status="open", severity="high", headline="Schedule 
                            severity=severity, headline=headline, detected_on=on)
 
 
+def _profile(site_id):
+    return SimpleNamespace(id=uuid4(), site_id=site_id)
+
+
+def _design_approval(*, at, action="send_to_architect", note=None, actor_role="homeowner"):
+    return SimpleNamespace(id=uuid4(), brief_id=uuid4(), action=action, note=note,
+                           actor_role=actor_role, created_at=at)
+
+
+def _design_brief(*, at, version=1):
+    return SimpleNamespace(id=uuid4(), profile_id=uuid4(), version=version, created_at=at)
+
+
 def _empty(**over):
     # updates_today/needs_decision_count/sites_total default to 0: build_activity
     # no longer computes these itself (the router's dedicated un-capped COUNT
@@ -187,6 +200,48 @@ def test_scope_change_links_to_project_timeline_via_site_id():
     assert item["kind"] == "scope_change"
     assert item["link"] == {"type": "update", "id": str(site.id)}
     assert item["severity"] == "warning"
+
+
+def test_design_approval_maps_to_design_update_item():
+    from app.activity.aggregate import _map_design_approval
+
+    site = _site()
+    profile = _profile(site.id)
+    approval = _design_approval(at=NOW, action="send_to_architect", note="looks good",
+                                actor_role="homeowner")
+    item = _map_design_approval(approval, profile, site)
+    assert item["id"] == f"design_update:{approval.id}"
+    assert item["kind"] == "design_update"
+    assert item["title"] == "Design brief sent to designer"
+    assert item["subtitle"] == "looks good"
+    assert item["actor"] == "homeowner"
+    assert item["severity"] == "info"
+    assert item["occurred_at"] == NOW.isoformat()
+    assert item["link"] == {"type": "design_brief", "id": str(site.id)}
+
+
+def test_design_brief_creation_maps_to_design_update_item():
+    site = _site()
+    profile = _profile(site.id)
+    brief = _design_brief(at=NOW, version=2)
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(design_briefs=[(brief, profile)]))
+    item = res["items"][0]
+    assert item["kind"] == "design_update"
+    assert item["title"] == "Design brief v2 ready"
+    assert item["subtitle"] is None
+    assert item["actor"] is None
+    assert item["link"] == {"type": "design_brief", "id": str(site.id)}
+
+
+def test_design_approval_included_via_build_activity():
+    site = _site()
+    profile = _profile(site.id)
+    approval = _design_approval(at=NOW, action="approve")
+    res = build_activity(sites=[site], now=NOW, limit=20, cursor=None,
+                         **_empty(design_approvals=[(approval, profile)]))
+    assert len(res["items"]) == 1
+    assert res["items"][0]["title"] == "Design brief approved"
 
 
 def test_summary_passes_through_caller_supplied_counts_unchanged():

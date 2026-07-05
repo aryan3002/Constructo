@@ -37,6 +37,7 @@ from app.models import (
     User,
     WeeklySummary,
 )
+from app.models.profiler import ProfilerBrief, ProfilerBriefApproval, ProfilerProfile
 
 # The owner Home feed shows a short recent slice by default (unlike list/table
 # endpoints elsewhere that default to 50) — 20 keeps the initial payload light.
@@ -87,6 +88,7 @@ async def get_activity(
         empty = build_activity(
             sites=[], photos=[], updates=[], milestones=[], weekly_summaries=[],
             changes=[], requests=[], decisions=[], findings=[],
+            design_approvals=[], design_briefs=[],
             now=dt.datetime.now(dt.UTC), limit=page_size, cursor=decoded,
             updates_today=0, needs_decision_count=0, sites_total=0,
         )
@@ -174,6 +176,41 @@ async def get_activity(
         date_col=True, extra=(SiteFinding.status == "open",),
     )
 
+    # Design brief hand-offs: profiler tables carry no site_id of their own,
+    # so scope via an explicit join to ProfilerProfile (mirrors how
+    # `decisions` above builds its own custom select instead of using `_load`).
+    # Each row list comes back as (row, profile) pairs — aggregate.py needs the
+    # profile alongside the row to resolve the site.
+    design_approvals = list(
+        (
+            await session.execute(
+                _cursor_filter(
+                    select(ProfilerBriefApproval, ProfilerProfile)
+                    .join(ProfilerBrief, ProfilerBriefApproval.brief_id == ProfilerBrief.id)
+                    .join(ProfilerProfile, ProfilerBrief.profile_id == ProfilerProfile.id)
+                    .where(ProfilerProfile.site_id.in_(visible)),
+                    ProfilerBriefApproval.created_at,
+                )
+                .order_by(ProfilerBriefApproval.created_at.desc())
+                .limit(cap)
+            )
+        ).all()
+    )
+    design_briefs = list(
+        (
+            await session.execute(
+                _cursor_filter(
+                    select(ProfilerBrief, ProfilerProfile)
+                    .join(ProfilerProfile, ProfilerBrief.profile_id == ProfilerProfile.id)
+                    .where(ProfilerProfile.site_id.in_(visible)),
+                    ProfilerBrief.created_at,
+                )
+                .order_by(ProfilerBrief.created_at.desc())
+                .limit(cap)
+            )
+        ).all()
+    )
+
     now = dt.datetime.now(dt.UTC)
     updates_today, needs_decision_count = await _summary_counts(session, visible, user, now)
 
@@ -181,6 +218,7 @@ async def get_activity(
         sites=sites, photos=photos, updates=updates, milestones=milestones,
         weekly_summaries=weekly, changes=changes, requests=requests,
         decisions=decisions, findings=findings,
+        design_approvals=design_approvals, design_briefs=design_briefs,
         now=now, limit=page_size, cursor=decoded,
         updates_today=updates_today, needs_decision_count=needs_decision_count,
         sites_total=len(visible),

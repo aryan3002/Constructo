@@ -57,6 +57,7 @@ from app.profiler.engine import (
     propose_themes_for_area,
     refresh_taste_and_maybe_propose,
 )
+from app.profiler.events import notify_design_event
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.pinterest import PinResolver, get_pin_resolver
 from app.profiler.schemas import (
@@ -75,6 +76,7 @@ from app.profiler.schemas import (
     DesignMediaPresignIn,
     DesignMediaPresignOut,
     DesignMediaUploadOut,
+    InboxSummaryOut,
     MaterializeOut,
     PresetOut,
     ProfileCreate,
@@ -110,6 +112,16 @@ _BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
     ),
     (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
     (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
+}
+
+# Every legal approval action fires its own design event, emitted AFTER the
+# state-machine commit in act_on_brief.
+_BRIEF_ACTION_EVENT_KIND: dict[BriefAction, str] = {
+    BriefAction.send_to_architect: "brief_sent_to_designer",
+    BriefAction.request_changes: "changes_requested",
+    BriefAction.architect_sign_off: "designer_signed_off",
+    BriefAction.approve: "brief_approved",
+    BriefAction.contractor_received: "brief_locked",
 }
 
 
@@ -287,6 +299,26 @@ async def _validate_contributor(
     return contributor
 
 
+async def _emit_propose_summary(
+    session: AsyncSession, profile: ProfilerProfile, summary: dict | None
+) -> None:
+    """Turn refresh_taste_and_maybe_propose's post-commit summary into design
+    events. Called AFTER the handler's own session.commit() — never before, so a
+    rolled-back write can never announce itself. summary is None when the
+    auto-propose threshold didn't fire and no new conflict appeared this call."""
+    if summary is None:
+        return
+    area_label = summary["area_label"]
+    if summary["proposed_themes"]:
+        await notify_design_event(session, profile, "themes_ready", area_label=area_label)
+        if summary["asked_clarifications"]:
+            await notify_design_event(
+                session, profile, "clarifications_asked", area_label=area_label
+            )
+    if summary["new_conflict"]:
+        await notify_design_event(session, profile, "conflict_detected", area_label=area_label)
+
+
 _HOMEOWNER_BRIEF_ACTIONS = {
     BriefAction.approve, BriefAction.request_changes, BriefAction.send_to_architect,
 }
@@ -457,6 +489,7 @@ async def create_profile(
         )
     await session.commit()
     await session.refresh(profile)
+    await notify_design_event(session, profile, "profile_started")
     return ProfileOut.model_validate(profile)
 
 
@@ -562,6 +595,7 @@ async def start_self_serve_profile(
 
     await session.commit()
     await session.refresh(profile)
+    await notify_design_event(session, profile, "profile_started")
     return await _profile_detail(session, profile, user)
 
 
@@ -588,6 +622,90 @@ async def list_profiles(
     stmt = stmt.order_by(ProfilerProfile.created_at.desc())
     rows = (await session.execute(stmt)).scalars().all()
     return [ProfileOut.model_validate(p) for p in rows]
+
+
+@router.get("/inbox-summary", response_model=InboxSummaryOut)
+async def get_inbox_summary(
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> InboxSummaryOut:
+    """Designer badge counts for the caller's company (contractor-side cockpit).
+
+    State-computed, no read-tracking — a static top-level path, kept above the
+    dynamic ``/profiles/{profile_id}``-style routes so it can never be shadowed.
+    """
+    briefs_awaiting_signoff = (
+        await session.execute(
+            select(func.count(ProfilerBrief.id))
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerBrief.profile_id)
+            .where(
+                ProfilerBrief.state == BriefState.architect_review,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalar_one()
+
+    # "Answered clarifications the architect hasn't acted on yet" is approximated
+    # as: answered clarifications on company profiles, EXCLUDING profiles whose
+    # latest brief (max version) is already locked — once locked, the architect
+    # has already closed the loop on that profile's clarifications. Two-step:
+    # (1) per profile, find the max brief version; (2) of those latest briefs,
+    # which ones are locked; exclude those profiles from the count below.
+    latest_version_per_profile = (
+        select(
+            ProfilerBrief.profile_id,
+            func.max(ProfilerBrief.version).label("max_version"),
+        )
+        .group_by(ProfilerBrief.profile_id)
+        .subquery()
+    )
+    locked_latest_profile_ids = (
+        await session.execute(
+            select(ProfilerBrief.profile_id)
+            .join(
+                latest_version_per_profile,
+                (ProfilerBrief.profile_id == latest_version_per_profile.c.profile_id)
+                & (ProfilerBrief.version == latest_version_per_profile.c.max_version),
+            )
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerBrief.profile_id)
+            .where(
+                ProfilerBrief.state == BriefState.locked,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalars().all()
+    answered_clarifications_stmt = (
+        select(func.count(ProfilerClarification.id))
+        .join(ProfilerProfile, ProfilerProfile.id == ProfilerClarification.profile_id)
+        .where(
+            ProfilerClarification.answer.is_not(None),
+            ProfilerProfile.company_id == user.company_id,
+        )
+    )
+    if locked_latest_profile_ids:
+        answered_clarifications_stmt = answered_clarifications_stmt.where(
+            ProfilerClarification.profile_id.notin_(locked_latest_profile_ids)
+        )
+    answered_clarifications = (
+        await session.execute(answered_clarifications_stmt)
+    ).scalar_one()
+
+    deferred_conflicts = (
+        await session.execute(
+            select(func.count(ProfilerConflict.id))
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerConflict.profile_id)
+            .where(
+                ProfilerConflict.resolution_status == ConflictStatus.deferred_to_architect,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalar_one()
+
+    return InboxSummaryOut(
+        briefs_awaiting_signoff=briefs_awaiting_signoff,
+        answered_clarifications=answered_clarifications,
+        deferred_conflicts=deferred_conflicts,
+    )
 
 
 async def _profile_detail(
@@ -754,9 +872,10 @@ async def add_reference(
     vision_url = body.source_url or storage.url_for(body.image_r2_key)
     await _run_vision(session, llm, ref, area, vision_url)
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -805,9 +924,10 @@ async def add_reference_from_link(
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -878,9 +998,10 @@ async def add_reference_from_preset(
     storage = get_storage()
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -992,8 +1113,9 @@ async def rank_reference(
                 note=body.note,
             )
         )
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
     await session.commit()
+    await _emit_propose_summary(session, profile, propose_summary)
     return {"ok": True}
 
 
@@ -1123,6 +1245,7 @@ async def resolve_conflict(
     conflict.resolved_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(conflict)
+    await notify_design_event(session, profile, "conflict_resolved", note=conflict.decision_note)
     return ConflictOut.model_validate(conflict)
 
 
@@ -1191,6 +1314,7 @@ async def generate_brief(
     await session.refresh(brief)
     for r in renderings:
         await session.refresh(r)
+    await notify_design_event(session, profile, "brief_ready", version=brief.version)
     return _brief_detail(brief, renderings)
 
 
@@ -1258,6 +1382,10 @@ async def act_on_brief(
     )
     await session.commit()
     await session.refresh(brief)
+    kind = _BRIEF_ACTION_EVENT_KIND[action]
+    await notify_design_event(
+        session, profile, kind, note=body.note, version=brief.version
+    )
     return BriefOut.model_validate(brief)
 
 
@@ -1404,6 +1532,10 @@ async def materialize_brief(
     await session.commit()
     for s in created_specs:
         await session.refresh(s)
+    await notify_design_event(
+        session, profile, "specs_materialized",
+        note=f"{specs_created} selections proposed",
+    )
     return MaterializeOut(
         materials_created=materials_created, materials_reused=materials_reused,
         specs_created=specs_created, specs_reused=specs_reused,
@@ -1468,9 +1600,10 @@ async def answer_clarification(
     row = await session.get(ProfilerClarification, clarification_id)
     if row is None:
         raise AppError(404, "not_found", "Clarification not found")
-    await _load_accessible_profile(session, row.profile_id, user)
+    profile = await _load_accessible_profile(session, row.profile_id, user)
     row.answer = body.answer
     row.answered_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(row)
+    await notify_design_event(session, profile, "clarification_answered")
     return ClarificationOut.model_validate(row)

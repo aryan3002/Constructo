@@ -19,6 +19,7 @@ export type ActivityKind =
   | 'homeowner_request'
   | 'decision_made'
   | 'site_health_flag'
+  | 'design_update'
 
 export type ActivitySeverity = 'info' | 'success' | 'warning'
 
@@ -29,6 +30,7 @@ export type ActivityLinkType =
   | 'request'
   | 'decision'
   | 'finding'
+  | 'design_brief'
 
 export interface ActivityLink {
   type: ActivityLinkType

@@ -48,6 +48,18 @@ test('generateBrief() POSTs to /api/v1/design/profiles/{profileId}/brief with no
   expect(init.body).toBeUndefined()
 })
 
+test('inboxSummary() GETs /api/v1/design/inbox-summary', async () => {
+  mockOk({ briefs_awaiting_signoff: 1, answered_clarifications: 2, deferred_conflicts: 0 })
+  const result = await design.inboxSummary()
+  const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/design/inbox-summary')
+  expect(init.method).toBeUndefined() // request() sends GET when no method is set
+  expect(init.body).toBeUndefined()
+  expect(result.briefs_awaiting_signoff).toBe(1)
+  expect(result.answered_clarifications).toBe(2)
+  expect(result.deferred_conflicts).toBe(0)
+})
+
 test('retryExtraction() POSTs to /api/v1/design/references/{referenceId}/extract with no body', async () => {
   mockOk({ id: 'ref-1', area_id: 'area-1', source_type: 'upload', image_r2_key: 'k', source_url: null, preset_id: null, image_url: 'https://signed/k', consistency_status: null, created_at: '2026-07-05T00:00:00Z', extraction_status: 'ok' })
   const result = await design.retryExtraction('ref-1')

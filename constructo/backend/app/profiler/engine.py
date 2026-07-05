@@ -75,12 +75,24 @@ async def _area_signals(
     return rankings, attrs
 
 
+def _conflict_identity(
+    dimension: str, value: str, contributor_a_id: UUID, contributor_b_id: UUID
+) -> tuple[str, str, UUID, UUID]:
+    return (dimension, value, contributor_a_id, contributor_b_id)
+
+
 async def _sync_conflicts(
     session: AsyncSession, profile_id: UUID, area_id: UUID, conflicts: list[dict]
-) -> None:
+) -> bool:
     """Replace this area's OPEN conflicts with the freshly-detected set.
 
     Resolved conflicts are preserved; only OPEN ones are replaced.
+
+    Returns whether the fresh set contains at least one conflict identity
+    (dimension, value, contributor_a_id, contributor_b_id) that was NOT in the
+    pre-delete OPEN set — i.e. a genuinely NEW conflict, not a re-detection of
+    one that was already open. This lets callers fire conflict_detected once
+    per new conflict instead of once per write.
     """
     existing = (
         await session.execute(
@@ -90,6 +102,18 @@ async def _sync_conflicts(
             )
         )
     ).scalars().all()
+    existing_identities = {
+        _conflict_identity(c.dimension, c.value, c.contributor_a_id, c.contributor_b_id)
+        for c in existing
+    }
+    fresh_identities = {
+        _conflict_identity(
+            cf["dimension"], cf["value"], UUID(cf["contributor_a"]), UUID(cf["contributor_b"])
+        )
+        for cf in conflicts
+    }
+    has_new = bool(fresh_identities - existing_identities)
+
     for c in existing:
         await session.delete(c)
     for cf in conflicts:
@@ -103,6 +127,7 @@ async def _sync_conflicts(
                 contributor_b_id=UUID(cf["contributor_b"]),
             )
         )
+    return has_new
 
 
 async def compute_and_persist_taste(session: AsyncSession, area: ProfilerArea) -> dict:
@@ -200,7 +225,7 @@ async def propose_clarifications_for_area(
 
 async def refresh_taste_and_maybe_propose(
     session: AsyncSession, llm: LLMClient, profile_id: UUID, area_id: UUID,
-) -> None:
+) -> dict | None:
     """Called after every ranking/reference write, pre-commit.
     1. compute_and_persist_taste (taste now persists on WRITE — Task 4 removes
        the GET side-effect).
@@ -209,27 +234,61 @@ async def refresh_taste_and_maybe_propose(
          propose_themes_for_area + (if model['confidence'] < 0.7 or
          model['has_conflict']) propose_clarifications_for_area;
          area.last_proposal_ranked_count = model['ranked_count'].
-    Proposal errors are logged, never raised (ranking must always save)."""
+    Proposal errors are logged, never raised (ranking must always save).
+
+    Runs pre-commit inside the calling handler's transaction, so it cannot emit
+    notifications itself (a notify before commit could announce a write that
+    later rolls back). Instead it RETURNS a summary the caller emits from AFTER
+    its own session.commit(): {"proposed_themes": bool, "asked_clarifications":
+    bool, "new_conflict": bool, "area_label": area.area_key}, or None when
+    nothing happened this call (area missing, or threshold not crossed)."""
     area = await session.get(ProfilerArea, area_id)
     if area is None:
-        return
+        return None
     model = await compute_and_persist_taste(session, area)
     # Conflicts are deterministic (no LLM) and must reflect EVERY write, not only
     # the threshold-crossing case below: a second contributor can disagree on refs
     # that were already ranked (ranked_count unchanged), which would otherwise
     # never re-run propose_themes_for_area (the only other _sync_conflicts caller)
     # and leave GET /conflicts stale/empty despite area.has_conflict=True.
-    await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
+    #
+    # new_conflict: _sync_conflicts returns whether the fresh set contains a
+    # conflict identity absent from the pre-delete OPEN set, i.e. a genuinely
+    # NEW conflict rather than a re-detection of one that's already standing.
+    # THIS call must run first and own the flag: when the threshold branch below
+    # also calls propose_themes_for_area (which internally re-runs
+    # _sync_conflicts on the exact same `model["conflicts"]`), that second sync
+    # sees the set it just wrote as the pre-delete set and returns False —
+    # content-wise a no-op — so it must never overwrite `new_conflict` computed
+    # here. Do not swap this call after the threshold branch.
+    new_conflict = await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
     if (
         model["ranked_count"] >= area.recommended_count
         and model["ranked_count"] != area.last_proposal_ranked_count
     ):
         try:
             await propose_themes_for_area(session, llm, profile_id, area, model)
+            asked_clarifications = False
             if model["confidence"] < 0.7 or model["has_conflict"]:
                 await propose_clarifications_for_area(session, llm, profile_id, area, model)
+                asked_clarifications = True
             area.last_proposal_ranked_count = model["ranked_count"]
+            return {
+                "proposed_themes": True,
+                "asked_clarifications": asked_clarifications,
+                "new_conflict": new_conflict,
+                "area_label": area.area_key,
+            }
         except Exception:
             logger.exception(
                 "profiler: auto-propose failed for area %s (profile %s)", area_id, profile_id
             )
+            return None
+    if new_conflict:
+        return {
+            "proposed_themes": False,
+            "asked_clarifications": False,
+            "new_conflict": True,
+            "area_label": area.area_key,
+        }
+    return None

@@ -484,6 +484,14 @@ export interface ProfilerBriefDetail {
   state: string
 }
 
+/** Contractor-side design inbox — what waits on the designer right now
+ *  (GET /api/v1/design/inbox-summary; contractor roles only). */
+export interface DesignInboxSummary {
+  briefs_awaiting_signoff: number
+  answered_clarifications: number
+  deferred_conflicts: number
+}
+
 export const design = {
   profileBySite: (siteId: string) =>
     request<ProfilerProfileDetail>(`/api/v1/design/profiles/by-site/${siteId}`),
@@ -588,4 +596,8 @@ export const design = {
     request<ProfilerReference>(`/api/v1/design/references/${referenceId}/extract`, {
       method: 'POST',
     }),
+
+  /** Contractor-side inbox counts: briefs awaiting sign-off, answered
+   *  clarifications, conflicts deferred to the designer. */
+  inboxSummary: () => request<DesignInboxSummary>('/api/v1/design/inbox-summary'),
 }
