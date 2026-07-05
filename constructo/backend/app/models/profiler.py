@@ -143,6 +143,9 @@ class ProfilerArea(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     taste_model: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    last_proposal_ranked_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -193,6 +196,7 @@ class ProfilerReference(Base):
     image_r2_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    extraction_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     consistency_status: Mapped[ConsistencyStatus | None] = mapped_column(
         SAEnum(ConsistencyStatus, name="profiler_consistency_status"), nullable=True
     )
