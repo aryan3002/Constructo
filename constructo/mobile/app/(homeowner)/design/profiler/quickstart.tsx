@@ -23,7 +23,7 @@
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 
 import { design } from '../../../../src/api/client'
@@ -89,6 +89,7 @@ function QuickstartStars({
 
 export default function QuickstartScreen() {
   const router = useRouter()
+  const qc = useQueryClient()
   const { theme } = useTheme()
   const c = theme.colors
   const toast = useToast()
@@ -155,6 +156,10 @@ export default function QuickstartScreen() {
     onSuccess: () => {
       setRatedCount((n) => n + 1)
       setIndex((i) => i + 1)
+      // The area screen (persistent Tabs, no remount, AppState-only focus
+      // refetch) reads these same query families — without this, returning
+      // from the deck shows the stale pre-quickstart empty state.
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
     },
     onError: (e: Error) => {
       // Honest failure: keep the card so she can retry (tap a star again) or
@@ -174,6 +179,10 @@ export default function QuickstartScreen() {
   }
 
   function goToArea() {
+    // Belt-and-braces: onSuccess already invalidates after every landed rank,
+    // but this guarantees the area screen is never stale on the way back —
+    // e.g. if she leaves mid-flight before a rank's invalidation settles.
+    void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
     router.back()
   }
 
@@ -182,7 +191,7 @@ export default function QuickstartScreen() {
       <SubHeader
         title={`Quick start — ${areaLabel}`}
         subtitle={canRank && !done ? S.progress(index + 1, total) : undefined}
-        onBack={() => router.back()}
+        onBack={goToArea}
       />
 
       <View style={{ paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, gap: SPACE.md }}>
