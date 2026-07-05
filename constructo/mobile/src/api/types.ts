@@ -447,6 +447,10 @@ export interface HomeownerDecision {
   detail: string | null
   state: string
   created_at: string
+  // Set when this decision was raised by routing a design Spec — lets the
+  // Design tab group "From your design brief" selections. Null otherwise.
+  spec_id?: string | null
+  spec_label?: string | null
 }
 
 /**

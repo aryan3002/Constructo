@@ -56,6 +56,7 @@ import {
   PROFILER_STR,
 } from '../../src/homeowner/design_profiler.util'
 import { briefStateCard } from '../../src/homeowner/brief_state.util'
+import { briefBornDecisions } from '../../src/homeowner/brief_selections.util'
 import { clarCountLabel, openClarifications } from '../../src/homeowner/clarifications.util'
 import {
   DESIGN_STR,
@@ -225,7 +226,73 @@ const TAB_STR = {
     notStarted: 'Not started',
     ready: 'Ready',
     inProgress: 'In progress',
+    // Brief-born selections (the payoff — routed Specs reaching the homeowner)
+    fromYourBrief: 'From your design brief',
+    briefBornCountOne: 'Your brief became a material choice — 1 waiting on you',
+    briefBornCountMany: 'Your brief became material choices — {count} waiting on you',
+    briefBornCountNoneWaiting: 'Your brief became material choices — all decided',
   } as Record<string, string>,
+  hi: {
+    tabProfile: 'प्रोफ़ाइल',
+    tabPlans: 'नक्शे',
+    tabSelections: 'चुनाव',
+    bannerEyebrow: 'आपकी शैली',
+    bannerUpdated: 'अपडेट किया गया',
+    bannerEmpty: 'अपनी शैली प्रोफ़ाइल जोड़ें',
+    pendingApprovalCallout: 'आपकी मंज़ूरी बाकी',
+    pendingApprovalBody:
+      'आपके बिल्डर ने समीक्षा के लिए नक्शे साझा किए हैं। विवरण देखने के लिए किसी भी नक्शे पर टैप करें।',
+    refsButton: 'संदर्भ',
+    decidedLabel: 'तय हुआ',
+    pendingLabel: 'लंबित',
+    wholeHouse: 'पूरा घर',
+    groupFloorPlan: 'फ़्लोर प्लान',
+    groupElecPlumb: 'बिजली और प्लंबिंग',
+    groupElevations: 'एलिवेशन और 3D',
+    groupOther: 'अन्य नक्शे',
+    viewDrawing: 'समीक्षा करें',
+    profileEyebrow: 'डिज़ाइन प्रोफ़ाइल',
+    profileH3: 'आपकी ब्रीफ़ बन रही है',
+    addInspiration: 'प्रेरणा जोड़ें',
+    designChat: 'डिज़ाइन चैट',
+    scopeLabel: 'दायरा',
+    wholeHouseScope: 'पूरा घर',
+    contributorsLabel: 'योगदानकर्ता',
+    areasFromAI: 'AI की ओर से',
+    themeSuggestions: 'थीम सुझाव',
+    themeSub: '3 दिशाएं, सबूत सहित',
+    conflictLabel: 'पसंद अलग-अलग हैं',
+    conflictSub: 'साथ मिलकर तय करें',
+    briefPreview: 'ब्रीफ़ पूर्वावलोकन',
+    briefSub: 'पूरे घर की डिज़ाइन ब्रीफ़',
+    howItWorks: 'यह कैसे काम करता है',
+    notStarted: 'शुरू नहीं हुआ',
+    ready: 'तैयार',
+    inProgress: 'जारी है',
+    fromYourBrief: 'आपकी डिज़ाइन ब्रीफ़ से',
+    briefBornCountOne: 'आपकी ब्रीफ़ से एक सामग्री चुनाव बना — 1 आप पर लंबित',
+    briefBornCountMany: 'आपकी ब्रीफ़ से सामग्री चुनाव बने — {count} आप पर लंबित',
+    briefBornCountNoneWaiting: 'आपकी ब्रीफ़ से सामग्री चुनाव बने — सभी तय हो गए',
+  } as Record<string, string>,
+}
+
+/** Map decision.state → Status tone for the StatusPill (mirrors
+ * app/(homeowner)/decisions/[id].tsx's stateStatus so the pill on the Design
+ * tab matches the one on the decision detail screen). */
+function briefDecisionStatus(state: string): 'warn' | 'ok' | 'risk' | 'info' {
+  switch (state) {
+    case 'pending':
+      return 'warn'
+    case 'acknowledged':
+      return 'info'
+    case 'resolved':
+      return 'ok'
+    case 'rejected':
+    case 'escalated':
+      return 'risk'
+    default:
+      return 'info'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -740,11 +807,17 @@ export default function Design() {
     queryKey: ['homeowner', 'capabilities'],
     queryFn: () => homeowner.capabilities(),
   })
+  const decisionsQ = useQuery({
+    queryKey: ['homeowner', 'decisions'],
+    queryFn: () => homeowner.decisions(),
+  })
 
   const drawings = drawingsQ.data ?? []
   const selections = selectionsQ.data ?? []
   const profile = profileQ.data
   const canDesign = capsQ.data?.can_design ?? false
+  const briefDecisions = briefBornDecisions(decisionsQ.data ?? [])
+  const briefDecisionsPending = briefDecisions.filter((d) => d.state === 'pending').length
 
   const tones = profileTone(profile)
   const profileSummary = profileText(profile)
@@ -868,6 +941,43 @@ export default function Design() {
   // ============================================================================
   const renderSelectionsTab = () => (
     <View style={{ gap: SPACE.xl }}>
+      {/* "From your design brief" — the payoff: routed Specs reaching the
+          homeowner as material choices, via the existing decisions surface. */}
+      {briefDecisions.length > 0 ? (
+        <View style={{ gap: SPACE.md }}>
+          <View style={{ gap: 2 }}>
+            <Eyebrow style={{ color: c.accentDeep }}>{T.fromYourBrief.toUpperCase()}</Eyebrow>
+            <Small muted>
+              {briefDecisionsPending === 0
+                ? T.briefBornCountNoneWaiting
+                : briefDecisionsPending === 1
+                  ? T.briefBornCountOne
+                  : T.briefBornCountMany.replace('{count}', String(briefDecisionsPending))}
+            </Small>
+          </View>
+          <Card padded={false}>
+            <View style={{ paddingHorizontal: SPACE.lg }}>
+              {briefDecisions.map((d, idx) => (
+                <ListRow
+                  key={d.id}
+                  icon="feather"
+                  title={d.spec_label ?? d.title}
+                  onPress={() => router.push(`/(homeowner)/decisions/${d.id}`)}
+                  last={idx === briefDecisions.length - 1}
+                  right={
+                    <StatusPill
+                      status={briefDecisionStatus(d.state)}
+                      size="sm"
+                      label={d.state === 'pending' ? T.pendingLabel : undefined}
+                    />
+                  }
+                />
+              ))}
+            </View>
+          </Card>
+        </View>
+      ) : null}
+
       {selectionsQ.isLoading ? (
         <Card padded><Small muted>Loading selections…</Small></Card>
       ) : selectionsQ.isError ? (
