@@ -12,7 +12,7 @@ import { Feather } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
-import type { AppNotification } from '../../src/api/types'
+import { routeForNotification } from '../../src/homeowner/inbox_route.util'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -23,6 +23,7 @@ const ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   request: 'message-square',
   update: 'file-text',
   weekly_summary: 'calendar',
+  design: 'layers',
 }
 
 const STR = {
@@ -35,20 +36,6 @@ function timeLabel(iso: string): string {
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   if (d.toDateString() === new Date().toDateString()) return time
   return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} · ${time}`
-}
-
-function routeFor(n: AppNotification): string | null {
-  switch (n.type) {
-    case 'photo':
-      return '/(homeowner)/photos'
-    case 'request':
-      return '/(homeowner)/requests'
-    case 'update':
-    case 'weekly_summary':
-      return '/(homeowner)/updates'
-    default:
-      return null
-  }
 }
 
 export default function InboxScreen() {
@@ -85,7 +72,7 @@ export default function InboxScreen() {
       ) : (
         <View style={{ gap: SPACE.sm, marginTop: SPACE.sm }}>
           {items.map((n, i) => {
-            const route = routeFor(n)
+            const route = routeForNotification(n)
             return (
               <FadeInUp key={n.id} delay={Math.min(i, 6) * 40}>
                 <Pressable

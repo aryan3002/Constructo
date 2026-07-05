@@ -56,9 +56,15 @@ export default function DesignerBrief() {
     const s = inboxQ.data
     if (!s) return null
     const parts = [
-      s.briefs_awaiting_signoff > 0 ? `${s.briefs_awaiting_signoff} waiting for sign-off` : null,
-      s.answered_clarifications > 0 ? `${s.answered_clarifications} new answers` : null,
-      s.deferred_conflicts > 0 ? `${s.deferred_conflicts} deferred to you` : null,
+      s.briefs_awaiting_signoff > 0
+        ? `${s.briefs_awaiting_signoff} brief${s.briefs_awaiting_signoff === 1 ? '' : 's'} waiting for sign-off`
+        : null,
+      s.answered_clarifications > 0
+        ? `${s.answered_clarifications} new answer${s.answered_clarifications === 1 ? '' : 's'}`
+        : null,
+      s.deferred_conflicts > 0
+        ? `${s.deferred_conflicts} conflict${s.deferred_conflicts === 1 ? '' : 's'} deferred to you`
+        : null,
     ].filter((p): p is string => p !== null)
     return parts.length > 0 ? parts.join(' · ') : null
   }, [inboxQ.data])
