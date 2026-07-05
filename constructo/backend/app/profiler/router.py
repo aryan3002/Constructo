@@ -911,9 +911,11 @@ async def retry_extraction(
         await session.delete(row)
 
     storage = get_storage()
-    # Vision needs a FETCHABLE url, never a bare R2 key — resolve the stored key
-    # (presigned GET) or pass the external source_url through (mirrors add_reference).
-    vision_url = ref.source_url or storage.url_for(ref.image_r2_key)
+    # Vision needs a FETCHABLE image url, never a bare R2 key. Prefer the rehosted
+    # R2 image whenever a key exists: for pinterest_link refs source_url is the pin
+    # PAGE (kept for display, not an image), so handing it to vision would fail
+    # forever. source_url is only the degenerate fallback for key-less refs.
+    vision_url = storage.url_for(ref.image_r2_key) if ref.image_r2_key else ref.source_url
     await _run_vision(session, llm, ref, area, vision_url)
 
     await session.commit()

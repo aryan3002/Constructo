@@ -150,6 +150,53 @@ async def test_retry_extraction_replaces_stale_attributes_and_reports_ok(
         app.dependency_overrides.pop(get_llm, None)
 
 
+async def test_retry_extraction_uses_rehosted_image_not_pin_page(client, factory):
+    """A pinterest_link ref keeps the pin-PAGE url in source_url (display only) —
+    retry must hand vision the rehosted R2 image, never the pin page."""
+    canned = {"style": "minimal", "materials": ["oak"], "colors": ["light"], "confidence": 0.8}
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(site.id),
+                  "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
+                  "contributors": []},
+            headers=_auth(architect),
+        )
+        pid = created.json()["id"]
+        detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
+        area_id = detail.json()["areas"][0]["id"]
+
+        ref = await client.post(
+            "/api/v1/design/references",
+            json={"area_id": area_id, "source_type": "pinterest_link",
+                  "image_r2_key": "design/test/rehosted-pin.jpg",
+                  "source_url": "https://www.pinterest.com/pin/12345/"},
+            headers=_auth(architect),
+        )
+        assert ref.status_code == 201
+        ref_id = ref.json()["id"]
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    capture = FakeLLMClient(canned=canned)
+    app.dependency_overrides[get_llm] = lambda: capture
+    try:
+        retry = await client.post(
+            f"/api/v1/design/references/{ref_id}/extract",
+            headers=_auth(architect),
+        )
+        assert retry.status_code == 200
+        vision_url = capture.calls[-1]["image_url"]
+        assert "rehosted-pin.jpg" in vision_url
+        assert "pinterest" not in vision_url
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
 async def test_retry_extraction_cross_company_is_404(client, factory):
     canned = {"style": "minimal", "materials": ["oak"], "colors": ["light"], "confidence": 0.8}
     app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
