@@ -27,37 +27,24 @@
 |---|---|---|---|
 | 0 | Land the in-flight fix pass (incl. the Pinterest parse fix = "Pinterest doesn't work" root cause) | ✅ **DONE — merged as PR #243 (`4936256`) 2026-07-05**; plan doc kept for the record | — |
 | 1 | Backend ignition + authority + hygiene | `2026-07-05-design-loop-phase1-ignition.md` ✅ ready | 0 |
-| 2 | Design events → push + Updates + activity + badges | expand JIT | 1 |
-| 3 | Designer cockpit completion (mobile architect + web) | expand JIT | 1 (2 for badges) |
-| 4 | Homeowner loop completion (incl. P2/P3 Pinterest UX, Q3 quick-start) | expand JIT | 1 (2 for banners) |
-| 5 | One inspiration surface + visible payoff | expand JIT | 4 |
-| 6 | Full-loop seeds, sim smoke, verify, deploy | expand JIT | all |
+| 2 | Design events → push + bell inbox + activity + badges | `2026-07-05-design-loop-phase2-events.md` ✅ ready | 1 |
+| 3 | Designer cockpit completion (mobile architect + web) | `2026-07-05-design-loop-phase3-designer-cockpit.md` ✅ ready | 1 (2 for badges) |
+| 4 | Homeowner loop completion (incl. P2/P3/P4 Pinterest, Q1/Q3/Q5 presets) | `2026-07-05-design-loop-phase4-homeowner.md` ✅ ready | 1 (2 for banners) |
+| 5 | One inspiration surface + visible payoff | `2026-07-05-design-loop-phase5-unify-payoff.md` ✅ ready | 4 |
+| 6 | Full-loop seeds, sim smoke, verify, deploy | `2026-07-05-design-loop-phase6-prove-ship.md` ✅ ready | all |
 
 Phases 3 and 4 parallelize (different apps, same contracts). Workstream Q1–Q2 (preset catalog pipeline) has no dependencies and can run any time after Phase 0.
 
 ---
 
-## Phase 2 — Design events: push + Updates + activity + badges
+## Phase 2 — Design events: push + bell inbox + activity + badges
 
-**New module:** `backend/app/profiler/events.py`
-
-```python
-async def emit_design_event(
-    session: AsyncSession,
-    profile: ProfilerProfile,
-    kind: str,                      # catalog below
-    *,
-    actor_user_id: UUID | None,
-    brief_id: UUID | None = None,
-    area_id: UUID | None = None,
-    note: str | None = None,
-) -> None: ...
-```
+**Detailed plan:** `2026-07-05-design-loop-phase2-events.md`. **New module:** `backend/app/profiler/events.py` with a single `notify_design_event(session, profile, kind, *, note, area_label, version)`.
 
 Behavior (all failure-isolated — an event error never 500s the triggering request):
-1. Insert `SiteEventModel(site_id=profile.site_id, event_type=f"design_{kind}", payload={...})`.
-2. Push: homeowner-directed kinds → tokens via `_push_tokens_for_site(...)` filtered to active `HomeownerMember` users; designer-directed kinds → `push_tokens_for_user(...)` for company architect users. Send with `send_expo_push`, deep-link `data` (`{"url": "/design/brief"}` etc.).
-3. Homeowner Updates: insert `Update(site_id, type="design", ...)` rows for the homeowner-visible kinds (reuses the existing Updates timeline + quiet-period filter; follow `app/publish/router.py:396` shape).
+1. Homeowner direction: `notify_site_homeowners(...)` (`app/push/sender.py:170`) — it already persists the bell-inbox `HomeownerNotification` row AND sends cadence-gated push in one call (`category="design"`, never spike).
+2. Designer direction: `push_tokens_for_user(...)` over the company's architect users → `send_expo_push` with deep-link `data`.
+3. **Deliberately NO `Update` rows and NO `SiteEventModel` rows** — both are consumed by unrelated surfaces (WhatsApp brief, site register); writing shadow rows there is exactly the pollution bug PR #240 had to clean up. Owner-web activity instead reads profiler tables directly (`ProfilerBriefApproval` + `ProfilerBrief`) as a 10th source with kind `design_update`.
 
 **Event catalog** (kind → audience → deep-link):
 
@@ -78,11 +65,11 @@ Behavior (all failure-isolated — an event error never 500s the triggering requ
 **Emit points:** inside Phase-1's `engine.py` proposal hook (themes_ready/clarifications_asked/conflict_detected), `act_on_brief` (all transitions), `generate_brief` (brief_ready), `materialize_brief` (specs_materialized), self-serve/contractor profile create (profile_started).
 
 **Tasks:**
-1. `events.py` + unit tests (event rows, token targeting, Update row shape; push transport faked).
-2. Wire emit points (one test per trigger asserting the SiteEvent row + no emission on failed transitions).
-3. Owner-web activity: extend the `GET /api/v1/activity` union with `design_*` site events (owner web already unions real rows — PR #240 pattern) + web render row.
-4. Homeowner Updates renderer: `type="design"` card (icon, EN/HI line, deep-link).
-5. Designer badges endpoint: `GET /api/v1/design/inbox-summary` → `{new_briefs: int, unread_answers: int, deferred_conflicts: int}` (computed from state timestamps vs. an architect `last_seen_at` stored per-user in a small `profiler_seen` table — or v1: state-based counts only, no read-tracking). **Decision recorded: v1 = state-based counts, no read-tracking (YAGNI).**
+1. `events.py` + unit tests (kind catalog, copy, token targeting — asserted via the push sender's `dry_run_log()`).
+2. Wire emit points after each domain commit (one test per trigger; illegal transitions emit nothing).
+3. Owner-web activity: 10th source read from `ProfilerBriefApproval`/`ProfilerBrief` → kind `design_update`, link `design_brief` + web render row.
+4. Mobile push-tap routing for `data.type === "design"` in `app/_layout.tsx`.
+5. Designer badges endpoint: `GET /api/v1/design/inbox-summary` → `{briefs_awaiting_signoff, answered_clarifications, deferred_conflicts}`. **Decision recorded: v1 = state-based counts, no read-tracking (YAGNI).**
 
 **Acceptance:** every state transition in a full loop run produces exactly the catalog's events; homeowner sees Update cards + gets pushes; architect Brief hub badge shows counts; zero events on illegal transitions; backend suite green.
 
@@ -134,7 +121,7 @@ All screens Calm Cockpit (`constructo-homeowner-design` skill), EN lead + HI str
 | 5.1 | Room↔area mapping util (`room_tag`/space name → profiler `area_key`, both directions, HI-safe slugs) | `src/homeowner/design_area_map.util.ts` + test; backend none | pure function, tested on seed names incl. "pooja"/underscore variants |
 | 5.2 | `references/[room].tsx` re-pointed at the profiler: reads that area's references, add-flow = the same Upload/Pinterest/Preset trio; legacy homeowner refs shown in a collapsed "Earlier saves" section (read-only dual-read) | `references/[room].tsx` | one add-flow everywhere; legacy rows still visible; no writes to the legacy endpoint from UI |
 | 5.3 | Selections-tab "References" chips → profiler area screen; delete the duplicate board entry-point | `design.tsx` | no path creates un-ranked orphan references anymore |
-| 5.4 | Payoff surface: after materialize, homeowner Selections tab gains a "From your design brief" group listing pending Specs (`GET /api/v1/homeowner/…` new read endpoint over Spec rows scoped by site + membrane; approval stays in the existing decisions flow) | backend `app/homeowner/router.py` + schema + tests; `design.tsx` | "Your brief became 8 material choices — 3 waiting on you" renders from real Spec rows; cross-company 404 |
+| 5.4 | Payoff surface: routed brief-born Specs already become homeowner `Decision(kind=approval, spec_id=…)` rows (`sync_spec_routed_decision`); expose `spec_id`+`spec_label` on `HomeownerDecisionOut` and group them in the Selections tab as "From your design brief" — NO new approval path | backend `my_decisions` + schema + tests; `design.tsx` | "Your brief became material choices — 3 waiting on you" renders from real Decision rows; approve stays owner-gated in the existing decisions flow |
 | 5.5 | Style-profile prose: keep, but source its draft from profiler taste when a profile exists (fallback to legacy fingerprint) — decision D-5.5 recorded: keep-and-feed, not retire | `app/homeowner/ai.py` touchpoint + test | draft mentions ranked-taste materials when profiler data exists |
 
 ---

@@ -277,20 +277,20 @@ async def _suggested_theme(db_session, pid, area_id) -> ProfilerTheme:
     return t
 
 async def test_owner_homeowner_approves_theme(client, factory, db_session):
-    w = await _world(client, factory, db_session)   # exposes .profile_id .area_id .site .owner_user ...
-    theme = await _suggested_theme(db_session, w.profile_id, w.area_id)
+    # _world returns a dict: company, architect, site, pid, area_id, bid,
+    # owner, co, family, advisor (tests/test_profiler_membrane.py:32-66)
+    w = await _world(client, factory, db_session)
+    theme = await _suggested_theme(db_session, w["pid"], w["area_id"])
     resp = await client.post(f"/api/v1/design/themes/{theme.id}/decision",
-        json={"action": "approve"}, headers=auth(w.owner_user))
+        json={"action": "approve"}, headers=auth(w["owner"]))
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "approved"
 
 async def test_family_member_gets_comment_box_not_authority(client, factory, db_session):
-    w = await _world(client, factory, db_session)
-    fam = await factory.user(role=w.owner_user.role)  # homeowner-role user
-    await _member(db_session, w.site.id, fam.id, HomeownerSubRole.family)
-    theme = await _suggested_theme(db_session, w.profile_id, w.area_id)
+    w = await _world(client, factory, db_session)   # w["family"] is already an active family member
+    theme = await _suggested_theme(db_session, w["pid"], w["area_id"])
     resp = await client.post(f"/api/v1/design/themes/{theme.id}/decision",
-        json={"action": "approve"}, headers=auth(fam))
+        json={"action": "approve"}, headers=auth(w["family"]))
     assert resp.status_code == 403
     body = resp.json()
     assert body["error"]["code"] == "approve_forbidden"
@@ -298,22 +298,20 @@ async def test_family_member_gets_comment_box_not_authority(client, factory, db_
 
 async def test_cross_company_homeowner_sees_404(client, factory, db_session):
     w = await _world(client, factory, db_session)
-    stranger = await factory.user(role=w.owner_user.role)  # no membership anywhere on this site
-    theme = await _suggested_theme(db_session, w.profile_id, w.area_id)
+    stranger = await factory.user(role=w["owner"].role)  # no membership on this site
+    theme = await _suggested_theme(db_session, w["pid"], w["area_id"])
     resp = await client.post(f"/api/v1/design/themes/{theme.id}/decision",
         json={"action": "approve"}, headers=auth(stranger))
     assert resp.status_code == 404  # membrane: existence not revealed
 
 async def test_architect_path_still_works(client, factory, db_session):
     w = await _world(client, factory, db_session)
-    theme = await _suggested_theme(db_session, w.profile_id, w.area_id)
+    theme = await _suggested_theme(db_session, w["pid"], w["area_id"])
     resp = await client.post(f"/api/v1/design/themes/{theme.id}/decision",
-        json={"action": "reject"}, headers=auth(w.architect_user))
+        json={"action": "reject"}, headers=auth(w["architect"]))
     assert resp.status_code == 200
     assert resp.json()["status"] == "rejected"
 ```
-
-(Adapt `_world`'s attribute names to its real return shape — it is the Plan-3b membrane world builder.)
 
 - [ ] **Step 2:** run → FAIL (homeowner currently blocked by `require_role(*_EDIT_ROLES)` → 403 wrong shape / 401).
 - [ ] **Step 3: Implement.** `decide_theme` signature: `user: User = Depends(get_current_user)`; body becomes `profile = await _load_accessible_profile(session, theme.profile_id, user)` → `actor_role = await _gate_design_commit(session, user, profile)` → existing status/decided_by lines. Implement `_gate_design_commit` per docstring (copy the act_on_brief branch, factor both call sites onto the helper).
@@ -336,24 +334,24 @@ async def test_architect_path_still_works(client, factory, db_session):
 
 ```python
 async def test_owner_generates_brief_and_regenerates_out_of_revision(client, factory, db_session):
-    w = await _world(client, factory, db_session)
-    hdrs = auth(w.owner_user)
-    r1 = await client.post(f"/api/v1/design/profiles/{w.profile_id}/brief", headers=hdrs)
+    w = await _world(client, factory, db_session)   # NOTE: _world already generated a brief (w["bid"])
+    hdrs = auth(w["owner"])
+    r1 = await client.post(f"/api/v1/design/profiles/{w['pid']}/brief", headers=hdrs)
     assert r1.status_code == 201, r1.text
-    b1 = r1.json(); assert b1["version"] == 1 and b1["state"] == "homeowner_review"
+    b1 = r1.json()
+    assert b1["state"] == "homeowner_review"
+    v1 = b1["version"]                       # world's seed brief means this is >= 2
     # dead-end exit: request changes, then REGENERATE
     rc = await client.post(f"/api/v1/design/briefs/{b1['id']}/approval",
         json={"action": "request_changes", "note": "less grey"}, headers=hdrs)
     assert rc.status_code == 200 and rc.json()["state"] == "revision_requested"
-    r2 = await client.post(f"/api/v1/design/profiles/{w.profile_id}/brief", headers=hdrs)
+    r2 = await client.post(f"/api/v1/design/profiles/{w['pid']}/brief", headers=hdrs)
     assert r2.status_code == 201
-    assert r2.json()["version"] == 2 and r2.json()["state"] == "homeowner_review"
+    assert r2.json()["version"] == v1 + 1 and r2.json()["state"] == "homeowner_review"
 
 async def test_family_cannot_generate_brief(client, factory, db_session):
     w = await _world(client, factory, db_session)
-    fam = await factory.user(role=w.owner_user.role)
-    await _member(db_session, w.site.id, fam.id, HomeownerSubRole.family)
-    resp = await client.post(f"/api/v1/design/profiles/{w.profile_id}/brief", headers=auth(fam))
+    resp = await client.post(f"/api/v1/design/profiles/{w['pid']}/brief", headers=auth(w["family"]))
     assert resp.status_code == 403
 ```
 
