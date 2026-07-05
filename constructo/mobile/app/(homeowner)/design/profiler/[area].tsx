@@ -30,7 +30,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ApiError, design, homeowner } from '../../../../src/api/client'
-import type { ProfilerConflict, ProfilerReference } from '../../../../src/api/client'
+import type { ProfilerConflict, ProfilerReference, ProfilerTheme, ThemeDecisionAction } from '../../../../src/api/client'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import {
@@ -46,6 +46,7 @@ import {
   Screen,
   SegmentedTabs,
   Small,
+  StatusPill,
   SubHeader,
   useToast,
 } from '../../../../src/ui'
@@ -57,6 +58,11 @@ import {
 } from '../../../../src/homeowner/design_profiler.util'
 import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
 import { CONFLICT_STR, conflictSides, resolvedSummary } from '../../../../src/homeowner/conflicts.util'
+import {
+  decidedAttribution,
+  THEME_DECISION_STR,
+  themeDecisionTone,
+} from '../../../../src/homeowner/theme_decisions.util'
 
 // ---------------------------------------------------------------------------
 // Confidence pill
@@ -495,6 +501,13 @@ export default function AreaRankScreen() {
   })
   const canApprove = capQ.data?.can_approve ?? true
 
+  // Caller's own user id — for "Decided by you" attribution on theme cards.
+  const meQ = useQuery({
+    queryKey: ['homeowner', 'me'],
+    queryFn: () => homeowner.me(),
+  })
+  const myUserId = meQ.data?.id ?? null
+
   const refs = refsQ.data ?? []
   const myContributorId = profileQ.data?.my_contributor_id ?? null
   const canRank = !!myContributorId
@@ -607,6 +620,33 @@ export default function AreaRankScreen() {
     },
     onError: (e: Error) => toast(e.message),
   })
+
+  // Theme decisions — owners/co-owners commit approve/adjust/reject per theme.
+  // "adjust" opens a small note-sheet (note optional); approve/reject fire
+  // straight away. A single mutation + a ref to the theme being decided so
+  // per-card loading state stays isolated without extra component splitting.
+  const [adjustSheet, setAdjustSheet] = useState<ProfilerTheme | null>(null)
+  const [adjustNote, setAdjustNote] = useState('')
+  const decideThemeMut = useMutation({
+    mutationFn: ({ themeId, action, note }: { themeId: string; action: ThemeDecisionAction; note?: string }) =>
+      design.decideTheme(themeId, action, note),
+    onSuccess: () => {
+      toast(THEME_DECISION_STR.en.decidedToast, 'check')
+      setAdjustSheet(null)
+      setAdjustNote('')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'themes', pid, area] })
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'detail', pid] })
+    },
+    onError: (e: unknown) => {
+      if (e instanceof ApiError && e.code === 'approve_forbidden') {
+        toast(e.message)
+      } else {
+        toast((e as Error).message)
+      }
+    },
+  })
+  const decidingThemeId =
+    decideThemeMut.isPending ? decideThemeMut.variables?.themeId : undefined
 
   // "Settle this together" sheet — one conflict at a time.
   const [conflictSheet, setConflictSheet] = useState<ProfilerConflict | null>(null)
@@ -839,40 +879,87 @@ export default function AreaRankScreen() {
                 <Small muted>Analysing your references…</Small>
               ) : themesQ.data && themesQ.data.length > 0 ? (
                 <Card padded>
-                  {themesQ.data.map((t, i, arr) => (
-                    <View
-                      key={t.id}
-                      style={{
-                        paddingVertical: 10,
-                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
-                        borderBottomColor: theme.colors.line,
-                      }}
-                    >
-                      <Eyebrow style={{ color: c.textMute }}>Theme</Eyebrow>
-                      <Body style={{ marginTop: 3 }}>{t.name}</Body>
-                      {t.materials.length > 0 ? (
-                        <Small muted style={{ marginTop: 2 }}>
-                          Materials: {t.materials.join(', ')}
-                        </Small>
-                      ) : null}
-                      {/* Confidence inline */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <Feather
-                          name={t.confidence > 0.65 ? 'check-circle' : 'clock'}
-                          size={13}
-                          color={t.confidence > 0.65 ? c.ok : c.warn}
-                        />
-                        <Micro
-                          style={{
-                            color: t.confidence > 0.65 ? c.ok : c.warn,
-                            fontWeight: '600',
-                          }}
-                        >
-                          {t.confidence > 0.65 ? 'High' : 'Building'}
-                        </Micro>
+                  {themesQ.data.map((t, i, arr) => {
+                    const isSuggested = t.status === 'suggested'
+                    const attribution = decidedAttribution(t.decided_by, myUserId)
+                    const isDecidingThis = decidingThemeId === t.id
+                    return (
+                      <View
+                        key={t.id}
+                        style={{
+                          paddingVertical: 10,
+                          borderBottomWidth: i === arr.length - 1 ? 0 : 1,
+                          borderBottomColor: theme.colors.line,
+                          gap: 6,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACE.sm }}>
+                          <View style={{ flex: 1 }}>
+                            <Eyebrow style={{ color: c.textMute }}>Theme</Eyebrow>
+                            <Body style={{ marginTop: 3 }}>{t.name}</Body>
+                          </View>
+                          {!isSuggested ? (
+                            <StatusPill status={themeDecisionTone(t.status)} size="sm" label={t.status} />
+                          ) : null}
+                        </View>
+                        {t.materials.length > 0 ? (
+                          <Small muted>Materials: {t.materials.join(', ')}</Small>
+                        ) : null}
+                        {/* Confidence inline */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Feather
+                            name={t.confidence > 0.65 ? 'check-circle' : 'clock'}
+                            size={13}
+                            color={t.confidence > 0.65 ? c.ok : c.warn}
+                          />
+                          <Micro
+                            style={{
+                              color: t.confidence > 0.65 ? c.ok : c.warn,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {t.confidence > 0.65 ? 'High' : 'Building'}
+                          </Micro>
+                        </View>
+
+                        {!isSuggested && attribution ? (
+                          <Small muted>{attribution}</Small>
+                        ) : null}
+
+                        {isSuggested && canApprove ? (
+                          <View style={{ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap', marginTop: 4 }}>
+                            <Button
+                              title={THEME_DECISION_STR.en.approve}
+                              variant="primary"
+                              size="md"
+                              loading={isDecidingThis && decideThemeMut.variables?.action === 'approve'}
+                              onPress={() =>
+                                decideThemeMut.mutate({ themeId: t.id, action: 'approve' })
+                              }
+                            />
+                            <Button
+                              title={THEME_DECISION_STR.en.adjust}
+                              variant="secondary"
+                              size="md"
+                              onPress={() => {
+                                setAdjustNote('')
+                                setAdjustSheet(t)
+                              }}
+                            />
+                            <Button
+                              title={THEME_DECISION_STR.en.reject}
+                              variant="ghost"
+                              size="md"
+                              loading={isDecidingThis && decideThemeMut.variables?.action === 'reject'}
+                              onPress={() =>
+                                decideThemeMut.mutate({ themeId: t.id, action: 'reject' })
+                              }
+                            />
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  ))}
+                    )
+                  })}
                 </Card>
               ) : (
                 <Card padded>
@@ -1306,6 +1393,84 @@ export default function AreaRankScreen() {
                   })()}
                 </ScrollView>
               ) : null}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── "Close, adjust" note sheet — optional note on an adjust decision ── */}
+      <Modal
+        visible={!!adjustSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAdjustSheet(null)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+            onPress={() => setAdjustSheet(null)}
+          >
+            <Pressable
+              style={{
+                backgroundColor: c.card,
+                borderTopLeftRadius: theme.radii.card,
+                borderTopRightRadius: theme.radii.card,
+                padding: SPACE.lg,
+                paddingBottom: insets.bottom + SPACE.lg,
+                gap: SPACE.sm,
+              }}
+              onPress={() => {}}
+            >
+              <Eyebrow style={{ color: c.textMute }}>{THEME_DECISION_STR.en.adjustSheetEyebrow}</Eyebrow>
+              <BodyStrong>{THEME_DECISION_STR.en.adjustSheetTitle}</BodyStrong>
+              <TextInput
+                value={adjustNote}
+                onChangeText={setAdjustNote}
+                placeholder={THEME_DECISION_STR.en.adjustPlaceholder}
+                placeholderTextColor={c.textMute}
+                multiline
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderRadius: theme.radii.control,
+                  paddingHorizontal: SPACE.md,
+                  paddingVertical: SPACE.sm,
+                  color: c.text,
+                  backgroundColor: c.paper,
+                  minHeight: 44,
+                }}
+              />
+              <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+                <Button
+                  title={THEME_DECISION_STR.en.cancel}
+                  variant="ghost"
+                  size="md"
+                  onPress={() => setAdjustSheet(null)}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title={
+                    adjustNote.trim()
+                      ? THEME_DECISION_STR.en.adjustSubmit
+                      : THEME_DECISION_STR.en.adjustSkip
+                  }
+                  variant="primary"
+                  size="md"
+                  loading={decideThemeMut.isPending}
+                  onPress={() =>
+                    adjustSheet &&
+                    decideThemeMut.mutate({
+                      themeId: adjustSheet.id,
+                      action: 'adjust',
+                      note: adjustNote.trim() || undefined,
+                    })
+                  }
+                  style={{ flex: 1 }}
+                />
+              </View>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>

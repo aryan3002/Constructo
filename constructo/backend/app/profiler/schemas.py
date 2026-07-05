@@ -161,6 +161,10 @@ class ThemeOut(BaseModel):
     evidence_reference_ids: list = []
     status: str
     created_at: datetime
+    # Who committed the decision (approve/adjust/reject) — lets the client show
+    # "Decided by you" (decided_by == the caller's user id) without a second
+    # request. None while still `suggested`.
+    decided_by: UUID | None = None
 
 
 class ThemeDecisionIn(BaseModel):
