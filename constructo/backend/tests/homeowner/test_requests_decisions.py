@@ -6,11 +6,16 @@ from sqlalchemy import select
 
 from app.homeowner.nudge import NUDGE_TAG, run_request_nudge_sweep
 from app.models import (
+    Component,
+    ComponentStatus,
     Decision,
     DecisionKind,
     DecisionState,
     HomeownerRequest,
     HomeownerRequestStatus,
+    Space,
+    SpaceKind,
+    Spec,
 )
 
 from .conftest import auth
@@ -352,3 +357,58 @@ async def test_cannot_respond_to_other_sites_decision(client, ctx, factory, db_s
         headers=auth(ctx.homeowner),
     )
     assert resp.status_code == 404
+
+
+async def test_decisions_carry_spec_identity_when_routed(client, ctx, db_session):
+    """A Decision created by routing a Spec (sync_spec_routed_decision) must
+    expose spec_id + spec_label to the homeowner so the mobile Design tab can
+    group "From your design brief" selections. A plain, non-spec decision must
+    keep both fields None — no leaking of unrelated spec data."""
+    space = Space(site_id=ctx.site.id, name="Living Room", kind=SpaceKind.room)
+    db_session.add(space)
+    await db_session.flush()
+
+    comp = Component(
+        space_id=space.id,
+        name="Feature Wall",
+        location="North wall",
+        status=ComponentStatus.in_progress,
+    )
+    db_session.add(comp)
+    await db_session.flush()
+
+    spec = Spec(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        component_id=comp.id,
+        label="Fluted Marble Panel",
+    )
+    db_session.add(spec)
+    await db_session.flush()
+
+    # A plain decision with no spec_id — must not gain a spec identity.
+    plain = Decision(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        kind=DecisionKind.homeowner_question,
+        title="Approve the tile sample?",
+        state=DecisionState.pending,
+    )
+    db_session.add(plain)
+    await db_session.flush()
+
+    # Route the spec as the owner (edit role) — triggers sync_spec_routed_decision.
+    route_resp = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(ctx.owner))
+    assert route_resp.status_code == 200, route_resp.text
+
+    pending = await client.get("/api/v1/homeowner/decisions", headers=auth(ctx.homeowner))
+    assert pending.status_code == 200, pending.text
+    items = pending.json()
+
+    spec_item = next(d for d in items if d.get("spec_id") == str(spec.id))
+    assert spec_item["spec_id"] == str(spec.id)
+    assert spec_item["spec_label"] == "Fluted Marble Panel"
+
+    plain_item = next(d for d in items if d["id"] == str(plain.id))
+    assert plain_item["spec_id"] is None
+    assert plain_item["spec_label"] is None

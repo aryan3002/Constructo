@@ -501,6 +501,11 @@ class HomeownerDecisionOut(BaseModel):
     detail: str | None
     state: str
     created_at: datetime
+    # Set when this decision was raised by routing a Spec (see
+    # sync_spec_routed_decision) — lets the mobile Design tab group
+    # "From your design brief" selections. None for every other decision.
+    spec_id: UUID | None = None
+    spec_label: str | None = None
 
 
 class CapabilitiesOut(BaseModel):

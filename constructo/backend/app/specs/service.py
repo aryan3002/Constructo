@@ -72,6 +72,7 @@ async def sync_spec_routed_decision(
     title = f"Selection sign-off: {spec.label}"
     decision = Decision(
         company_id=spec.company_id,
+        site_id=spec.site_id,
         spec_id=spec.id,
         kind=DecisionKind.approval,
         title=title,

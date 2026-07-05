@@ -2392,10 +2392,18 @@ async def my_decisions(
             .order_by(Decision.created_at)
         )
     ).scalars().all()
+    spec_ids = {d.spec_id for d in rows if d.spec_id is not None}
+    spec_labels: dict[UUID, str] = {}
+    if spec_ids:
+        spec_rows = (
+            await session.execute(select(Spec.id, Spec.label).where(Spec.id.in_(spec_ids)))
+        ).all()
+        spec_labels = {sid: label for sid, label in spec_rows}
     return [
         HomeownerDecisionOut(
             id=d.id, site_id=d.site_id, kind=str(d.kind), title=_strip_tag(d.title),
             detail=_humanize_detail(d.detail), state=str(d.state), created_at=d.created_at,
+            spec_id=d.spec_id, spec_label=spec_labels.get(d.spec_id) if d.spec_id else None,
         )
         for d in rows
     ]
