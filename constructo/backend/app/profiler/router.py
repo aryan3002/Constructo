@@ -985,6 +985,22 @@ async def add_reference_from_preset(
             422, "preset_area_mismatch", "That preset doesn't fit this kind of area."
         )
 
+    storage = get_storage()
+    existing = (
+        await session.execute(
+            select(ProfilerReference).where(
+                ProfilerReference.area_id == area.id,
+                ProfilerReference.contributor_id == body.contributor_id,
+                ProfilerReference.preset_id == str(preset.id),
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        # Repeat tap of the same preset by the same contributor — a true no-op:
+        # don't insert a duplicate row, and don't re-run vision or the auto-propose
+        # hook a second time for a reference that's already been processed.
+        return _reference_out(existing, storage)
+
     ref = ProfilerReference(
         profile_id=area.profile_id,
         area_id=area.id,
@@ -995,7 +1011,6 @@ async def add_reference_from_preset(
     )
     session.add(ref)
     await session.flush()
-    storage = get_storage()
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
     propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)

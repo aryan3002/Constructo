@@ -1,10 +1,17 @@
 """Design Profiler — preset packs: list (filtered + image_url resolved) and
 add-from-preset (a reference copying the preset's R2 key)."""
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+from sqlalchemy import func, select
 
 from app.auth.jwt import create_access_token
-from app.models import UserRole
-from app.models.profiler import ProfilerPreset
+from app.models import Company, UserRole
+from app.models.profiler import (
+    ContributorRole,
+    ProfilerContributor,
+    ProfilerPreset,
+    ProfilerReference,
+)
 from app.storage import get_storage
 
 
@@ -158,3 +165,70 @@ async def test_reference_from_preset_cross_company_stranger_404(client, factory,
         headers=auth(stranger),
     )
     assert resp.status_code == 404
+
+
+async def test_reference_from_preset_is_idempotent_per_contributor(client, factory, db_session):
+    """Tapping "add this preset" twice for the same contributor+area must not
+    create a duplicate reference — a repeat tap (double-click, retry) is a
+    true no-op beyond returning the existing row."""
+    preset = await _seed_preset(db_session)
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    payload = {"area_id": area_id, "contributor_id": contributor_id, "preset_id": str(preset.id)}
+
+    first = await client.post(
+        "/api/v1/design/references/from-preset", json=payload, headers=auth(architect)
+    )
+    assert first.status_code == 201
+    first_id = first.json()["id"]
+
+    count_before = (
+        await db_session.execute(select(func.count()).select_from(ProfilerReference))
+    ).scalar_one()
+
+    second = await client.post(
+        "/api/v1/design/references/from-preset", json=payload, headers=auth(architect)
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] == first_id
+
+    count_after = (
+        await db_session.execute(select(func.count()).select_from(ProfilerReference))
+    ).scalar_one()
+    assert count_after == count_before  # no new row inserted on the dedupe path
+
+
+async def test_reference_from_preset_different_contributor_creates_new_row(
+    client, factory, db_session
+):
+    """The same preset added by a DIFFERENT contributor on the same area is not
+    a duplicate — each contributor's taste model needs its own reference row."""
+    preset = await _seed_preset(db_session)
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+
+    company = await db_session.get(Company, site.company_id)
+    other_user = await factory.user(company=company, role=UserRole.architect)
+    other_contributor = ProfilerContributor(
+        profile_id=UUID(pid), user_id=other_user.id, role=ContributorRole.architect
+    )
+    db_session.add(other_contributor)
+    await db_session.commit()
+    await db_session.refresh(other_contributor)
+
+    first = await client.post(
+        "/api/v1/design/references/from-preset",
+        json={"area_id": area_id, "contributor_id": contributor_id, "preset_id": str(preset.id)},
+        headers=auth(architect),
+    )
+    assert first.status_code == 201
+
+    second = await client.post(
+        "/api/v1/design/references/from-preset",
+        json={
+            "area_id": area_id,
+            "contributor_id": str(other_contributor.id),
+            "preset_id": str(preset.id),
+        },
+        headers=auth(other_user),
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] != first.json()["id"]
