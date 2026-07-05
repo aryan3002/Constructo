@@ -69,3 +69,14 @@ test('retryExtraction() POSTs to /api/v1/design/references/{referenceId}/extract
   expect(init.body).toBeUndefined()
   expect(result.extraction_status).toBe('ok')
 })
+
+test('materialize() POSTs to /api/v1/design/briefs/{briefId}/materialize with no body', async () => {
+  mockOk({ materials_created: 3, materials_reused: 1, specs_created: 2, specs_reused: 0, skipped_areas: ['garage'] })
+  const result = await design.materialize('brief-1')
+  const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/design/briefs/brief-1/materialize')
+  expect(init.method).toBe('POST')
+  expect(init.body).toBeUndefined()
+  expect(result.specs_created).toBe(2)
+  expect(result.skipped_areas).toEqual(['garage'])
+})

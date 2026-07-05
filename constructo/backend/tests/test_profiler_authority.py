@@ -184,3 +184,64 @@ async def test_family_cannot_generate_brief(client, factory, db_session):
         assert resp.status_code == 403
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_architect_can_request_changes_from_architect_review(client, factory, db_session):
+    """The designer's own request-changes is real: an architect (company-scoped via
+    _load_accessible_profile, no homeowner membership needed) may fire request_changes
+    once the homeowner has handed the brief to architect_review. _BRIEF_TRANSITIONS
+    already allows (request_changes, architect_review) -> revision_requested; only the
+    membrane was blocking it."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)  # bid starts in homeowner_review
+        bid = w["bid"]
+        sent = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(w["owner"]))
+        assert sent.status_code == 200 and sent.json()["state"] == "architect_review"
+
+        resp = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "request_changes", "note": "swap the tile"},
+            headers=auth(w["architect"]))
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "revision_requested"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_architect_request_changes_opening_is_exactly_one_action_wide(
+    client, factory, db_session
+):
+    """The architect's new authority is scoped to request_changes only — approve and
+    send_to_architect (both homeowner-only money/scope commits) must still 403 an
+    architect, proving this isn't a blanket contractor-side bypass of the membrane.
+
+    approve is checked from contractor_brief_ready (where it IS a legal transition
+    per _BRIEF_TRANSITIONS), so the membrane's approve_forbidden is actually what
+    rejects it — not a 409 from transition-illegality masking the membrane."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)  # bid starts in homeowner_review
+        bid = w["bid"]
+
+        # architect cannot send_to_architect (still homeowner-only)
+        resp_send = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(w["architect"]))
+        assert resp_send.status_code == 403
+        assert resp_send.json()["error"]["code"] == "approve_forbidden"
+
+        # drive the brief to contractor_brief_ready via the legitimate path
+        sent = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "send_to_architect"}, headers=auth(w["owner"]))
+        assert sent.status_code == 200 and sent.json()["state"] == "architect_review"
+        signed = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "architect_sign_off"}, headers=auth(w["architect"]))
+        assert signed.status_code == 200 and signed.json()["state"] == "contractor_brief_ready"
+
+        # approve IS a legal transition here, but still homeowner-only -> 403
+        resp_approve = await client.post(f"/api/v1/design/briefs/{bid}/approval",
+            json={"action": "approve"}, headers=auth(w["architect"]))
+        assert resp_approve.status_code == 403
+        assert resp_approve.json()["error"]["code"] == "approve_forbidden"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)

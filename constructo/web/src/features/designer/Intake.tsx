@@ -23,15 +23,25 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useT } from '../../i18n'
+import { useT, type TranslationKey } from '../../i18n'
 import { useMeRole } from '../../auth/useCan'
-import { designApi, type DesignTheme, type DesignArea, type DesignProfile } from '../../api/design'
+import {
+  designApi,
+  type DesignTheme,
+  type DesignArea,
+  type DesignProfile,
+  type DesignClarification,
+  type DesignConflict,
+  type DesignBriefApproval,
+} from '../../api/design'
 import { qk } from '../../api/queryKeys'
-import { H1, H2, Body, Small, Button, StatusPill, ConfidenceMeter } from '../../ui'
+import { H1, H2, Body, Small, Micro, Button, StatusPill, ConfidenceMeter, TimelineItem } from '../../ui'
 import { ConfirmDialog } from '../../ui/Modal'
 import { useToast } from '../../ui/Toast'
 import { Spinner, ErrorState, EmptyState } from '../../components/states'
 import type { Status } from '../../ui'
+import { designerActions, actionLabel, type DesignerActionType } from './briefActions'
+import { formatDateTime } from '../../lib/format'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +72,20 @@ function areaTitle(key: string): string {
     .split(/[-_]/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+/** Title-case a snake_case string (e.g. 'palette' -> 'Palette'). */
+function cap(s: string): string {
+  return s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+}
+
+/** i18n lookup for a designer action's label, falling back to the ported
+ *  util's static EN label (never a KeyError-equivalent undefined render). */
+const ACTION_I18N_KEY: Record<DesignerActionType, TranslationKey> = {
+  architect_sign_off: 'intake.action.architect_sign_off',
+  request_changes: 'intake.action.request_changes',
+  regenerate: 'intake.action.regenerate',
+  materialize: 'intake.action.materialize',
 }
 
 // ---------------------------------------------------------------------------
@@ -250,12 +274,274 @@ function AreaThemesSection({
 }
 
 // ---------------------------------------------------------------------------
+// ActionsRow — brief-state-driven action buttons (sign off / request changes /
+// regenerate) + the inline request-changes note panel. 'materialize' is
+// deliberately excluded here — the brief already has a dedicated Materialize
+// CTA + confirm dialog further down, so designerActions()'s materialize entry
+// would otherwise render a duplicate button.
+// ---------------------------------------------------------------------------
+
+interface ActionsRowProps {
+  state: string
+  acting: DesignerActionType | null
+  onRun: (action: DesignerActionType, note?: string) => void
+}
+
+function ActionsRow({ state, acting, onRun }: ActionsRowProps) {
+  const t = useT()
+  const [pendingNoteAction, setPendingNoteAction] = useState<DesignerActionType | null>(null)
+  const [note, setNote] = useState('')
+  const actions = designerActions(state).filter((a) => a.action !== 'materialize')
+
+  if (actions.length === 0) return null
+
+  const canConfirm = note.trim().length >= 3
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="designer-actions-row">
+      <div className="flex flex-wrap gap-2">
+        {actions.map((a) => (
+          <Button
+            key={a.action}
+            variant={a.variant === 'ghost' ? 'ghost' : a.variant === 'secondary' ? 'secondary' : 'primary'}
+            disabled={acting !== null && acting !== a.action}
+            onClick={() =>
+              a.needsNote ? setPendingNoteAction(a.action) : onRun(a.action)
+            }
+          >
+            {t(ACTION_I18N_KEY[a.action] ?? ('' as TranslationKey)) || a.label}
+          </Button>
+        ))}
+      </div>
+
+      {pendingNoteAction ? (
+        <div className="rounded-card border border-line bg-card p-4 flex flex-col gap-2">
+          <p className="font-body font-semibold text-text">{t('intake.request_changes.title')}</p>
+          <Small className="text-text-mute">{t('intake.request_changes.hint')}</Small>
+          <textarea
+            data-testid="request-changes-textarea"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t('intake.request_changes.placeholder')}
+            rows={4}
+            className={[
+              'w-full rounded-control border border-line bg-card px-3 py-2',
+              'font-body text-small text-text placeholder-text-mute',
+              'resize-y min-h-[96px]',
+              'focus:outline-none focus:ring-2 focus:ring-primary',
+              'disabled:opacity-50 cstk-animate',
+            ].join(' ')}
+            disabled={acting !== null}
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPendingNoteAction(null)
+                setNote('')
+              }}
+              disabled={acting !== null}
+            >
+              {t('intake.request_changes.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              data-testid="request-changes-confirm"
+              disabled={!canConfirm || acting !== null}
+              onClick={() => {
+                onRun(pendingNoteAction, note.trim())
+                setPendingNoteAction(null)
+                setNote('')
+              }}
+            >
+              {t('intake.request_changes.send')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// HomeownerQA — answered clarifications (prominent) + waiting ones (quiet)
+// ---------------------------------------------------------------------------
+
+function HomeownerQA({ rows }: { rows: DesignClarification[] }) {
+  const t = useT()
+  if (rows.length === 0) return null
+
+  const byNewest = (a: DesignClarification, b: DesignClarification) =>
+    new Date(b.asked_at).getTime() - new Date(a.asked_at).getTime()
+  const answered = rows.filter((r) => r.answer != null).sort(byNewest)
+  const waiting = rows.filter((r) => r.answer == null).sort(byNewest)
+
+  return (
+    <div className="space-y-3">
+      <H2>{t('intake.qa.section_title')}</H2>
+      <div className="rounded-card border border-line bg-card divide-y divide-line">
+        {[...answered, ...waiting].map((row) => (
+          <div key={row.id} className="p-4 flex flex-col gap-1">
+            <Body className="text-text-mute">{row.question}</Body>
+            {row.answer != null ? (
+              <>
+                <p className="font-body font-semibold text-text">{row.answer}</p>
+                {row.answered_at ? (
+                  <Micro>
+                    {t('intake.qa.answered_prefix')} · {formatDateTime(row.answered_at)}
+                  </Micro>
+                ) : null}
+              </>
+            ) : (
+              <Small className="text-text-mute italic">{t('intake.qa.waiting')}</Small>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ConflictsPanel — resolve open conflicts; already-deferred rows show a badge
+// ---------------------------------------------------------------------------
+
+interface ConflictsPanelProps {
+  conflicts: DesignConflict[]
+  pendingId: string | null
+  onResolve: (conflictId: string, resolution: 'keep_a' | 'keep_b' | 'compromise', note?: string) => void
+}
+
+function ConflictsPanel({ conflicts, pendingId, onResolve }: ConflictsPanelProps) {
+  const t = useT()
+  if (conflicts.length === 0) return null
+
+  return (
+    <div className="space-y-3">
+      <H2>{t('intake.conflicts.section_title')}</H2>
+      <div className="flex flex-col gap-3">
+        {conflicts.map((c) => (
+          <ConflictCard
+            key={c.id}
+            conflict={c}
+            pending={pendingId === c.id}
+            onResolve={(resolution, note) => onResolve(c.id, resolution, note)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ConflictCard({
+  conflict,
+  pending,
+  onResolve,
+}: {
+  conflict: DesignConflict
+  pending: boolean
+  onResolve: (resolution: 'keep_a' | 'keep_b' | 'compromise', note?: string) => void
+}) {
+  const t = useT()
+  const [compromiseNote, setCompromiseNote] = useState('')
+  const isDeferred = conflict.resolution_status === 'deferred_to_architect'
+  const isResolved = conflict.resolution_status === 'resolved'
+
+  return (
+    <div className="rounded-card border border-warn/30 bg-warn/5 p-4 flex flex-col gap-2" data-testid="conflict-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill status="warn" label={cap(conflict.dimension)} size="sm" />
+        {isDeferred ? (
+          <StatusPill status="info" label={t('intake.conflicts.deferred_badge')} size="sm" />
+        ) : null}
+        {isResolved ? (
+          <StatusPill status="ok" label={t('intake.conflicts.resolved')} size="sm" />
+        ) : null}
+      </div>
+      <Body>{conflict.value}</Body>
+      {!isResolved ? (
+        <>
+          <Small className="text-text-mute">{t('intake.conflicts.subtitle')}</Small>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={() => onResolve('keep_a')}
+            >
+              {t('intake.conflicts.keep_a')}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={() => onResolve('keep_b')}
+            >
+              {t('intake.conflicts.keep_b')}
+            </Button>
+          </div>
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={compromiseNote}
+              onChange={(e) => setCompromiseNote(e.target.value)}
+              placeholder={t('intake.conflicts.compromise_placeholder')}
+              disabled={pending}
+              className={[
+                'flex-1 rounded-control border border-line bg-card px-3 py-2',
+                'font-body text-small text-text placeholder-text-mute',
+                'focus:outline-none focus:ring-2 focus:ring-primary',
+                'disabled:opacity-50 cstk-animate',
+              ].join(' ')}
+            />
+            <Button
+              variant="primary"
+              disabled={pending || compromiseNote.trim().length === 0}
+              onClick={() => onResolve('compromise', compromiseNote.trim())}
+            >
+              {t('intake.conflicts.compromise_cta')}
+            </Button>
+          </div>
+        </>
+      ) : conflict.decision_note ? (
+        <Small className="text-text-mute">{conflict.decision_note}</Small>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ApprovalTimeline — the attributed approval history for the brief
+// ---------------------------------------------------------------------------
+
+function ApprovalTimeline({ rows }: { rows: DesignBriefApproval[] }) {
+  const t = useT()
+  if (rows.length === 0) return null
+
+  return (
+    <div className="space-y-3">
+      <H2>{t('intake.approvals.section_title')}</H2>
+      <ul className="flex flex-col">
+        {rows.map((row, i) => (
+          <TimelineItem
+            key={row.id}
+            typeLabel={cap(row.actor_role)}
+            summary={actionLabel(row.action) || row.action}
+            occurredOn={formatDateTime(row.created_at)}
+            isLast={i === rows.length - 1}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // BriefBody — renders the full brief once available
 // ---------------------------------------------------------------------------
 
 interface BriefBodyProps {
   profile: DesignProfile
   briefId: string
+  briefState: string | null | undefined
   siteId: string
   narrative: {
     headline: string
@@ -267,7 +553,16 @@ interface BriefBodyProps {
   onViewSelections?: () => void
 }
 
-function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, onViewSelections }: BriefBodyProps) {
+function BriefBody({
+  profile,
+  briefId,
+  briefState,
+  siteId,
+  narrative,
+  version,
+  canDecide,
+  onViewSelections,
+}: BriefBodyProps) {
   const t = useT()
   const qc = useQueryClient()
   const { show } = useToast()
@@ -278,6 +573,82 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
 
   // Theme decision mutation
   const [decidingId, setDecidingId] = useState<string | null>(null)
+
+  // Brief-lifecycle action mutation (sign off / request changes / regenerate)
+  const [acting, setActing] = useState<DesignerActionType | null>(null)
+
+  const clarificationsQuery = useQuery<DesignClarification[]>({
+    queryKey: qk.designClarifications(profile.id),
+    queryFn: () => designApi.clarifications(profile.id),
+    staleTime: 30_000,
+  })
+
+  const conflictsQuery = useQuery<DesignConflict[]>({
+    queryKey: qk.designConflicts(profile.id),
+    queryFn: () => designApi.conflicts(profile.id),
+    staleTime: 30_000,
+  })
+
+  const approvalsQuery = useQuery<DesignBriefApproval[]>({
+    queryKey: qk.designApprovals(briefId),
+    queryFn: () => designApi.briefApprovals(briefId),
+    staleTime: 30_000,
+  })
+
+  const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null)
+
+  const resolveConflictMutation = useMutation({
+    mutationFn: ({
+      conflictId,
+      resolution,
+      note,
+    }: {
+      conflictId: string
+      resolution: 'keep_a' | 'keep_b' | 'compromise'
+      note?: string
+    }) => designApi.resolveConflict(conflictId, { resolution, note }),
+    onMutate: ({ conflictId }) => setResolvingConflictId(conflictId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.designConflicts(profile.id) })
+      show({ message: t('intake.conflicts.toast.success'), status: 'ok' })
+      setResolvingConflictId(null)
+    },
+    onError: () => {
+      show({ message: t('intake.conflicts.toast.error'), status: 'risk' })
+      setResolvingConflictId(null)
+    },
+  })
+
+  // Runs the non-materialize lifecycle actions (sign off / request changes /
+  // regenerate). Materialize keeps its own dedicated CTA + confirm dialog below.
+  async function runBriefAction(action: DesignerActionType, note?: string) {
+    setActing(action)
+    try {
+      if (action === 'regenerate') {
+        await designApi.generateBrief(profile.id)
+      } else {
+        await designApi.actOnBrief(briefId, { action, note })
+      }
+      qc.invalidateQueries({ queryKey: qk.designBrief(profile.id) })
+      qc.invalidateQueries({ queryKey: qk.designApprovals(briefId) })
+      // The inbox badge (DesignerWorkspace's unread-count pill) must refresh
+      // immediately too, not just on the next poll.
+      qc.invalidateQueries({ queryKey: ['design', 'inbox-summary'] })
+      show({ message: t('intake.action.toast.success'), status: 'ok' })
+    } catch (e) {
+      // Surface the server's actual detail (e.g. a 403 approve_forbidden or a
+      // 409 raced transition) instead of a generic message, same as mobile's
+      // runAction. Also invalidate the brief so a 409-raced action bar
+      // self-corrects to the brief's real current state.
+      show({
+        message: e instanceof Error && e.message ? e.message : t('intake.action.toast.error'),
+        status: 'risk',
+      })
+      qc.invalidateQueries({ queryKey: qk.designBrief(profile.id) })
+    } finally {
+      setActing(null)
+    }
+  }
 
   const decisionMutation = useMutation({
     mutationFn: ({ themeId, action }: { themeId: string; action: 'approve' | 'adjust' | 'reject' }) =>
@@ -365,6 +736,11 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
         )}
       </div>
 
+      {/* Brief-lifecycle actions (sign off / request changes / regenerate) */}
+      {canDecide && briefState && (
+        <ActionsRow state={briefState} acting={acting} onRun={runBriefAction} />
+      )}
+
       {/* Narrative sections */}
       {narrative.sections.length > 0 && (
         <div className="space-y-4">
@@ -380,6 +756,20 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
             </div>
           ))}
         </div>
+      )}
+
+      {/* Homeowner Q&A */}
+      <HomeownerQA rows={clarificationsQuery.data ?? []} />
+
+      {/* Conflicts */}
+      {canDecide && (
+        <ConflictsPanel
+          conflicts={conflictsQuery.data ?? []}
+          pendingId={resolvingConflictId}
+          onResolve={(conflictId, resolution, note) =>
+            resolveConflictMutation.mutate({ conflictId, resolution, note })
+          }
+        />
       )}
 
       {/* Design themes per area */}
@@ -404,8 +794,10 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
         ))}
       </div>
 
-      {/* Materialize CTA */}
-      {canDecide && (
+      {/* Materialize CTA — hidden while the brief is still in homeowner_review
+          (or any state designerActions() doesn't offer materialize for), even
+          for a decider role: there's nothing to materialize yet. */}
+      {canDecide && designerActions(briefState ?? '').some((a) => a.action === 'materialize') && (
         <div className="pt-2">
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -441,6 +833,9 @@ function BriefBody({ profile, briefId, siteId, narrative, version, canDecide, on
         cancelLabel={t('action.cancel')}
         busy={materializeMutation.isPending}
       />
+
+      {/* Approval timeline */}
+      <ApprovalTimeline rows={approvalsQuery.data ?? []} />
     </div>
   )
 }
@@ -554,6 +949,7 @@ export function Intake({ siteId, onViewSelections }: IntakeProps) {
       <BriefBody
         profile={profile}
         briefId={brief.brief_id}
+        briefState={brief.state}
         siteId={siteId}
         narrative={brief.narrative}
         version={brief.version}
