@@ -120,6 +120,13 @@ export interface MaterializeOut {
   skipped_areas: string[]
 }
 
+/** Minimal brief-generation result — POST /profiles/{id}/brief returns the freshly (re)generated brief. */
+export interface GenerateBriefOut {
+  id: string
+  version: number
+  state: string
+}
+
 // ---------------------------------------------------------------------------
 // HTTP helper
 // ---------------------------------------------------------------------------
@@ -403,6 +410,20 @@ export const designApi = {
     return call<DesignTheme>(`/api/v1/design/themes/${encodeURIComponent(themeId)}/decision`, {
       method: 'POST',
       body: JSON.stringify(body),
+    })
+  },
+
+  /**
+   * POST /api/v1/design/profiles/{profileId}/brief
+   * (Re)generates the brief for a profile from its current themes/conflicts.
+   * Returns GenerateBriefOut { id, version, state }.
+   */
+  async generateBrief(profileId: string): Promise<GenerateBriefOut> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ id: 'mock-brief', version: 2, state: 'homeowner_review' })
+    }
+    return call<GenerateBriefOut>(`/api/v1/design/profiles/${encodeURIComponent(profileId)}/brief`, {
+      method: 'POST',
     })
   },
 
