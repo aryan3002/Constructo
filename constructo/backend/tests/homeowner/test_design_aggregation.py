@@ -5,12 +5,16 @@ from types import SimpleNamespace
 
 import pytest_asyncio
 
+from app.homeowner.router import _build_site_fingerprint
 from app.models import (
+    AreaKind,
     DesignReference,
     DesignSelection,
     HomeownerMember,
     HomeownerSubRole,
     MemberStatus,
+    ProfilerArea,
+    ProfilerProfile,
     UserRole,
 )
 
@@ -123,3 +127,36 @@ async def test_human_resolution_settles_the_conflict(client, ctx, co_owner):
     )
     assert after.status_code == 200
     assert after.json() == []
+
+
+async def test_conflicts_fingerprint_skips_ranked_taste_even_with_profiler_profile(
+    ctx, db_session
+):
+    """GET /design/conflicts fires on every selection pick (unbounded frequency)
+    and never reads ranked_taste, so its fingerprint call must default to
+    include_ranked_taste=False — zero extra ProfilerProfile/ProfilerArea
+    queries — even when the site DOES have a profiler profile. Asserting the
+    key is absent (not merely empty) is the simplest honest proof the
+    profiler fetch was skipped, since an empty dict is indistinguishable from
+    "fetched but no taste data" otherwise."""
+    profile = ProfilerProfile(company_id=ctx.company.id, site_id=ctx.site.id)
+    db_session.add(profile)
+    await db_session.flush()
+    db_session.add(
+        ProfilerArea(
+            profile_id=profile.id,
+            area_kind=AreaKind.interior,
+            area_key="kitchen",
+            taste_model={"materials": {"light oak": 0.9}},
+        )
+    )
+    await db_session.flush()
+
+    fingerprint = await _build_site_fingerprint(db_session, ctx.site.id)
+    assert "ranked_taste" not in fingerprint
+
+    fingerprint_with_taste = await _build_site_fingerprint(
+        db_session, ctx.site.id, include_ranked_taste=True
+    )
+    assert "ranked_taste" in fingerprint_with_taste
+    assert fingerprint_with_taste["ranked_taste"]["kitchen"] == [["materials", "light oak"]]

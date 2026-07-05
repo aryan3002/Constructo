@@ -339,3 +339,40 @@ export function selectionStatus(selection: DesignSelection): Status {
       return 'info'
   }
 }
+
+/**
+ * Group selections by space, resolving each group's display name AND its
+ * route slug from a real space-name map (id → name, e.g. built from
+ * `homeowner.property().spaces`) — never the raw space UUID.
+ *
+ * `roomSlug` is what gets pushed into `design/references/[room]`; it must be
+ * a NAME so `areaForRoom`'s normalizer (which matches on human names like
+ * "kitchen") can bridge into the profiler. Falls back to the raw space_id
+ * only when the id isn't in the map (a space the property fetch hasn't
+ * caught up on yet) so the screen never throws — it just won't bridge into
+ * the profiler for that one room until the name is known.
+ */
+export function groupSelections(
+  selections: DesignSelection[],
+  wholeHouseLabel: string,
+  spaceNameById: Record<string, string> = {},
+): Array<{ spaceId: string | null; spaceName: string; roomSlug: string; items: DesignSelection[] }> {
+  const map = new Map<
+    string,
+    { spaceId: string | null; spaceName: string; roomSlug: string; items: DesignSelection[] }
+  >()
+  for (const s of selections) {
+    const key = s.space_id ?? '__whole__'
+    if (!map.has(key)) {
+      const name = s.space_id ? (spaceNameById[s.space_id] ?? s.space_id) : wholeHouseLabel
+      map.set(key, {
+        spaceId: s.space_id,
+        spaceName: name,
+        roomSlug: s.space_id ? name : 'all',
+        items: [],
+      })
+    }
+    map.get(key)!.items.push(s)
+  }
+  return Array.from(map.values())
+}

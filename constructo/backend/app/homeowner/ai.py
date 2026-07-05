@@ -60,6 +60,36 @@ def _first_str(result: dict, *keys: str) -> str | None:
     return None
 
 
+def _ranked_taste_block(ranked_taste: object) -> str:
+    """Render the profiler's per-area top-3 ranked taste into plain fingerprint
+    lines (D-5.5), or "" when there is none (legacy path stays byte-identical).
+
+    ``ranked_taste`` is ``{area_key: [[dimension, value], ...]}`` — already
+    reduced to the top-3 (dimension, value) pairs by the caller
+    (:func:`app.homeowner.router._site_ranked_taste`), deterministically
+    ordered (weight desc, then alpha on value). This function only formats;
+    it invents nothing and never re-ranks.
+    """
+    if not isinstance(ranked_taste, dict) or not ranked_taste:
+        return ""
+    lines = []
+    for area_key in sorted(ranked_taste):
+        pairs = ranked_taste[area_key]
+        if not isinstance(pairs, list) or not pairs:
+            continue
+        parts = []
+        for pair in pairs:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                continue
+            dim, value = pair
+            parts.append(f"{dim} {value}")
+        if parts:
+            lines.append(f"ranked taste — {area_key}: {', '.join(parts)}")
+    if not lines:
+        return ""
+    return "\n" + "\n".join(lines)
+
+
 async def draft_caption(
     llm: LLMClient,
     *,
@@ -204,6 +234,7 @@ async def generate_design_profile_v2(
         )
         or "(none)"
     )
+    ranked_taste_block = _ranked_taste_block(fingerprint.get("ranked_taste"))
 
     conflict_rule = (
         " When 'Open questions' lists an item the household has not agreed on, "
@@ -222,7 +253,10 @@ async def generate_design_profile_v2(
     )
     result = await llm.complete(
         system,
-        f"Agreed selections: {picks}\nReference tags: {refs}\nOpen questions: {open_qs}",
+        (
+            f"Agreed selections: {picks}\nReference tags: {refs}\n"
+            f"Open questions: {open_qs}{ranked_taste_block}"
+        ),
         {
             "type": "object",
             "properties": {

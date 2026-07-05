@@ -1,5 +1,7 @@
 """H0 design: references, selections, AI-drafted design profile (FakeLLM), and
 the advisory (never-gatekeeping) consistency check."""
+from app.models import AreaKind, ProfilerArea, ProfilerProfile
+
 from .conftest import auth
 
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIFfake-bytes"
@@ -142,6 +144,56 @@ async def test_ai_design_profile_generated_then_confirmed(client, ctx, fake_llm)
     got = await client.get("/api/v1/homeowner/design/profile", headers=auth(ctx.homeowner))
     assert got.status_code == 200
     assert got.json()["profile"]["profile"] == "warm, minimal, lots of wood"
+
+
+async def test_design_profile_draft_folds_in_ranked_profiler_taste(
+    client, ctx, db_session, fake_llm
+):
+    """D-5.5: when the site has a profiler profile, the top-3 ranked taste
+    signals per area are folded into the deterministic fingerprint text the
+    LLM drafts from (FakeLLM echoes its input back as ``summary``, which
+    ``generate_design_profile_v2`` falls back to as ``profile`` text)."""
+    profile = ProfilerProfile(company_id=ctx.company.id, site_id=ctx.site.id)
+    db_session.add(profile)
+    await db_session.flush()
+    db_session.add(
+        ProfilerArea(
+            profile_id=profile.id,
+            area_kind=AreaKind.interior,
+            area_key="kitchen",
+            taste_model={"materials": {"light oak": 0.9}},
+        )
+    )
+    await db_session.flush()
+
+    drafted = await client.put(
+        "/api/v1/homeowner/design/profile", json={}, headers=auth(ctx.homeowner)
+    )
+    assert drafted.status_code == 200, drafted.text
+    assert "light oak" in drafted.json()["profile"]["profile"]
+
+
+async def test_design_profile_draft_legacy_path_unchanged_without_profiler_profile(
+    client, ctx, fake_llm
+):
+    """No profiler profile for the site -> the fingerprint text is byte-identical
+    to the pre-existing legacy path (no ranked-taste block appended)."""
+    await client.post(
+        "/api/v1/homeowner/design/references",
+        json={"image_url": "http://pin/2.jpg", "room_tag": "kitchen"},
+        headers=auth(ctx.homeowner),
+    )
+    await client.post(
+        "/api/v1/homeowner/design/selections",
+        json={"item": "kitchen counter", "choice": "quartz"},
+        headers=auth(ctx.homeowner),
+    )
+
+    drafted = await client.put(
+        "/api/v1/homeowner/design/profile", json={}, headers=auth(ctx.homeowner)
+    )
+    assert drafted.status_code == 200, drafted.text
+    assert "ranked taste" not in drafted.json()["profile"]["profile"]
 
 
 async def test_consistency_check_is_advisory_not_a_gate(client, ctx, fake_llm):

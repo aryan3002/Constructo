@@ -123,6 +123,8 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     PhotoComment,
+    ProfilerArea,
+    ProfilerProfile,
     Property,
     PublishedDrawing,
     PublishedPhoto,
@@ -1922,12 +1924,21 @@ async def _resolve_actor_member_id(
     return max(rows, key=lambda r: _MANAGE_RANK.get(r.sub_role, 0)).id
 
 
-async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
+async def _build_site_fingerprint(
+    session: AsyncSession, site_id: UUID, *, include_ranked_taste: bool = False
+) -> dict:
     """Assemble the deterministic multi-member fingerprint for a site (the reducer).
 
     Reads every selection/reference + the member roster, hands the attributed
     rows to the pure :func:`build_fingerprint`, and returns its jsonb dict. No LLM
     here — this is the trust firewall.
+
+    ``include_ranked_taste`` gates two extra profiler queries (ProfilerProfile +
+    ProfilerArea) that only the design-profile draft path reads (D-5.5's ranked
+    taste block). Every other caller — e.g. the unbounded-frequency
+    ``GET /design/conflicts`` fired on each selection pick — leaves this False
+    so the ``ranked_taste`` key stays absent (not merely empty) and pays no
+    extra query cost.
     """
     selections = (
         await session.execute(
@@ -1973,7 +1984,56 @@ async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
         ],
         members=members,
     )
-    return fingerprint.as_dict()
+    result = fingerprint.as_dict()
+    if include_ranked_taste:
+        result["ranked_taste"] = await _site_ranked_taste(session, site_id)
+    return result
+
+
+async def _site_ranked_taste(session: AsyncSession, site_id: UUID) -> dict[str, list]:
+    """The site's latest profiler profile, reduced to per-area ranked taste.
+
+    D-5.5: folds the profiler's taste signal into the design-profile draft's
+    fingerprint text (never the LLM's job — this is pure, deterministic
+    selection). Returns ``{area_key: [(dimension, value), ...]}`` — each
+    area's top-3 (dimension, value) pairs by weight (deterministic: weight
+    desc, then alpha on value). Empty dict when the site has no profiler
+    profile (or no areas with a populated ``taste_model``) so the legacy
+    fingerprint text stays byte-identical.
+    """
+    profile = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == site_id)
+            .order_by(ProfilerProfile.created_at.desc())
+        )
+    ).scalars().first()
+    if profile is None:
+        return {}
+    areas = (
+        await session.execute(
+            select(ProfilerArea)
+            .where(ProfilerArea.profile_id == profile.id)
+            .order_by(ProfilerArea.area_key)
+        )
+    ).scalars().all()
+    ranked: dict[str, list] = {}
+    for area in areas:
+        taste_model = area.taste_model or {}
+        if not taste_model:
+            continue
+        pairs: list[tuple[str, str, float]] = [
+            (dim, str(value), float(weight))
+            for dim, values in taste_model.items()
+            if isinstance(values, dict)
+            for value, weight in values.items()
+            if isinstance(weight, (int, float)) and not isinstance(weight, bool)
+        ]
+        if not pairs:
+            continue
+        pairs.sort(key=lambda p: (-p[2], p[1]))
+        ranked[area.area_key] = [[dim, value] for dim, value, _weight in pairs[:3]]
+    return ranked
 
 
 @router.get("/design/profile", response_model=DesignProfileOut)
@@ -2016,7 +2076,7 @@ async def put_design_profile(
         # Reduce all members' attributed inputs to one deterministic fingerprint
         # (the trust firewall), then let the LLM rephrase ONLY those facts into a
         # DRAFT the primary confirms — conflicts are surfaced, never resolved.
-        fingerprint = await _build_site_fingerprint(session, sid)
+        fingerprint = await _build_site_fingerprint(session, sid, include_ranked_taste=True)
         profile_data = await generate_design_profile_v2(
             llm, fingerprint=fingerprint, language=user.language or "en"
         )
@@ -2392,10 +2452,18 @@ async def my_decisions(
             .order_by(Decision.created_at)
         )
     ).scalars().all()
+    spec_ids = {d.spec_id for d in rows if d.spec_id is not None}
+    spec_labels: dict[UUID, str] = {}
+    if spec_ids:
+        spec_rows = (
+            await session.execute(select(Spec.id, Spec.label).where(Spec.id.in_(spec_ids)))
+        ).all()
+        spec_labels = {sid: label for sid, label in spec_rows}
     return [
         HomeownerDecisionOut(
             id=d.id, site_id=d.site_id, kind=str(d.kind), title=_strip_tag(d.title),
             detail=_humanize_detail(d.detail), state=str(d.state), created_at=d.created_at,
+            spec_id=d.spec_id, spec_label=spec_labels.get(d.spec_id) if d.spec_id else None,
         )
         for d in rows
     ]
@@ -2438,6 +2506,22 @@ async def respond_to_decision(
     else:
         action = _RESPOND_ACTION[body.action]
         updated = await apply_action(session, decision, action, note=body.note)
+        # Spec-Decision bridge, the other direction: when this Decision is
+        # tracking a routed Spec (decision.spec_id set), the homeowner's
+        # approve/request_change must reach the Spec itself — not just the
+        # Decision ledger — or the material never actually gets approved.
+        # Mirrors app/specs/router.py:approve_spec's semantics directly
+        # (that helper's own sync_spec_approved_decision goes Spec->Decision
+        # and would just re-apply the no-op transition we already made here).
+        if updated.spec_id is not None:
+            spec = await session.get(Spec, updated.spec_id)
+            if spec is not None:
+                spec.approval_status = (
+                    SpecApprovalStatus.approved
+                    if body.action == "approve"
+                    else SpecApprovalStatus.rejected
+                )
+                await session.commit()
     return HomeownerDecisionOut(
         id=updated.id, site_id=updated.site_id, kind=str(updated.kind),
         title=_strip_tag(updated.title), detail=updated.detail, state=str(updated.state),

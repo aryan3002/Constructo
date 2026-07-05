@@ -60,11 +60,20 @@ async def sync_spec_routed_decision(
 
     existing = await _find_by_client_id(session, spec.company_id, cid)
     if existing is not None:
+        dirty = False
         # Re-routing: reopen to pending so the owner sees it again.
         if existing.state != DecisionState.pending:
             existing.state = DecisionState.pending
             existing.resolved_at = None
             existing.resolution_note = None
+            dirty = True
+        # Heal a legacy row's NULL site_id (predates site_id being stamped on
+        # creation) so it becomes visible to the homeowner's site-scoped
+        # decisions query instead of silently sitting outside every scope.
+        if existing.site_id is None:
+            existing.site_id = spec.site_id
+            dirty = True
+        if dirty:
             await session.commit()
             await session.refresh(existing)
         return existing
@@ -72,6 +81,7 @@ async def sync_spec_routed_decision(
     title = f"Selection sign-off: {spec.label}"
     decision = Decision(
         company_id=spec.company_id,
+        site_id=spec.site_id,
         spec_id=spec.id,
         kind=DecisionKind.approval,
         title=title,
