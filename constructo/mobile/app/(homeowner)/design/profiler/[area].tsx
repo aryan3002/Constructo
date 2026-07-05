@@ -20,7 +20,7 @@
  * Membrane: canRank only when my_contributor_id is set; others see read-only.
  * Per-reference state is isolated in RefRankRow so ratings don't bleed.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import type { ViewStyle } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -455,8 +455,20 @@ export default function AreaRankScreen() {
   // Deep-link support: ?tab=notes opens straight to AI Notes (used by the
   // DPHub "Questions for you" card). Any other/absent value is ignored —
   // falls back to the default Inspiration tab.
-  const initialTab = tabParam === 'notes' ? 'AI Notes' : 'Inspiration'
-  const [tab, setTab] = useState(initialTab)
+  const [tab, setTab] = useState(tabParam === 'notes' ? 'AI Notes' : 'Inspiration')
+  // Tabs are persistent (no remount) — a useState initializer only applies the
+  // param on first mount, so a SECOND deep-link into an already-open area
+  // screen (e.g. tapping the "Questions for you" card twice, or for two
+  // different areas) never switches the tab. React only to the param
+  // CHANGING (tracked in a ref), and never fight a tab she's since picked
+  // herself — once seeded, further re-renders with the same param value are
+  // a no-op.
+  const lastSeededTab = useRef<string | undefined>(tabParam)
+  useEffect(() => {
+    if (tabParam === undefined || tabParam === lastSeededTab.current) return
+    lastSeededTab.current = tabParam
+    if (tabParam === 'notes') setTab('AI Notes')
+  }, [tabParam])
 
   const refsQ = useQuery({
     queryKey: ['design', 'profiler', 'refs', pid, area],
