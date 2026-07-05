@@ -57,6 +57,7 @@ from app.profiler.engine import (
     propose_themes_for_area,
     refresh_taste_and_maybe_propose,
 )
+from app.profiler.events import notify_design_event
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.pinterest import PinResolver, get_pin_resolver
 from app.profiler.schemas import (
@@ -110,6 +111,16 @@ _BRIEF_TRANSITIONS: dict[tuple[BriefAction, BriefState], BriefState] = {
     ),
     (BriefAction.approve, BriefState.contractor_brief_ready): BriefState.approved,
     (BriefAction.contractor_received, BriefState.approved): BriefState.locked,
+}
+
+# Every legal approval action fires its own design event, emitted AFTER the
+# state-machine commit in act_on_brief.
+_BRIEF_ACTION_EVENT_KIND: dict[BriefAction, str] = {
+    BriefAction.send_to_architect: "brief_sent_to_designer",
+    BriefAction.request_changes: "changes_requested",
+    BriefAction.architect_sign_off: "designer_signed_off",
+    BriefAction.approve: "brief_approved",
+    BriefAction.contractor_received: "brief_locked",
 }
 
 
@@ -287,6 +298,26 @@ async def _validate_contributor(
     return contributor
 
 
+async def _emit_propose_summary(
+    session: AsyncSession, profile: ProfilerProfile, summary: dict | None
+) -> None:
+    """Turn refresh_taste_and_maybe_propose's post-commit summary into design
+    events. Called AFTER the handler's own session.commit() — never before, so a
+    rolled-back write can never announce itself. summary is None when the
+    auto-propose threshold didn't fire and no new conflict appeared this call."""
+    if summary is None:
+        return
+    area_label = summary["area_label"]
+    if summary["proposed_themes"]:
+        await notify_design_event(session, profile, "themes_ready", area_label=area_label)
+        if summary["asked_clarifications"]:
+            await notify_design_event(
+                session, profile, "clarifications_asked", area_label=area_label
+            )
+    if summary["new_conflict"]:
+        await notify_design_event(session, profile, "conflict_detected", area_label=area_label)
+
+
 _HOMEOWNER_BRIEF_ACTIONS = {
     BriefAction.approve, BriefAction.request_changes, BriefAction.send_to_architect,
 }
@@ -457,6 +488,7 @@ async def create_profile(
         )
     await session.commit()
     await session.refresh(profile)
+    await notify_design_event(session, profile, "profile_started")
     return ProfileOut.model_validate(profile)
 
 
@@ -562,6 +594,7 @@ async def start_self_serve_profile(
 
     await session.commit()
     await session.refresh(profile)
+    await notify_design_event(session, profile, "profile_started")
     return await _profile_detail(session, profile, user)
 
 
@@ -754,9 +787,10 @@ async def add_reference(
     vision_url = body.source_url or storage.url_for(body.image_r2_key)
     await _run_vision(session, llm, ref, area, vision_url)
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -805,9 +839,10 @@ async def add_reference_from_link(
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -878,9 +913,10 @@ async def add_reference_from_preset(
     storage = get_storage()
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
+    await _emit_propose_summary(session, profile, propose_summary)
     return _reference_out(ref, storage)
 
 
@@ -992,8 +1028,9 @@ async def rank_reference(
                 note=body.note,
             )
         )
-    await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
+    propose_summary = await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
     await session.commit()
+    await _emit_propose_summary(session, profile, propose_summary)
     return {"ok": True}
 
 
@@ -1191,6 +1228,7 @@ async def generate_brief(
     await session.refresh(brief)
     for r in renderings:
         await session.refresh(r)
+    await notify_design_event(session, profile, "brief_ready", version=brief.version)
     return _brief_detail(brief, renderings)
 
 
@@ -1258,6 +1296,10 @@ async def act_on_brief(
     )
     await session.commit()
     await session.refresh(brief)
+    kind = _BRIEF_ACTION_EVENT_KIND[action]
+    await notify_design_event(
+        session, profile, kind, note=body.note, version=brief.version
+    )
     return BriefOut.model_validate(brief)
 
 
@@ -1404,6 +1446,10 @@ async def materialize_brief(
     await session.commit()
     for s in created_specs:
         await session.refresh(s)
+    await notify_design_event(
+        session, profile, "specs_materialized",
+        note=f"{specs_created} selections proposed",
+    )
     return MaterializeOut(
         materials_created=materials_created, materials_reused=materials_reused,
         specs_created=specs_created, specs_reused=specs_reused,

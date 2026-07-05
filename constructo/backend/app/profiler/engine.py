@@ -200,7 +200,7 @@ async def propose_clarifications_for_area(
 
 async def refresh_taste_and_maybe_propose(
     session: AsyncSession, llm: LLMClient, profile_id: UUID, area_id: UUID,
-) -> None:
+) -> dict | None:
     """Called after every ranking/reference write, pre-commit.
     1. compute_and_persist_taste (taste now persists on WRITE — Task 4 removes
        the GET side-effect).
@@ -209,27 +209,60 @@ async def refresh_taste_and_maybe_propose(
          propose_themes_for_area + (if model['confidence'] < 0.7 or
          model['has_conflict']) propose_clarifications_for_area;
          area.last_proposal_ranked_count = model['ranked_count'].
-    Proposal errors are logged, never raised (ranking must always save)."""
+    Proposal errors are logged, never raised (ranking must always save).
+
+    Runs pre-commit inside the calling handler's transaction, so it cannot emit
+    notifications itself (a notify before commit could announce a write that
+    later rolls back). Instead it RETURNS a summary the caller emits from AFTER
+    its own session.commit(): {"proposed_themes": bool, "asked_clarifications":
+    bool, "new_conflict": bool, "area_label": area.area_key}, or None when
+    nothing happened this call (area missing, or threshold not crossed)."""
     area = await session.get(ProfilerArea, area_id)
     if area is None:
-        return
+        return None
     model = await compute_and_persist_taste(session, area)
     # Conflicts are deterministic (no LLM) and must reflect EVERY write, not only
     # the threshold-crossing case below: a second contributor can disagree on refs
     # that were already ranked (ranked_count unchanged), which would otherwise
     # never re-run propose_themes_for_area (the only other _sync_conflicts caller)
     # and leave GET /conflicts stale/empty despite area.has_conflict=True.
+    #
+    # new_conflict: cheap + deterministic definition — this call's _sync_conflicts
+    # produced >=1 OPEN conflict for this area AND the fresh model says
+    # has_conflict. It doesn't try to diff against the prior conflict set (that
+    # would need a pre-sync snapshot query); "OPEN conflict exists after this
+    # write, on a model that currently disagrees" is enough signal to notify,
+    # and notify_design_event's copy is safe to repeat if the same conflict
+    # persists across calls (best-effort, not exactly-once).
     await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
+    new_conflict = bool(model["has_conflict"] and model["conflicts"])
     if (
         model["ranked_count"] >= area.recommended_count
         and model["ranked_count"] != area.last_proposal_ranked_count
     ):
         try:
             await propose_themes_for_area(session, llm, profile_id, area, model)
+            asked_clarifications = False
             if model["confidence"] < 0.7 or model["has_conflict"]:
                 await propose_clarifications_for_area(session, llm, profile_id, area, model)
+                asked_clarifications = True
             area.last_proposal_ranked_count = model["ranked_count"]
+            return {
+                "proposed_themes": True,
+                "asked_clarifications": asked_clarifications,
+                "new_conflict": new_conflict,
+                "area_label": area.area_key,
+            }
         except Exception:
             logger.exception(
                 "profiler: auto-propose failed for area %s (profile %s)", area_id, profile_id
             )
+            return None
+    if new_conflict:
+        return {
+            "proposed_themes": False,
+            "asked_clarifications": False,
+            "new_conflict": True,
+            "area_label": area.area_key,
+        }
+    return None
