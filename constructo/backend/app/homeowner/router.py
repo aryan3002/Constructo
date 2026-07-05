@@ -123,6 +123,8 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     PhotoComment,
+    ProfilerArea,
+    ProfilerProfile,
     Property,
     PublishedDrawing,
     PublishedPhoto,
@@ -1973,7 +1975,54 @@ async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
         ],
         members=members,
     )
-    return fingerprint.as_dict()
+    result = fingerprint.as_dict()
+    result["ranked_taste"] = await _site_ranked_taste(session, site_id)
+    return result
+
+
+async def _site_ranked_taste(session: AsyncSession, site_id: UUID) -> dict[str, list]:
+    """The site's latest profiler profile, reduced to per-area ranked taste.
+
+    D-5.5: folds the profiler's taste signal into the design-profile draft's
+    fingerprint text (never the LLM's job — this is pure, deterministic
+    selection). Returns ``{area_key: [(dimension, value), ...]}`` — each
+    area's top-3 (dimension, value) pairs by weight (deterministic: weight
+    desc, then alpha on value). Empty dict when the site has no profiler
+    profile (or no areas with a populated ``taste_model``) so the legacy
+    fingerprint text stays byte-identical.
+    """
+    profile = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == site_id)
+            .order_by(ProfilerProfile.created_at.desc())
+        )
+    ).scalars().first()
+    if profile is None:
+        return {}
+    areas = (
+        await session.execute(
+            select(ProfilerArea)
+            .where(ProfilerArea.profile_id == profile.id)
+            .order_by(ProfilerArea.area_key)
+        )
+    ).scalars().all()
+    ranked: dict[str, list] = {}
+    for area in areas:
+        taste_model = area.taste_model or {}
+        if not taste_model:
+            continue
+        pairs: list[tuple[str, str, float]] = [
+            (dim, str(value), float(weight))
+            for dim, values in taste_model.items()
+            if isinstance(values, dict)
+            for value, weight in values.items()
+        ]
+        if not pairs:
+            continue
+        pairs.sort(key=lambda p: (-p[2], p[1]))
+        ranked[area.area_key] = [[dim, value] for dim, value, _weight in pairs[:3]]
+    return ranked
 
 
 @router.get("/design/profile", response_model=DesignProfileOut)
