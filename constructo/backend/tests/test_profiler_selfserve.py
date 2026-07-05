@@ -71,6 +71,27 @@ async def test_owner_creates_self_serve_profile_with_areas_and_contributor(
     assert roles == ["co_owner", "family"]
 
 
+async def test_long_space_name_truncates_area_key_to_column_width(client, factory, db_session):
+    """Space.name is an unbounded String; ProfilerArea.area_key is String(64). An
+    80-char room name must not 500 the self-serve entry point — it should truncate
+    to fit the column."""
+    w = await _world_no_profile(client, factory, db_session, with_spaces=False)
+    long_name = "A" * 80
+    db_session.add(Space(site_id=w["site"].id, name=long_name, kind=SpaceKind.room))
+    await db_session.flush()
+
+    resp = await client.post(
+        "/api/v1/design/profiles/self-serve",
+        json={"site_id": str(w["site"].id)},
+        headers=auth(w["owner"]),
+    )
+    assert resp.status_code == 201, resp.text
+    areas = resp.json()["areas"]
+    assert len(areas) == 1
+    assert len(areas[0]["area_key"]) == 64
+    assert areas[0]["area_key"] == long_name.lower()[:64]
+
+
 async def test_no_spaces_defaults_to_three_areas(client, factory, db_session):
     w = await _world_no_profile(client, factory, db_session, with_spaces=False)
     resp = await client.post(

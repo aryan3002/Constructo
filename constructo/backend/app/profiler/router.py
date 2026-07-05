@@ -524,7 +524,9 @@ async def start_self_serve_profile(
                 ProfilerArea(
                     profile_id=profile.id,
                     area_kind=AreaKind.interior,
-                    area_key=space.name.strip().lower(),
+                    # area_key is String(64); Space.name is unbounded — truncate so
+                    # a long room name can't 500 this Phase-4 entry point.
+                    area_key=space.name.strip().lower()[:64],
                     space_id=space.id,
                 )
             )
