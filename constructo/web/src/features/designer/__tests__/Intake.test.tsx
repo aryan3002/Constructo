@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { LanguageProvider } from '../../../i18n'
 import { ToastProvider } from '../../../ui/Toast'
+import { ApiError } from '../../../api/client'
 
 // ---------------------------------------------------------------------------
 // Mock the design API before importing the SUT (vi.mock is hoisted)
@@ -564,6 +565,45 @@ describe('Intake', () => {
     await waitFor(() => {
       expect(mockActOnBrief).toHaveBeenCalledWith('brief-1', { action: 'request_changes', note: 'abc' })
     })
+  })
+
+  it('a failed brief action surfaces the server detail, not a generic message', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'architect_review' })
+    mockThemesForArea.mockResolvedValue([])
+    mockActOnBrief.mockRejectedValue(
+      new ApiError(403, 'Only a property owner can approve this. You can add a comment.'),
+    )
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await userEvent.click(screen.getByRole('button', { name: /Sign off brief/i }))
+
+    // The real server detail is shown, not the generic "Could not complete
+    // that action." fallback.
+    await screen.findByText(/Only a property owner can approve this/i)
+    expect(screen.queryByText(/Could not complete that action/i)).toBeNull()
+
+    // A 409-raced action bar self-corrects: the brief query is invalidated
+    // on error too, so refetch fires (not just on success).
+    await waitFor(() => {
+      expect(mockBrief).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('falls back to the generic message when the error carries no detail', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'architect_review' })
+    mockThemesForArea.mockResolvedValue([])
+    mockActOnBrief.mockRejectedValue(new Error(''))
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await userEvent.click(screen.getByRole('button', { name: /Sign off brief/i }))
+
+    await screen.findByText(/Could not complete that action/i)
   })
 
   it('renders the Homeowner Q&A section with answered and waiting rows', async () => {

@@ -635,8 +635,16 @@ function BriefBody({
       // immediately too, not just on the next poll.
       qc.invalidateQueries({ queryKey: ['design', 'inbox-summary'] })
       show({ message: t('intake.action.toast.success'), status: 'ok' })
-    } catch {
-      show({ message: t('intake.action.toast.error'), status: 'risk' })
+    } catch (e) {
+      // Surface the server's actual detail (e.g. a 403 approve_forbidden or a
+      // 409 raced transition) instead of a generic message, same as mobile's
+      // runAction. Also invalidate the brief so a 409-raced action bar
+      // self-corrects to the brief's real current state.
+      show({
+        message: e instanceof Error && e.message ? e.message : t('intake.action.toast.error'),
+        status: 'risk',
+      })
+      qc.invalidateQueries({ queryKey: qk.designBrief(profile.id) })
     } finally {
       setActing(null)
     }

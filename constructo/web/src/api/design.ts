@@ -185,7 +185,10 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     let detail = res.statusText
     try {
       const body = await res.json()
-      detail = body?.detail ?? body?.message ?? detail
+      // AppError's envelope nests the real message under body.error.message
+      // (see app/common/errors.py) — check that first, same as every other
+      // web api/*.ts file's `call`/`request` helper.
+      detail = body?.error?.message ?? body?.detail ?? body?.message ?? detail
     } catch {
       /* non-JSON error body */
     }
