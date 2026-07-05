@@ -16,8 +16,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../../src/theme/tokens'
 import { design, type Area, type Theme, type ThemeAction } from '../../../../src/api/ownerDesign'
-import { design as briefApi, type MaterializeOut, type ProfilerBriefApproval } from '../../../../src/api/client'
+import { design as briefApi, type MaterializeOut, type ProfilerBriefApproval, type ProfilerClarification } from '../../../../src/api/client'
 import { designerActions, actionLabel, type DesignerActionType } from '../../../../src/architect/brief_actions.util'
+import { splitClarifications } from '../../../../src/architect/clarifications.util'
 import { Body, BodyStrong, Button, Card, Eyebrow, ListRow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader, timeAgo } from '../_components'
 
@@ -69,6 +70,12 @@ export default function DesignerBriefDetail() {
     enabled: !!brief?.brief_id,
   })
 
+  const clarQ = useQuery({
+    queryKey: ['dp', 'clar', id],
+    queryFn: () => briefApi.clarifications(id),
+    enabled: !!id,
+  })
+
   const decide = useMutation({
     mutationFn: ({ themeId, action }: { themeId: string; action: ThemeAction }) =>
       design.decideTheme(themeId, action),
@@ -109,6 +116,9 @@ export default function DesignerBriefDetail() {
   const totalThemes = groups.reduce((n, g) => n + g.themes.length, 0)
   const actions = brief ? designerActions(brief.state ?? '') : []
   const approvals = approvalsQ.data ?? []
+  const { answered, waiting } = splitClarifications(clarQ.data ?? [])
+  const showClarSection = answered.length > 0 || waiting.length > 0
+  const showRegenerateNudge = answered.length > 0 && brief?.state === 'revision_requested'
 
   return (
     <Pad>
@@ -159,6 +169,31 @@ export default function DesignerBriefDetail() {
         </Card>
       ) : null}
 
+      {showClarSection ? (
+        <View style={{ gap: SPACE.sm }}>
+          <SectionLabel>Homeowner Q&A</SectionLabel>
+          {showRegenerateNudge ? (
+            <Card>
+              <BodyStrong>New answers came in — regenerate the brief to fold them in</BodyStrong>
+              <Button
+                title="Regenerate brief"
+                variant="primary"
+                size="md"
+                loading={acting === 'regenerate'}
+                disabled={acting !== null && acting !== 'regenerate'}
+                onPress={() => void runAction('regenerate')}
+                style={{ marginTop: SPACE.md }}
+              />
+            </Card>
+          ) : null}
+          <Card padded={false}>
+            {[...answered, ...waiting].map((row, i, arr) => (
+              <ClarificationRow key={row.id} row={row} last={i === arr.length - 1} />
+            ))}
+          </Card>
+        </View>
+      ) : null}
+
       {totalThemes === 0 ? (
         <Card variant="quiet">
           <Small muted>No theme directions drafted yet. They appear once enough inspiration is ranked.</Small>
@@ -201,6 +236,32 @@ function ApprovalRow({ row, last }: { row: ProfilerBriefApproval; last: boolean 
       subtitle={`${cap(row.actor_role)} · ${timeAgo(row.created_at)}`}
       last={last}
     />
+  )
+}
+
+function ClarificationRow({ row, last }: { row: ProfilerClarification; last: boolean }) {
+  const { theme } = useTheme()
+  const answered = row.answer != null
+  return (
+    <View
+      style={{
+        paddingVertical: SPACE.md,
+        paddingHorizontal: SPACE.lg,
+        gap: 4,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: theme.colors.line,
+      }}
+    >
+      <Body muted>{row.question}</Body>
+      {answered ? (
+        <>
+          <BodyStrong>{row.answer}</BodyStrong>
+          <Small muted>{timeAgo(row.answered_at)}</Small>
+        </>
+      ) : (
+        <Small muted>Waiting for homeowner</Small>
+      )}
+    </View>
   )
 }
 
