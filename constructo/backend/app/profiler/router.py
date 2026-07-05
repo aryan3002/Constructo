@@ -10,23 +10,26 @@ from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.homeowner.authority import can_approve
-from app.homeowner.scoping import homeowner_site_ids, member_sub_role
+from app.homeowner.authority import APPROVERS, can_approve
+from app.homeowner.scoping import homeowner_site_ids, member_sub_role, resolve_site
 from app.models import (
     Component,
     HomeownerMember,
     Material,
     MemberStatus,
+    Site,
     Space,
     Spec,
     User,
     UserRole,
 )
 from app.models.profiler import (
+    AreaKind,
     BriefAction,
     BriefAudience,
     BriefState,
     ConflictStatus,
+    ContributorRole,
     ProfilerArea,
     ProfilerBrief,
     ProfilerBriefApproval,
@@ -40,12 +43,20 @@ from app.models.profiler import (
     ProfilerReference,
     ProfilerReferenceAttributes,
     ProfilerTheme,
+    ProfileScope,
     ProfileStatus,
     ReferenceSource,
     ThemeStatus,
 )
 from app.profiler.bridge import bridge_id, plan_proposals
-from app.profiler.brief import build_area_brief_payload, generate_clarifications, narrate_brief
+from app.profiler.brief import build_area_brief_payload, narrate_brief
+from app.profiler.engine import (
+    _area_signals,
+    compute_and_persist_taste,
+    propose_clarifications_for_area,
+    propose_themes_for_area,
+    refresh_taste_and_maybe_propose,
+)
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.pinterest import PinResolver, get_pin_resolver
 from app.profiler.schemas import (
@@ -74,11 +85,11 @@ from app.profiler.schemas import (
     ReferenceFromPresetIn,
     ReferenceIn,
     ReferenceOut,
+    SelfServeProfileIn,
     ThemeDecisionIn,
     ThemeOut,
 )
 from app.profiler.taste import build_taste_model, check_consistency
-from app.profiler.themes import narrate_themes, top_reference_ids
 from app.specs.schemas import SpecOut
 from app.storage import Storage, get_storage
 
@@ -118,6 +129,7 @@ def _reference_out(ref: ProfilerReference, storage: Storage) -> ReferenceOut:
     stored key, else the external source_url) so the app can render the photo."""
     out = ReferenceOut.model_validate(ref)
     out.image_url = storage.url_for(ref.image_r2_key) or ref.source_url
+    out.extraction_status = ref.extraction_status
     return out
 
 
@@ -138,6 +150,7 @@ async def _run_vision(
     except Exception:  # never fail the request on extraction
         logger.exception("profiler: vision extraction failed for reference %s", ref.id)
         attrs = None
+        ref.extraction_status = "failed"
     if attrs:
         confidence = float(attrs.get("confidence") or 0.0)
         session.add(
@@ -148,6 +161,7 @@ async def _run_vision(
         verdict = check_consistency(attrs, area.taste_model or {})
         ref.consistency_status = verdict["status"]
         ref.consistency_note = verdict["reason"]
+        ref.extraction_status = "ok"
 
 
 async def _area_counts(
@@ -221,6 +235,32 @@ async def _load_accessible_profile(
     elif profile.company_id != user.company_id:
         raise AppError(404, "not_found", "Profile not found")
     return profile
+
+
+async def _gate_design_commit(
+    session: AsyncSession, user: User, profile: ProfilerProfile,
+) -> str:
+    """Who may COMMIT design decisions (themes, conflicts, brief generation).
+
+    Contractor side: role in ``_EDIT_ROLES`` and company match (404 otherwise —
+    the caller already went through ``_load_accessible_profile``). Homeowner
+    side: ``member_sub_role(session, user, profile.site_id)`` must satisfy
+    ``can_approve``, else 403 ``approve_forbidden`` with ``{"can_comment": True}``
+    (mirrors ``act_on_brief``'s homeowner branch). Returns the actor_role string.
+    """
+    if user.role in _EDIT_ROLES:
+        return user.role.value
+    sub_role = await member_sub_role(session, user, profile.site_id)
+    if sub_role is None or not can_approve(sub_role):
+        # No membership here cannot normally arise: _load_accessible_profile
+        # already 404s strangers before this helper runs. Kept as a safe
+        # belt-and-braces fallback rather than assuming.
+        raise AppError(
+            403, "approve_forbidden",
+            "Only a property owner can approve this. You can add a comment.",
+            extra={"can_comment": True},
+        )
+    return sub_role.value
 
 
 async def _validate_contributor(
@@ -307,78 +347,6 @@ async def _my_contributor_id(
         if c.user_id == user.id or (c.member_id is not None and c.member_id in member_ids):
             return c.id
     return None
-
-
-async def _area_signals(
-    session: AsyncSession, area_id: UUID
-) -> tuple[list[dict], list[dict]]:
-    """The (rankings, attributes) dict-lists the reducer expects, for one area."""
-    ref_ids = (
-        (
-            await session.execute(
-                select(ProfilerReference.id).where(ProfilerReference.area_id == area_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not ref_ids:
-        return [], []
-    rank_rows = (
-        await session.execute(
-            select(ProfilerRanking).where(ProfilerRanking.reference_id.in_(ref_ids))
-        )
-    ).scalars().all()
-    attr_rows = (
-        await session.execute(
-            select(ProfilerReferenceAttributes).where(
-                ProfilerReferenceAttributes.reference_id.in_(ref_ids)
-            )
-        )
-    ).scalars().all()
-    rankings = [
-        {
-            "reference_id": str(r.reference_id),
-            "contributor_id": str(r.contributor_id),
-            "stars": r.stars,
-            "tags": r.tags,
-        }
-        for r in rank_rows
-    ]
-    attrs = [
-        {"reference_id": str(a.reference_id), "attributes": a.attributes} for a in attr_rows
-    ]
-    return rankings, attrs
-
-
-async def _sync_conflicts(
-    session: AsyncSession, profile_id: UUID, area_id: UUID, conflicts: list[dict]
-) -> None:
-    """Replace this area's OPEN conflicts with the freshly-detected set.
-
-    Resolved conflicts are preserved; only OPEN ones are replaced.
-    """
-    existing = (
-        await session.execute(
-            select(ProfilerConflict).where(
-                ProfilerConflict.area_id == area_id,
-                ProfilerConflict.resolution_status == ConflictStatus.open,
-            )
-        )
-    ).scalars().all()
-    for c in existing:
-        await session.delete(c)
-    for cf in conflicts:
-        session.add(
-            ProfilerConflict(
-                profile_id=profile_id,
-                area_id=area_id,
-                dimension=cf["dimension"],
-                value=cf["value"],
-                contributor_a_id=UUID(cf["contributor_a"]),
-                contributor_b_id=UUID(cf["contributor_b"]),
-            )
-        )
 
 
 async def _brief_payload(session: AsyncSession, profile: ProfilerProfile) -> dict:
@@ -492,6 +460,111 @@ async def create_profile(
     return ProfileOut.model_validate(profile)
 
 
+_DEFAULT_SELF_SERVE_AREAS = ("kitchen", "living room", "master bedroom")
+
+
+@router.post("/profiles/self-serve", response_model=ProfileDetailOut, status_code=201)
+async def start_self_serve_profile(
+    body: SelfServeProfileIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    """Homeowner-initiated profile start — no contractor/architect required.
+
+    Owner/co-owner only (money/scope-bearing: it seeds the whole intake). Areas
+    come from the site's existing Space rows so intake matches the real house;
+    with no spaces yet we fall back to three sensible defaults. Every active
+    household member is seeded as a contributor so ranking is immediately open
+    to everyone, with the caller (and any other approver) marked decision owner.
+    """
+    sid = await resolve_site(session, user, body.site_id)
+    sub_role = await member_sub_role(session, user, sid)
+    if sub_role is None or not can_approve(sub_role):
+        raise AppError(
+            403, "approve_forbidden",
+            "Only a property owner can start the design profile. You can add a comment.",
+            extra={"can_comment": True},
+        )
+
+    existing = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == sid)
+            .order_by(ProfilerProfile.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if existing is not None:
+        raise AppError(
+            409, "profile_exists",
+            "A design profile already exists for this property.",
+            extra={"profile_id": str(existing.id)},
+        )
+
+    site = await session.get(Site, sid)
+    if site is None:
+        raise AppError(404, "not_found", "Site not found")
+
+    profile = ProfilerProfile(
+        company_id=site.company_id,
+        site_id=sid,
+        scope_type=ProfileScope.whole_house,
+        created_by=user.id,
+        status=ProfileStatus.intake_started,
+    )
+    session.add(profile)
+    await session.flush()
+
+    spaces = (
+        await session.execute(select(Space).where(Space.site_id == sid))
+    ).scalars().all()
+    if spaces:
+        for space in spaces:
+            session.add(
+                ProfilerArea(
+                    profile_id=profile.id,
+                    area_kind=AreaKind.interior,
+                    # area_key is String(64); Space.name is unbounded — truncate so
+                    # a long room name can't 500 this Phase-4 entry point.
+                    area_key=space.name.strip().lower()[:64],
+                    space_id=space.id,
+                )
+            )
+    else:
+        for area_key in _DEFAULT_SELF_SERVE_AREAS:
+            session.add(
+                ProfilerArea(
+                    profile_id=profile.id,
+                    area_kind=AreaKind.interior,
+                    area_key=area_key,
+                )
+            )
+
+    members = (
+        await session.execute(
+            select(HomeownerMember).where(
+                HomeownerMember.site_id == sid,
+                HomeownerMember.status == MemberStatus.active,
+            )
+        )
+    ).scalars().all()
+    for m in members:
+        role = ContributorRole.co_owner if m.sub_role in APPROVERS else ContributorRole.family
+        session.add(
+            ProfilerContributor(
+                profile_id=profile.id,
+                member_id=m.id,
+                user_id=m.user_id,
+                role=role,
+                is_decision_owner=can_approve(m.sub_role),
+            )
+        )
+
+    await session.commit()
+    await session.refresh(profile)
+    return await _profile_detail(session, profile, user)
+
+
 @router.get("/profiles", response_model=list[ProfileOut])
 async def list_profiles(
     site_id: UUID | None = Query(None),
@@ -517,22 +590,25 @@ async def list_profiles(
     return [ProfileOut.model_validate(p) for p in rows]
 
 
-@router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)
-async def get_profile(
-    profile_id: UUID,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+async def _profile_detail(
+    session: AsyncSession, profile: ProfilerProfile, user: User
 ) -> ProfileDetailOut:
-    profile = await _load_accessible_profile(session, profile_id, user)
+    """Build the full ProfileDetailOut (areas + contributors + my_contributor_id)
+    for an already-loaded, already-authorized profile. Shared by every endpoint
+    that returns a profile's detail view, so the response shape never drifts."""
     areas = (
-        (await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile_id)))
+        (
+            await session.execute(
+                select(ProfilerArea).where(ProfilerArea.profile_id == profile.id)
+            )
+        )
         .scalars()
         .all()
     )
     contributors = (
         (
             await session.execute(
-                select(ProfilerContributor).where(ProfilerContributor.profile_id == profile_id)
+                select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
             )
         )
         .scalars()
@@ -541,9 +617,19 @@ async def get_profile(
     out = ProfileDetailOut.model_validate(profile)
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
     out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
-    counts = await _area_counts(session, profile_id, out.my_contributor_id)
+    counts = await _area_counts(session, profile.id, out.my_contributor_id)
     out.areas = [_area_out(a, counts) for a in areas]
     return out
+
+
+@router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)
+async def get_profile(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    profile = await _load_accessible_profile(session, profile_id, user)
+    return await _profile_detail(session, profile, user)
 
 
 @router.get("/profiles/by-site/{site_id}", response_model=ProfileDetailOut)
@@ -565,20 +651,7 @@ async def get_profile_by_site(
     if profile is None:
         raise AppError(404, "not_found", "No design profile for this site")
     await _load_accessible_profile(session, profile.id, user)
-    areas = (
-        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
-    ).scalars().all()
-    contributors = (
-        await session.execute(
-            select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
-        )
-    ).scalars().all()
-    out = ProfileDetailOut.model_validate(profile)
-    out.contributors = [ContributorOut.model_validate(c) for c in contributors]
-    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
-    counts = await _area_counts(session, profile.id, out.my_contributor_id)
-    out.areas = [_area_out(a, counts) for a in areas]
-    return out
+    return await _profile_detail(session, profile, user)
 
 
 @router.post("/profiles/{profile_id}/contributors", status_code=201)
@@ -681,6 +754,7 @@ async def add_reference(
     vision_url = body.source_url or storage.url_for(body.image_r2_key)
     await _run_vision(session, llm, ref, area, vision_url)
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -731,6 +805,7 @@ async def add_reference_from_link(
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -803,6 +878,54 @@ async def add_reference_from_preset(
     storage = get_storage()
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    await session.commit()
+    await session.refresh(ref)
+    return _reference_out(ref, storage)
+
+
+@router.post("/references/{reference_id}/extract", response_model=ReferenceOut)
+async def retry_extraction(
+    reference_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> ReferenceOut:
+    """Re-run vision for a reference whose extraction failed (or never ran).
+    Any member who can see the profile may retry — it commits nothing new
+    authority-wise (no _gate_design_commit; read-membrane only)."""
+    ref = await session.get(ProfilerReference, reference_id)
+    if ref is None:
+        raise AppError(404, "not_found", "Reference not found")
+    await _load_accessible_profile(session, ref.profile_id, user)
+    area = await session.get(ProfilerArea, ref.area_id)
+    if area is None:
+        raise AppError(404, "not_found", "Area not found")
+
+    stale = (
+        await session.execute(
+            select(ProfilerReferenceAttributes).where(
+                ProfilerReferenceAttributes.reference_id == ref.id
+            )
+        )
+    ).scalars().all()
+    for row in stale:
+        await session.delete(row)
+
+    storage = get_storage()
+    # Vision needs a FETCHABLE image url, never a bare R2 key. Prefer the rehosted
+    # R2 image whenever a key exists: for pinterest_link refs source_url is the pin
+    # PAGE (kept for display, not an image), so handing it to vision would fail
+    # forever. source_url is only the degenerate fallback for key-less refs.
+    vision_url = storage.url_for(ref.image_r2_key) if ref.image_r2_key else ref.source_url
+    await _run_vision(session, llm, ref, area, vision_url)
+
+    # A successful retry produces a fresh attributes row that the area's persisted
+    # taste model doesn't yet reflect (only ranking/reference writes trigger this
+    # elsewhere) — recompute now so the reducer isn't blind to this reference until
+    # some unrelated later write happens to touch the same area.
+    await refresh_taste_and_maybe_propose(session, llm, ref.profile_id, ref.area_id)
+
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -840,6 +963,7 @@ async def rank_reference(
     body: RankingIn,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
 ) -> dict:
     ref = await session.get(ProfilerReference, reference_id)
     if ref is None:
@@ -868,6 +992,7 @@ async def rank_reference(
                 note=body.note,
             )
         )
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
     await session.commit()
     return {"ok": True}
 
@@ -886,11 +1011,6 @@ async def get_area_taste(
 
     rankings, attrs = await _area_signals(session, area_id)
     model = build_taste_model(rankings, attrs, area.recommended_count)
-    # Persist the deterministic summary back onto the area (no LLM involved here).
-    area.taste_model = model["dimensions"]
-    area.confidence = model["confidence"]
-    area.has_conflict = model["has_conflict"]
-    await session.commit()
     return model
 
 
@@ -911,42 +1031,8 @@ async def generate_themes(
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
 
-    rankings, attrs = await _area_signals(session, area_id)
-    model = build_taste_model(rankings, attrs, area.recommended_count)
-    evidence = top_reference_ids(rankings)
-
-    try:
-        proposals = await narrate_themes(llm, area.area_key, model)
-    except Exception:  # narration must never 500 the request
-        logger.exception("profiler: theme narration failed for area %s", area_id)
-        proposals = []
-
-    # Replace prior SUGGESTED themes for this area (keep approved/adjusted/rejected).
-    prior = (
-        await session.execute(
-            select(ProfilerTheme).where(
-                ProfilerTheme.area_id == area_id, ProfilerTheme.status == ThemeStatus.suggested
-            )
-        )
-    ).scalars().all()
-    for t in prior:
-        await session.delete(t)
-
-    created: list[ProfilerTheme] = []
-    for p in proposals:
-        theme = ProfilerTheme(
-            profile_id=profile_id, area_id=area_id,
-            name=(p.get("name") or "Untitled"),
-            palette=(p.get("palette") or []),
-            materials=(p.get("materials") or []),
-            rationale=p.get("rationale"),
-            evidence_reference_ids=evidence,
-            confidence=model["confidence"],  # reducer math, never the LLM
-        )
-        session.add(theme)
-        created.append(theme)
-
-    await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
+    model = await compute_and_persist_taste(session, area)
+    created = await propose_themes_for_area(session, llm, profile_id, area, model)
     await session.commit()
     for t in created:
         await session.refresh(t)
@@ -995,13 +1081,14 @@ async def list_conflicts(
 async def decide_theme(
     theme_id: UUID,
     body: ThemeDecisionIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ThemeOut:
     theme = await session.get(ProfilerTheme, theme_id)
     if theme is None:
         raise AppError(404, "not_found", "Theme not found")
-    await _load_owned_profile(session, theme.profile_id, user)
+    profile = await _load_accessible_profile(session, theme.profile_id, user)
+    await _gate_design_commit(session, user, profile)
     theme.status = {
         "approve": ThemeStatus.approved,
         "adjust": ThemeStatus.adjusted,
@@ -1018,13 +1105,14 @@ async def decide_theme(
 async def resolve_conflict(
     conflict_id: UUID,
     body: ConflictResolveIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ConflictOut:
     conflict = await session.get(ProfilerConflict, conflict_id)
     if conflict is None:
         raise AppError(404, "not_found", "Conflict not found")
-    await _load_owned_profile(session, conflict.profile_id, user)
+    profile = await _load_accessible_profile(session, conflict.profile_id, user)
+    await _gate_design_commit(session, user, profile)
     conflict.resolution_status = (
         ConflictStatus.deferred_to_architect
         if body.resolution == "defer_to_architect"
@@ -1046,11 +1134,12 @@ async def resolve_conflict(
 @router.post("/profiles/{profile_id}/brief", response_model=BriefDetailOut, status_code=201)
 async def generate_brief(
     profile_id: UUID,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> BriefDetailOut:
-    profile = await _load_owned_profile(session, profile_id, user)
+    profile = await _load_accessible_profile(session, profile_id, user)
+    await _gate_design_commit(session, user, profile)
     payload = await _brief_payload(session, profile)
 
     next_version = (
@@ -1344,29 +1433,8 @@ async def generate_clarifications_endpoint(
     if area is None or area.profile_id != profile_id:
         raise AppError(404, "not_found", "Area not found")
 
-    rankings, attrs = await _area_signals(session, area_id)
-    model = build_taste_model(rankings, attrs, area.recommended_count)
-    try:
-        questions = await generate_clarifications(llm, area.area_key, model)
-    except Exception:  # never 500 on narration
-        logger.exception(
-            "profiler: clarification generation failed for area %s", area_id
-        )
-        questions = []
-
-    created: list[ProfilerClarification] = []
-    for q in questions:
-        row = ProfilerClarification(
-            profile_id=profile_id,
-            area_id=area_id,
-            question=q,
-            source_attribution={
-                "confidence": model["confidence"],
-                "has_conflict": model["has_conflict"],
-            },
-        )
-        session.add(row)
-        created.append(row)
+    model = await compute_and_persist_taste(session, area)
+    created = await propose_clarifications_for_area(session, llm, profile_id, area, model)
     await session.commit()
     for row in created:
         await session.refresh(row)

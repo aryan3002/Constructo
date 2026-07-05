@@ -6,10 +6,19 @@ SHARED brief; a different-company user and a different-site homeowner get 404.
 
 AppError envelope shape: {"error": {"code", "message", <extra merged in>}}.
 """
+from uuid import uuid4
+
 from app.extraction.llm import FakeLLMClient
 from app.main import app
 from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, UserRole
+from app.models.profiler import (
+    ConflictStatus,
+    ProfilerClarification,
+    ProfilerConflict,
+    ProfilerTheme,
+)
 from app.profiler.extraction import get_llm
+from app.profiler.pinterest import get_pin_resolver
 from tests.test_profiler_api import auth
 
 
@@ -283,5 +292,250 @@ async def test_approval_timeline_attributes_actor_scoped(client, factory, db_ses
         blocked = await client.get(
             f"/api/v1/design/briefs/{bid}/approvals", headers=auth(stranger))
         assert blocked.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+# ---------------------------------------------------------------------------
+# Task 10: cross-company write matrix — a FULL second world (company B) never
+# gets anything but 404 writing against company A's objects. Never 403: a 403
+# would confirm the object exists, which is itself a membrane leak.
+# ---------------------------------------------------------------------------
+
+
+class _RefusingResolver:
+    """A PinResolver whose .fetch() blows up the test if it is ever called.
+
+    Used to prove the membrane check in add_reference_from_link runs BEFORE any
+    network fetch: if the endpoint fetched first, this would raise AssertionError
+    instead of the expected AppError(404), and the test would fail loudly rather
+    than silently pass for the wrong reason.
+    """
+
+    async def fetch(self, url: str):  # pragma: no cover - should never execute
+        raise AssertionError(
+            "PinResolver.fetch() was called before the membrane check rejected "
+            "the request — the from-link endpoint must load/authorize the "
+            "profile before touching the network."
+        )
+
+
+async def _second_world(client, factory, db_session):
+    """A FULL second company: its own site, an active homeowner owner, and an
+    architect — used as the attacker world in the cross-company write matrix."""
+    company = await factory.company(name="Company B")
+    site = await factory.site(company, name="Site B")
+    architect = await factory.user(company=company, role=UserRole.architect)
+    owner = await factory.user(company=company, role=UserRole.homeowner)
+    await _member(db_session, site.id, owner.id, HomeownerSubRole.primary_owner)
+    return dict(company=company, site=site, architect=architect, owner=owner)
+
+
+async def test_cross_company_write_matrix_always_404s(client, factory, db_session):
+    """Every WRITE endpoint, attempted by company B's owner AND architect against
+    company A's objects, must 404 — never 403 (existence must not leak)."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    app.dependency_overrides[get_pin_resolver] = lambda: _RefusingResolver()
+    try:
+        a = await _world(client, factory, db_session)
+        b = await _second_world(client, factory, db_session)
+
+        # A-side rows this task's endpoints need that _world() doesn't already
+        # create: a suggested theme, an open conflict, an answered clarification.
+        theme = ProfilerTheme(
+            profile_id=a["pid"], area_id=a["area_id"], name="Warm Minimal",
+            palette=["oak"], materials=["light oak"], confidence=0.8,
+            evidence_reference_ids=[],
+        )
+        conflict = ProfilerConflict(
+            profile_id=a["pid"], area_id=a["area_id"], dimension="colors",
+            value="dark", resolution_status=ConflictStatus.open,
+        )
+        clarification = ProfilerClarification(
+            profile_id=a["pid"], area_id=a["area_id"], question="Matte or gloss?",
+        )
+        db_session.add_all([theme, conflict, clarification])
+        await db_session.commit()
+        for row in (theme, conflict, clarification):
+            await db_session.refresh(row)
+
+        # a reference on A's area, ranked by A's own contributor, so /extract has
+        # something real to retry.
+        a_ref = (
+            await client.post(
+                "/api/v1/design/references",
+                json={
+                    "area_id": a["area_id"],
+                    "source_type": "upload",
+                    "source_url": "https://x.test/matrix.jpg",
+                },
+                headers=auth(a["architect"]),
+            )
+        ).json()
+
+        both_roles = (b["owner"], b["architect"])
+
+        for actor in both_roles:
+            # 1. POST /references/{A.ref}/rankings
+            resp = await client.post(
+                f"/api/v1/design/references/{a_ref['id']}/rankings",
+                json={"contributor_id": str(uuid4()), "stars": 5},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "rankings", resp.text)
+
+            # 2. POST /references (body targeting A's area)
+            resp = await client.post(
+                "/api/v1/design/references",
+                json={
+                    "area_id": a["area_id"],
+                    "source_type": "upload",
+                    "source_url": "https://x.test/b.jpg",
+                },
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "add reference", resp.text)
+
+            # 3. POST /references/from-link — membrane must fire BEFORE any
+            # network fetch (_RefusingResolver blows up the test if hit).
+            resp = await client.post(
+                "/api/v1/design/references/from-link",
+                json={"area_id": a["area_id"], "url": "https://pin.it/whatever"},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "from-link", resp.text)
+
+            # 4. POST /references/from-preset
+            resp = await client.post(
+                "/api/v1/design/references/from-preset",
+                json={"area_id": a["area_id"], "preset_id": str(uuid4())},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "from-preset", resp.text)
+
+            # 5. POST /themes/{A.theme}/decision
+            resp = await client.post(
+                f"/api/v1/design/themes/{theme.id}/decision",
+                json={"action": "approve"},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "theme decision", resp.text)
+
+            # 6. POST /conflicts/{A.conflict}/resolve
+            resp = await client.post(
+                f"/api/v1/design/conflicts/{conflict.id}/resolve",
+                json={"resolution": "keep_a"},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "conflict resolve", resp.text)
+
+            # 7. POST /profiles/{A.pid}/brief
+            resp = await client.post(
+                f"/api/v1/design/profiles/{a['pid']}/brief", headers=auth(actor)
+            )
+            assert resp.status_code == 404, (actor.role, "generate brief", resp.text)
+
+            # 8. POST /briefs/{A.bid}/approval
+            resp = await client.post(
+                f"/api/v1/design/briefs/{a['bid']}/approval",
+                json={"action": "send_to_architect"},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "brief approval", resp.text)
+
+            # 9. POST /clarifications/{A.clar}/answer
+            resp = await client.post(
+                f"/api/v1/design/clarifications/{clarification.id}/answer",
+                json={"answer": "Matte."},
+                headers=auth(actor),
+            )
+            assert resp.status_code == 404, (actor.role, "clarification answer", resp.text)
+
+            # 10. POST /references/{A.ref}/extract
+            resp = await client.post(
+                f"/api/v1/design/references/{a_ref['id']}/extract", headers=auth(actor)
+            )
+            assert resp.status_code == 404, (actor.role, "extract", resp.text)
+
+        # 11. POST /briefs/{A.bid}/materialize — contractor-side only (_load_owned_profile
+        # + require_role(_EDIT_ROLES)); the homeowner role isn't in _EDIT_ROLES at all
+        # (403, not a membrane concern), so only B's architect exercises the membrane here.
+        resp = await client.post(
+            f"/api/v1/design/briefs/{a['bid']}/materialize", headers=auth(b["architect"])
+        )
+        assert resp.status_code == 404, ("architect", "materialize", resp.text)
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+async def test_contributor_forgery_across_companies_never_201s(client, factory, db_session):
+    """A contributor id belonging to world B, used by world A's own owner on A's
+    own profile/reference, must never succeed — ``_validate_contributor`` must
+    catch the cross-company forgery (403 not_your_contributor or 404), not 201."""
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        a = await _world(client, factory, db_session)
+        b = await _second_world(client, factory, db_session)
+
+        # B's own profile + contributor, entirely on company B's site.
+        b_created = await client.post(
+            "/api/v1/design/profiles",
+            json={
+                "site_id": str(b["site"].id),
+                "areas": [
+                    {"area_kind": "interior", "area_key": "kitchen", "recommended_count": 1}
+                ],
+                "contributors": [{"role": "co_owner", "is_decision_owner": True}],
+            },
+            headers=auth(b["architect"]),
+        )
+        assert b_created.status_code == 201
+        b_pid = b_created.json()["id"]
+        b_detail = (
+            await client.get(
+                f"/api/v1/design/profiles/{b_pid}", headers=auth(b["architect"])
+            )
+        ).json()
+        b_contrib_id = b_detail["contributors"][0]["id"]
+
+        a_ref = (
+            await client.post(
+                "/api/v1/design/references",
+                json={
+                    "area_id": a["area_id"],
+                    "source_type": "upload",
+                    "source_url": "https://x.test/forge.jpg",
+                },
+                headers=auth(a["architect"]),
+            )
+        ).json()
+
+        # A's own owner (legitimately on A's profile) tries to rank AS B's contributor.
+        resp = await client.post(
+            f"/api/v1/design/references/{a_ref['id']}/rankings",
+            json={"contributor_id": b_contrib_id, "stars": 5},
+            headers=auth(a["owner"]),
+        )
+        assert resp.status_code in (403, 404), resp.text
+        assert resp.status_code != 201
+        if resp.status_code == 403:
+            assert resp.json()["error"]["code"] == "not_your_contributor"
+
+        # Same forgery via POST /references' optional contributor_id.
+        resp2 = await client.post(
+            "/api/v1/design/references",
+            json={
+                "area_id": a["area_id"],
+                "source_type": "upload",
+                "source_url": "https://x.test/forge2.jpg",
+                "contributor_id": b_contrib_id,
+            },
+            headers=auth(a["owner"]),
+        )
+        assert resp2.status_code in (403, 404), resp2.text
+        assert resp2.status_code != 201
+        if resp2.status_code == 403:
+            assert resp2.json()["error"]["code"] == "not_your_contributor"
     finally:
         app.dependency_overrides.pop(get_llm, None)

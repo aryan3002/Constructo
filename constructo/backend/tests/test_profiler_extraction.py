@@ -1,8 +1,11 @@
 """Vision extraction proposes attributes from an image; a human never sees raw guesses."""
+from sqlalchemy import select
+
 from app.auth.jwt import create_access_token
 from app.extraction.llm import FakeLLMClient
 from app.main import app
 from app.models import UserRole
+from app.models.profiler import ProfilerArea, ProfilerReference, ProfilerReferenceAttributes
 from app.profiler.extraction import extract_reference_attributes, get_llm
 
 
@@ -45,5 +48,218 @@ async def test_reference_add_extracts_and_stores_attributes(client, factory):
         )
         assert ref.status_code == 201
         assert ref.json()["consistency_status"] == "consistent"  # empty taste -> consistent
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+class _RaisingLLM(FakeLLMClient):
+    """Extraction always throws — used to prove failures never fail the request."""
+
+    async def complete_vision(self, system, user, image_url, json_schema):
+        raise RuntimeError("vision provider is down")
+
+
+async def test_reference_add_survives_extraction_failure_and_flags_status(
+    client, factory, db_session
+):
+    app.dependency_overrides[get_llm] = lambda: _RaisingLLM()
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(site.id),
+                  "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
+                  "contributors": []},
+            headers=_auth(architect),
+        )
+        pid = created.json()["id"]
+        detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
+        area_id = detail.json()["areas"][0]["id"]
+
+        ref = await client.post(
+            "/api/v1/design/references",
+            json={"area_id": area_id, "source_type": "upload",
+                  "source_url": "https://example.test/pin.jpg"},
+            headers=_auth(architect),
+        )
+        assert ref.status_code == 201
+        assert ref.json()["extraction_status"] == "failed"
+
+        row = (
+            await db_session.execute(
+                select(ProfilerReference).where(ProfilerReference.id == ref.json()["id"])
+            )
+        ).scalar_one()
+        assert row.extraction_status == "failed"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_retry_extraction_replaces_stale_attributes_and_reports_ok(
+    client, factory, db_session
+):
+    canned = {"style": "minimal", "materials": ["oak"], "colors": ["light"], "confidence": 0.8}
+    app.dependency_overrides[get_llm] = lambda: _RaisingLLM()
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(site.id),
+                  "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
+                  "contributors": [{"role": "co_owner", "is_decision_owner": True,
+                                     "user_id": str(architect.id)}]},
+            headers=_auth(architect),
+        )
+        pid = created.json()["id"]
+        detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
+        area_id = detail.json()["areas"][0]["id"]
+        contributor_id = detail.json()["my_contributor_id"]
+
+        ref = await client.post(
+            "/api/v1/design/references",
+            json={"area_id": area_id, "source_type": "upload",
+                  "source_url": "https://example.test/pin.jpg",
+                  "contributor_id": contributor_id},
+            headers=_auth(architect),
+        )
+        ref_id = ref.json()["id"]
+        assert ref.json()["extraction_status"] == "failed"
+
+        # A ranking (with no attributes yet, since extraction failed) so the
+        # reducer has a star weight to apply once attributes DO land on retry —
+        # otherwise aggregate_dimension_scores has nothing to multiply and the
+        # taste-model assertion below couldn't distinguish "refreshed" from "still
+        # empty because there was never a ranking".
+        rank = await client.post(f"/api/v1/design/references/{ref_id}/rankings", json={
+            "contributor_id": contributor_id, "stars": 5, "tags": {},
+        }, headers=_auth(architect))
+        assert rank.status_code == 201, rank.text
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    # The failed extraction leaves no attributes, so the area's persisted taste
+    # model has only empty per-dimension shells (build_taste_model always emits
+    # DIMENSIONS keys) and no actual scored values yet — confirm the pre-fix
+    # baseline before the retry.
+    area_before = await db_session.get(ProfilerArea, area_id)
+    await db_session.refresh(area_before)
+    assert all(not v for v in area_before.taste_model.values())
+
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
+    try:
+        retry = await client.post(
+            f"/api/v1/design/references/{ref_id}/extract",
+            headers=_auth(architect),
+        )
+        assert retry.status_code == 200
+        assert retry.json()["extraction_status"] == "ok"
+
+        rows = (
+            await db_session.execute(
+                select(ProfilerReferenceAttributes).where(
+                    ProfilerReferenceAttributes.reference_id == ref_id
+                )
+            )
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].attributes["style"] == "minimal"
+
+        # A successful retry must refresh the area's persisted taste model, not
+        # just the reference's own attributes row — otherwise the taste engine
+        # stays blind to a reference until some unrelated later write touches it.
+        area_after = await db_session.get(ProfilerArea, area_id)
+        await db_session.refresh(area_after)
+        assert area_after.taste_model != {}
+        assert area_after.taste_model.get("style", {}).get("minimal") is not None
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_retry_extraction_uses_rehosted_image_not_pin_page(client, factory):
+    """A pinterest_link ref keeps the pin-PAGE url in source_url (display only) —
+    retry must hand vision the rehosted R2 image, never the pin page."""
+    canned = {"style": "minimal", "materials": ["oak"], "colors": ["light"], "confidence": 0.8}
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(site.id),
+                  "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
+                  "contributors": []},
+            headers=_auth(architect),
+        )
+        pid = created.json()["id"]
+        detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
+        area_id = detail.json()["areas"][0]["id"]
+
+        ref = await client.post(
+            "/api/v1/design/references",
+            json={"area_id": area_id, "source_type": "pinterest_link",
+                  "image_r2_key": "design/test/rehosted-pin.jpg",
+                  "source_url": "https://www.pinterest.com/pin/12345/"},
+            headers=_auth(architect),
+        )
+        assert ref.status_code == 201
+        ref_id = ref.json()["id"]
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    capture = FakeLLMClient(canned=canned)
+    app.dependency_overrides[get_llm] = lambda: capture
+    try:
+        retry = await client.post(
+            f"/api/v1/design/references/{ref_id}/extract",
+            headers=_auth(architect),
+        )
+        assert retry.status_code == 200
+        vision_url = capture.calls[-1]["image_url"]
+        assert "rehosted-pin.jpg" in vision_url
+        assert "pinterest" not in vision_url
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_retry_extraction_cross_company_is_404(client, factory):
+    canned = {"style": "minimal", "materials": ["oak"], "colors": ["light"], "confidence": 0.8}
+    app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
+    try:
+        company = await factory.company()
+        architect = await factory.user(company=company, role=UserRole.architect)
+        site = await factory.site(company)
+        created = await client.post(
+            "/api/v1/design/profiles",
+            json={"site_id": str(site.id),
+                  "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
+                  "contributors": []},
+            headers=_auth(architect),
+        )
+        pid = created.json()["id"]
+        detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
+        area_id = detail.json()["areas"][0]["id"]
+
+        ref = await client.post(
+            "/api/v1/design/references",
+            json={"area_id": area_id, "source_type": "upload",
+                  "source_url": "https://example.test/pin.jpg"},
+            headers=_auth(architect),
+        )
+        ref_id = ref.json()["id"]
+
+        stranger_company = await factory.company(name="Stranger Co")
+        stranger = await factory.user(
+            company=stranger_company, role=UserRole.homeowner
+        )
+        resp = await client.post(
+            f"/api/v1/design/references/{ref_id}/extract",
+            headers=_auth(stranger),
+        )
+        assert resp.status_code == 404
     finally:
         app.dependency_overrides.pop(get_llm, None)

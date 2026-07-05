@@ -35,6 +35,10 @@ class ProfileCreate(BaseModel):
     contributors: list[ContributorIn] = Field(default_factory=list)
 
 
+class SelfServeProfileIn(BaseModel):
+    site_id: UUID | None = None
+
+
 class AreaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -96,6 +100,7 @@ class ReferenceOut(BaseModel):
     # from image_r2_key, else the external source_url). Not on the ORM row.
     image_url: str | None = None
     consistency_status: str | None = None
+    extraction_status: str | None = None
     created_at: datetime
 
 
