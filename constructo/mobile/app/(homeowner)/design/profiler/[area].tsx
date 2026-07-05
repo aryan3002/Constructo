@@ -26,6 +26,7 @@ import type { ViewStyle } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -58,6 +59,7 @@ import {
 } from '../../../../src/homeowner/design_profiler.util'
 import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
 import { CONFLICT_STR, conflictSides, resolvedSummary } from '../../../../src/homeowner/conflicts.util'
+import { extractPinterestUrls, PIN_PASTE_STR } from '../../../../src/homeowner/pin_paste.util'
 import {
   decidedAttribution,
   THEME_DECISION_STR,
@@ -578,26 +580,69 @@ export default function AreaRankScreen() {
     addByUpload.mutate(result.assets[0].uri)
   }
 
-  // Pinterest — paste a pin link (server re-hosts the image to our R2).
+  // Pinterest — paste one or many pin links (server re-hosts each image to our R2).
+  const PS = PIN_PASTE_STR.en
   const [pinOpen, setPinOpen] = useState(false)
   const [pinUrl, setPinUrl] = useState('')
   const [pinError, setPinError] = useState<string | null>(null)
-  const addByLink = useMutation({
-    mutationFn: () =>
-      design.referenceFromLink({
-        area_id: area as string,
-        contributor_id: contributorArg,
-        url: pinUrl.trim(),
-      }),
-    onSuccess: () => {
-      toast('Added from Pinterest', 'check')
-      setPinOpen(false)
-      setPinUrl('')
-      setPinError(null)
-      void refresh()
-    },
-    onError: (e: Error) => setPinError(e.message),
-  })
+  const [pinResults, setPinResults] = useState<{ ok: number; fails: string[] } | null>(null)
+  const [pinSubmitting, setPinSubmitting] = useState(false)
+
+  function shortReason(e: unknown): string {
+    if (e instanceof ApiError) return e.message
+    if (e instanceof Error) return e.message
+    return 'Could not be added.'
+  }
+
+  // Explicit-tap clipboard read only (never on mount/focus — that triggers
+  // the iOS "Paste" permission banner as a surprise).
+  async function pasteFromPinterest() {
+    const text = await Clipboard.getStringAsync()
+    const urls = extractPinterestUrls(text)
+    if (urls.length === 0) {
+      toast(PS.noPinsToast)
+      return
+    }
+    if (urls.length === 1) {
+      setPinUrl(urls[0])
+      return
+    }
+    setPinUrl(urls.join('\n'))
+  }
+
+  async function submitPins() {
+    const urls = extractPinterestUrls(pinUrl)
+    if (urls.length === 0) {
+      setPinError('Paste a Pinterest pin link.')
+      return
+    }
+    setPinError(null)
+    setPinSubmitting(true)
+    let ok = 0
+    const fails: string[] = []
+    for (const url of urls) {
+      try {
+        await design.referenceFromLink({
+          area_id: area as string,
+          contributor_id: contributorArg,
+          url,
+        })
+        ok += 1
+      } catch (e) {
+        fails.push(shortReason(e))
+      }
+    }
+    setPinSubmitting(false)
+    setPinResults({ ok, fails })
+    if (ok > 0) void refresh()
+  }
+
+  function closePinSheet() {
+    setPinOpen(false)
+    setPinUrl('')
+    setPinError(null)
+    setPinResults(null)
+  }
 
   // Presets — curated designer packs for this area kind.
   const [presetOpen, setPresetOpen] = useState(false)
@@ -778,6 +823,7 @@ export default function AreaRankScreen() {
               leading={<Feather name="image" size={16} color={c.accentDeep} />}
               onPress={() => {
                 setPinError(null)
+                setPinResults(null)
                 setPinOpen(true)
               }}
               style={{ flex: 1 }}
@@ -1094,12 +1140,12 @@ export default function AreaRankScreen() {
         </View>
       ) : null}
 
-      {/* ── Pinterest paste-a-link sheet ──────────────────────────────── */}
+      {/* ── Pinterest paste-a-link sheet (one-tap + multi-link) ─────────── */}
       <Modal
         visible={pinOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setPinOpen(false)}
+        onRequestClose={closePinSheet}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -1107,7 +1153,7 @@ export default function AreaRankScreen() {
         >
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
-          onPress={() => setPinOpen(false)}
+          onPress={closePinSheet}
         >
           <Pressable
             style={{
@@ -1122,54 +1168,91 @@ export default function AreaRankScreen() {
           >
             <Eyebrow style={{ color: c.textMute }}>Add from Pinterest</Eyebrow>
             <BodyStrong>Paste a pin link</BodyStrong>
-            <Small muted>
-              Open a pin in Pinterest, tap Share → Copy link, and paste it here. We'll save the
-              image to your inspiration.
-            </Small>
-            <TextInput
-              value={pinUrl}
-              onChangeText={(t) => {
-                setPinUrl(t)
-                if (pinError) setPinError(null)
-              }}
-              placeholder="https://pin.it/…"
-              placeholderTextColor={c.textMute}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              style={{
-                borderWidth: 1,
-                borderColor: pinError ? c.warn : c.line,
-                borderRadius: theme.radii.control,
-                paddingHorizontal: SPACE.md,
-                paddingVertical: SPACE.sm,
-                color: c.text,
-                backgroundColor: c.paper,
-                marginTop: SPACE.xs,
-              }}
-            />
-            {pinError ? (
-              <Small style={{ color: c.warn }}>{pinError}</Small>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
-              <Button
-                title="Cancel"
-                variant="ghost"
-                size="md"
-                onPress={() => setPinOpen(false)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={addByLink.isPending ? 'Adding…' : 'Add'}
-                variant="primary"
-                size="md"
-                loading={addByLink.isPending}
-                onPress={() => {
-                  if (pinUrl.trim()) addByLink.mutate()
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
+
+            {pinResults ? (
+              <>
+                <Small style={{ marginTop: SPACE.xs, fontWeight: '600', color: c.text }}>
+                  {PS.resultLine(pinResults.ok, pinResults.fails.length)}
+                </Small>
+                {pinResults.fails.length > 0 ? (
+                  <View style={{ gap: 4 }}>
+                    {pinResults.fails.map((reason, i) => (
+                      <Small key={i} muted>
+                        {reason}
+                      </Small>
+                    ))}
+                  </View>
+                ) : null}
+                <Button
+                  title={PS.done}
+                  variant="primary"
+                  size="md"
+                  onPress={closePinSheet}
+                  style={{ marginTop: SPACE.sm }}
+                />
+              </>
+            ) : (
+              <>
+                <Small muted>
+                  Open a pin in Pinterest, tap Share → Copy link, and paste it here — or paste
+                  several links at once. We'll save each image to your inspiration.
+                </Small>
+                <Button
+                  title={PS.pasteButton}
+                  variant="secondary"
+                  size="md"
+                  leading={<Feather name="clipboard" size={16} color={c.accentDeep} />}
+                  onPress={() => void pasteFromPinterest()}
+                  style={{ marginTop: SPACE.xs }}
+                />
+                <TextInput
+                  value={pinUrl}
+                  onChangeText={(t) => {
+                    setPinUrl(t)
+                    if (pinError) setPinError(null)
+                  }}
+                  placeholder="https://pin.it/… (one or more, one per line)"
+                  placeholderTextColor={c.textMute}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  keyboardType="url"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: pinError ? c.warn : c.line,
+                    borderRadius: theme.radii.control,
+                    paddingHorizontal: SPACE.md,
+                    paddingVertical: SPACE.sm,
+                    color: c.text,
+                    backgroundColor: c.paper,
+                    marginTop: SPACE.xs,
+                    minHeight: 44,
+                  }}
+                />
+                {pinError ? (
+                  <Small style={{ color: c.warn }}>{pinError}</Small>
+                ) : null}
+                <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+                  <Button
+                    title="Cancel"
+                    variant="ghost"
+                    size="md"
+                    onPress={closePinSheet}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    title={pinSubmitting ? 'Adding…' : 'Add'}
+                    variant="primary"
+                    size="md"
+                    loading={pinSubmitting}
+                    onPress={() => {
+                      if (pinUrl.trim()) void submitPins()
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
+            )}
           </Pressable>
         </Pressable>
         </KeyboardAvoidingView>
