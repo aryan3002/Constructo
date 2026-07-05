@@ -79,6 +79,16 @@ async def test_below_threshold_stays_silent(client, factory, db_session):
     assert themes == []
 
 
+async def test_get_taste_is_read_only(client, factory, db_session):
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    resp = await client.get(
+        f"/api/v1/design/profiles/{pid}/areas/{area_id}/taste", headers=auth(architect))
+    assert resp.status_code == 200
+    area = await db_session.get(ProfilerArea, area_id)
+    await db_session.refresh(area)
+    assert area.taste_model == {}  # untouched by a GET (no rankings yet, nothing persisted)
+
+
 async def test_same_ranked_count_does_not_regenerate(client, factory, db_session):
     """Debounce: re-ranking the same reference (upsert, count unchanged) must not
     delete+recreate the suggested set."""

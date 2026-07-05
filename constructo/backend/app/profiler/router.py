@@ -825,11 +825,6 @@ async def get_area_taste(
 
     rankings, attrs = await _area_signals(session, area_id)
     model = build_taste_model(rankings, attrs, area.recommended_count)
-    # Persist the deterministic summary back onto the area (no LLM involved here).
-    area.taste_model = model["dimensions"]
-    area.confidence = model["confidence"]
-    area.has_conflict = model["has_conflict"]
-    await session.commit()
     return model
 
 
