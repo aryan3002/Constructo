@@ -214,6 +214,12 @@ async def refresh_taste_and_maybe_propose(
     if area is None:
         return
     model = await compute_and_persist_taste(session, area)
+    # Conflicts are deterministic (no LLM) and must reflect EVERY write, not only
+    # the threshold-crossing case below: a second contributor can disagree on refs
+    # that were already ranked (ranked_count unchanged), which would otherwise
+    # never re-run propose_themes_for_area (the only other _sync_conflicts caller)
+    # and leave GET /conflicts stale/empty despite area.has_conflict=True.
+    await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
     if (
         model["ranked_count"] >= area.recommended_count
         and model["ranked_count"] != area.last_proposal_ranked_count
