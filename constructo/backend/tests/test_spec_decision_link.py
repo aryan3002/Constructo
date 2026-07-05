@@ -13,9 +13,21 @@ Coverage:
   (e) approving a never-routed spec doesn't error.
 """
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.auth.jwt import create_access_token
-from app.models import Component, ComponentStatus, Space, SpaceKind, Spec, UserRole
+from app.models import (
+    Component,
+    ComponentStatus,
+    Decision,
+    DecisionKind,
+    DecisionState,
+    Space,
+    SpaceKind,
+    Spec,
+    UserRole,
+)
+from app.specs.service import _client_decision_id, sync_spec_routed_decision
 
 
 def auth(user) -> dict[str, str]:
@@ -200,3 +212,41 @@ async def test_approve_never_routed_spec_does_not_error(client, world):
     inbox = await client.get("/api/v1/approvals", headers=auth(owner))
     spec_decisions = [d for d in inbox.json()["items"] if d.get("spec_id") == str(spec.id)]
     assert len(spec_decisions) == 0, "should not create a decision for an unrouted spec"
+
+
+# ---------------------------------------------------------------------------
+# (f) re-routing heals a legacy Decision's NULL site_id
+# ---------------------------------------------------------------------------
+
+
+async def test_reroute_heals_legacy_null_site_id(client, world, db_session):
+    """A Decision created before site_id was stamped on every row (legacy
+    shape) sits outside every site-scoped query — including the homeowner's.
+    Re-routing the spec must heal it in place, not just leave it invisible."""
+    _company, arch, owner, site, spec = world
+
+    # Simulate a legacy row: linked to the spec via the idempotency key, but
+    # with site_id NULL (predates the column being populated on creation).
+    legacy = Decision(
+        company_id=spec.company_id,
+        site_id=None,
+        spec_id=spec.id,
+        kind=DecisionKind.approval,
+        title=f"Selection sign-off: {spec.label}",
+        raised_by=arch.id,
+        client_decision_id=_client_decision_id(spec.id),
+        state=DecisionState.pending,
+    )
+    db_session.add(legacy)
+    await db_session.flush()
+
+    # Re-route via the service directly (exercises the existing-row branch).
+    healed = await sync_spec_routed_decision(db_session, spec, arch)
+    assert healed.id == legacy.id
+    assert healed.site_id == site.id
+
+    # Persisted, not just mutated in-memory.
+    refetched = (
+        await db_session.execute(select(Decision).where(Decision.id == legacy.id))
+    ).scalar_one()
+    assert refetched.site_id == site.id
