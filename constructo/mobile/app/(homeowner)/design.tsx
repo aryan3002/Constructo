@@ -52,6 +52,7 @@ import {
   PROFILER_STR,
 } from '../../src/homeowner/design_profiler.util'
 import { briefStateCard } from '../../src/homeowner/brief_state.util'
+import { clarCountLabel, openClarifications } from '../../src/homeowner/clarifications.util'
 import {
   DESIGN_STR,
   drawingDate,
@@ -261,6 +262,15 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   const briefState = briefQ.data?.state ?? null
   const card = briefState ? briefStateCard(briefState) : null
 
+  // "Questions for you" — open clarifications the AI needs answered.
+  const clarQ = useQuery({
+    queryKey: ['design', 'profiler', 'clarifications', pid],
+    queryFn: () => design.clarifications(pid as string),
+    enabled: !!pid,
+    retry: false,
+  })
+  const openClars = openClarifications(clarQ.data ?? [])
+
   const regenMut = useMutation({
     mutationFn: () => design.generateBrief(pid as string),
     onSuccess: () => {
@@ -404,6 +414,41 @@ function DPHubSection({ profileId }: { profileId?: string }) {
             </View>
           ) : null}
         </Card>
+      ) : null}
+
+      {/* "Questions for you" — open clarifications, press → area's AI Notes tab */}
+      {openClars.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={clarCountLabel(openClars.length)}
+          onPress={() => {
+            const first = openClars[0]
+            const area = areas.find((a) => a.id === first.area_id)
+            if (!area) {
+              // No area match (e.g. a whole-profile question) — nothing to
+              // deep-link into yet, so fall back to the profiler overview.
+              router.push('/(homeowner)/design/profiler')
+              return
+            }
+            router.push({
+              pathname: '/(homeowner)/design/profiler/[area]',
+              params: { area: area.id, pid: q.data!.id, key: area.area_key, tab: 'notes' },
+            })
+          }}
+        >
+          <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
+              <Feather name="help-circle" size={18} color={c.secondary} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 3 }}>
+                <BodyStrong>{clarCountLabel(openClars.length)}</BodyStrong>
+                <Small muted numberOfLines={1}>
+                  {openClars[0].question}
+                </Small>
+              </View>
+              <Feather name="chevron-right" size={18} color={c.textMute} style={{ marginTop: 2 }} />
+            </View>
+          </Card>
+        </Pressable>
       ) : null}
 
       {/* Scope + Contributors row */}

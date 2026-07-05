@@ -55,6 +55,7 @@ import {
   PROFILER_STR,
   RANKING_TAGS,
 } from '../../../../src/homeowner/design_profiler.util'
+import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
 
 // ---------------------------------------------------------------------------
 // Confidence pill
@@ -350,6 +351,77 @@ function RefGridTile({
 }
 
 // ---------------------------------------------------------------------------
+// Clarification row (AI Notes tab) — open (question + answer box) or
+// answered (question + quiet answer). Isolated so per-row draft text
+// doesn't bleed between rows.
+// ---------------------------------------------------------------------------
+
+interface ClarificationRowProps {
+  id: string
+  question: string
+  answer: string | null
+  onAnswered: () => void
+}
+
+function ClarificationRow({ id, question, answer, onAnswered }: ClarificationRowProps) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const toast = useToast()
+  const S = CLAR_STR.en
+  const [draft, setDraft] = useState('')
+
+  const mut = useMutation({
+    mutationFn: () => design.answerClarification(id, draft.trim()),
+    onSuccess: () => {
+      toast(S.answeredToast, 'check')
+      onAnswered()
+    },
+    onError: (e: Error) => toast(e.message),
+  })
+
+  if (answer != null) {
+    return (
+      <View style={{ paddingVertical: SPACE.sm }}>
+        <Body style={{ fontWeight: '600', fontSize: 14 }}>{question}</Body>
+        <Small muted style={{ marginTop: 3 }}>{answer}</Small>
+      </View>
+    )
+  }
+
+  return (
+    <View style={{ paddingVertical: SPACE.sm, gap: SPACE.sm }}>
+      <Body style={{ fontWeight: '600', fontSize: 14 }}>{question}</Body>
+      <TextInput
+        value={draft}
+        onChangeText={setDraft}
+        placeholder={S.answerPlaceholder}
+        placeholderTextColor={c.textMute}
+        multiline
+        style={{
+          borderWidth: 1,
+          borderColor: c.line,
+          borderRadius: theme.radii.control,
+          paddingHorizontal: SPACE.md,
+          paddingVertical: SPACE.sm,
+          color: c.text,
+          backgroundColor: c.paper,
+          minHeight: 44,
+        }}
+      />
+      <Button
+        title={S.sendAnswer}
+        variant="secondary"
+        size="md"
+        loading={mut.isPending}
+        onPress={() => {
+          if (draft.trim()) mut.mutate()
+        }}
+      />
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
@@ -362,14 +434,19 @@ export default function AreaRankScreen() {
   const insets = useSafeAreaInsets()
   const S = PROFILER_STR.en
 
-  const { area, pid, key } = useLocalSearchParams<{
+  const { area, pid, key, tab: tabParam } = useLocalSearchParams<{
     area: string
     pid: string
     key: string
+    tab?: string
   }>()
 
   const areaLabel = String(key ?? 'Area').replace(/_/g, ' ')
-  const [tab, setTab] = useState('Inspiration')
+  // Deep-link support: ?tab=notes opens straight to AI Notes (used by the
+  // DPHub "Questions for you" card). Any other/absent value is ignored —
+  // falls back to the default Inspiration tab.
+  const initialTab = tabParam === 'notes' ? 'AI Notes' : 'Inspiration'
+  const [tab, setTab] = useState(initialTab)
 
   const refsQ = useQuery({
     queryKey: ['design', 'profiler', 'refs', pid, area],
@@ -389,6 +466,16 @@ export default function AreaRankScreen() {
     queryFn: () => design.themes(pid as string, area as string),
     enabled: !!pid && !!area,
   })
+
+  // Clarifications — this area's slice of the profile's "questions for you".
+  const clarsQ = useQuery({
+    queryKey: ['design', 'profiler', 'clarifications', pid],
+    queryFn: () => design.clarifications(pid as string),
+    enabled: !!pid,
+  })
+  const areaClars = (clarsQ.data ?? []).filter((cl) => cl.area_id === area)
+  const openClars = openClarifications(areaClars)
+  const answeredClars = areaClars.filter((cl) => cl.answer != null)
 
   const refs = refsQ.data ?? []
   const myContributorId = profileQ.data?.my_contributor_id ?? null
@@ -766,6 +853,50 @@ export default function AreaRankScreen() {
               ) : null}
             </>
           )}
+
+          {/* Clarifications — questions the AI needs answered for this area */}
+          {openClars.length > 0 || answeredClars.length > 0 ? (
+            <View style={{ gap: SPACE.sm }}>
+              <Eyebrow style={{ color: c.textMute }}>{CLAR_STR.en.cardEyebrow}</Eyebrow>
+              {openClars.length > 0 ? (
+                <Card padded>
+                  {openClars.map((cl, i, arr) => (
+                    <View
+                      key={cl.id}
+                      style={{
+                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
+                        borderBottomColor: theme.colors.line,
+                      }}
+                    >
+                      <ClarificationRow
+                        id={cl.id}
+                        question={cl.question}
+                        answer={cl.answer}
+                        onAnswered={() =>
+                          void qc.invalidateQueries({
+                            queryKey: ['design', 'profiler', 'clarifications', pid],
+                          })
+                        }
+                      />
+                    </View>
+                  ))}
+                </Card>
+              ) : null}
+              {answeredClars.length > 0 ? (
+                <View>
+                  {answeredClars.map((cl) => (
+                    <ClarificationRow
+                      key={cl.id}
+                      id={cl.id}
+                      question={cl.question}
+                      answer={cl.answer}
+                      onAnswered={() => {}}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       ) : null}
 
