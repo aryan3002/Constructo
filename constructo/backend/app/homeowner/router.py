@@ -2506,6 +2506,22 @@ async def respond_to_decision(
     else:
         action = _RESPOND_ACTION[body.action]
         updated = await apply_action(session, decision, action, note=body.note)
+        # Spec-Decision bridge, the other direction: when this Decision is
+        # tracking a routed Spec (decision.spec_id set), the homeowner's
+        # approve/request_change must reach the Spec itself — not just the
+        # Decision ledger — or the material never actually gets approved.
+        # Mirrors app/specs/router.py:approve_spec's semantics directly
+        # (that helper's own sync_spec_approved_decision goes Spec->Decision
+        # and would just re-apply the no-op transition we already made here).
+        if updated.spec_id is not None:
+            spec = await session.get(Spec, updated.spec_id)
+            if spec is not None:
+                spec.approval_status = (
+                    SpecApprovalStatus.approved
+                    if body.action == "approve"
+                    else SpecApprovalStatus.rejected
+                )
+                await session.commit()
     return HomeownerDecisionOut(
         id=updated.id, site_id=updated.site_id, kind=str(updated.kind),
         title=_strip_tag(updated.title), detail=updated.detail, state=str(updated.state),

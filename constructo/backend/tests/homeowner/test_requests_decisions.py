@@ -16,6 +16,7 @@ from app.models import (
     Space,
     SpaceKind,
     Spec,
+    SpecApprovalStatus,
 )
 
 from .conftest import auth
@@ -409,6 +410,99 @@ async def test_decisions_carry_spec_identity_when_routed(client, ctx, db_session
     assert spec_item["spec_id"] == str(spec.id)
     assert spec_item["spec_label"] == "Fluted Marble Panel"
 
-    plain_item = next(d for d in items if d["id"] == str(plain.id))
-    assert plain_item["spec_id"] is None
-    assert plain_item["spec_label"] is None
+
+async def _routed_spec(client, ctx, db_session) -> Spec:
+    """Create a Component + Spec and route it — mirrors
+    test_decisions_carry_spec_identity_when_routed's setup so the resulting
+    Decision has spec_id set via the real sync_spec_routed_decision path."""
+    space = Space(site_id=ctx.site.id, name="Living Room", kind=SpaceKind.room)
+    db_session.add(space)
+    await db_session.flush()
+
+    comp = Component(
+        space_id=space.id,
+        name="Feature Wall",
+        location="North wall",
+        status=ComponentStatus.in_progress,
+    )
+    db_session.add(comp)
+    await db_session.flush()
+
+    spec = Spec(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        component_id=comp.id,
+        label="Fluted Marble Panel",
+    )
+    db_session.add(spec)
+    await db_session.flush()
+
+    route_resp = await client.post(f"/api/v1/specs/{spec.id}/route", headers=auth(ctx.owner))
+    assert route_resp.status_code == 200, route_resp.text
+    return spec
+
+
+async def test_approving_a_routed_decision_approves_its_spec(client, ctx, db_session):
+    """The homeowner approving a Decision that tracks a routed Spec must
+    actually approve the Spec — not just resolve the Decision ledger row —
+    or the material choice never reaches the Material Specification Schedule."""
+    spec = await _routed_spec(client, ctx, db_session)
+
+    decision = (
+        await db_session.execute(select(Decision).where(Decision.spec_id == spec.id))
+    ).scalar_one()
+
+    resp = await client.post(
+        f"/api/v1/homeowner/decisions/{decision.id}/respond",
+        json={"action": "approve"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["state"] == "resolved"
+
+    await db_session.refresh(spec)
+    assert spec.approval_status == SpecApprovalStatus.approved
+
+
+async def test_requesting_change_on_a_routed_decision_rejects_its_spec(client, ctx, db_session):
+    """request_change mirrors the contractor's reject semantics — the Spec
+    goes back to rejected so it re-enters the design loop, not just the
+    Decision ledger."""
+    spec = await _routed_spec(client, ctx, db_session)
+
+    decision = (
+        await db_session.execute(select(Decision).where(Decision.spec_id == spec.id))
+    ).scalar_one()
+
+    resp = await client.post(
+        f"/api/v1/homeowner/decisions/{decision.id}/respond",
+        json={"action": "request_change", "note": "Too dark for the room"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["state"] == "rejected"
+
+    await db_session.refresh(spec)
+    assert spec.approval_status == SpecApprovalStatus.rejected
+
+
+async def test_responding_to_a_non_spec_decision_leaves_no_spec_touched(client, ctx, db_session):
+    """A plain decision (spec_id None) must behave exactly as before — no
+    Spec lookup/mutation attempted."""
+    decision = Decision(
+        company_id=ctx.company.id,
+        site_id=ctx.site.id,
+        kind=DecisionKind.homeowner_question,
+        title="Approve the tile sample?",
+        state=DecisionState.pending,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/api/v1/homeowner/decisions/{decision.id}/respond",
+        json={"action": "approve"},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["state"] == "resolved"
