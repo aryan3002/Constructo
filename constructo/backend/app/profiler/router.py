@@ -1245,6 +1245,7 @@ async def resolve_conflict(
     conflict.resolved_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(conflict)
+    await notify_design_event(session, profile, "conflict_resolved", note=conflict.decision_note)
     return ConflictOut.model_validate(conflict)
 
 
@@ -1599,9 +1600,10 @@ async def answer_clarification(
     row = await session.get(ProfilerClarification, clarification_id)
     if row is None:
         raise AppError(404, "not_found", "Clarification not found")
-    await _load_accessible_profile(session, row.profile_id, user)
+    profile = await _load_accessible_profile(session, row.profile_id, user)
     row.answer = body.answer
     row.answered_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(row)
+    await notify_design_event(session, profile, "clarification_answered")
     return ClarificationOut.model_validate(row)

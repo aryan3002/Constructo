@@ -168,7 +168,9 @@ async def test_auto_propose_emits_themes_ready(client, factory, db_session):
 
         # area recommended_count is 1, so ranking one more reference re-crosses
         # the (unchanged) threshold on a NEW ranked_count and re-fires propose.
-        # Simpler: add + rank a second reference in a NEW area with recommended_count=1.
+        # Add + rank a second reference in the SAME area — ranked_count goes 1 -> 2,
+        # which is still >= recommended_count(1) and != the stored marker, so it
+        # re-triggers propose_themes_for_area.
         detail = (await client.get(
             f"/api/v1/design/profiles/{w['pid']}", headers=auth(w["architect"]))).json()
         contrib_id = detail["contributors"][0]["id"]
@@ -282,6 +284,49 @@ async def test_materialize_brief_emits_specs_materialized_with_note(client, fact
         assert "proposed" in hit["body"]
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_answer_clarification_emits_clarification_answered(client, factory, db_session):
+    w = await _world(client, factory, db_session)
+    # designer-directed copy only — give the architect a token so it lands.
+    db_session.add(PushToken(
+        user_id=w["architect"].id, token="ExponentPushToken[test-architect]"))
+    clarification = ProfilerClarification(
+        profile_id=w["pid"], area_id=w["area_id"], question="Which oak finish?",
+    )
+    db_session.add(clarification)
+    await db_session.commit()
+    await db_session.refresh(clarification)
+
+    reset_dry_run_log()
+    resp = await client.post(
+        f"/api/v1/design/clarifications/{clarification.id}/answer",
+        json={"answer": "Light oak, matte."}, headers=auth(w["owner"]))
+    assert resp.status_code == 200
+    assert "clarification_answered" in _kinds(dry_run_log())
+
+
+async def test_resolve_conflict_emits_conflict_resolved_with_note(client, factory, db_session):
+    w = await _world(client, factory, db_session)
+    db_session.add(PushToken(
+        user_id=w["architect"].id, token="ExponentPushToken[test-architect]"))
+    conflict = ProfilerConflict(
+        profile_id=w["pid"], area_id=w["area_id"],
+        dimension="material", value="oak vs walnut",
+    )
+    db_session.add(conflict)
+    await db_session.commit()
+    await db_session.refresh(conflict)
+
+    reset_dry_run_log()
+    resp = await client.post(
+        f"/api/v1/design/conflicts/{conflict.id}/resolve",
+        json={"resolution": "keep_a", "note": "Going with oak."}, headers=auth(w["owner"]))
+    assert resp.status_code == 200
+    msgs = dry_run_log()
+    assert "conflict_resolved" in _kinds(msgs)
+    hit = next(m for m in msgs if m["data"]["kind"] == "conflict_resolved")
+    assert "Going with oak." in hit["body"]
 
 
 async def test_illegal_transition_emits_nothing(client, factory, db_session):
