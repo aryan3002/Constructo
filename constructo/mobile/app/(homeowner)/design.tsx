@@ -261,6 +261,15 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   })
   const briefState = briefQ.data?.state ?? null
   const card = briefState ? briefStateCard(briefState) : null
+  const noBriefYet = briefQ.isError && (briefQ.error as ApiError | null)?.status === 404
+
+  // Gates the first-brief CTA to owners/co-owners — a family member sees an
+  // explainer instead (only an owner can kick off generation).
+  const capsQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capsQ.data?.can_approve ?? false
 
   // "Questions for you" — open clarifications the AI needs answered.
   const clarQ = useQuery({
@@ -275,6 +284,18 @@ function DPHubSection({ profileId }: { profileId?: string }) {
     mutationFn: () => design.generateBrief(pid as string),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    },
+    onError: (e: unknown) => toast((e as Error).message),
+  })
+
+  // First-brief generation (brief 404s — nothing to regenerate yet). Separate
+  // from regenMut because only this path navigates straight to the new brief;
+  // the in-banner "Regenerate brief" CTA (revision_requested) stays on DPHub.
+  const genFirstMut = useMutation({
+    mutationFn: () => design.generateBrief(pid as string),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+      router.push('/(homeowner)/design/brief')
     },
     onError: (e: unknown) => toast((e as Error).message),
   })
@@ -413,6 +434,34 @@ function DPHubSection({ profileId }: { profileId?: string }) {
               )}
             </View>
           ) : null}
+        </Card>
+      ) : null}
+
+      {/* First-brief CTA — no brief exists yet (404) but at least one area has
+          enough ranked references to be "ready". Owners/co-owners can kick off
+          generation; everyone else sees an honest explainer instead. */}
+      {noBriefYet && areas.some((a) => a.status === 'ready') ? (
+        <Card padded>
+          {canApprove ? (
+            <>
+              <BodyStrong>Your first areas are ready</BodyStrong>
+              <Small muted style={{ marginTop: 4 }}>
+                We can put together a whole-house brief from what's ranked so far.
+              </Small>
+              <View style={{ marginTop: SPACE.md }}>
+                <Button
+                  title="Get my brief"
+                  variant="primary"
+                  size="md"
+                  loading={genFirstMut.isPending}
+                  leading={<Feather name="file-text" size={16} color={c.onAccent} />}
+                  onPress={() => genFirstMut.mutate()}
+                />
+              </View>
+            </>
+          ) : (
+            <Small muted>An owner can generate the brief when you're ready.</Small>
+          )}
         </Card>
       ) : null}
 
