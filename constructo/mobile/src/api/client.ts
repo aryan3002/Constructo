@@ -428,6 +428,8 @@ export interface ProfilerReference {
   image_url: string | null
   consistency_status: string | null
   created_at: string
+  /** Vision-extraction outcome for this reference; null while pending/unattempted. */
+  extraction_status?: 'ok' | 'failed' | null
 }
 
 /** Direct-to-R2 upload ticket for an inspiration image (mirrors chat media). */
@@ -473,6 +475,13 @@ export interface ProfilerBriefApproval {
   action: string
   note: string | null
   created_at: string
+}
+
+/** Minimal brief-generation result — the freshly (re)generated brief's identity + lifecycle state. */
+export interface ProfilerBriefDetail {
+  id: string
+  version: number
+  state: string
 }
 
 export const design = {
@@ -560,4 +569,23 @@ export const design = {
     }),
   approvals: (briefId: string) =>
     request<ProfilerBriefApproval[]>(`/api/v1/design/briefs/${briefId}/approvals`),
+
+  /** Homeowner self-serve entry point — create/fetch a profile without a contractor invite. */
+  selfServeProfile: (siteId?: string) =>
+    request<ProfilerProfileDetail>(`/api/v1/design/profiles/self-serve`, {
+      method: 'POST',
+      body: JSON.stringify({ site_id: siteId }),
+    }),
+
+  /** (Re)generate the brief for a profile from its current themes/conflicts. */
+  generateBrief: (profileId: string) =>
+    request<ProfilerBriefDetail>(`/api/v1/design/profiles/${profileId}/brief`, {
+      method: 'POST',
+    }),
+
+  /** Retry vision extraction for a reference whose first attempt failed. */
+  retryExtraction: (referenceId: string) =>
+    request<ProfilerReference>(`/api/v1/design/references/${referenceId}/extract`, {
+      method: 'POST',
+    }),
 }
