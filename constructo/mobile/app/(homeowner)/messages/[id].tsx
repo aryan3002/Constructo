@@ -125,18 +125,22 @@ export default function HomeownerThread() {
   const router = useRouter()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
 
-  const { id, kind, title, siteName } = useLocalSearchParams<{
+  const { id, kind, title, siteName, draft } = useLocalSearchParams<{
     id: string
     kind: string
     title: string
     siteName: string
+    draft: string
   }>()
 
   const headerTitle = kind === 'homeowner' ? t.builder : title || t.builder
 
   const { siteId, me } = useAuth()
   const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
-  const [text, setText] = useState('')
+  // Seeded ONCE from the deep-link's ?draft= (e.g. from a "Design chat" button
+  // elsewhere in the app) — never re-seeded on re-render, so her own edits
+  // aren't clobbered by a stale param on a later navigation into this screen.
+  const [text, setText] = useState(() => (typeof draft === 'string' ? draft : ''))
 
   // The builder channel (kind=homeowner, has a site) surfaces its published
   // Updates + pending Decisions as a pinned summary STRIP above the pure chat —

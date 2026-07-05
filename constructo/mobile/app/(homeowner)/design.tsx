@@ -24,7 +24,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
 import { ApiError, design, homeowner } from '../../src/api/client'
+import { chatApi } from '../../src/api/chat'
 import type { DesignSelection, Drawing } from '../../src/api/types'
+import { useAuth } from '../../src/auth/AuthContext'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
 import {
@@ -48,6 +50,8 @@ import {
 import {
   areaProgressLabel,
   confidenceBand,
+  designChatDraft,
+  designChatRoute,
   groupAreasByKind,
   PROFILER_STR,
 } from '../../src/homeowner/design_profiler.util'
@@ -234,6 +238,7 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   const router = useRouter()
   const toast = useToast()
   const qc = useQueryClient()
+  const { siteId: authSiteId } = useAuth()
 
   // Fetch the profiler profile by site
   const propQ = useQuery({
@@ -241,6 +246,28 @@ function DPHubSection({ profileId }: { profileId?: string }) {
     queryFn: () => homeowner.property(),
   })
   const siteId = propQ.data?.site_id
+
+  // "Design chat" → her real builder/crew thread, not a stub. Resolved the
+  // same way the Messages inbox resolves it (get-or-create on the shared
+  // queryKey, so a prior inbox visit is a cache hit) — then a deep-link with
+  // a prefilled draft so she never faces a blank composer.
+  const openDesignChat = async (draft: string) => {
+    if (!authSiteId) {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+      return
+    }
+    try {
+      const conv = await qc.fetchQuery({
+        queryKey: ['homeowner', 'channel', authSiteId],
+        queryFn: () => chatApi.homeownerChannel(authSiteId),
+      })
+      router.push(designChatRoute(conv, draft))
+    } catch {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+    }
+  }
 
   const q = useQuery({
     queryKey: ['design', 'profiler', 'by-site', siteId],
@@ -392,11 +419,13 @@ function DPHubSection({ profileId }: { profileId?: string }) {
             style={{ flex: 1 }}
           />
           <Button
-            title="Design chat (soon)"
-            variant="ghost"
+            title="Design chat"
+            variant="secondary"
             size="md"
             leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
-            onPress={() => toast('Coming soon — design chat is not yet backed by the engine.')}
+            onPress={() =>
+              void openDesignChat(designChatDraft({ briefVersion: briefQ.data?.version ?? undefined }))
+            }
             style={{ flex: 1 }}
           />
         </View>

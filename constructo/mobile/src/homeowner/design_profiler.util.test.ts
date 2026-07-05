@@ -2,6 +2,8 @@ import {
   areaProgressLabel,
   briefAudienceTabs,
   confidenceBand,
+  designChatDraft,
+  designChatRoute,
   groupAreasByKind,
   PROFILER_STR,
 } from './design_profiler.util'
@@ -44,4 +46,49 @@ describe('briefAudienceTabs', () => {
 test('PROFILER_STR has en + hi', () => {
   expect(PROFILER_STR.en.intakeTitle).toBeTruthy()
   expect(PROFILER_STR.hi.intakeTitle).toBeTruthy()
+})
+
+describe('designChatDraft', () => {
+  it('opens with the area label when one is given (en)', () => {
+    expect(designChatDraft({ areaLabel: 'Kitchen' })).toBe('About our Kitchen design: ')
+  })
+
+  it('opens with the brief version when one is given (en)', () => {
+    expect(designChatDraft({ briefVersion: 3 })).toBe('About our design brief v3: ')
+  })
+
+  it('prefers the area label over the brief version when both are given', () => {
+    expect(designChatDraft({ areaLabel: 'Kitchen', briefVersion: 3 })).toBe(
+      'About our Kitchen design: ',
+    )
+  })
+
+  it('falls back to a plain opener when neither is given', () => {
+    expect(designChatDraft({})).toBe('About our design: ')
+  })
+
+  it('translates to Hindi', () => {
+    expect(designChatDraft({ areaLabel: 'रसोई' }, 'hi')).toBe('हमारी रसोई डिज़ाइन के बारे में: ')
+    expect(designChatDraft({ briefVersion: 2 }, 'hi')).toBe('हमारे डिज़ाइन ब्रीफ़ v2 के बारे में: ')
+    expect(designChatDraft({}, 'hi')).toBe('हमारे डिज़ाइन के बारे में: ')
+  })
+})
+
+describe('designChatRoute', () => {
+  it('builds the same params shape the inbox uses, plus a draft', () => {
+    const route = designChatRoute(
+      { id: 'conv-1', title: null, site_name: 'Tripathi Home' },
+      'About our Kitchen design: ',
+    )
+    expect(route).toEqual({
+      pathname: '/(homeowner)/messages/[id]',
+      params: {
+        id: 'conv-1',
+        kind: 'homeowner',
+        title: '',
+        siteName: 'Tripathi Home',
+        draft: 'About our Kitchen design: ',
+      },
+    })
+  })
 })

@@ -11,15 +11,18 @@
  *
  * Real data: design.profileBySite → ProfilerProfileDetail (areas, contributors).
  * Membrane: homeowner ranks as my_contributor_id; owner/co_owner approve.
- * Visual-only (no engine yet): Design Chat (noted below).
+ * Design Chat deep-links into her real builder/crew thread with a prefilled
+ * draft (see designChatRoute/designChatDraft in design_profiler.util.ts).
  */
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 
 import { ApiError, design, homeowner } from '../../../src/api/client'
+import { chatApi } from '../../../src/api/chat'
+import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../src/theme/tokens'
 import {
@@ -41,6 +44,8 @@ import {
 import {
   areaProgressLabel,
   confidenceBand,
+  designChatDraft,
+  designChatRoute,
   groupAreasByKind,
   PROFILER_STR,
 } from '../../../src/homeowner/design_profiler.util'
@@ -124,8 +129,10 @@ export default function ProfilerHubScreen() {
   const { theme } = useTheme()
   const c = theme.colors
   const toast = useToast()
+  const qc = useQueryClient()
   const insets = useSafeAreaInsets()
   const S = PROFILER_STR.en
+  const { siteId: authSiteId } = useAuth()
 
   const [openCats, setOpenCats] = useState<Record<string, boolean>>({ interior: true })
 
@@ -134,6 +141,27 @@ export default function ProfilerHubScreen() {
     queryFn: () => homeowner.property(),
   })
   const siteId = propQ.data?.site_id
+
+  // "Design chat" → her real builder/crew thread (same resolution the Messages
+  // inbox uses: get-or-create on the shared queryKey, so a prior inbox visit
+  // is a cache hit) with a prefilled draft — never a dead "(soon)" button.
+  const openDesignChat = async (draft: string) => {
+    if (!authSiteId) {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+      return
+    }
+    try {
+      const conv = await qc.fetchQuery({
+        queryKey: ['homeowner', 'channel', authSiteId],
+        queryFn: () => chatApi.homeownerChannel(authSiteId),
+      })
+      router.push(designChatRoute(conv, draft))
+    } catch {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+    }
+  }
 
   const q = useQuery({
     queryKey: ['design', 'profiler', 'by-site', siteId],
@@ -255,12 +283,16 @@ export default function ProfilerHubScreen() {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Design chat (soon)"
-                variant="ghost"
+                title="Design chat"
+                variant="secondary"
                 size="md"
                 leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
                 onPress={() =>
-                  toast('Design chat is coming soon — not yet backed by the engine.')
+                  void openDesignChat(
+                    designChatDraft({
+                      areaLabel: areas[0] ? areas[0].area_key.replace(/_/g, ' ') : undefined,
+                    }),
+                  )
                 }
                 style={{ flex: 1 }}
               />
