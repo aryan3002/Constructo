@@ -18,7 +18,7 @@
  */
 import { useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -51,6 +51,7 @@ import {
   groupAreasByKind,
   PROFILER_STR,
 } from '../../src/homeowner/design_profiler.util'
+import { briefStateCard } from '../../src/homeowner/brief_state.util'
 import {
   DESIGN_STR,
   drawingDate,
@@ -231,6 +232,7 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   const c = theme.colors
   const router = useRouter()
   const toast = useToast()
+  const qc = useQueryClient()
 
   // Fetch the profiler profile by site
   const propQ = useQuery({
@@ -244,6 +246,27 @@ function DPHubSection({ profileId }: { profileId?: string }) {
     queryFn: () => design.profileBySite(siteId as string),
     enabled: !!siteId,
     retry: false,
+  })
+  const pid = q.data?.id
+
+  // State-aware "whose move is it" banner — same brief rendering the brief
+  // screen uses (design.brief), so the state is always in sync. A 404 (no
+  // brief shared yet) is a calm null, not an error.
+  const briefQ = useQuery({
+    queryKey: ['design', 'profiler', 'brief', pid, 'homeowner'],
+    queryFn: () => design.brief(pid as string, 'homeowner'),
+    enabled: !!pid,
+    retry: false,
+  })
+  const briefState = briefQ.data?.state ?? null
+  const card = briefState ? briefStateCard(briefState) : null
+
+  const regenMut = useMutation({
+    mutationFn: () => design.generateBrief(pid as string),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    },
+    onError: (e: unknown) => toast((e as Error).message),
   })
 
   const [openCats, setOpenCats] = useState<Record<string, boolean>>({ interior: true })
@@ -347,6 +370,41 @@ function DPHubSection({ profileId }: { profileId?: string }) {
           />
         </View>
       </Card>
+
+      {/* Brief state banner — always says whose move it is */}
+      {card ? (
+        <Card padded>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACE.sm }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <BodyStrong>{card.title}</BodyStrong>
+              <Small muted>{card.body}</Small>
+            </View>
+            <StatusPill status={card.tone} size="sm" />
+          </View>
+          {card.cta ? (
+            <View style={{ marginTop: SPACE.md }}>
+              {card.cta === 'view_brief' ? (
+                <Button
+                  title="View brief"
+                  variant="secondary"
+                  size="md"
+                  leading={<Feather name="clipboard" size={16} color={c.accentDeep} />}
+                  onPress={() => router.push('/(homeowner)/design/brief')}
+                />
+              ) : (
+                <Button
+                  title="Regenerate brief"
+                  variant="secondary"
+                  size="md"
+                  loading={regenMut.isPending}
+                  leading={<Feather name="refresh-cw" size={16} color={c.accentDeep} />}
+                  onPress={() => regenMut.mutate()}
+                />
+              )}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/* Scope + Contributors row */}
       <View style={{ flexDirection: 'row', gap: SPACE.sm }}>

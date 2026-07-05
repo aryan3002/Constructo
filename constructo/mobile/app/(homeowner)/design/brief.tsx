@@ -71,6 +71,7 @@ import {
   briefAudienceTabs,
   PROFILER_STR,
 } from '../../../src/homeowner/design_profiler.util'
+import { briefStateCard } from '../../../src/homeowner/brief_state.util'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -252,8 +253,11 @@ export default function BriefScreen() {
   const actMut = useMutation({
     mutationFn: (action: string) =>
       design.actOnBrief(briefId as string, { action }),
-    onSuccess: () => {
-      toast('Done', 'check')
+    onSuccess: (result) => {
+      // Same copy map as the DPHub banner, so "Done" always names whose move
+      // is next rather than a bare acknowledgement.
+      const nextLine = briefStateCard(result.state)?.title
+      toast(nextLine ? `Done — ${nextLine}` : 'Done', 'check')
       void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
     },
     onError: (e: unknown) => {
