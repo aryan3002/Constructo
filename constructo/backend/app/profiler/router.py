@@ -229,6 +229,32 @@ async def _load_accessible_profile(
     return profile
 
 
+async def _gate_design_commit(
+    session: AsyncSession, user: User, profile: ProfilerProfile,
+) -> str:
+    """Who may COMMIT design decisions (themes, conflicts, brief generation).
+
+    Contractor side: role in ``_EDIT_ROLES`` and company match (404 otherwise —
+    the caller already went through ``_load_accessible_profile``). Homeowner
+    side: ``member_sub_role(session, user, profile.site_id)`` must satisfy
+    ``can_approve``, else 403 ``approve_forbidden`` with ``{"can_comment": True}``
+    (mirrors ``act_on_brief``'s homeowner branch). Returns the actor_role string.
+    """
+    if user.role in _EDIT_ROLES:
+        return user.role.value
+    sub_role = await member_sub_role(session, user, profile.site_id)
+    if sub_role is None or not can_approve(sub_role):
+        # No membership here cannot normally arise: _load_accessible_profile
+        # already 404s strangers before this helper runs. Kept as a safe
+        # belt-and-braces fallback rather than assuming.
+        raise AppError(
+            403, "approve_forbidden",
+            "Only a property owner can approve this. You can add a comment.",
+            extra={"can_comment": True},
+        )
+    return sub_role.value
+
+
 async def _validate_contributor(
     session: AsyncSession, profile: ProfilerProfile, contributor_id: UUID, user: User
 ) -> ProfilerContributor:
@@ -895,13 +921,14 @@ async def list_conflicts(
 async def decide_theme(
     theme_id: UUID,
     body: ThemeDecisionIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ThemeOut:
     theme = await session.get(ProfilerTheme, theme_id)
     if theme is None:
         raise AppError(404, "not_found", "Theme not found")
-    await _load_owned_profile(session, theme.profile_id, user)
+    profile = await _load_accessible_profile(session, theme.profile_id, user)
+    await _gate_design_commit(session, user, profile)
     theme.status = {
         "approve": ThemeStatus.approved,
         "adjust": ThemeStatus.adjusted,
