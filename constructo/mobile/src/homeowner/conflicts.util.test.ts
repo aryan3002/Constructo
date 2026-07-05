@@ -2,7 +2,7 @@ import { conflictSides, resolvedSummary } from './conflicts.util'
 import type { ProfilerConflict, ProfilerContributor } from '../api/client'
 
 const contributors: ProfilerContributor[] = [
-  { id: 'c-me', role: 'primary_owner', is_decision_owner: true },
+  { id: 'c-me', role: 'owner', is_decision_owner: true },
   { id: 'c-spouse', role: 'co_owner', is_decision_owner: true },
 ]
 
@@ -51,6 +51,33 @@ describe('conflictSides', () => {
     const result = conflictSides(c, contributors, 'c-me')
     expect(result.a.value).toBe('Warm neutrals')
     expect(result.b.value).toBe('A different direction')
+  })
+
+  test('labels every real ContributorRole (backend enum: owner | co_owner | family | advisor | architect)', () => {
+    const roled = (role: string): ProfilerContributor[] => [
+      { id: 'c-a', role, is_decision_owner: false },
+      { id: 'c-spouse', role: 'co_owner', is_decision_owner: true },
+    ]
+    const nameFor = (role: string) => {
+      const c = conflict({ contributor_a_id: 'c-a' })
+      return conflictSides(c, roled(role), 'c-me').a.name
+    }
+    expect(nameFor('owner')).toBe('Owner')
+    expect(nameFor('co_owner')).toBe('Co-owner')
+    expect(nameFor('family')).toBe('Family')
+    expect(nameFor('advisor')).toBe('Advisor')
+    // architect -> "Designer": the homeowner-facing name for this role.
+    expect(nameFor('architect')).toBe('Designer')
+  })
+
+  test('falls back to "Co-owner" for a role that does not exist on the backend', () => {
+    const c = conflict({ contributor_a_id: 'c-a' })
+    const result = conflictSides(
+      c,
+      [{ id: 'c-a', role: 'primary_owner', is_decision_owner: false }],
+      'c-me',
+    )
+    expect(result.a.name).toBe('Co-owner')
   })
 })
 

@@ -22,12 +22,15 @@ export interface ConflictSides {
   b: ConflictSide
 }
 
-/** "primary_owner" -> "Owner", "co_owner" -> "Co-owner", "family" -> "Family",
- *  "advisor" -> "Advisor". Unknown/missing roles fall through to "Co-owner",
+/** Real ContributorRole values (backend app/models/profiler.py): owner |
+ *  co_owner | family | advisor | architect. "owner" -> "Owner", "co_owner" ->
+ *  "Co-owner", "family" -> "Family", "advisor" -> "Advisor", "architect" ->
+ *  "Designer" (the homeowner-facing name for the architect role everywhere
+ *  else in this app). Unknown/missing roles fall through to "Co-owner",
  *  matching the brief's fallback. */
 function roleLabel(role: string | undefined): string {
   switch (role) {
-    case 'primary_owner':
+    case 'owner':
       return 'Owner'
     case 'co_owner':
       return 'Co-owner'
@@ -35,6 +38,8 @@ function roleLabel(role: string | undefined): string {
       return 'Family'
     case 'advisor':
       return 'Advisor'
+    case 'architect':
+      return 'Designer'
     default:
       return 'Co-owner'
   }
