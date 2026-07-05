@@ -1924,12 +1924,21 @@ async def _resolve_actor_member_id(
     return max(rows, key=lambda r: _MANAGE_RANK.get(r.sub_role, 0)).id
 
 
-async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
+async def _build_site_fingerprint(
+    session: AsyncSession, site_id: UUID, *, include_ranked_taste: bool = False
+) -> dict:
     """Assemble the deterministic multi-member fingerprint for a site (the reducer).
 
     Reads every selection/reference + the member roster, hands the attributed
     rows to the pure :func:`build_fingerprint`, and returns its jsonb dict. No LLM
     here — this is the trust firewall.
+
+    ``include_ranked_taste`` gates two extra profiler queries (ProfilerProfile +
+    ProfilerArea) that only the design-profile draft path reads (D-5.5's ranked
+    taste block). Every other caller — e.g. the unbounded-frequency
+    ``GET /design/conflicts`` fired on each selection pick — leaves this False
+    so the ``ranked_taste`` key stays absent (not merely empty) and pays no
+    extra query cost.
     """
     selections = (
         await session.execute(
@@ -1976,7 +1985,8 @@ async def _build_site_fingerprint(session: AsyncSession, site_id: UUID) -> dict:
         members=members,
     )
     result = fingerprint.as_dict()
-    result["ranked_taste"] = await _site_ranked_taste(session, site_id)
+    if include_ranked_taste:
+        result["ranked_taste"] = await _site_ranked_taste(session, site_id)
     return result
 
 
@@ -2017,6 +2027,7 @@ async def _site_ranked_taste(session: AsyncSession, site_id: UUID) -> dict[str, 
             for dim, values in taste_model.items()
             if isinstance(values, dict)
             for value, weight in values.items()
+            if isinstance(weight, (int, float)) and not isinstance(weight, bool)
         ]
         if not pairs:
             continue
@@ -2065,7 +2076,7 @@ async def put_design_profile(
         # Reduce all members' attributed inputs to one deterministic fingerprint
         # (the trust firewall), then let the LLM rephrase ONLY those facts into a
         # DRAFT the primary confirms — conflicts are surfaced, never resolved.
-        fingerprint = await _build_site_fingerprint(session, sid)
+        fingerprint = await _build_site_fingerprint(session, sid, include_ranked_taste=True)
         profile_data = await generate_design_profile_v2(
             llm, fingerprint=fingerprint, language=user.language or "en"
         )
