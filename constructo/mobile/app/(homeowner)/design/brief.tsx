@@ -291,6 +291,13 @@ export default function BriefScreen() {
   const briefState = briefQ.data?.state ?? null
   const canApproveNow = briefState === 'contractor_brief_ready'
   const needsRevision = briefState === 'revision_requested'
+  // "Submit for designer review" is only the homeowner's actual next move in
+  // homeowner_review (or a legacy row with no state at all, which predates
+  // this state machine and behaves as if freshly in review). Every other
+  // state (architect_review, contractor_brief_ready, approved, locked) has
+  // its own action/banner already — showing this button there guaranteed a
+  // 409 on tap since send_to_architect is an invalid transition from them.
+  const canSubmitForReview = briefState === 'homeowner_review' || briefState == null
 
   // Parse content_json from the brief
   const content = briefQ.data?.content_json as
@@ -593,7 +600,7 @@ export default function BriefScreen() {
                       leading={<Feather name="refresh-cw" size={16} color={c.onAccent} />}
                       onPress={() => regenMut.mutate()}
                     />
-                  ) : (
+                  ) : canSubmitForReview ? (
                     <Button
                       title="Submit for designer review"
                       variant="primary"
@@ -602,7 +609,7 @@ export default function BriefScreen() {
                       leading={<Feather name="send" size={16} color={c.onAccent} />}
                       onPress={() => actMut.mutate('send_to_architect')}
                     />
-                  )
+                  ) : null
                 ) : (
                   <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.quiet }}>
                     <Small muted>{S.onlyOwnerCanApprove}</Small>
