@@ -974,11 +974,12 @@ async def resolve_conflict(
 @router.post("/profiles/{profile_id}/brief", response_model=BriefDetailOut, status_code=201)
 async def generate_brief(
     profile_id: UUID,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
 ) -> BriefDetailOut:
-    profile = await _load_owned_profile(session, profile_id, user)
+    profile = await _load_accessible_profile(session, profile_id, user)
+    await _gate_design_commit(session, user, profile)
     payload = await _brief_payload(session, profile)
 
     next_version = (

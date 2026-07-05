@@ -152,3 +152,35 @@ async def test_cross_company_homeowner_sees_404_on_conflict(client, factory, db_
         assert resp.status_code == 404  # membrane: existence not revealed
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_owner_generates_brief_and_regenerates_out_of_revision(client, factory, db_session):
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)   # NOTE: _world already generated a brief
+        hdrs = auth(w["owner"])
+        r1 = await client.post(f"/api/v1/design/profiles/{w['pid']}/brief", headers=hdrs)
+        assert r1.status_code == 201, r1.text
+        b1 = r1.json()
+        assert b1["state"] == "homeowner_review"
+        v1 = b1["version"]                       # world's seed brief means this is >= 2
+        # dead-end exit: request changes, then REGENERATE
+        rc = await client.post(f"/api/v1/design/briefs/{b1['id']}/approval",
+            json={"action": "request_changes", "note": "less grey"}, headers=hdrs)
+        assert rc.status_code == 200 and rc.json()["state"] == "revision_requested"
+        r2 = await client.post(f"/api/v1/design/profiles/{w['pid']}/brief", headers=hdrs)
+        assert r2.status_code == 201
+        assert r2.json()["version"] == v1 + 1 and r2.json()["state"] == "homeowner_review"
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+
+async def test_family_cannot_generate_brief(client, factory, db_session):
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        resp = await client.post(
+            f"/api/v1/design/profiles/{w['pid']}/brief", headers=auth(w["family"]))
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
