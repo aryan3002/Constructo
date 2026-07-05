@@ -1345,7 +1345,13 @@ async def act_on_brief(
 
     # --- the membrane: authority per action ---------------------------------
     actor_member_id: UUID | None = None
-    if action in _HOMEOWNER_BRIEF_ACTIONS:
+    if action is BriefAction.request_changes and user.role is UserRole.architect:
+        # The designer's own request-changes: an architect may send a brief back for
+        # revision too (already company-scoped by _load_accessible_profile above).
+        # This opening is exactly one action wide — send_to_architect/approve stay
+        # homeowner-only below; state legality is still the transition table's job.
+        actor_role = user.role.value
+    elif action in _HOMEOWNER_BRIEF_ACTIONS:
         # Money/scope commit -> owner/co_owner only. Family/advisor get a comment box.
         sub_role = await member_sub_role(session, user, profile.site_id)
         if sub_role is None or not can_approve(sub_role):

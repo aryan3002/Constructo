@@ -492,6 +492,16 @@ export interface DesignInboxSummary {
   deferred_conflicts: number
 }
 
+/** Result of turning an approved/locked brief into real material specs
+ *  (POST /api/v1/design/briefs/{briefId}/materialize). */
+export interface MaterializeOut {
+  materials_created: number
+  materials_reused: number
+  specs_created: number
+  specs_reused: number
+  skipped_areas: string[]
+}
+
 export const design = {
   profileBySite: (siteId: string) =>
     request<ProfilerProfileDetail>(`/api/v1/design/profiles/by-site/${siteId}`),
@@ -577,6 +587,13 @@ export const design = {
     }),
   approvals: (briefId: string) =>
     request<ProfilerBriefApproval[]>(`/api/v1/design/briefs/${briefId}/approvals`),
+
+  /** Turn an approved/locked brief into real material specs (idempotent —
+   *  reuses existing specs/materials on repeat calls). */
+  materialize: (briefId: string) =>
+    request<MaterializeOut>(`/api/v1/design/briefs/${briefId}/materialize`, {
+      method: 'POST',
+    }),
 
   /** Homeowner self-serve entry point — create/fetch a profile without a contractor invite. */
   selfServeProfile: (siteId?: string) =>
