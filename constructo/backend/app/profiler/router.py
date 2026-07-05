@@ -945,13 +945,14 @@ async def decide_theme(
 async def resolve_conflict(
     conflict_id: UUID,
     body: ConflictResolveIn,
-    user: User = Depends(require_role(*_EDIT_ROLES)),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ConflictOut:
     conflict = await session.get(ProfilerConflict, conflict_id)
     if conflict is None:
         raise AppError(404, "not_found", "Conflict not found")
-    await _load_owned_profile(session, conflict.profile_id, user)
+    profile = await _load_accessible_profile(session, conflict.profile_id, user)
+    await _gate_design_commit(session, user, profile)
     conflict.resolution_status = (
         ConflictStatus.deferred_to_architect
         if body.resolution == "defer_to_architect"
