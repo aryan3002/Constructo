@@ -1,7 +1,7 @@
 """Pure aggregation for the Owner activity-first Command Center.
 
-Side-effect-free: takes already-loaded ORM rows across nine homeowner-feed /
-decision / finding source tables, maps each to a uniform ActivityItem, merges
+Side-effect-free: takes already-loaded ORM rows across homeowner-feed /
+decision / finding / design-brief source tables, maps each to a uniform ActivityItem, merges
 them into ONE time-ordered feed (occurred_at DESC, id tiebreak), applies the
 keyset cursor, and threads the router's already-accurate summary counts
 through into the response. The router (``router.py``) is the only place that
@@ -26,6 +26,7 @@ from app.models import (
     Update,
     WeeklySummary,
 )
+from app.models.profiler import ProfilerBrief, ProfilerBriefApproval, ProfilerProfile
 
 # --- kind enum (contract) ---------------------------------------------------
 KIND_PHOTO = "photo_shared"
@@ -36,6 +37,7 @@ KIND_SCOPE = "scope_change"
 KIND_REQUEST = "homeowner_request"
 KIND_DECISION = "decision_made"
 KIND_FINDING = "site_health_flag"
+KIND_DESIGN = "design_update"
 
 # --- link.type enum (contract) ----------------------------------------------
 LINK_FEED_PHOTO = "feed_photo"
@@ -44,6 +46,16 @@ LINK_MILESTONE = "milestone"
 LINK_REQUEST = "request"
 LINK_DECISION = "decision"
 LINK_FINDING = "finding"
+LINK_DESIGN_BRIEF = "design_brief"
+
+# Design brief approval action -> owner-feed title (per contract).
+_DESIGN_TITLES = {
+    "send_to_architect": "Design brief sent to designer",
+    "request_changes": "Designer asked for brief changes",
+    "architect_sign_off": "Designer signed off the brief",
+    "approve": "Design brief approved",
+    "contractor_received": "Design brief locked",
+}
 
 # Decision kinds that surface as owner activity (per contract).
 _DECISION_KINDS = {"approval", "hold_payment"}
@@ -174,6 +186,33 @@ def _map_finding(f: SiteFinding, site: Site) -> dict:
                  severity=_finding_severity(f.severity))
 
 
+def _map_design_approval(
+    approval: ProfilerBriefApproval, profile: ProfilerProfile, site: Site,
+) -> dict:
+    # Profiler tables carry no site_id of their own — the caller resolves
+    # approval -> brief -> profile and passes the profile + its site along so
+    # this stays a pure mapper (mirrors every other _map_* here). The link id
+    # is the SITE id (not the approval/brief id) for future site-scoped
+    # routing on the web (see task brief); the web route does not consume it
+    # for routing yet.
+    return _item(kind=KIND_DESIGN, row_id=approval.id, site=site,
+                 title=_DESIGN_TITLES[str(approval.action)],
+                 subtitle=approval.note,
+                 occurred_at=approval.created_at, actor=approval.actor_role,
+                 link_type=LINK_DESIGN_BRIEF, link_id=profile.site_id,
+                 severity="info")
+
+
+def _map_design_brief(
+    brief: ProfilerBrief, profile: ProfilerProfile, site: Site,
+) -> dict:
+    return _item(kind=KIND_DESIGN, row_id=brief.id, site=site,
+                 title=f"Design brief v{brief.version} ready", subtitle=None,
+                 occurred_at=brief.created_at, actor=None,
+                 link_type=LINK_DESIGN_BRIEF, link_id=profile.site_id,
+                 severity="info")
+
+
 def _item_sort_key(item: dict) -> tuple[str, str]:
     # occurred_at is a fixed-width iso8601 string -> lexicographic == chronological.
     return (item["occurred_at"], item["id"])
@@ -196,6 +235,8 @@ def build_activity(
     updates_today: int,
     needs_decision_count: int,
     sites_total: int,
+    design_approvals: list[tuple[ProfilerBriefApproval, ProfilerProfile]] | None = None,
+    design_briefs: list[tuple[ProfilerBrief, ProfilerProfile]] | None = None,
 ) -> dict:
     """Union → sort → keyset-trim. All rows must already be in scope.
 
@@ -212,6 +253,13 @@ def build_activity(
     ``sites_total``, the already-un-capped visible-sites list) — this function
     only threads them through into the returned ``summary``, it does not
     derive them from the (possibly-capped) rows above.
+
+    ``design_approvals``/``design_briefs`` are keyword-only with a ``None``
+    default (kept optional so existing callers/tests that predate the design
+    source keep compiling unchanged) — each entry is a ``(row, profile)`` pair
+    since the profiler tables carry no ``site_id`` of their own; the caller
+    resolves the join to the owning ``ProfilerProfile`` (for its ``site_id``)
+    before calling in.
     """
     sites_by_id: dict[UUID, Site] = {s.id: s for s in sites}
 
@@ -248,6 +296,14 @@ def build_activity(
         s = sites_by_id.get(f.site_id)
         if s is not None and str(f.status) == "open":
             items.append(_map_finding(f, s))
+    for approval, profile in (design_approvals or []):
+        s = sites_by_id.get(profile.site_id)
+        if s is not None:
+            items.append(_map_design_approval(approval, profile, s))
+    for brief, profile in (design_briefs or []):
+        s = sites_by_id.get(profile.site_id)
+        if s is not None:
+            items.append(_map_design_brief(brief, profile, s))
 
     # occurred_at DESC, then id DESC as tiebreak (deterministic).
     items.sort(key=_item_sort_key, reverse=True)

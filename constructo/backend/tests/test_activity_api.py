@@ -246,6 +246,59 @@ async def test_activity_cursor_with_garbage_timestamp_is_400(client, db_session,
     assert resp.json()["error"]["code"] == "invalid_cursor"
 
 
+async def test_activity_includes_design_brief_handoffs(client, db_session, factory, owner):
+    # Reuse the profiler membrane's _world helper to seed a real brief +
+    # approval through the actual API (profiler tables have no site_id of
+    # their own, so a hand-rolled row would skip the join-scoping this
+    # exercises). The world's company/owner are separate from the `owner`
+    # fixture above — GET /api/v1/activity must be scoped per-company.
+    from app.extraction.llm import FakeLLMClient
+    from app.main import app
+    from app.profiler.extraction import get_llm
+    from tests.test_profiler_api import auth as profiler_auth
+    from tests.test_profiler_membrane import _world
+
+    def _brief_llm() -> FakeLLMClient:
+        return FakeLLMClient(canned={
+            "headline": "h", "summary": "s", "sections": [],
+            "themes": [
+                {"name": "T", "palette": ["beige"], "materials": ["light oak"], "rationale": "r"},
+            ],
+            "questions": ["q?"], "colors": ["dark"], "style": "minimal", "confidence": 0.9,
+        })
+
+    app.dependency_overrides[get_llm] = _brief_llm
+    try:
+        w = await _world(client, factory, db_session)
+        resp = await client.post(
+            f"/api/v1/design/briefs/{w['bid']}/approval",
+            json={"action": "send_to_architect"},
+            headers=profiler_auth(w["owner"]),
+        )
+        assert resp.status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    # The world's company owner (a homeowner-role user) can't hit the
+    # owner-only /api/v1/activity endpoint — create a genuine company-owner
+    # user in the SAME company as the design world to read the feed back.
+    company_owner = await factory.user(company=w["company"], role=UserRole.owner)
+
+    body = (await client.get("/api/v1/activity", headers=auth(company_owner))).json()
+    design_items = [i for i in body["items"] if i["kind"] == "design_update"]
+    titles = {i["title"] for i in design_items}
+    assert "Design brief sent to designer" in titles
+    assert "Design brief v1 ready" in titles
+    sent_item = next(i for i in design_items if i["title"] == "Design brief sent to designer")
+    assert sent_item["link"] == {"type": "design_brief", "id": str(w["site"].id)}
+
+    # Cross-visibility: a different company's owner must not see any of this.
+    other = await factory.company(name="Other Co")
+    other_owner = await factory.user(company=other, role=UserRole.owner)
+    other_body = (await client.get("/api/v1/activity", headers=auth(other_owner))).json()
+    assert all(i["kind"] != "design_update" for i in other_body["items"])
+
+
 async def test_activity_scopes_to_company(client, db_session, factory, owner):
     other = await factory.company(name="Other Co")
     other_site = await _site(db_session, other.id, name="Secret Site")
