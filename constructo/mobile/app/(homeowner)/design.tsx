@@ -25,7 +25,7 @@ import { useRouter } from 'expo-router'
 
 import { ApiError, design, homeowner } from '../../src/api/client'
 import { chatApi } from '../../src/api/chat'
-import type { DesignSelection, Drawing } from '../../src/api/types'
+import type { Drawing } from '../../src/api/types'
 import { useAuth } from '../../src/auth/AuthContext'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -62,33 +62,12 @@ import {
   DESIGN_STR,
   drawingDate,
   drawingKindLabel,
+  groupSelections,
   isProfileEmpty,
   profileText,
   profileTone,
   selectionStatus,
 } from './_design.util'
-
-// ---------------------------------------------------------------------------
-// Local groupSelections (was in _design.util template but not exported)
-// ---------------------------------------------------------------------------
-function groupSelections(
-  selections: DesignSelection[],
-  wholeHouseLabel: string,
-): Array<{ spaceId: string | null; spaceName: string; items: DesignSelection[] }> {
-  const map = new Map<string, { spaceId: string | null; spaceName: string; items: DesignSelection[] }>()
-  for (const s of selections) {
-    const key = s.space_id ?? '__whole__'
-    if (!map.has(key)) {
-      map.set(key, {
-        spaceId: s.space_id,
-        spaceName: s.space_id ? s.space_id : wholeHouseLabel,
-        items: [],
-      })
-    }
-    map.get(key)!.items.push(s)
-  }
-  return Array.from(map.values())
-}
 
 // ---------------------------------------------------------------------------
 // Colour helpers (Calm Cockpit, Daylight palette)
@@ -811,6 +790,13 @@ export default function Design() {
     queryKey: ['homeowner', 'decisions'],
     queryFn: () => homeowner.decisions(),
   })
+  // Real space names (id → name) so the Selections tab shows a room name
+  // instead of a raw UUID, and the References chip can push a NAME the
+  // profiler bridge (areaForRoom) actually matches against.
+  const propertyQ = useQuery({
+    queryKey: ['design', 'property'],
+    queryFn: () => homeowner.property(),
+  })
 
   const drawings = drawingsQ.data ?? []
   const selections = selectionsQ.data ?? []
@@ -828,8 +814,11 @@ export default function Design() {
   // drawing groups
   const drawingGroups = buildDrawingGroups(drawings, T)
 
-  // selection groups
-  const selGroups = groupSelections(selections, T.wholeHouse)
+  // selection groups — resolved against real space names, not raw UUIDs
+  const spaceNameById = Object.fromEntries(
+    (propertyQ.data?.spaces ?? []).map((s) => [s.id, s.name]),
+  )
+  const selGroups = groupSelections(selections, T.wholeHouse, spaceNameById)
 
   // ============================================================================
   // TAB: Profile — DPHub inline
@@ -990,7 +979,7 @@ export default function Design() {
       ) : (
         <View style={{ gap: SPACE.lg }}>
           {selGroups.map((group) => {
-            const roomSlug = group.spaceId ?? 'all'
+            const roomSlug = group.roomSlug
             const decidedItems = group.items.filter((s) =>
               ['approved', 'final', 'done'].includes(s.status?.toLowerCase()),
             )
