@@ -495,8 +495,14 @@ export default function AreaRankScreen() {
     enabled: !!pid,
   })
   const areaConflicts = (conflictsQ.data ?? []).filter((cf) => cf.area_id === area)
-  const pendingConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'pending')
-  const settledConflicts = areaConflicts.filter((cf) => cf.resolution_status !== 'pending')
+  // Real backend enum (ConflictStatus): open | resolved | deferred_to_architect.
+  // "open" is the only actionable state — resolved/deferred each get their own
+  // quiet, honest row instead of being lumped into one "Settled" line.
+  const openConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'open')
+  const resolvedConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'resolved')
+  const deferredConflicts = areaConflicts.filter(
+    (cf) => cf.resolution_status === 'deferred_to_architect',
+  )
 
   const capQ = useQuery({
     queryKey: ['homeowner', 'capabilities'],
@@ -1036,9 +1042,9 @@ export default function AreaRankScreen() {
                 </Card>
               )}
 
-              {pendingConflicts.length > 0 ? (
+              {openConflicts.length > 0 ? (
                 <View style={{ gap: SPACE.sm }}>
-                  {pendingConflicts.map((cf) => {
+                  {openConflicts.map((cf) => {
                     const sides = conflictSides(cf, contributors, myContributorId)
                     return (
                       <Card key={cf.id} padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
@@ -1067,11 +1073,16 @@ export default function AreaRankScreen() {
                 </View>
               ) : null}
 
-              {settledConflicts.length > 0 ? (
+              {resolvedConflicts.length > 0 || deferredConflicts.length > 0 ? (
                 <View style={{ gap: 4 }}>
-                  {settledConflicts.map((cf) => (
+                  {resolvedConflicts.map((cf) => (
                     <Small key={cf.id} muted>
                       {resolvedSummary(cf.decision_note, null)}
+                    </Small>
+                  ))}
+                  {deferredConflicts.map((cf) => (
+                    <Small key={cf.id} muted>
+                      {CONFLICT_STR.en.deferredRow}
                     </Small>
                   ))}
                 </View>

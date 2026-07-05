@@ -14,7 +14,7 @@ function conflict(overrides: Partial<ProfilerConflict> = {}): ProfilerConflict {
     value: 'Warm neutrals|Cool greys',
     contributor_a_id: 'c-me',
     contributor_b_id: 'c-spouse',
-    resolution_status: 'pending',
+    resolution_status: 'open',
     decision_note: null,
     ...overrides,
   }
