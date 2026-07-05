@@ -1,19 +1,21 @@
 /**
- * Per-room References — pushed from the Selections tab "References" button.
+ * Per-room References — pushed from the Selections tab "References" chip.
  * Route: (homeowner)/design/references/[room] — registered `href: null` in _layout.tsx.
  *
- * Loads real `homeowner.designReferences()` and filters by the `[room]`
- * param (which is the space_id slug, or "all" for the whole-house group).
- * Matches on `ref.room_tag` — if "all", shows every reference.
+ * One inspiration surface (Phase 5 unify): this screen now resolves whether
+ * the room maps onto a profiler area (via `areaForRoom`) and, when it does,
+ * reads and writes through the SAME profiler engine `[area].tsx`'s Inspiration
+ * tab uses — `design.references(pid, areaId)` for the grid, and the identical
+ * presign/multipart upload path for "Add reference photo". A "Rank these"
+ * button routes straight into that area's Ranking tab.
  *
- * Features (all real data or honestly-labeled stubs):
- *   - AI-summary chip when the profile data has one (not implemented server-side
- *     yet — shown only when data is present, otherwise absent).
- *   - 2-column grid of reference photos via PhotoTile.
- *   - "Add reference image" → ImagePicker + real `references()` POST with room_tag.
- *   - "Sharing" toggle (shared with contractor vs private) — NO backend exists for
- *     this; rendered as a local-only toggle, honestly labeled "coming soon — your
- *     builder won't see this toggle yet."
+ * When no area matches (a custom room, or no profiler profile yet) the screen
+ * falls back to the legacy `homeowner.designReferences()` behavior, plus a
+ * quiet hint pointing at the self-serve profiler start.
+ *
+ * Any legacy rows that already exist for this room (from before the profiler
+ * existed, or from the no-profile fallback) are shown read-only in a
+ * collapsed "Earlier saves" section — they are never a second live surface.
  */
 import { useState } from 'react'
 import { Alert, View } from 'react-native'
@@ -22,20 +24,20 @@ import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { homeowner } from '../../../../src/api/client'
+import { design, homeowner } from '../../../../src/api/client'
 import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../../src/theme/tokens'
+import { AP, SPACE } from '../../../../src/theme/tokens'
+import { areaForRoom, roomLabelForArea } from '../../../../src/homeowner/design_area_map.util'
 import {
-  Body,
-  BodyStrong,
+  BlurUpImage,
   Button,
   Micro,
   PhotoTile,
   Screen,
   Small,
-  StatusPill,
   SubHeader,
+  useToast,
 } from '../../../../src/ui'
 
 // ---- strings -----------------------------------------------------------------
@@ -54,12 +56,13 @@ const STR = {
     provenanceUpload: 'You added this',
     provenancePinterest: 'From Pinterest',
     caption: 'Reference photo',
-    sharingTitle: 'Sharing',
-    sharingShared: 'Shared with builder',
-    sharingPrivate: 'Private',
-    sharingStubNote:
-      'Coming soon — your builder won\'t see this toggle yet. Reference visibility will be controlled here once the sharing feature is live.',
+    sharedCaption: 'Your design team sees this board.',
     addErrorTitle: 'Could not add reference',
+    rankThese: 'Rank these',
+    startProfileHint: 'Start your style profile to get AI suggestions from these photos.',
+    startProfileCta: 'Start your style profile',
+    earlierSaves: 'Earlier saves',
+    earlierSavesHint: 'Saved before your design profile — kept here for reference.',
   },
   hi: {
     title: 'संदर्भ',
@@ -75,47 +78,107 @@ const STR = {
     provenanceUpload: 'आपने जोड़ा',
     provenancePinterest: 'Pinterest से',
     caption: 'संदर्भ तस्वीर',
-    sharingTitle: 'साझाकरण',
-    sharingShared: 'बिल्डर के साथ साझा',
-    sharingPrivate: 'निजी',
-    sharingStubNote:
-      'जल्द आ रहा है — आपका बिल्डर अभी यह टॉगल नहीं देख सकता। साझाकरण सुविधा लाइव होने पर यहाँ नियंत्रण होगा।',
+    sharedCaption: 'आपकी डिज़ाइन टीम यह बोर्ड देखती है।',
     addErrorTitle: 'संदर्भ जोड़ नहीं सका',
+    rankThese: 'इन्हें रैंक करें',
+    startProfileHint: 'इन तस्वीरों से AI सुझाव पाने के लिए अपनी शैली प्रोफ़ाइल शुरू करें।',
+    startProfileCta: 'अपनी शैली प्रोफ़ाइल शुरू करें',
+    earlierSaves: 'पहले की बचतें',
+    earlierSavesHint: 'आपकी डिज़ाइन प्रोफ़ाइल से पहले सहेजी गईं — संदर्भ के लिए यहाँ रखी गई हैं।',
   },
+}
+
+function sourceLabel(t: typeof STR.en, source: string): string {
+  return source === 'pinterest' ? t.provenancePinterest : t.provenanceUpload
 }
 
 export default function RoomReferences() {
   const { lang } = useT()
   const { theme } = useTheme()
   const router = useRouter()
+  const toast = useToast()
   const { room } = useLocalSearchParams<{ room: string }>()
   const qc = useQueryClient()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
   const c = theme.colors
 
-  // "all" means whole-house — no room_tag filter applied.
+  // "all" means whole-house — no room_tag filter applied, and never maps to a
+  // single profiler area (the caller shows the whole-house hub instead).
   const roomSlug = decodeURIComponent(room ?? 'all')
   const isAll = roomSlug === 'all'
 
-  // Sharing toggle — local state only (no backend yet; honestly labeled stub).
-  const [sharedWithContractor, setSharedWithContractor] = useState(false)
+  // ---- resolve site → profiler profile → matching area -------------------
+  const propQ = useQuery({
+    queryKey: ['homeowner', 'property'],
+    queryFn: () => homeowner.property(),
+  })
+  const siteId = propQ.data?.site_id
 
-  const refsQ = useQuery({
+  const profileQ = useQuery({
+    queryKey: ['design', 'profiler', 'by-site', siteId],
+    queryFn: () => design.profileBySite(siteId as string),
+    enabled: !!siteId,
+    retry: false,
+  })
+  const profile = profileQ.data
+  const pid = profile?.id
+  const area = !isAll && profile ? areaForRoom(roomSlug, profile.areas) : null
+
+  // ---- profiler-backed references (only fetched once an area is resolved) --
+  const profilerRefsQ = useQuery({
+    queryKey: ['design', 'profiler', 'refs', pid, area?.id],
+    queryFn: () => design.references(pid as string, area!.id),
+    enabled: !!pid && !!area,
+  })
+
+  const addByUpload = useMutation({
+    mutationFn: async (localUri: string) => {
+      const presign = await design.presignMedia(pid as string)
+      let imageKey: string
+      if (presign.upload_mode === 'presigned' && presign.put_url) {
+        const blob = await (await fetch(localUri)).blob()
+        const put = await fetch(presign.put_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: blob,
+        })
+        if (!put.ok) throw new Error('Upload failed — please try again.')
+        imageKey = presign.key
+      } else {
+        const up = await design.uploadMedia(pid as string, {
+          uri: localUri,
+          name: 'inspiration.jpg',
+          type: 'image/jpeg',
+        })
+        imageKey = up.key
+      }
+      return design.addReference({
+        area_id: area!.id,
+        contributor_id: profile?.my_contributor_id ?? undefined,
+        source_type: 'upload',
+        image_r2_key: imageKey,
+      })
+    },
+    onSuccess: () => {
+      toast(t.addedToast, 'check')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'refs', pid, area?.id] })
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    },
+    onError: (e: Error) => Alert.alert(t.addErrorTitle, e.message),
+  })
+
+  // ---- legacy fallback (no area resolved yet) -----------------------------
+  const legacyRefsQ = useQuery({
     queryKey: ['design', 'references'],
     queryFn: () => homeowner.designReferences(),
   })
+  const allLegacyRefs = legacyRefsQ.data ?? []
+  const roomLegacyRefs = isAll
+    ? allLegacyRefs
+    : allLegacyRefs.filter((r) => r.room_tag === roomSlug)
 
-  // Filter by room_tag when we have a real space_id; show all when "all".
-  const allRefs = refsQ.data ?? []
-  const filteredRefs = isAll
-    ? allRefs
-    : allRefs.filter((r) => r.room_tag === roomSlug)
-
-  const addRefMut = useMutation({
+  const addLegacyMut = useMutation({
     mutationFn: async (asset: ImagePicker.ImagePickerAsset) => {
-      // The picker only gives us a local device URI (file://...) — it must be
-      // uploaded to storage first; a device path is never a usable permanent
-      // URL for anyone else (or for us, next launch).
       const { image_url } = await homeowner.uploadReferenceImage({
         uri: asset.uri,
         name: asset.fileName ?? `reference-${Date.now()}.jpg`,
@@ -134,7 +197,9 @@ export default function RoomReferences() {
     onError: (err: Error) => Alert.alert(t.addErrorTitle, err.message),
   })
 
-  async function pickImage() {
+  const [earlierOpen, setEarlierOpen] = useState(false)
+
+  async function pickImage(mode: 'profiler' | 'legacy') {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
       Alert.alert(t.title, t.permissionDenied)
@@ -145,7 +210,11 @@ export default function RoomReferences() {
       quality: 0.8,
     })
     if (result.canceled || !result.assets?.length) return
-    addRefMut.mutate(result.assets[0])
+    if (mode === 'profiler') {
+      addByUpload.mutate(result.assets[0].uri)
+    } else {
+      addLegacyMut.mutate(result.assets[0])
+    }
   }
 
   const surface = (children: React.ReactNode) => (
@@ -163,142 +232,71 @@ export default function RoomReferences() {
     </View>
   )
 
+  const isLoadingContext = propQ.isLoading || profileQ.isLoading
+  const profilerRefs = profilerRefsQ.data ?? []
+
   return (
     <Screen floatingNav>
       <SubHeader
         title={t.title}
-        subtitle={isAll ? t.subtitleAll : t.subtitle}
+        subtitle={isAll ? t.subtitleAll : area ? roomLabelForArea(area) : t.subtitle}
         onBack={() => router.back()}
       />
 
       <View style={{ gap: SPACE.xl, marginTop: SPACE.md }}>
-        {/* Sharing control — HONEST local-only stub, clearly labeled */}
-        <View
-          style={[
-            {
-              backgroundColor: c.card,
-              borderRadius: theme.radii.card,
-              padding: SPACE.lg,
-              gap: SPACE.md,
-            },
-            theme.shadowCard,
-          ]}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-            <Feather name="share-2" size={16} color={c.accent} />
-            <BodyStrong style={{ flex: 1 }}>{t.sharingTitle}</BodyStrong>
-            {/* Toggle row */}
-            <View
-              style={{
-                flexDirection: 'row',
-                gap: SPACE.xs,
-                backgroundColor: c.paper,
-                borderRadius: theme.radii.pill,
-                padding: 3,
-                borderWidth: 1,
-                borderColor: c.line,
-              }}
-            >
-              {[
-                { label: t.sharingPrivate, value: false, icon: 'lock' as const },
-                { label: t.sharingShared, value: true, icon: 'eye' as const },
-              ].map(({ label, value, icon }) => {
-                const active = sharedWithContractor === value
-                return (
-                  <View
-                    key={String(value)}
-                    style={[
-                      {
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        paddingHorizontal: SPACE.sm,
-                        paddingVertical: 4,
-                        borderRadius: theme.radii.pill,
-                        backgroundColor: active ? c.accent : 'transparent',
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name={icon}
-                      size={12}
-                      color={active ? c.onAccent : c.textMute}
-                      onPress={() => setSharedWithContractor(value)}
-                    />
-                    <Small
-                      style={{
-                        color: active ? c.onAccent : c.textMute,
-                        fontWeight: active ? '600' : '400',
-                      }}
-                      onPress={() => setSharedWithContractor(value)}
-                    >
-                      {label}
-                    </Small>
-                  </View>
-                )
-              })}
-            </View>
-          </View>
-          {/* Honest stub label */}
-          <View
-            style={{
-              flexDirection: 'row',
-              gap: SPACE.sm,
-              backgroundColor: c.paper,
-              borderRadius: theme.radii.control,
-              padding: SPACE.md,
-            }}
-          >
-            <Feather name="info" size={14} color={c.textMute} style={{ marginTop: 1 }} />
-            <Micro muted style={{ flex: 1 }}>
-              {t.sharingStubNote}
-            </Micro>
-          </View>
+        {/* Honest sharing caption — the profiler board is shared with the
+            design team by construction; no stub toggle needed. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+          <Feather name="users" size={14} color={c.textMute} />
+          <Small muted>{t.sharedCaption}</Small>
         </View>
 
-        {/* Reference photo grid */}
-        {refsQ.isLoading ? (
+        {isLoadingContext ? (
           surface(<Small muted>{t.loading}</Small>)
-        ) : refsQ.isError ? (
-          surface(
-            <View style={{ gap: SPACE.sm }}>
-              <Small muted>{t.errorTitle}</Small>
-              <Button
-                title={t.retry}
-                variant="secondary"
-                onPress={() => void refsQ.refetch()}
-              />
-            </View>,
-          )
-        ) : filteredRefs.length === 0 ? (
-          <View
-            style={{
-              borderRadius: theme.radii.card,
-              borderWidth: 1,
-              borderColor: c.line,
-              borderStyle: 'dashed',
-              backgroundColor: c.paper,
-              padding: SPACE.xl,
-              alignItems: 'center',
-              gap: SPACE.xs,
-            }}
-          >
-            <Feather name="image" size={24} color={c.textMute} />
-            <Small muted style={{ textAlign: 'center' }}>
-              {t.empty}
-            </Small>
-          </View>
-        ) : (
-          <View style={{ gap: SPACE.md }}>
-            {/* 2-column grid */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md }}>
-              {filteredRefs.map((ref) => {
-                const provenance =
-                  ref.source === 'pinterest' ? t.provenancePinterest : t.provenanceUpload
-                return (
+        ) : area && pid ? (
+          <>
+            {/* Profiler-backed grid */}
+            {profilerRefsQ.isLoading ? (
+              surface(<Small muted>{t.loading}</Small>)
+            ) : profilerRefsQ.isError ? (
+              surface(
+                <View style={{ gap: SPACE.sm }}>
+                  <Small muted>{t.errorTitle}</Small>
+                  <Button
+                    title={t.retry}
+                    variant="secondary"
+                    onPress={() => void profilerRefsQ.refetch()}
+                  />
+                </View>,
+              )
+            ) : profilerRefs.length === 0 ? (
+              <View
+                style={{
+                  borderRadius: theme.radii.card,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderStyle: 'dashed',
+                  backgroundColor: c.paper,
+                  padding: SPACE.xl,
+                  alignItems: 'center',
+                  gap: SPACE.xs,
+                }}
+              >
+                <Feather name="image" size={24} color={c.textMute} />
+                <Small muted style={{ textAlign: 'center' }}>
+                  {t.empty}
+                </Small>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md }}>
+                {profilerRefs.map((ref) => (
                   <PhotoTile
                     key={ref.id}
-                    photo={{ id: ref.id, imageUri: ref.image_url, caption: provenance }}
+                    photo={{
+                      id: ref.id,
+                      imageUri: ref.image_url ?? '',
+                      caption: sourceLabel(t, ref.source_type),
+                    }}
                     variant="grid"
                     size={156}
                     style={{ width: 156 }}
@@ -312,20 +310,158 @@ export default function RoomReferences() {
                       starred: '',
                     }}
                   />
-                )
-              })}
+                ))}
+              </View>
+            )}
+
+            {/* Add + Rank these */}
+            <View style={{ gap: SPACE.sm }}>
+              <Button
+                title={t.addButton}
+                variant="secondary"
+                loading={addByUpload.isPending}
+                leading={<Feather name="plus" size={16} color={c.accentDeep} />}
+                onPress={() => void pickImage('profiler')}
+              />
+              {profilerRefs.length > 0 ? (
+                <Button
+                  title={t.rankThese}
+                  variant="primary"
+                  leading={<Feather name="star" size={16} color={c.onAccent} />}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(homeowner)/design/profiler/[area]',
+                      params: { area: area.id, pid, key: area.area_key, tab: 'ranking' },
+                    })
+                  }
+                />
+              ) : null}
             </View>
-          </View>
+          </>
+        ) : (
+          <>
+            {/* Legacy behavior — no area resolved (custom room, or no profile yet) */}
+            {legacyRefsQ.isLoading ? (
+              surface(<Small muted>{t.loading}</Small>)
+            ) : legacyRefsQ.isError ? (
+              surface(
+                <View style={{ gap: SPACE.sm }}>
+                  <Small muted>{t.errorTitle}</Small>
+                  <Button
+                    title={t.retry}
+                    variant="secondary"
+                    onPress={() => void legacyRefsQ.refetch()}
+                  />
+                </View>,
+              )
+            ) : roomLegacyRefs.length === 0 ? (
+              <View
+                style={{
+                  borderRadius: theme.radii.card,
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderStyle: 'dashed',
+                  backgroundColor: c.paper,
+                  padding: SPACE.xl,
+                  alignItems: 'center',
+                  gap: SPACE.xs,
+                }}
+              >
+                <Feather name="image" size={24} color={c.textMute} />
+                <Small muted style={{ textAlign: 'center' }}>
+                  {t.empty}
+                </Small>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md }}>
+                {roomLegacyRefs.map((ref) => (
+                  <PhotoTile
+                    key={ref.id}
+                    photo={{ id: ref.id, imageUri: ref.image_url, caption: sourceLabel(t, ref.source) }}
+                    variant="grid"
+                    size={156}
+                    style={{ width: 156 }}
+                    labels={{
+                      caption: t.caption,
+                      translate: '',
+                      save: '',
+                      share: '',
+                      hide: '',
+                      video: '',
+                      starred: '',
+                    }}
+                  />
+                ))}
+              </View>
+            )}
+
+            <Button
+              title={t.addButton}
+              variant="secondary"
+              loading={addLegacyMut.isPending}
+              leading={<Feather name="plus" size={16} color={c.accentDeep} />}
+              onPress={() => void pickImage('legacy')}
+            />
+
+            {/* Quiet hint → self-serve style profile start */}
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: SPACE.sm,
+                backgroundColor: c.paper,
+                borderRadius: theme.radii.control,
+                padding: SPACE.md,
+                alignItems: 'flex-start',
+              }}
+            >
+              <Feather name="feather" size={14} color={c.accent} style={{ marginTop: 1 }} />
+              <View style={{ flex: 1, gap: SPACE.xs }}>
+                <Micro muted>{t.startProfileHint}</Micro>
+                <Button
+                  title={t.startProfileCta}
+                  variant="ghost"
+                  onPress={() => router.push('/(homeowner)/design/profiler')}
+                />
+              </View>
+            </View>
+          </>
         )}
 
-        {/* Add reference image */}
-        <Button
-          title={t.addButton}
-          variant="secondary"
-          loading={addRefMut.isPending}
-          leading={<Feather name="plus" size={16} color={c.accentDeep} />}
-          onPress={() => void pickImage()}
-        />
+        {/* Earlier saves — legacy rows for this room, read-only, collapsed.
+            Shown whenever legacy rows exist for the room, even once the
+            profiler board is the live surface, so nothing already saved is
+            silently lost. */}
+        {area && roomLegacyRefs.length > 0 ? (
+          <View style={{ gap: SPACE.sm }}>
+            <Button
+              title={`${t.earlierSaves} (${roomLegacyRefs.length})`}
+              variant="ghost"
+              leading={
+                <Feather
+                  name={earlierOpen ? 'chevron-down' : 'chevron-right'}
+                  size={14}
+                  color={c.textMute}
+                />
+              }
+              onPress={() => setEarlierOpen((o) => !o)}
+            />
+            {earlierOpen ? (
+              <View style={{ gap: SPACE.sm }}>
+                <Micro muted>{t.earlierSavesHint}</Micro>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md }}>
+                  {roomLegacyRefs.map((ref) => (
+                    <View key={ref.id} style={{ width: 110, opacity: 0.85 }}>
+                      <BlurUpImage
+                        uri={ref.image_url}
+                        style={{ width: 110, height: 110, borderRadius: theme.radii.chip }}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </Screen>
   )
