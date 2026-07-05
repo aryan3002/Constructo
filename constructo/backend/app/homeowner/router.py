@@ -88,6 +88,7 @@ from app.homeowner.schemas import (
     QuietPeriodOut,
     ReferenceCreateIn,
     ReferenceOut,
+    ReferenceUploadOut,
     RequestCreateIn,
     RequestOut,
     RequestStatusPatchIn,
@@ -2034,6 +2035,35 @@ async def put_design_profile(
         id=row.id, site_id=row.site_id, profile=dict(row.profile or {}),
         created_at=row.created_at, updated_at=row.updated_at,
     )
+
+
+@router.post("/design/references/upload", response_model=ReferenceUploadOut, status_code=201)
+async def upload_reference_image(
+    media: UploadFile = File(...),
+    site_id: UUID | None = Form(default=None),
+    user: User = Depends(require_homeowner),
+    session: AsyncSession = Depends(get_session),
+) -> ReferenceUploadOut:
+    """Upload an inspiration reference photo to private storage.
+
+    Mirrors ``upload_visit_photo``: the server streams the file to R2 and
+    returns the bare object key. The client then POSTs that key as
+    ``image_url`` to POST /design/references to create the reference row —
+    the picker's local device URI is never usable as a permanent URL on its
+    own, so this upload step must happen first.
+    """
+    sid = await resolve_site(session, user, site_id=site_id)
+    await _gate_design_write(session, user, sid, None)
+
+    if not (media.content_type or "").lower().startswith("image/"):
+        raise AppError(415, "unsupported_media", "Only image uploads are allowed")
+    data = await media.read()
+    if len(data) > HOMEOWNER_MAX_PHOTO_BYTES:
+        raise AppError(413, "media_too_large", "Photo exceeds 12 MB")
+
+    key = f"homeowner/{sid}/design/{uuid4().hex}{_photo_ext(media.content_type, media.filename)}"
+    get_storage().put_bytes(key, data, media.content_type or "application/octet-stream")
+    return ReferenceUploadOut(image_url=key)
 
 
 @router.post("/design/references", response_model=ReferenceOut, status_code=201)

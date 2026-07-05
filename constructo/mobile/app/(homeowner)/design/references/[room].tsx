@@ -112,12 +112,21 @@ export default function RoomReferences() {
     : allRefs.filter((r) => r.room_tag === roomSlug)
 
   const addRefMut = useMutation({
-    mutationFn: (image_url: string) =>
-      homeowner.references({
+    mutationFn: async (asset: ImagePicker.ImagePickerAsset) => {
+      // The picker only gives us a local device URI (file://...) — it must be
+      // uploaded to storage first; a device path is never a usable permanent
+      // URL for anyone else (or for us, next launch).
+      const { image_url } = await homeowner.uploadReferenceImage({
+        uri: asset.uri,
+        name: asset.fileName ?? `reference-${Date.now()}.jpg`,
+        type: asset.mimeType ?? 'image/jpeg',
+      })
+      return homeowner.references({
         image_url,
         room_tag: isAll ? undefined : roomSlug,
         source: 'upload',
-      }),
+      })
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['design', 'references'] })
       Alert.alert(t.title, t.addedToast)
@@ -136,7 +145,7 @@ export default function RoomReferences() {
       quality: 0.8,
     })
     if (result.canceled || !result.assets?.length) return
-    addRefMut.mutate(result.assets[0].uri)
+    addRefMut.mutate(result.assets[0])
   }
 
   const surface = (children: React.ReactNode) => (

@@ -54,6 +54,7 @@ export interface SelectStrings {
   fits: string
   worthLook: string
   adviceNote: string
+  checkFitErr: string
   statusLabel: string
   statusProposed: string
   statusFinal: string
@@ -81,6 +82,7 @@ export const SELECT_STR: Record<'en' | 'hi', SelectStrings> = {
     fits: 'Fits your style',
     worthLook: 'Worth a look',
     adviceNote: 'Friendly advice — it never blocks your choice.',
+    checkFitErr: 'Couldn’t check fit just now — you can still save your choice.',
     statusLabel: 'Status',
     statusProposed: 'Proposed',
     statusFinal: 'Final',
@@ -106,6 +108,7 @@ export const SELECT_STR: Record<'en' | 'hi', SelectStrings> = {
     fits: 'आपकी शैली से मेल खाता है',
     worthLook: 'एक नज़र डालें',
     adviceNote: 'मित्रवत सलाह — यह आपके चयन को कभी नहीं रोकती।',
+    checkFitErr: 'अभी उपयुक्तता जांच नहीं हो सकी — आप फिर भी अपना विकल्प सहेज सकते हैं।',
     statusLabel: 'स्थिति',
     statusProposed: 'विचाराधीन',
     statusFinal: 'अंतिम',

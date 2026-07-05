@@ -241,7 +241,7 @@ export default function BriefScreen() {
     enabled: !!pid,
     retry: false,
   })
-  const briefId = briefQ.data?.brief_id ?? (briefQ.data as any)?.id ?? null
+  const briefId = briefQ.data?.brief_id ?? null
 
   const approvalsQ = useQuery({
     queryKey: ['design', 'profiler', 'approvals', briefId],

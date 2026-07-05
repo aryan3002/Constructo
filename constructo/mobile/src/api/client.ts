@@ -218,6 +218,18 @@ export const homeowner = {
   /** Attributed inspiration references for a site (survives reload — proposal C). */
   designReferences: (siteId?: string) =>
     request<DesignReference[]>(`/api/v1/homeowner/design/references${qs({ site_id: siteId })}`),
+  /** Upload an inspiration photo to private storage; returns a bare object key.
+   *  Pass that key as `image_url` to {@link references} — the picker's local
+   *  device URI is never itself a usable permanent URL. */
+  uploadReferenceImage: (file: UploadFile, siteId?: string) => {
+    const form = new FormData()
+    form.append('media', file as unknown as Blob)
+    if (siteId) form.append('site_id', siteId)
+    return uploadMultipart<{ image_url: string }>(
+      '/api/v1/homeowner/design/references/upload',
+      form,
+    )
+  },
   references: (body: { image_url: string; room_tag?: string; source?: string; site_id?: string }) =>
     request<DesignReference>('/api/v1/homeowner/design/references', {
       method: 'POST',

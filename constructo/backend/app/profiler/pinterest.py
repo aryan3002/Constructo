@@ -21,11 +21,10 @@ from app.common.errors import AppError
 from app.extraction.url_guard import assert_safe_media_url
 
 _PIN_HOST_RE = re.compile(r"(^|\.)(pinterest\.[a-z.]+|pin\.it)$", re.I)
-_OG_IMAGE_RE = re.compile(
-    r'<meta[^>]+(?:property|name)=["\'](?:og:image(?::secure_url)?|twitter:image)["\']'
-    r'[^>]+content=["\']([^"\']+)["\']',
-    re.I,
-)
+_META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
+_OG_IMAGE_PROP_RE = re.compile(r'(?:property|name)=["\']og:image(?::secure_url)?["\']', re.I)
+_TWITTER_IMAGE_PROP_RE = re.compile(r'(?:property|name)=["\']twitter:image["\']', re.I)
+_CONTENT_ATTR_RE = re.compile(r'content=["\']([^"\']+)["\']', re.I)
 _FETCH_TIMEOUT = 10.0
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024  # match the upload ceiling
 _MAX_PAGE_REDIRECTS = 3
@@ -38,9 +37,23 @@ def is_pinterest_url(url: str) -> bool:
 
 
 def parse_og_image(html: str) -> str | None:
-    """The pin's preview image URL from its og:image / twitter:image meta, else None."""
-    m = _OG_IMAGE_RE.search(html)
-    return m.group(1) if m else None
+    """The pin's preview image URL from its og:image / twitter:image meta, else None.
+
+    Checked per-tag rather than with one order-sensitive regex: real Pinterest
+    pages emit `content` BEFORE `name`/`property` (e.g. `<meta content="..."
+    data-app="true" name="og:image" property="og:image"/>`) — the opposite of
+    the usual og:-tag convention — so attribute order cannot be assumed.
+    """
+    twitter_fallback: str | None = None
+    for tag in _META_TAG_RE.findall(html):
+        content_match = _CONTENT_ATTR_RE.search(tag)
+        if not content_match:
+            continue
+        if _OG_IMAGE_PROP_RE.search(tag):
+            return content_match.group(1)
+        if twitter_fallback is None and _TWITTER_IMAGE_PROP_RE.search(tag):
+            twitter_fallback = content_match.group(1)
+    return twitter_fallback
 
 
 class PinResolver:
@@ -91,6 +104,20 @@ class HttpPinResolver(PinResolver):
             # pivot the request to an internal/non-Pinterest host (SSRF). Mirrors the
             # follow_redirects=False discipline in app/extraction/pdf_read.py.
             page = await self._get_pinterest_page(hc, url)
+            # A pin.it code that no longer maps to a real pin (deleted, made
+            # private, or mistyped) is redirected by Pinterest's OWN servers to
+            # the bare homepage rather than a 404 — that lands here as a
+            # same-host, non-redirect 200 with no /pin/ path. Give an
+            # actionable message instead of the generic "couldn't find an
+            # image", which reads like our resolver is broken rather than the
+            # link being stale.
+            if "/pin/" not in urlparse(str(page.url)).path:
+                raise AppError(
+                    422,
+                    "pinterest_unresolved",
+                    "That link didn't lead to a specific pin — it may have expired or been "
+                    "deleted. Copy a fresh link from an open pin and try again.",
+                )
             image_url = parse_og_image(page.text)
             if not image_url:
                 raise AppError(

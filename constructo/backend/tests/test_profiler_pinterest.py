@@ -37,6 +37,20 @@ def test_parse_og_image_none_when_absent():
     assert parse_og_image("<html><head></head></html>") is None
 
 
+def test_parse_og_image_matches_real_pinterest_attribute_order():
+    """Real Pinterest pin pages emit `content` BEFORE `name`/`property` (plus an
+    extra `data-app` attribute in between) — the opposite of the fixture above.
+    Every real pin page was silently failing to match before this test."""
+    html = (
+        '<html><head>'
+        '<meta content="A kitchen" data-app="true" name="og:title" property="og:title"/>'
+        '<meta content="https://i.pinimg.com/736x/a7/66/56/abc123.jpg" data-app="true" '
+        'name="og:image" property="og:image"/>'
+        '</head></html>'
+    )
+    assert parse_og_image(html) == "https://i.pinimg.com/736x/a7/66/56/abc123.jpg"
+
+
 def test_is_pinterest_url_accepts_pin_hosts():
     assert is_pinterest_url("https://www.pinterest.com/pin/12345/")
     assert is_pinterest_url("https://pin.it/abc123")
@@ -52,12 +66,18 @@ def test_is_pinterest_url_rejects_others():
 
 
 def _mock_resolver(og_image_url: str) -> HttpPinResolver:
-    """A resolver whose network is a MockTransport: any pinterest page returns an
-    og:image of ``og_image_url``; everything else returns image bytes."""
+    """A resolver whose network is a MockTransport: pin.it redirects to a real
+    pin page (mirrors live Pinterest's pin.it -> pinterest.com/pin/<id>/ hop —
+    see test_resolver_gives_actionable_error_when_shortlink_has_no_real_pin for
+    what happens when that hop DOESN'T land on a /pin/ path), the pin page
+    returns an og:image of ``og_image_url``, and everything else returns image
+    bytes."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
-        if "pin.it" in url or "pinterest" in url:
+        if "pin.it" in url:
+            return httpx.Response(302, headers={"location": "https://www.pinterest.com/pin/1/"})
+        if "pinterest.com/pin/" in url:
             return httpx.Response(
                 200,
                 headers={"content-type": "text/html"},
@@ -121,6 +141,26 @@ async def test_resolver_follows_redirect_that_stays_on_pinterest():
     resolver = HttpPinResolver(transport=httpx.MockTransport(handler))
     data, content_type, resolved = await resolver.fetch("https://pin.it/go")
     assert data and resolved == "http://93.184.216.34/p.jpg"
+
+
+async def test_resolver_gives_actionable_error_when_shortlink_has_no_real_pin():
+    """A pin.it code that no longer maps to a real pin (deleted, made private, or
+    mistyped) is redirected by Pinterest's OWN servers to the bare homepage —
+    not a 404. Confirmed live: pin.it/<stale-code> -> api.pinterest.com/url_
+    shortener/.../redirect/ -> https://www.pinterest.com (no /pin/ path at all).
+    The homeowner needs an actionable message here, not the generic "couldn't
+    find an image" (which reads like a resolver bug, not a stale link)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://pin.it/dead":
+            return httpx.Response(302, headers={"location": "https://www.pinterest.com"})
+        return httpx.Response(200, headers={"content-type": "text/html"}, text="<html></html>")
+
+    resolver = HttpPinResolver(transport=httpx.MockTransport(handler))
+    with pytest.raises(AppError) as ei:
+        await resolver.fetch("https://pin.it/dead")
+    assert ei.value.code == "pinterest_unresolved"
+    assert "fresh link" in ei.value.message.lower()
 
 
 # --- e2e: the from-link endpoint --------------------------------------------

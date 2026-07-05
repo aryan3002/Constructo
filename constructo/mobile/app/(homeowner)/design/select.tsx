@@ -71,17 +71,20 @@ export default function AddSelection() {
   const [status, setStatus] = useState<SelectionStatusChoice>('proposed')
   const [advice, setAdvice] = useState<ConsistencyCheck | null>(null)
   const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState(false)
 
   const canSave = item.trim().length > 0 && choice.trim().length > 0
 
   const checkFit = async () => {
     if (!canSave) return
     setChecking(true)
+    setCheckError(false)
     try {
       const res = await homeowner.consistencyCheck({ item: item.trim(), choice: choice.trim() })
       setAdvice(res)
     } catch {
       setAdvice(null)
+      setCheckError(true)
     } finally {
       setChecking(false)
     }
@@ -210,6 +213,7 @@ export default function AddSelection() {
           onChangeText={(v) => {
             setItem(v)
             setAdvice(null)
+            setCheckError(false)
           }}
           placeholder={t.itemPlaceholder}
           placeholderTextColor={c.textMute}
@@ -221,6 +225,7 @@ export default function AddSelection() {
           onChangeText={(v) => {
             setChoice(v)
             setAdvice(null)
+            setCheckError(false)
           }}
           placeholder={t.choicePlaceholder}
           placeholderTextColor={c.textMute}
@@ -263,6 +268,21 @@ export default function AddSelection() {
               <Small>{advice.feedback}</Small>
               <Small muted>{t.adviceNote}</Small>
             </View>
+          </View>
+        ) : checkError ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: SPACE.sm,
+              backgroundColor: c.paper,
+              borderRadius: theme.radii.control,
+              padding: SPACE.md,
+            }}
+          >
+            <Feather name="wifi-off" size={16} color={c.textMute} style={{ marginTop: 2 }} />
+            <Small muted style={{ flex: 1 }}>
+              {t.checkFitErr}
+            </Small>
           </View>
         ) : null}
       </View>
