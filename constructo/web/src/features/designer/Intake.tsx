@@ -631,6 +631,9 @@ function BriefBody({
       }
       qc.invalidateQueries({ queryKey: qk.designBrief(profile.id) })
       qc.invalidateQueries({ queryKey: qk.designApprovals(briefId) })
+      // The inbox badge (DesignerWorkspace's unread-count pill) must refresh
+      // immediately too, not just on the next poll.
+      qc.invalidateQueries({ queryKey: ['design', 'inbox-summary'] })
       show({ message: t('intake.action.toast.success'), status: 'ok' })
     } catch {
       show({ message: t('intake.action.toast.error'), status: 'risk' })

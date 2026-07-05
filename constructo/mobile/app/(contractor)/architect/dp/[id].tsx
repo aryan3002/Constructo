@@ -85,6 +85,7 @@ export default function DesignerBriefDetail() {
   async function runAction(action: DesignerActionType, noteText?: string) {
     setActing(action)
     setActionError(null)
+    if (action !== 'materialize') setMatResult(null)
     try {
       if (action === 'regenerate') {
         await briefApi.generateBrief(id)
@@ -98,12 +99,14 @@ export default function DesignerBriefDetail() {
       }
       void qc.invalidateQueries({ queryKey: ['dp', 'brief', id] })
       void qc.invalidateQueries({ queryKey: ['dp', 'approvals'] })
+      void qc.invalidateQueries({ queryKey: ['architect', 'design', 'hub'] })
+      void qc.invalidateQueries({ queryKey: ['design', 'inbox'] })
+      setNoteSheet(null)
+      setNote('')
     } catch (e) {
       setActionError((e as Error).message)
     } finally {
       setActing(null)
-      setNoteSheet(null)
-      setNote('')
     }
   }
 
