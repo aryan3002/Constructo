@@ -75,12 +75,24 @@ async def _area_signals(
     return rankings, attrs
 
 
+def _conflict_identity(
+    dimension: str, value: str, contributor_a_id: UUID, contributor_b_id: UUID
+) -> tuple[str, str, UUID, UUID]:
+    return (dimension, value, contributor_a_id, contributor_b_id)
+
+
 async def _sync_conflicts(
     session: AsyncSession, profile_id: UUID, area_id: UUID, conflicts: list[dict]
-) -> None:
+) -> bool:
     """Replace this area's OPEN conflicts with the freshly-detected set.
 
     Resolved conflicts are preserved; only OPEN ones are replaced.
+
+    Returns whether the fresh set contains at least one conflict identity
+    (dimension, value, contributor_a_id, contributor_b_id) that was NOT in the
+    pre-delete OPEN set — i.e. a genuinely NEW conflict, not a re-detection of
+    one that was already open. This lets callers fire conflict_detected once
+    per new conflict instead of once per write.
     """
     existing = (
         await session.execute(
@@ -90,6 +102,18 @@ async def _sync_conflicts(
             )
         )
     ).scalars().all()
+    existing_identities = {
+        _conflict_identity(c.dimension, c.value, c.contributor_a_id, c.contributor_b_id)
+        for c in existing
+    }
+    fresh_identities = {
+        _conflict_identity(
+            cf["dimension"], cf["value"], UUID(cf["contributor_a"]), UUID(cf["contributor_b"])
+        )
+        for cf in conflicts
+    }
+    has_new = bool(fresh_identities - existing_identities)
+
     for c in existing:
         await session.delete(c)
     for cf in conflicts:
@@ -103,6 +127,7 @@ async def _sync_conflicts(
                 contributor_b_id=UUID(cf["contributor_b"]),
             )
         )
+    return has_new
 
 
 async def compute_and_persist_taste(session: AsyncSession, area: ProfilerArea) -> dict:
@@ -227,15 +252,16 @@ async def refresh_taste_and_maybe_propose(
     # never re-run propose_themes_for_area (the only other _sync_conflicts caller)
     # and leave GET /conflicts stale/empty despite area.has_conflict=True.
     #
-    # new_conflict: cheap + deterministic definition — this call's _sync_conflicts
-    # produced >=1 OPEN conflict for this area AND the fresh model says
-    # has_conflict. It doesn't try to diff against the prior conflict set (that
-    # would need a pre-sync snapshot query); "OPEN conflict exists after this
-    # write, on a model that currently disagrees" is enough signal to notify,
-    # and notify_design_event's copy is safe to repeat if the same conflict
-    # persists across calls (best-effort, not exactly-once).
-    await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
-    new_conflict = bool(model["has_conflict"] and model["conflicts"])
+    # new_conflict: _sync_conflicts returns whether the fresh set contains a
+    # conflict identity absent from the pre-delete OPEN set, i.e. a genuinely
+    # NEW conflict rather than a re-detection of one that's already standing.
+    # THIS call must run first and own the flag: when the threshold branch below
+    # also calls propose_themes_for_area (which internally re-runs
+    # _sync_conflicts on the exact same `model["conflicts"]`), that second sync
+    # sees the set it just wrote as the pre-delete set and returns False —
+    # content-wise a no-op — so it must never overwrite `new_conflict` computed
+    # here. Do not swap this call after the threshold branch.
+    new_conflict = await _sync_conflicts(session, profile_id, area_id, model["conflicts"])
     if (
         model["ranked_count"] >= area.recommended_count
         and model["ranked_count"] != area.last_proposal_ranked_count

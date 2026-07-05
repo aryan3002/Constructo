@@ -5,9 +5,22 @@ from sqlalchemy import select
 from app.auth.jwt import create_access_token
 from app.extraction.llm import FakeLLMClient
 from app.main import app
+from app.models import PushToken
 from app.models.profiler import ProfilerArea, ProfilerTheme, ThemeStatus
 from app.profiler.extraction import get_llm
+from app.push.sender import dry_run_log, reset_dry_run_log
 from tests.test_profiler_presets import _profile_with_area  # architect+site+area+contributor
+
+
+def _kinds(msgs: list[dict]) -> set[str]:
+    return {m["data"]["kind"] for m in msgs}
+
+
+@pytest.fixture(autouse=True)
+def _clean_push_log():
+    reset_dry_run_log()
+    yield
+    reset_dry_run_log()
 
 _CANNED = {
     "themes": [
@@ -129,12 +142,39 @@ async def test_second_contributor_disagreement_syncs_conflicts_without_new_refs(
     assert add_contrib.status_code == 201, add_contrib.text
     contributor_b = add_contrib.json()["id"]
 
+    # conflict_detected's designer-copy targets every architect user of the
+    # company; register a token so it actually lands in dry_run_log().
+    db_session.add(PushToken(user_id=architect.id, token="ExponentPushToken[test-architect]"))
+    await db_session.commit()
+
+    # First disagreeing write: contributor_b ranks ref[0] 1-star against
+    # contributor_a's 5-star -> a brand-new conflict identity appears ->
+    # conflict_detected fires exactly once here.
     hdrs_b = auth(user_b)
-    for rid in ref_ids:
-        rank = await client.post(f"/api/v1/design/references/{rid}/rankings", json={
-            "contributor_id": contributor_b, "stars": 1, "tags": {},
-        }, headers=hdrs_b)
-        assert rank.status_code == 201, rank.text
+    reset_dry_run_log()
+    first_rank = await client.post(
+        f"/api/v1/design/references/{ref_ids[0]}/rankings",
+        json={"contributor_id": contributor_b, "stars": 1, "tags": {}},
+        headers=hdrs_b,
+    )
+    assert first_rank.status_code == 201, first_rank.text
+    assert "conflict_detected" in _kinds(dry_run_log()), (
+        "the first disagreeing write must surface conflict_detected"
+    )
+
+    # Second write while the same conflict identity still stands (ranking the
+    # OTHER ref the same way reproduces the identical conflict set) must NOT
+    # emit a second conflict_detected.
+    reset_dry_run_log()
+    second_rank = await client.post(
+        f"/api/v1/design/references/{ref_ids[1]}/rankings",
+        json={"contributor_id": contributor_b, "stars": 1, "tags": {}},
+        headers=hdrs_b,
+    )
+    assert second_rank.status_code == 201, second_rank.text
+    assert "conflict_detected" not in _kinds(dry_run_log()), (
+        "a write that doesn't introduce a NEW conflict identity must stay silent"
+    )
 
     marker_after = (await db_session.get(ProfilerArea, area_id)).last_proposal_ranked_count
     assert marker_after == marker_before == 2  # no new distinct ref -> no re-propose
