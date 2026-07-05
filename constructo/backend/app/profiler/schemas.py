@@ -35,6 +35,10 @@ class ProfileCreate(BaseModel):
     contributors: list[ContributorIn] = Field(default_factory=list)
 
 
+class SelfServeProfileIn(BaseModel):
+    site_id: UUID | None = None
+
+
 class AreaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID

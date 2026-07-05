@@ -10,23 +10,26 @@ from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.db import get_session
 from app.extraction.llm import LLMClient
-from app.homeowner.authority import can_approve
-from app.homeowner.scoping import homeowner_site_ids, member_sub_role
+from app.homeowner.authority import APPROVERS, can_approve
+from app.homeowner.scoping import homeowner_site_ids, member_sub_role, resolve_site
 from app.models import (
     Component,
     HomeownerMember,
     Material,
     MemberStatus,
+    Site,
     Space,
     Spec,
     User,
     UserRole,
 )
 from app.models.profiler import (
+    AreaKind,
     BriefAction,
     BriefAudience,
     BriefState,
     ConflictStatus,
+    ContributorRole,
     ProfilerArea,
     ProfilerBrief,
     ProfilerBriefApproval,
@@ -40,6 +43,7 @@ from app.models.profiler import (
     ProfilerReference,
     ProfilerReferenceAttributes,
     ProfilerTheme,
+    ProfileScope,
     ProfileStatus,
     ReferenceSource,
     ThemeStatus,
@@ -81,6 +85,7 @@ from app.profiler.schemas import (
     ReferenceFromPresetIn,
     ReferenceIn,
     ReferenceOut,
+    SelfServeProfileIn,
     ThemeDecisionIn,
     ThemeOut,
 )
@@ -452,6 +457,109 @@ async def create_profile(
     return ProfileOut.model_validate(profile)
 
 
+_DEFAULT_SELF_SERVE_AREAS = ("kitchen", "living room", "master bedroom")
+
+
+@router.post("/profiles/self-serve", response_model=ProfileDetailOut, status_code=201)
+async def start_self_serve_profile(
+    body: SelfServeProfileIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    """Homeowner-initiated profile start — no contractor/architect required.
+
+    Owner/co-owner only (money/scope-bearing: it seeds the whole intake). Areas
+    come from the site's existing Space rows so intake matches the real house;
+    with no spaces yet we fall back to three sensible defaults. Every active
+    household member is seeded as a contributor so ranking is immediately open
+    to everyone, with the caller (and any other approver) marked decision owner.
+    """
+    sid = await resolve_site(session, user, body.site_id)
+    sub_role = await member_sub_role(session, user, sid)
+    if sub_role is None or not can_approve(sub_role):
+        raise AppError(
+            403, "approve_forbidden",
+            "Only a property owner can start the design profile. You can add a comment.",
+            extra={"can_comment": True},
+        )
+
+    existing = (
+        await session.execute(
+            select(ProfilerProfile)
+            .where(ProfilerProfile.site_id == sid)
+            .order_by(ProfilerProfile.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if existing is not None:
+        raise AppError(
+            409, "profile_exists",
+            "A design profile already exists for this property.",
+            extra={"profile_id": str(existing.id)},
+        )
+
+    site = await session.get(Site, sid)
+    if site is None:
+        raise AppError(404, "not_found", "Site not found")
+
+    profile = ProfilerProfile(
+        company_id=site.company_id,
+        site_id=sid,
+        scope_type=ProfileScope.whole_house,
+        created_by=user.id,
+        status=ProfileStatus.intake_started,
+    )
+    session.add(profile)
+    await session.flush()
+
+    spaces = (
+        await session.execute(select(Space).where(Space.site_id == sid))
+    ).scalars().all()
+    if spaces:
+        for space in spaces:
+            session.add(
+                ProfilerArea(
+                    profile_id=profile.id,
+                    area_kind=AreaKind.interior,
+                    area_key=space.name.strip().lower(),
+                    space_id=space.id,
+                )
+            )
+    else:
+        for area_key in _DEFAULT_SELF_SERVE_AREAS:
+            session.add(
+                ProfilerArea(
+                    profile_id=profile.id,
+                    area_kind=AreaKind.interior,
+                    area_key=area_key,
+                )
+            )
+
+    members = (
+        await session.execute(
+            select(HomeownerMember).where(
+                HomeownerMember.site_id == sid,
+                HomeownerMember.status == MemberStatus.active,
+            )
+        )
+    ).scalars().all()
+    for m in members:
+        role = ContributorRole.co_owner if m.sub_role in APPROVERS else ContributorRole.family
+        session.add(
+            ProfilerContributor(
+                profile_id=profile.id,
+                member_id=m.id,
+                user_id=m.user_id,
+                role=role,
+                is_decision_owner=can_approve(m.sub_role),
+            )
+        )
+
+    await session.commit()
+    await session.refresh(profile)
+    return await _profile_detail(session, profile, user)
+
+
 @router.get("/profiles", response_model=list[ProfileOut])
 async def list_profiles(
     site_id: UUID | None = Query(None),
@@ -477,22 +585,25 @@ async def list_profiles(
     return [ProfileOut.model_validate(p) for p in rows]
 
 
-@router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)
-async def get_profile(
-    profile_id: UUID,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+async def _profile_detail(
+    session: AsyncSession, profile: ProfilerProfile, user: User
 ) -> ProfileDetailOut:
-    profile = await _load_accessible_profile(session, profile_id, user)
+    """Build the full ProfileDetailOut (areas + contributors + my_contributor_id)
+    for an already-loaded, already-authorized profile. Shared by every endpoint
+    that returns a profile's detail view, so the response shape never drifts."""
     areas = (
-        (await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile_id)))
+        (
+            await session.execute(
+                select(ProfilerArea).where(ProfilerArea.profile_id == profile.id)
+            )
+        )
         .scalars()
         .all()
     )
     contributors = (
         (
             await session.execute(
-                select(ProfilerContributor).where(ProfilerContributor.profile_id == profile_id)
+                select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
             )
         )
         .scalars()
@@ -501,9 +612,19 @@ async def get_profile(
     out = ProfileDetailOut.model_validate(profile)
     out.contributors = [ContributorOut.model_validate(c) for c in contributors]
     out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
-    counts = await _area_counts(session, profile_id, out.my_contributor_id)
+    counts = await _area_counts(session, profile.id, out.my_contributor_id)
     out.areas = [_area_out(a, counts) for a in areas]
     return out
+
+
+@router.get("/profiles/{profile_id}", response_model=ProfileDetailOut)
+async def get_profile(
+    profile_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileDetailOut:
+    profile = await _load_accessible_profile(session, profile_id, user)
+    return await _profile_detail(session, profile, user)
 
 
 @router.get("/profiles/by-site/{site_id}", response_model=ProfileDetailOut)
@@ -525,20 +646,7 @@ async def get_profile_by_site(
     if profile is None:
         raise AppError(404, "not_found", "No design profile for this site")
     await _load_accessible_profile(session, profile.id, user)
-    areas = (
-        await session.execute(select(ProfilerArea).where(ProfilerArea.profile_id == profile.id))
-    ).scalars().all()
-    contributors = (
-        await session.execute(
-            select(ProfilerContributor).where(ProfilerContributor.profile_id == profile.id)
-        )
-    ).scalars().all()
-    out = ProfileDetailOut.model_validate(profile)
-    out.contributors = [ContributorOut.model_validate(c) for c in contributors]
-    out.my_contributor_id = await _my_contributor_id(session, profile, contributors, user)
-    counts = await _area_counts(session, profile.id, out.my_contributor_id)
-    out.areas = [_area_out(a, counts) for a in areas]
-    return out
+    return await _profile_detail(session, profile, user)
 
 
 @router.post("/profiles/{profile_id}/contributors", status_code=201)
