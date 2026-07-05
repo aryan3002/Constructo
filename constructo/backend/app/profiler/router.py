@@ -51,6 +51,7 @@ from app.profiler.engine import (
     compute_and_persist_taste,
     propose_clarifications_for_area,
     propose_themes_for_area,
+    refresh_taste_and_maybe_propose,
 )
 from app.profiler.extraction import extract_reference_attributes, get_llm
 from app.profiler.pinterest import PinResolver, get_pin_resolver
@@ -614,6 +615,7 @@ async def add_reference(
     vision_url = body.source_url or storage.url_for(body.image_r2_key)
     await _run_vision(session, llm, ref, area, vision_url)
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -664,6 +666,7 @@ async def add_reference_from_link(
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -736,6 +739,7 @@ async def add_reference_from_preset(
     storage = get_storage()
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)
@@ -773,6 +777,7 @@ async def rank_reference(
     body: RankingIn,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
 ) -> dict:
     ref = await session.get(ProfilerReference, reference_id)
     if ref is None:
@@ -801,6 +806,7 @@ async def rank_reference(
                 note=body.note,
             )
         )
+    await refresh_taste_and_maybe_propose(session, llm, profile.id, ref.area_id)
     await session.commit()
     return {"ok": True}
 

@@ -196,3 +196,34 @@ async def propose_clarifications_for_area(
         session.add(row)
         created.append(row)
     return created
+
+
+async def refresh_taste_and_maybe_propose(
+    session: AsyncSession, llm: LLMClient, profile_id: UUID, area_id: UUID,
+) -> None:
+    """Called after every ranking/reference write, pre-commit.
+    1. compute_and_persist_taste (taste now persists on WRITE — Task 4 removes
+       the GET side-effect).
+    2. If model['ranked_count'] >= area.recommended_count AND
+       model['ranked_count'] != area.last_proposal_ranked_count:
+         propose_themes_for_area + (if model['confidence'] < 0.7 or
+         model['has_conflict']) propose_clarifications_for_area;
+         area.last_proposal_ranked_count = model['ranked_count'].
+    Proposal errors are logged, never raised (ranking must always save)."""
+    area = await session.get(ProfilerArea, area_id)
+    if area is None:
+        return
+    model = await compute_and_persist_taste(session, area)
+    if (
+        model["ranked_count"] >= area.recommended_count
+        and model["ranked_count"] != area.last_proposal_ranked_count
+    ):
+        try:
+            await propose_themes_for_area(session, llm, profile_id, area, model)
+            if model["confidence"] < 0.7 or model["has_conflict"]:
+                await propose_clarifications_for_area(session, llm, profile_id, area, model)
+            area.last_proposal_ranked_count = model["ranked_count"]
+        except Exception:
+            logger.exception(
+                "profiler: auto-propose failed for area %s (profile %s)", area_id, profile_id
+            )
