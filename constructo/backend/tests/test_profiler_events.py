@@ -16,7 +16,12 @@ from app.extraction.llm import FakeLLMClient
 from app.main import app
 from app.models import HomeownerSubRole, MemberStatus, PushToken, UserRole
 from app.models.homeowner_member import HomeownerMember
-from app.models.profiler import ProfilerProfile
+from app.models.profiler import (
+    ConflictStatus,
+    ProfilerClarification,
+    ProfilerConflict,
+    ProfilerProfile,
+)
 from app.profiler.events import notify_design_event
 from app.profiler.extraction import get_llm
 from app.push.sender import dry_run_log, reset_dry_run_log
@@ -288,3 +293,56 @@ async def test_illegal_transition_emits_nothing(client, factory, db_session):
         json={"action": "contractor_received"}, headers=auth(w["owner"]))
     assert resp.status_code in (403, 409)
     assert dry_run_log() == []
+
+
+# ---------------------------------------------------------------------------
+# Task 6: designer inbox summary badge
+# ---------------------------------------------------------------------------
+
+
+async def test_inbox_summary_counts_for_architects_company(client, factory, db_session):
+    w = await _world(client, factory, db_session)
+    # drive the brief to architect_review via the real API (owner sends it on)
+    resp = await client.post(f"/api/v1/design/briefs/{w['bid']}/approval",
+        json={"action": "send_to_architect"}, headers=auth(w["owner"]))
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "architect_review"
+
+    db_session.add(ProfilerClarification(
+        profile_id=w["pid"], area_id=w["area_id"],
+        question="Which oak finish?", answer="Light oak, matte.",
+    ))
+    db_session.add(ProfilerConflict(
+        profile_id=w["pid"], area_id=w["area_id"],
+        dimension="material", value="oak vs walnut",
+        resolution_status=ConflictStatus.deferred_to_architect,
+    ))
+    await db_session.commit()
+
+    got = await client.get("/api/v1/design/inbox-summary", headers=auth(w["architect"]))
+    assert got.status_code == 200
+    assert got.json() == {
+        "briefs_awaiting_signoff": 1,
+        "answered_clarifications": 1,
+        "deferred_conflicts": 1,
+    }
+
+
+async def test_inbox_summary_is_company_scoped(client, factory, db_session):
+    await _world(client, factory, db_session)  # unrelated company w/ signal, must not leak
+    other_company = await factory.company()
+    other_architect = await factory.user(company=other_company, role=UserRole.architect)
+
+    got = await client.get("/api/v1/design/inbox-summary", headers=auth(other_architect))
+    assert got.status_code == 200
+    assert got.json() == {
+        "briefs_awaiting_signoff": 0,
+        "answered_clarifications": 0,
+        "deferred_conflicts": 0,
+    }
+
+
+async def test_inbox_summary_forbidden_for_homeowner(client, factory, db_session):
+    w = await _world(client, factory, db_session)
+    resp = await client.get("/api/v1/design/inbox-summary", headers=auth(w["owner"]))
+    assert resp.status_code == 403

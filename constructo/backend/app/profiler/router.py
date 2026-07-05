@@ -76,6 +76,7 @@ from app.profiler.schemas import (
     DesignMediaPresignIn,
     DesignMediaPresignOut,
     DesignMediaUploadOut,
+    InboxSummaryOut,
     MaterializeOut,
     PresetOut,
     ProfileCreate,
@@ -621,6 +622,90 @@ async def list_profiles(
     stmt = stmt.order_by(ProfilerProfile.created_at.desc())
     rows = (await session.execute(stmt)).scalars().all()
     return [ProfileOut.model_validate(p) for p in rows]
+
+
+@router.get("/inbox-summary", response_model=InboxSummaryOut)
+async def get_inbox_summary(
+    user: User = Depends(require_role(*_EDIT_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> InboxSummaryOut:
+    """Designer badge counts for the caller's company (contractor-side cockpit).
+
+    State-computed, no read-tracking — a static top-level path, kept above the
+    dynamic ``/profiles/{profile_id}``-style routes so it can never be shadowed.
+    """
+    briefs_awaiting_signoff = (
+        await session.execute(
+            select(func.count(ProfilerBrief.id))
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerBrief.profile_id)
+            .where(
+                ProfilerBrief.state == BriefState.architect_review,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalar_one()
+
+    # "Answered clarifications the architect hasn't acted on yet" is approximated
+    # as: answered clarifications on company profiles, EXCLUDING profiles whose
+    # latest brief (max version) is already locked — once locked, the architect
+    # has already closed the loop on that profile's clarifications. Two-step:
+    # (1) per profile, find the max brief version; (2) of those latest briefs,
+    # which ones are locked; exclude those profiles from the count below.
+    latest_version_per_profile = (
+        select(
+            ProfilerBrief.profile_id,
+            func.max(ProfilerBrief.version).label("max_version"),
+        )
+        .group_by(ProfilerBrief.profile_id)
+        .subquery()
+    )
+    locked_latest_profile_ids = (
+        await session.execute(
+            select(ProfilerBrief.profile_id)
+            .join(
+                latest_version_per_profile,
+                (ProfilerBrief.profile_id == latest_version_per_profile.c.profile_id)
+                & (ProfilerBrief.version == latest_version_per_profile.c.max_version),
+            )
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerBrief.profile_id)
+            .where(
+                ProfilerBrief.state == BriefState.locked,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalars().all()
+    answered_clarifications_stmt = (
+        select(func.count(ProfilerClarification.id))
+        .join(ProfilerProfile, ProfilerProfile.id == ProfilerClarification.profile_id)
+        .where(
+            ProfilerClarification.answer.is_not(None),
+            ProfilerProfile.company_id == user.company_id,
+        )
+    )
+    if locked_latest_profile_ids:
+        answered_clarifications_stmt = answered_clarifications_stmt.where(
+            ProfilerClarification.profile_id.notin_(locked_latest_profile_ids)
+        )
+    answered_clarifications = (
+        await session.execute(answered_clarifications_stmt)
+    ).scalar_one()
+
+    deferred_conflicts = (
+        await session.execute(
+            select(func.count(ProfilerConflict.id))
+            .join(ProfilerProfile, ProfilerProfile.id == ProfilerConflict.profile_id)
+            .where(
+                ProfilerConflict.resolution_status == ConflictStatus.deferred_to_architect,
+                ProfilerProfile.company_id == user.company_id,
+            )
+        )
+    ).scalar_one()
+
+    return InboxSummaryOut(
+        briefs_awaiting_signoff=briefs_awaiting_signoff,
+        answered_clarifications=answered_clarifications,
+        deferred_conflicts=deferred_conflicts,
+    )
 
 
 async def _profile_detail(
