@@ -1,5 +1,7 @@
 # Phase 0 — Land the In-Flight Design Fix Pass
 
+> **STATUS: ✅ COMPLETE.** Merged to main as PR #243 (`4936256`, 2026-07-05) by the founder's parallel session before this plan executed. Kept for the record; Phase 1 is the active next phase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land the ~250-line uncommitted working-tree pass (14 modified files + 1 untracked test) that fixes the P0 Design-tab bugs — dead `file://` reference uploads, the Pinterest og:image attribute-order bug (every real pin failed to parse), stale pin.it messaging, wrong ranked counters — as a reviewed, CI-green PR.

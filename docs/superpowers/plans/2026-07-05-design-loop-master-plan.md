@@ -25,7 +25,7 @@
 
 | Phase | What | Detailed plan | Depends on |
 |---|---|---|---|
-| 0 | Land the in-flight fix pass (incl. the Pinterest parse fix = "Pinterest doesn't work" root cause) | `2026-07-05-design-loop-phase0-land-inflight.md` ✅ ready | — |
+| 0 | Land the in-flight fix pass (incl. the Pinterest parse fix = "Pinterest doesn't work" root cause) | ✅ **DONE — merged as PR #243 (`4936256`) 2026-07-05**; plan doc kept for the record | — |
 | 1 | Backend ignition + authority + hygiene | `2026-07-05-design-loop-phase1-ignition.md` ✅ ready | 0 |
 | 2 | Design events → push + Updates + activity + badges | expand JIT | 1 |
 | 3 | Designer cockpit completion (mobile architect + web) | expand JIT | 1 (2 for badges) |
