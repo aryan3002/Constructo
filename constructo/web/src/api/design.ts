@@ -127,6 +127,13 @@ export interface GenerateBriefOut {
   state: string
 }
 
+/** DesignInboxSummary — GET /inbox-summary: what waits on the designer right now. */
+export interface DesignInboxSummary {
+  briefs_awaiting_signoff: number
+  answered_clarifications: number
+  deferred_conflicts: number
+}
+
 // ---------------------------------------------------------------------------
 // HTTP helper
 // ---------------------------------------------------------------------------
@@ -425,6 +432,24 @@ export const designApi = {
     return call<GenerateBriefOut>(`/api/v1/design/profiles/${encodeURIComponent(profileId)}/brief`, {
       method: 'POST',
     })
+  },
+
+  /**
+   * GET /api/v1/design/inbox-summary
+   * Contractor-side counts of what waits on the designer: briefs awaiting
+   * sign-off, answered clarifications, conflicts deferred to the designer.
+   * Throws on error (incl. 404 when the backend predates the endpoint) —
+   * callers render nothing on failure.
+   */
+  async inboxSummary(): Promise<DesignInboxSummary> {
+    if (USE_MOCKS) {
+      return Promise.resolve({
+        briefs_awaiting_signoff: 1,
+        answered_clarifications: 0,
+        deferred_conflicts: 0,
+      })
+    }
+    return call<DesignInboxSummary>('/api/v1/design/inbox-summary')
   },
 
   /**

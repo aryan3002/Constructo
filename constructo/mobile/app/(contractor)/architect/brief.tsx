@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { AP, SPACE, type Status } from '../../../src/theme/tokens'
+import { design as designEngine } from '../../../src/api/client'
 import { design, profileStatusLabel, type ProfileDetail, type ProfileStatus } from '../../../src/api/ownerDesign'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Body, Card, Small, StatusPill, Title } from '../../../src/ui'
@@ -44,6 +45,24 @@ export default function DesignerBrief() {
     },
   })
 
+  // Inbox badge — what waits on the designer right now. Best-effort: an error
+  // (or a backend without the endpoint yet → 404) simply renders nothing.
+  const inboxQ = useQuery({
+    queryKey: ['design', 'inbox'],
+    queryFn: () => designEngine.inboxSummary(),
+    retry: false,
+  })
+  const inboxLabel = useMemo(() => {
+    const s = inboxQ.data
+    if (!s) return null
+    const parts = [
+      s.briefs_awaiting_signoff > 0 ? `${s.briefs_awaiting_signoff} waiting for sign-off` : null,
+      s.answered_clarifications > 0 ? `${s.answered_clarifications} new answers` : null,
+      s.deferred_conflicts > 0 ? `${s.deferred_conflicts} deferred to you` : null,
+    ].filter((p): p is string => p !== null)
+    return parts.length > 0 ? parts.join(' · ') : null
+  }, [inboxQ.data])
+
   const rows = q.data ?? []
   const hasConflict = useMemo(() => (d: ProfileDetail | null) => !!d?.areas?.some((a) => a.has_conflict), [])
 
@@ -53,6 +72,12 @@ export default function DesignerBrief() {
       contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="Homeowner briefs" sub="Taste → themes → room directions" />
+
+      {inboxLabel ? (
+        <View style={{ flexDirection: 'row' }}>
+          <StatusPill status="info" size="sm" label={inboxLabel} />
+        </View>
+      ) : null}
 
       <View style={{ backgroundColor: theme.colors.secondaryContainer, borderRadius: theme.radii.hero, padding: SPACE.lg, gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>

@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthContext'
 import { chatApi } from '../src/api/chat'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { I18nProvider } from '../src/i18n/I18nProvider'
+import { designPushRoute } from '../src/push/design_route.util'
 import { useAppFonts } from '../src/theme/fonts'
 
 export default function RootLayout() {
@@ -117,7 +118,7 @@ function ChatPushDeepLink() {
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as
-        | { conversation_id?: string; type?: string }
+        | { conversation_id?: string; type?: string; url?: string; audience?: string }
         | undefined
       if (!data) return
 
@@ -139,6 +140,16 @@ function ChatPushDeepLink() {
           // falls back to addressing by conv id in the screen.
           router.push({ pathname: '/(contractor)/owner/chat/[id]', params: { id: convId } })
         }
+        return
+      }
+
+      // Design-event notification (see `app.push.sender` design callers) → the
+      // brief/profile screen. Can target either a homeowner or (via
+      // `audience: 'designer'`) the contractor-side architect, so this check
+      // runs before the homeowner-only gate below.
+      const designRoute = designPushRoute(data)
+      if (designRoute) {
+        router.push(designRoute as never)
         return
       }
 

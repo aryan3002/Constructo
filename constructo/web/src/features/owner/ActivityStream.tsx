@@ -42,6 +42,8 @@ export function linkFor(item: ActivityItem): string {
       return '/approvals' // TODO(nav): no /decision/:id route yet
     case 'finding':
       return `/health/${item.link.id}`
+    case 'design_brief':
+      return '/designer?tab=intake'
     default:
       return '/owner'
   }
@@ -53,7 +55,9 @@ const SEVERITY_STATUS: Record<ActivitySeverity, Status> = {
   info: 'info',
 }
 
-/** Kind-specific glyph; falls back to the severity icon. */
+/** Kind-specific glyph; falls back to the severity icon.
+ *  `design_update` intentionally uses the severity default (info →
+ *  InfoSquareIcon): no palette-ish glyph exists in ui/icons yet. */
 function iconFor(item: ActivityItem): (p: { title?: string }) => ReactNode {
   if (item.kind === 'photo_shared') return PhotoIcon
   if (item.kind === 'homeowner_request') return MessageIcon
