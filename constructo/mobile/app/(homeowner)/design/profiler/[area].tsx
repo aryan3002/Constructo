@@ -60,6 +60,7 @@ import {
 import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
 import { CONFLICT_STR, conflictSides, resolvedSummary } from '../../../../src/homeowner/conflicts.util'
 import { extractPinterestUrls, PIN_PASTE_STR } from '../../../../src/homeowner/pin_paste.util'
+import { QUICKSTART_STR } from '../../../../src/homeowner/quickstart.util'
 import {
   decidedAttribution,
   THEME_DECISION_STR,
@@ -858,7 +859,27 @@ export default function AreaRankScreen() {
                 </View>
               ))}
             </View>
-          ) : null}
+          ) : (
+            /* No references yet — invite the 1-minute quick-start deck instead
+               of a bare empty grid. */
+            <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
+              <Eyebrow style={{ color: c.secondary }}>{QUICKSTART_STR.en.entryTitle}</Eyebrow>
+              <Body style={{ marginTop: 5, color: c.text }}>{QUICKSTART_STR.en.entryBody}</Body>
+              <Button
+                title={QUICKSTART_STR.en.entryCta}
+                variant="primary"
+                size="md"
+                leading={<Feather name="zap" size={16} color={c.onAccent} />}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(homeowner)/design/profiler/quickstart',
+                    params: { pid: pid as string, area: area as string, key: key as string },
+                  })
+                }
+                style={{ marginTop: SPACE.md }}
+              />
+            </Card>
+          )}
         </View>
       ) : null}
 
