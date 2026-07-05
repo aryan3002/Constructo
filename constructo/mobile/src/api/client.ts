@@ -414,6 +414,8 @@ export interface ProfilerConflict {
   area_id: string
   dimension: string
   value: string
+  contributor_a_id: string | null
+  contributor_b_id: string | null
   resolution_status: string
   decision_note: string | null
 }
@@ -559,6 +561,13 @@ export const design = {
     request<ProfilerTheme[]>(`/api/v1/design/profiles/${profileId}/areas/${areaId}/themes`),
   conflicts: (profileId: string) =>
     request<ProfilerConflict[]>(`/api/v1/design/profiles/${profileId}/conflicts`),
+  /** Homeowner "settle this together" sheet — owner/co-owner only (403
+   *  approve_forbidden + {can_comment:true} otherwise). */
+  resolveConflict: (id: string, body: { resolution: string; note?: string }) =>
+    request<ProfilerConflict>(`/api/v1/design/conflicts/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   brief: (profileId: string, audience: 'homeowner' | 'architect' | 'contractor' = 'homeowner') =>
     request<ProfilerBriefRendering>(
       `/api/v1/design/profiles/${profileId}/brief?audience=${audience}`,

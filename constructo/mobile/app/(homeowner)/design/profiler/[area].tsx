@@ -29,8 +29,8 @@ import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { design } from '../../../../src/api/client'
-import type { ProfilerReference } from '../../../../src/api/client'
+import { ApiError, design, homeowner } from '../../../../src/api/client'
+import type { ProfilerConflict, ProfilerReference } from '../../../../src/api/client'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import {
@@ -56,6 +56,7 @@ import {
   RANKING_TAGS,
 } from '../../../../src/homeowner/design_profiler.util'
 import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
+import { CONFLICT_STR, conflictSides, resolvedSummary } from '../../../../src/homeowner/conflicts.util'
 
 // ---------------------------------------------------------------------------
 // Confidence pill
@@ -477,6 +478,23 @@ export default function AreaRankScreen() {
   const openClars = openClarifications(areaClars)
   const answeredClars = areaClars.filter((cl) => cl.answer != null)
 
+  // Conflicts — this area's slice of "your styles differ", settled in the
+  // "Settle this together" sheet below.
+  const conflictsQ = useQuery({
+    queryKey: ['design', 'profiler', 'conflicts', pid],
+    queryFn: () => design.conflicts(pid as string),
+    enabled: !!pid,
+  })
+  const areaConflicts = (conflictsQ.data ?? []).filter((cf) => cf.area_id === area)
+  const pendingConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'pending')
+  const settledConflicts = areaConflicts.filter((cf) => cf.resolution_status !== 'pending')
+
+  const capQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capQ.data?.can_approve ?? true
+
   const refs = refsQ.data ?? []
   const myContributorId = profileQ.data?.my_contributor_id ?? null
   const canRank = !!myContributorId
@@ -489,7 +507,6 @@ export default function AreaRankScreen() {
   const recommended = areaDetail?.recommended_count ?? 6
   const progressPct =
     recommended > 0 ? Math.min(100, Math.round((ranked / recommended) * 100)) : 0
-  const hasConflict = areaDetail?.has_conflict ?? false
   const isLowInput = refs.length === 0
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
@@ -589,6 +606,36 @@ export default function AreaRankScreen() {
       void refresh()
     },
     onError: (e: Error) => toast(e.message),
+  })
+
+  // "Settle this together" sheet — one conflict at a time.
+  const [conflictSheet, setConflictSheet] = useState<ProfilerConflict | null>(null)
+  const [conflictNote, setConflictNote] = useState('')
+  const [conflictReadOnly, setConflictReadOnly] = useState(false)
+  const contributors = profileQ.data?.contributors ?? []
+
+  const resolveConflictMut = useMutation({
+    mutationFn: (body: { resolution: string; note?: string }) =>
+      design.resolveConflict((conflictSheet as ProfilerConflict).id, body),
+    onSuccess: (_result, variables) => {
+      toast(
+        variables.resolution === 'defer_to_architect'
+          ? CONFLICT_STR.en.deferredToast
+          : CONFLICT_STR.en.resolvedToast,
+        'check',
+      )
+      setConflictSheet(null)
+      setConflictNote('')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'conflicts', pid] })
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'detail', pid] })
+    },
+    onError: (e: unknown) => {
+      if (e instanceof ApiError && e.code === 'approve_forbidden') {
+        setConflictReadOnly(true)
+      } else {
+        toast((e as Error).message)
+      }
+    },
   })
 
   const adding = addByUpload.isPending
@@ -835,21 +882,45 @@ export default function AreaRankScreen() {
                 </Card>
               )}
 
-              {hasConflict ? (
-                <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
-                  <Eyebrow style={{ color: c.warn, marginBottom: 6 }}>Open questions</Eyebrow>
-                  <Small style={{ color: c.text }}>
-                    Some preferences differ for {areaLabel.toLowerCase()}. Resolve them together.
-                  </Small>
-                  <Button
-                    title="Answer in design chat"
-                    variant="ghost"
-                    size="md"
-                    leading={<Feather name="message-circle" size={16} color={c.warn} />}
-                    onPress={() => toast('Design chat — coming soon.')}
-                    style={{ marginTop: SPACE.sm }}
-                  />
-                </Card>
+              {pendingConflicts.length > 0 ? (
+                <View style={{ gap: SPACE.sm }}>
+                  {pendingConflicts.map((cf) => {
+                    const sides = conflictSides(cf, contributors, myContributorId)
+                    return (
+                      <Card key={cf.id} padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
+                        <Eyebrow style={{ color: c.warn, marginBottom: 6 }}>
+                          Your styles differ
+                        </Eyebrow>
+                        <Small style={{ color: c.text }}>
+                          {sides.label}: {sides.a.name} leans {sides.a.value.toLowerCase()}, {sides.b.name}{' '}
+                          leans {sides.b.value.toLowerCase()}.
+                        </Small>
+                        <Button
+                          title={CONFLICT_STR.en.cardButton}
+                          variant="ghost"
+                          size="md"
+                          leading={<Feather name="message-circle" size={16} color={c.warn} />}
+                          onPress={() => {
+                            setConflictReadOnly(!canApprove)
+                            setConflictNote('')
+                            setConflictSheet(cf)
+                          }}
+                          style={{ marginTop: SPACE.sm }}
+                        />
+                      </Card>
+                    )
+                  })}
+                </View>
+              ) : null}
+
+              {settledConflicts.length > 0 ? (
+                <View style={{ gap: 4 }}>
+                  {settledConflicts.map((cf) => (
+                    <Small key={cf.id} muted>
+                      {resolvedSummary(cf.decision_note, null)}
+                    </Small>
+                  ))}
+                </View>
               ) : null}
             </>
           )}
@@ -1095,6 +1166,149 @@ export default function AreaRankScreen() {
             />
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* ── "Settle this together" conflict sheet ───────────────────────── */}
+      <Modal
+        visible={!!conflictSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setConflictSheet(null)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+            onPress={() => setConflictSheet(null)}
+          >
+            <Pressable
+              style={{
+                backgroundColor: c.card,
+                borderTopLeftRadius: theme.radii.card,
+                borderTopRightRadius: theme.radii.card,
+                padding: SPACE.lg,
+                paddingBottom: insets.bottom + SPACE.lg,
+                gap: SPACE.md,
+                maxHeight: '85%',
+              }}
+              onPress={() => {}}
+            >
+              {conflictSheet ? (
+                <ScrollView contentContainerStyle={{ gap: SPACE.md }}>
+                  <Eyebrow style={{ color: c.textMute }}>{CONFLICT_STR.en.sheetEyebrow}</Eyebrow>
+                  <BodyStrong>{CONFLICT_STR.en.sheetTitle}</BodyStrong>
+
+                  {(() => {
+                    const sides = conflictSides(conflictSheet, contributors, myContributorId)
+                    return (
+                      <>
+                        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                          <Card padded style={{ flex: 1 }}>
+                            <Micro muted>{sides.a.name}</Micro>
+                            <Body style={{ marginTop: 4, fontWeight: '600' }}>{sides.a.value}</Body>
+                          </Card>
+                          <Card padded style={{ flex: 1 }}>
+                            <Micro muted>{sides.b.name}</Micro>
+                            <Body style={{ marginTop: 4, fontWeight: '600' }}>{sides.b.value}</Body>
+                          </Card>
+                        </View>
+
+                        {conflictReadOnly ? (
+                          <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.quiet }}>
+                            <Small muted>{CONFLICT_STR.en.readOnlyNotice}</Small>
+                          </Card>
+                        ) : (
+                          <>
+                            <Button
+                              title={CONFLICT_STR.en.keepA(sides.a.name)}
+                              variant="primary"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'keep_a'
+                              }
+                              onPress={() => resolveConflictMut.mutate({ resolution: 'keep_a' })}
+                            />
+                            <Button
+                              title={CONFLICT_STR.en.keepB(sides.b.name)}
+                              variant="primary"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'keep_b'
+                              }
+                              onPress={() => resolveConflictMut.mutate({ resolution: 'keep_b' })}
+                            />
+
+                            <View style={{ gap: SPACE.sm }}>
+                              <Small muted>{CONFLICT_STR.en.compromiseLabel}</Small>
+                              <TextInput
+                                value={conflictNote}
+                                onChangeText={setConflictNote}
+                                placeholder={CONFLICT_STR.en.compromisePlaceholder}
+                                placeholderTextColor={c.textMute}
+                                multiline
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: c.line,
+                                  borderRadius: theme.radii.control,
+                                  paddingHorizontal: SPACE.md,
+                                  paddingVertical: SPACE.sm,
+                                  color: c.text,
+                                  backgroundColor: c.paper,
+                                  minHeight: 44,
+                                }}
+                              />
+                              <Button
+                                title={CONFLICT_STR.en.compromiseCta}
+                                variant="secondary"
+                                size="md"
+                                loading={
+                                  resolveConflictMut.isPending &&
+                                  resolveConflictMut.variables?.resolution === 'compromise'
+                                }
+                                onPress={() => {
+                                  if (conflictNote.trim().length >= 3) {
+                                    resolveConflictMut.mutate({
+                                      resolution: 'compromise',
+                                      note: conflictNote.trim(),
+                                    })
+                                  }
+                                }}
+                              />
+                            </View>
+
+                            <Button
+                              title={CONFLICT_STR.en.deferLabel}
+                              variant="ghost"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'defer_to_architect'
+                              }
+                              onPress={() =>
+                                resolveConflictMut.mutate({ resolution: 'defer_to_architect' })
+                              }
+                            />
+                          </>
+                        )}
+
+                        <Button
+                          title={CONFLICT_STR.en.cancel}
+                          variant="ghost"
+                          size="md"
+                          onPress={() => setConflictSheet(null)}
+                        />
+                      </>
+                    )
+                  })()}
+                </ScrollView>
+              ) : null}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   )
