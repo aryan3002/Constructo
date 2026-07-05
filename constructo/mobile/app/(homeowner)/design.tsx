@@ -18,13 +18,15 @@
  */
 import { useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
 import { ApiError, design, homeowner } from '../../src/api/client'
+import { chatApi } from '../../src/api/chat'
 import type { DesignSelection, Drawing } from '../../src/api/types'
+import { useAuth } from '../../src/auth/AuthContext'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
 import {
@@ -48,9 +50,13 @@ import {
 import {
   areaProgressLabel,
   confidenceBand,
+  designChatDraft,
+  designChatRoute,
   groupAreasByKind,
   PROFILER_STR,
 } from '../../src/homeowner/design_profiler.util'
+import { briefStateCard } from '../../src/homeowner/brief_state.util'
+import { clarCountLabel, openClarifications } from '../../src/homeowner/clarifications.util'
 import {
   DESIGN_STR,
   drawingDate,
@@ -231,6 +237,8 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   const c = theme.colors
   const router = useRouter()
   const toast = useToast()
+  const qc = useQueryClient()
+  const { siteId: authSiteId } = useAuth()
 
   // Fetch the profiler profile by site
   const propQ = useQuery({
@@ -239,11 +247,84 @@ function DPHubSection({ profileId }: { profileId?: string }) {
   })
   const siteId = propQ.data?.site_id
 
+  // "Design chat" → her real builder/crew thread, not a stub. Resolved the
+  // same way the Messages inbox resolves it (get-or-create on the shared
+  // queryKey, so a prior inbox visit is a cache hit) — then a deep-link with
+  // a prefilled draft so she never faces a blank composer.
+  const openDesignChat = async (draft: string) => {
+    if (!authSiteId) {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+      return
+    }
+    try {
+      const conv = await qc.fetchQuery({
+        queryKey: ['homeowner', 'channel', authSiteId],
+        queryFn: () => chatApi.homeownerChannel(authSiteId),
+      })
+      router.push(designChatRoute(conv, draft))
+    } catch {
+      toast('Pick your project chat.')
+      router.push('/(homeowner)/messages')
+    }
+  }
+
   const q = useQuery({
     queryKey: ['design', 'profiler', 'by-site', siteId],
     queryFn: () => design.profileBySite(siteId as string),
     enabled: !!siteId,
     retry: false,
+  })
+  const pid = q.data?.id
+
+  // State-aware "whose move is it" banner — same brief rendering the brief
+  // screen uses (design.brief), so the state is always in sync. A 404 (no
+  // brief shared yet) is a calm null, not an error.
+  const briefQ = useQuery({
+    queryKey: ['design', 'profiler', 'brief', pid, 'homeowner'],
+    queryFn: () => design.brief(pid as string, 'homeowner'),
+    enabled: !!pid,
+    retry: false,
+  })
+  const briefState = briefQ.data?.state ?? null
+  const card = briefState ? briefStateCard(briefState) : null
+  const noBriefYet = briefQ.isError && (briefQ.error as ApiError | null)?.status === 404
+
+  // Gates the first-brief CTA to owners/co-owners — a family member sees an
+  // explainer instead (only an owner can kick off generation).
+  const capsQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capsQ.data?.can_approve ?? false
+
+  // "Questions for you" — open clarifications the AI needs answered.
+  const clarQ = useQuery({
+    queryKey: ['design', 'profiler', 'clarifications', pid],
+    queryFn: () => design.clarifications(pid as string),
+    enabled: !!pid,
+    retry: false,
+  })
+  const openClars = openClarifications(clarQ.data ?? [])
+
+  const regenMut = useMutation({
+    mutationFn: () => design.generateBrief(pid as string),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    },
+    onError: (e: unknown) => toast((e as Error).message),
+  })
+
+  // First-brief generation (brief 404s — nothing to regenerate yet). Separate
+  // from regenMut because only this path navigates straight to the new brief;
+  // the in-banner "Regenerate brief" CTA (revision_requested) stays on DPHub.
+  const genFirstMut = useMutation({
+    mutationFn: () => design.generateBrief(pid as string),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+      router.push('/(homeowner)/design/brief')
+    },
+    onError: (e: unknown) => toast((e as Error).message),
   })
 
   const [openCats, setOpenCats] = useState<Record<string, boolean>>({ interior: true })
@@ -338,15 +419,115 @@ function DPHubSection({ profileId }: { profileId?: string }) {
             style={{ flex: 1 }}
           />
           <Button
-            title="Design chat (soon)"
-            variant="ghost"
+            title="Design chat"
+            variant="secondary"
             size="md"
             leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
-            onPress={() => toast('Coming soon — design chat is not yet backed by the engine.')}
+            onPress={() =>
+              void openDesignChat(designChatDraft({ briefVersion: briefQ.data?.version ?? undefined }))
+            }
             style={{ flex: 1 }}
           />
         </View>
       </Card>
+
+      {/* Brief state banner — always says whose move it is */}
+      {card ? (
+        <Card padded>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACE.sm }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <BodyStrong>{card.title}</BodyStrong>
+              <Small muted>{card.body}</Small>
+            </View>
+            <StatusPill status={card.tone} size="sm" />
+          </View>
+          {card.cta ? (
+            <View style={{ marginTop: SPACE.md }}>
+              {card.cta === 'view_brief' ? (
+                <Button
+                  title="View brief"
+                  variant="secondary"
+                  size="md"
+                  leading={<Feather name="clipboard" size={16} color={c.accentDeep} />}
+                  onPress={() => router.push('/(homeowner)/design/brief')}
+                />
+              ) : (
+                <Button
+                  title="Regenerate brief"
+                  variant="secondary"
+                  size="md"
+                  loading={regenMut.isPending}
+                  leading={<Feather name="refresh-cw" size={16} color={c.accentDeep} />}
+                  onPress={() => regenMut.mutate()}
+                />
+              )}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {/* First-brief CTA — no brief exists yet (404) but at least one area has
+          enough ranked references to be "ready". Owners/co-owners can kick off
+          generation; everyone else sees an honest explainer instead. */}
+      {noBriefYet && areas.some((a) => a.status === 'ready') ? (
+        <Card padded>
+          {canApprove ? (
+            <>
+              <BodyStrong>Your first areas are ready</BodyStrong>
+              <Small muted style={{ marginTop: 4 }}>
+                We can put together a whole-house brief from what's ranked so far.
+              </Small>
+              <View style={{ marginTop: SPACE.md }}>
+                <Button
+                  title="Get my brief"
+                  variant="primary"
+                  size="md"
+                  loading={genFirstMut.isPending}
+                  leading={<Feather name="file-text" size={16} color={c.onAccent} />}
+                  onPress={() => genFirstMut.mutate()}
+                />
+              </View>
+            </>
+          ) : (
+            <Small muted>An owner can generate the brief when you're ready.</Small>
+          )}
+        </Card>
+      ) : null}
+
+      {/* "Questions for you" — open clarifications, press → area's AI Notes tab */}
+      {openClars.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={clarCountLabel(openClars.length)}
+          onPress={() => {
+            const first = openClars[0]
+            const area = areas.find((a) => a.id === first.area_id)
+            if (!area) {
+              // No area match (e.g. a whole-profile question) — nothing to
+              // deep-link into yet, so fall back to the profiler overview.
+              router.push('/(homeowner)/design/profiler')
+              return
+            }
+            router.push({
+              pathname: '/(homeowner)/design/profiler/[area]',
+              params: { area: area.id, pid: q.data!.id, key: area.area_key, tab: 'notes' },
+            })
+          }}
+        >
+          <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md }}>
+              <Feather name="help-circle" size={18} color={c.secondary} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 3 }}>
+                <BodyStrong>{clarCountLabel(openClars.length)}</BodyStrong>
+                <Small muted numberOfLines={1}>
+                  {openClars[0].question}
+                </Small>
+              </View>
+              <Feather name="chevron-right" size={18} color={c.textMute} style={{ marginTop: 2 }} />
+            </View>
+          </Card>
+        </Pressable>
+      ) : null}
 
       {/* Scope + Contributors row */}
       <View style={{ flexDirection: 'row', gap: SPACE.sm }}>

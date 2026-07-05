@@ -10,7 +10,7 @@
  * ledger slice will light the cards up). The composer is text + reply for now;
  * camera/voice/@ask arrive with their slices.
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
@@ -125,18 +125,34 @@ export default function HomeownerThread() {
   const router = useRouter()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
 
-  const { id, kind, title, siteName } = useLocalSearchParams<{
+  const { id, kind, title, siteName, draft } = useLocalSearchParams<{
     id: string
     kind: string
     title: string
     siteName: string
+    draft: string
   }>()
 
   const headerTitle = kind === 'homeowner' ? t.builder : title || t.builder
 
   const { siteId, me } = useAuth()
   const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
+  // Seeded from the deep-link's ?draft= (e.g. a "Design chat" button
+  // elsewhere in the app). Tabs are persistent — this screen may already be
+  // mounted from an earlier visit, so a useState initializer alone only ever
+  // fires on first mount and misses every later deep-link into an
+  // already-open thread. Instead: seed in an effect keyed on the draft param,
+  // tracking the last value we seeded in a ref so a re-render/re-focus with
+  // the SAME param never stomps text she's since typed or cleared, and only
+  // a genuinely NEW non-empty draft value seeds again.
   const [text, setText] = useState('')
+  const lastSeededDraft = useRef<string | null>(null)
+  useEffect(() => {
+    if (typeof draft !== 'string' || draft.length === 0) return
+    if (lastSeededDraft.current === draft) return
+    lastSeededDraft.current = draft
+    setText(draft)
+  }, [draft])
 
   // The builder channel (kind=homeowner, has a site) surfaces its published
   // Updates + pending Decisions as a pinned summary STRIP above the pure chat —

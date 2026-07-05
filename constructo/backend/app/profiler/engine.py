@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.extraction.llm import LLMClient
 from app.models.profiler import (
+    AreaStatus,
     ConflictStatus,
     ProfilerArea,
     ProfilerClarification,
@@ -132,11 +133,25 @@ async def _sync_conflicts(
 
 async def compute_and_persist_taste(session: AsyncSession, area: ProfilerArea) -> dict:
     """build_taste_model over _area_signals; writes area.taste_model/confidence/
-    has_conflict (no commit). Returns the full model dict."""
+    has_conflict/status (no commit). Returns the full model dict.
+
+    Status is derived deterministically from the model and is monotonic —
+    ready never regresses to in_progress (or not_started) on a later call.
+    All six call sites of this function (via refresh_taste_and_maybe_propose)
+    are reference/ranking writes, so the hook merely running at all implies
+    the area has activity; there is no dict field for "reference exists"
+    (taste.py's build_taste_model only reports ranked_count), so a
+    ranked_count of 0 here still means "some write just happened" and is
+    enough to leave not_started for in_progress.
+    """
     rankings, attrs = await _area_signals(session, area.id)
     model = build_taste_model(rankings, attrs, area.recommended_count)
     area.taste_model = model["dimensions"]
     area.confidence = model["confidence"]
+    if model["ranked_count"] >= area.recommended_count:
+        area.status = AreaStatus.ready
+    elif area.status != AreaStatus.ready:
+        area.status = AreaStatus.in_progress
     area.has_conflict = model["has_conflict"]
     return model
 

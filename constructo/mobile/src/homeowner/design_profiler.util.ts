@@ -57,6 +57,51 @@ export const RANKING_TAGS = [
   'Too dark', 'Too busy', 'Too expensive', 'Hard to maintain',
 ] as const
 
+const _DESIGN_CHAT_DRAFT_STR = {
+  en: {
+    area: (area: string) => `About our ${area} design: `,
+    brief: (v: number) => `About our design brief v${v}: `,
+    plain: 'About our design: ',
+  },
+  hi: {
+    area: (area: string) => `हमारी ${area} डिज़ाइन के बारे में: `,
+    brief: (v: number) => `हमारे डिज़ाइन ब्रीफ़ v${v} के बारे में: `,
+    plain: 'हमारे डिज़ाइन के बारे में: ',
+  },
+} as const
+
+/** A prefilled opener for "ask the crew about this" — deep-linked into the
+ *  design chat composer so she never faces a blank box. Area label wins over
+ *  brief version (the more specific context); neither → a plain opener. */
+export function designChatDraft(
+  ctx: { areaLabel?: string; briefVersion?: number },
+  lang: 'en' | 'hi' = 'en',
+): string {
+  const s = _DESIGN_CHAT_DRAFT_STR[lang] ?? _DESIGN_CHAT_DRAFT_STR.en
+  if (ctx.areaLabel) return s.area(ctx.areaLabel)
+  if (ctx.briefVersion != null) return s.brief(ctx.briefVersion)
+  return s.plain
+}
+
+/** The route to her builder/crew thread with a prefilled draft — same params
+ *  shape `messages.tsx`'s `open()` pushes, so the thread header renders
+ *  identically whether she arrives from the inbox or from a design screen. */
+export function designChatRoute(
+  conv: { id: string; title?: string | null; site_name?: string | null },
+  draft: string,
+): { pathname: '/(homeowner)/messages/[id]'; params: Record<string, string> } {
+  return {
+    pathname: '/(homeowner)/messages/[id]',
+    params: {
+      id: conv.id,
+      kind: 'homeowner',
+      title: conv.title ?? '',
+      siteName: conv.site_name ?? '',
+      draft,
+    },
+  }
+}
+
 export const PROFILER_STR = {
   en: {
     intakeTitle: 'Your design profile',

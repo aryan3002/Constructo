@@ -20,17 +20,18 @@
  * Membrane: canRank only when my_contributor_id is set; others see read-only.
  * Per-reference state is isolated in RefRankRow so ratings don't bleed.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import type { ViewStyle } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { design } from '../../../../src/api/client'
-import type { ProfilerReference } from '../../../../src/api/client'
+import { ApiError, design, homeowner } from '../../../../src/api/client'
+import type { ProfilerConflict, ProfilerReference, ProfilerTheme, ThemeDecisionAction } from '../../../../src/api/client'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import {
@@ -46,6 +47,7 @@ import {
   Screen,
   SegmentedTabs,
   Small,
+  StatusPill,
   SubHeader,
   useToast,
 } from '../../../../src/ui'
@@ -55,6 +57,15 @@ import {
   PROFILER_STR,
   RANKING_TAGS,
 } from '../../../../src/homeowner/design_profiler.util'
+import { CLAR_STR, openClarifications } from '../../../../src/homeowner/clarifications.util'
+import { CONFLICT_STR, conflictSides, resolvedSummary } from '../../../../src/homeowner/conflicts.util'
+import { extractPinterestUrls, PIN_PASTE_STR } from '../../../../src/homeowner/pin_paste.util'
+import { QUICKSTART_STR } from '../../../../src/homeowner/quickstart.util'
+import {
+  decidedAttribution,
+  THEME_DECISION_STR,
+  themeDecisionTone,
+} from '../../../../src/homeowner/theme_decisions.util'
 
 // ---------------------------------------------------------------------------
 // Confidence pill
@@ -350,6 +361,77 @@ function RefGridTile({
 }
 
 // ---------------------------------------------------------------------------
+// Clarification row (AI Notes tab) — open (question + answer box) or
+// answered (question + quiet answer). Isolated so per-row draft text
+// doesn't bleed between rows.
+// ---------------------------------------------------------------------------
+
+interface ClarificationRowProps {
+  id: string
+  question: string
+  answer: string | null
+  onAnswered: () => void
+}
+
+function ClarificationRow({ id, question, answer, onAnswered }: ClarificationRowProps) {
+  const { theme } = useTheme()
+  const c = theme.colors
+  const toast = useToast()
+  const S = CLAR_STR.en
+  const [draft, setDraft] = useState('')
+
+  const mut = useMutation({
+    mutationFn: () => design.answerClarification(id, draft.trim()),
+    onSuccess: () => {
+      toast(S.answeredToast, 'check')
+      onAnswered()
+    },
+    onError: (e: Error) => toast(e.message),
+  })
+
+  if (answer != null) {
+    return (
+      <View style={{ paddingVertical: SPACE.sm }}>
+        <Body style={{ fontWeight: '600', fontSize: 14 }}>{question}</Body>
+        <Small muted style={{ marginTop: 3 }}>{answer}</Small>
+      </View>
+    )
+  }
+
+  return (
+    <View style={{ paddingVertical: SPACE.sm, gap: SPACE.sm }}>
+      <Body style={{ fontWeight: '600', fontSize: 14 }}>{question}</Body>
+      <TextInput
+        value={draft}
+        onChangeText={setDraft}
+        placeholder={S.answerPlaceholder}
+        placeholderTextColor={c.textMute}
+        multiline
+        style={{
+          borderWidth: 1,
+          borderColor: c.line,
+          borderRadius: theme.radii.control,
+          paddingHorizontal: SPACE.md,
+          paddingVertical: SPACE.sm,
+          color: c.text,
+          backgroundColor: c.paper,
+          minHeight: 44,
+        }}
+      />
+      <Button
+        title={S.sendAnswer}
+        variant="secondary"
+        size="md"
+        loading={mut.isPending}
+        onPress={() => {
+          if (draft.trim()) mut.mutate()
+        }}
+      />
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
@@ -362,14 +444,31 @@ export default function AreaRankScreen() {
   const insets = useSafeAreaInsets()
   const S = PROFILER_STR.en
 
-  const { area, pid, key } = useLocalSearchParams<{
+  const { area, pid, key, tab: tabParam } = useLocalSearchParams<{
     area: string
     pid: string
     key: string
+    tab?: string
   }>()
 
   const areaLabel = String(key ?? 'Area').replace(/_/g, ' ')
-  const [tab, setTab] = useState('Inspiration')
+  // Deep-link support: ?tab=notes opens straight to AI Notes (used by the
+  // DPHub "Questions for you" card). Any other/absent value is ignored —
+  // falls back to the default Inspiration tab.
+  const [tab, setTab] = useState(tabParam === 'notes' ? 'AI Notes' : 'Inspiration')
+  // Tabs are persistent (no remount) — a useState initializer only applies the
+  // param on first mount, so a SECOND deep-link into an already-open area
+  // screen (e.g. tapping the "Questions for you" card twice, or for two
+  // different areas) never switches the tab. React only to the param
+  // CHANGING (tracked in a ref), and never fight a tab she's since picked
+  // herself — once seeded, further re-renders with the same param value are
+  // a no-op.
+  const lastSeededTab = useRef<string | undefined>(tabParam)
+  useEffect(() => {
+    if (tabParam === undefined || tabParam === lastSeededTab.current) return
+    lastSeededTab.current = tabParam
+    if (tabParam === 'notes') setTab('AI Notes')
+  }, [tabParam])
 
   const refsQ = useQuery({
     queryKey: ['design', 'profiler', 'refs', pid, area],
@@ -390,6 +489,46 @@ export default function AreaRankScreen() {
     enabled: !!pid && !!area,
   })
 
+  // Clarifications — this area's slice of the profile's "questions for you".
+  const clarsQ = useQuery({
+    queryKey: ['design', 'profiler', 'clarifications', pid],
+    queryFn: () => design.clarifications(pid as string),
+    enabled: !!pid,
+  })
+  const areaClars = (clarsQ.data ?? []).filter((cl) => cl.area_id === area)
+  const openClars = openClarifications(areaClars)
+  const answeredClars = areaClars.filter((cl) => cl.answer != null)
+
+  // Conflicts — this area's slice of "your styles differ", settled in the
+  // "Settle this together" sheet below.
+  const conflictsQ = useQuery({
+    queryKey: ['design', 'profiler', 'conflicts', pid],
+    queryFn: () => design.conflicts(pid as string),
+    enabled: !!pid,
+  })
+  const areaConflicts = (conflictsQ.data ?? []).filter((cf) => cf.area_id === area)
+  // Real backend enum (ConflictStatus): open | resolved | deferred_to_architect.
+  // "open" is the only actionable state — resolved/deferred each get their own
+  // quiet, honest row instead of being lumped into one "Settled" line.
+  const openConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'open')
+  const resolvedConflicts = areaConflicts.filter((cf) => cf.resolution_status === 'resolved')
+  const deferredConflicts = areaConflicts.filter(
+    (cf) => cf.resolution_status === 'deferred_to_architect',
+  )
+
+  const capQ = useQuery({
+    queryKey: ['homeowner', 'capabilities'],
+    queryFn: () => homeowner.capabilities(),
+  })
+  const canApprove = capQ.data?.can_approve ?? true
+
+  // Caller's own user id — for "Decided by you" attribution on theme cards.
+  const meQ = useQuery({
+    queryKey: ['homeowner', 'me'],
+    queryFn: () => homeowner.me(),
+  })
+  const myUserId = meQ.data?.id ?? null
+
   const refs = refsQ.data ?? []
   const myContributorId = profileQ.data?.my_contributor_id ?? null
   const canRank = !!myContributorId
@@ -402,7 +541,6 @@ export default function AreaRankScreen() {
   const recommended = areaDetail?.recommended_count ?? 6
   const progressPct =
     recommended > 0 ? Math.min(100, Math.round((ranked / recommended) * 100)) : 0
-  const hasConflict = areaDetail?.has_conflict ?? false
   const isLowInput = refs.length === 0
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
@@ -461,26 +599,69 @@ export default function AreaRankScreen() {
     addByUpload.mutate(result.assets[0].uri)
   }
 
-  // Pinterest — paste a pin link (server re-hosts the image to our R2).
+  // Pinterest — paste one or many pin links (server re-hosts each image to our R2).
+  const PS = PIN_PASTE_STR.en
   const [pinOpen, setPinOpen] = useState(false)
   const [pinUrl, setPinUrl] = useState('')
   const [pinError, setPinError] = useState<string | null>(null)
-  const addByLink = useMutation({
-    mutationFn: () =>
-      design.referenceFromLink({
-        area_id: area as string,
-        contributor_id: contributorArg,
-        url: pinUrl.trim(),
-      }),
-    onSuccess: () => {
-      toast('Added from Pinterest', 'check')
-      setPinOpen(false)
-      setPinUrl('')
-      setPinError(null)
-      void refresh()
-    },
-    onError: (e: Error) => setPinError(e.message),
-  })
+  const [pinResults, setPinResults] = useState<{ ok: number; fails: string[] } | null>(null)
+  const [pinSubmitting, setPinSubmitting] = useState(false)
+
+  function shortReason(e: unknown): string {
+    if (e instanceof ApiError) return e.message
+    if (e instanceof Error) return e.message
+    return 'Could not be added.'
+  }
+
+  // Explicit-tap clipboard read only (never on mount/focus — that triggers
+  // the iOS "Paste" permission banner as a surprise).
+  async function pasteFromPinterest() {
+    const text = await Clipboard.getStringAsync()
+    const urls = extractPinterestUrls(text)
+    if (urls.length === 0) {
+      toast(PS.noPinsToast)
+      return
+    }
+    if (urls.length === 1) {
+      setPinUrl(urls[0])
+      return
+    }
+    setPinUrl(urls.join('\n'))
+  }
+
+  async function submitPins() {
+    const urls = extractPinterestUrls(pinUrl)
+    if (urls.length === 0) {
+      setPinError('Paste a Pinterest pin link.')
+      return
+    }
+    setPinError(null)
+    setPinSubmitting(true)
+    let ok = 0
+    const fails: string[] = []
+    for (const url of urls) {
+      try {
+        await design.referenceFromLink({
+          area_id: area as string,
+          contributor_id: contributorArg,
+          url,
+        })
+        ok += 1
+      } catch (e) {
+        fails.push(shortReason(e))
+      }
+    }
+    setPinSubmitting(false)
+    setPinResults({ ok, fails })
+    if (ok > 0) void refresh()
+  }
+
+  function closePinSheet() {
+    setPinOpen(false)
+    setPinUrl('')
+    setPinError(null)
+    setPinResults(null)
+  }
 
   // Presets — curated designer packs for this area kind.
   const [presetOpen, setPresetOpen] = useState(false)
@@ -502,6 +683,63 @@ export default function AreaRankScreen() {
       void refresh()
     },
     onError: (e: Error) => toast(e.message),
+  })
+
+  // Theme decisions — owners/co-owners commit approve/adjust/reject per theme.
+  // "adjust" opens a small note-sheet (note optional); approve/reject fire
+  // straight away. A single mutation + a ref to the theme being decided so
+  // per-card loading state stays isolated without extra component splitting.
+  const [adjustSheet, setAdjustSheet] = useState<ProfilerTheme | null>(null)
+  const [adjustNote, setAdjustNote] = useState('')
+  const decideThemeMut = useMutation({
+    mutationFn: ({ themeId, action, note }: { themeId: string; action: ThemeDecisionAction; note?: string }) =>
+      design.decideTheme(themeId, action, note),
+    onSuccess: () => {
+      toast(THEME_DECISION_STR.en.decidedToast, 'check')
+      setAdjustSheet(null)
+      setAdjustNote('')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'themes', pid, area] })
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'detail', pid] })
+    },
+    onError: (e: unknown) => {
+      if (e instanceof ApiError && e.code === 'approve_forbidden') {
+        toast(e.message)
+      } else {
+        toast((e as Error).message)
+      }
+    },
+  })
+  const decidingThemeId =
+    decideThemeMut.isPending ? decideThemeMut.variables?.themeId : undefined
+
+  // "Settle this together" sheet — one conflict at a time.
+  const [conflictSheet, setConflictSheet] = useState<ProfilerConflict | null>(null)
+  const [conflictNote, setConflictNote] = useState('')
+  const [conflictReadOnly, setConflictReadOnly] = useState(false)
+  const contributors = profileQ.data?.contributors ?? []
+
+  const resolveConflictMut = useMutation({
+    mutationFn: (body: { resolution: string; note?: string }) =>
+      design.resolveConflict((conflictSheet as ProfilerConflict).id, body),
+    onSuccess: (_result, variables) => {
+      toast(
+        variables.resolution === 'defer_to_architect'
+          ? CONFLICT_STR.en.deferredToast
+          : CONFLICT_STR.en.resolvedToast,
+        'check',
+      )
+      setConflictSheet(null)
+      setConflictNote('')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'conflicts', pid] })
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler', 'detail', pid] })
+    },
+    onError: (e: unknown) => {
+      if (e instanceof ApiError && e.code === 'approve_forbidden') {
+        setConflictReadOnly(true)
+      } else {
+        toast((e as Error).message)
+      }
+    },
   })
 
   const adding = addByUpload.isPending
@@ -604,6 +842,7 @@ export default function AreaRankScreen() {
               leading={<Feather name="image" size={16} color={c.accentDeep} />}
               onPress={() => {
                 setPinError(null)
+                setPinResults(null)
                 setPinOpen(true)
               }}
               style={{ flex: 1 }}
@@ -638,7 +877,27 @@ export default function AreaRankScreen() {
                 </View>
               ))}
             </View>
-          ) : null}
+          ) : (
+            /* No references yet — invite the 1-minute quick-start deck instead
+               of a bare empty grid. */
+            <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.secondary }}>
+              <Eyebrow style={{ color: c.secondary }}>{QUICKSTART_STR.en.entryTitle}</Eyebrow>
+              <Body style={{ marginTop: 5, color: c.text }}>{QUICKSTART_STR.en.entryBody}</Body>
+              <Button
+                title={QUICKSTART_STR.en.entryCta}
+                variant="primary"
+                size="md"
+                leading={<Feather name="zap" size={16} color={c.onAccent} />}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(homeowner)/design/profiler/quickstart',
+                    params: { pid: pid as string, area: area as string, key: key as string },
+                  })
+                }
+                style={{ marginTop: SPACE.md }}
+              />
+            </Card>
+          )}
         </View>
       ) : null}
 
@@ -705,40 +964,87 @@ export default function AreaRankScreen() {
                 <Small muted>Analysing your references…</Small>
               ) : themesQ.data && themesQ.data.length > 0 ? (
                 <Card padded>
-                  {themesQ.data.map((t, i, arr) => (
-                    <View
-                      key={t.id}
-                      style={{
-                        paddingVertical: 10,
-                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
-                        borderBottomColor: theme.colors.line,
-                      }}
-                    >
-                      <Eyebrow style={{ color: c.textMute }}>Theme</Eyebrow>
-                      <Body style={{ marginTop: 3 }}>{t.name}</Body>
-                      {t.materials.length > 0 ? (
-                        <Small muted style={{ marginTop: 2 }}>
-                          Materials: {t.materials.join(', ')}
-                        </Small>
-                      ) : null}
-                      {/* Confidence inline */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <Feather
-                          name={t.confidence > 0.65 ? 'check-circle' : 'clock'}
-                          size={13}
-                          color={t.confidence > 0.65 ? c.ok : c.warn}
-                        />
-                        <Micro
-                          style={{
-                            color: t.confidence > 0.65 ? c.ok : c.warn,
-                            fontWeight: '600',
-                          }}
-                        >
-                          {t.confidence > 0.65 ? 'High' : 'Building'}
-                        </Micro>
+                  {themesQ.data.map((t, i, arr) => {
+                    const isSuggested = t.status === 'suggested'
+                    const attribution = decidedAttribution(t.decided_by, myUserId)
+                    const isDecidingThis = decidingThemeId === t.id
+                    return (
+                      <View
+                        key={t.id}
+                        style={{
+                          paddingVertical: 10,
+                          borderBottomWidth: i === arr.length - 1 ? 0 : 1,
+                          borderBottomColor: theme.colors.line,
+                          gap: 6,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACE.sm }}>
+                          <View style={{ flex: 1 }}>
+                            <Eyebrow style={{ color: c.textMute }}>Theme</Eyebrow>
+                            <Body style={{ marginTop: 3 }}>{t.name}</Body>
+                          </View>
+                          {!isSuggested ? (
+                            <StatusPill status={themeDecisionTone(t.status)} size="sm" label={t.status} />
+                          ) : null}
+                        </View>
+                        {t.materials.length > 0 ? (
+                          <Small muted>Materials: {t.materials.join(', ')}</Small>
+                        ) : null}
+                        {/* Confidence inline */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Feather
+                            name={t.confidence > 0.65 ? 'check-circle' : 'clock'}
+                            size={13}
+                            color={t.confidence > 0.65 ? c.ok : c.warn}
+                          />
+                          <Micro
+                            style={{
+                              color: t.confidence > 0.65 ? c.ok : c.warn,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {t.confidence > 0.65 ? 'High' : 'Building'}
+                          </Micro>
+                        </View>
+
+                        {!isSuggested && attribution ? (
+                          <Small muted>{attribution}</Small>
+                        ) : null}
+
+                        {isSuggested && canApprove ? (
+                          <View style={{ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap', marginTop: 4 }}>
+                            <Button
+                              title={THEME_DECISION_STR.en.approve}
+                              variant="primary"
+                              size="md"
+                              loading={isDecidingThis && decideThemeMut.variables?.action === 'approve'}
+                              onPress={() =>
+                                decideThemeMut.mutate({ themeId: t.id, action: 'approve' })
+                              }
+                            />
+                            <Button
+                              title={THEME_DECISION_STR.en.adjust}
+                              variant="secondary"
+                              size="md"
+                              onPress={() => {
+                                setAdjustNote('')
+                                setAdjustSheet(t)
+                              }}
+                            />
+                            <Button
+                              title={THEME_DECISION_STR.en.reject}
+                              variant="ghost"
+                              size="md"
+                              loading={isDecidingThis && decideThemeMut.variables?.action === 'reject'}
+                              onPress={() =>
+                                decideThemeMut.mutate({ themeId: t.id, action: 'reject' })
+                              }
+                            />
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  ))}
+                    )
+                  })}
                 </Card>
               ) : (
                 <Card padded>
@@ -748,24 +1054,97 @@ export default function AreaRankScreen() {
                 </Card>
               )}
 
-              {hasConflict ? (
-                <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
-                  <Eyebrow style={{ color: c.warn, marginBottom: 6 }}>Open questions</Eyebrow>
-                  <Small style={{ color: c.text }}>
-                    Some preferences differ for {areaLabel.toLowerCase()}. Resolve them together.
-                  </Small>
-                  <Button
-                    title="Answer in design chat"
-                    variant="ghost"
-                    size="md"
-                    leading={<Feather name="message-circle" size={16} color={c.warn} />}
-                    onPress={() => toast('Design chat — coming soon.')}
-                    style={{ marginTop: SPACE.sm }}
-                  />
-                </Card>
+              {openConflicts.length > 0 ? (
+                <View style={{ gap: SPACE.sm }}>
+                  {openConflicts.map((cf) => {
+                    const sides = conflictSides(cf, contributors, myContributorId)
+                    return (
+                      <Card key={cf.id} padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
+                        <Eyebrow style={{ color: c.warn, marginBottom: 6 }}>
+                          Your styles differ
+                        </Eyebrow>
+                        <Small style={{ color: c.text }}>
+                          {sides.label}: {sides.a.name} leans {sides.a.value.toLowerCase()}, {sides.b.name}{' '}
+                          leans {sides.b.value.toLowerCase()}.
+                        </Small>
+                        <Button
+                          title={CONFLICT_STR.en.cardButton}
+                          variant="ghost"
+                          size="md"
+                          leading={<Feather name="message-circle" size={16} color={c.warn} />}
+                          onPress={() => {
+                            setConflictReadOnly(!canApprove)
+                            setConflictNote('')
+                            setConflictSheet(cf)
+                          }}
+                          style={{ marginTop: SPACE.sm }}
+                        />
+                      </Card>
+                    )
+                  })}
+                </View>
+              ) : null}
+
+              {resolvedConflicts.length > 0 || deferredConflicts.length > 0 ? (
+                <View style={{ gap: 4 }}>
+                  {resolvedConflicts.map((cf) => (
+                    <Small key={cf.id} muted>
+                      {resolvedSummary(cf.decision_note, null)}
+                    </Small>
+                  ))}
+                  {deferredConflicts.map((cf) => (
+                    <Small key={cf.id} muted>
+                      {CONFLICT_STR.en.deferredRow}
+                    </Small>
+                  ))}
+                </View>
               ) : null}
             </>
           )}
+
+          {/* Clarifications — questions the AI needs answered for this area */}
+          {openClars.length > 0 || answeredClars.length > 0 ? (
+            <View style={{ gap: SPACE.sm }}>
+              <Eyebrow style={{ color: c.textMute }}>{CLAR_STR.en.cardEyebrow}</Eyebrow>
+              {openClars.length > 0 ? (
+                <Card padded>
+                  {openClars.map((cl, i, arr) => (
+                    <View
+                      key={cl.id}
+                      style={{
+                        borderBottomWidth: i === arr.length - 1 ? 0 : 1,
+                        borderBottomColor: theme.colors.line,
+                      }}
+                    >
+                      <ClarificationRow
+                        id={cl.id}
+                        question={cl.question}
+                        answer={cl.answer}
+                        onAnswered={() =>
+                          void qc.invalidateQueries({
+                            queryKey: ['design', 'profiler', 'clarifications', pid],
+                          })
+                        }
+                      />
+                    </View>
+                  ))}
+                </Card>
+              ) : null}
+              {answeredClars.length > 0 ? (
+                <View>
+                  {answeredClars.map((cl) => (
+                    <ClarificationRow
+                      key={cl.id}
+                      id={cl.id}
+                      question={cl.question}
+                      answer={cl.answer}
+                      onAnswered={() => {}}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -805,12 +1184,12 @@ export default function AreaRankScreen() {
         </View>
       ) : null}
 
-      {/* ── Pinterest paste-a-link sheet ──────────────────────────────── */}
+      {/* ── Pinterest paste-a-link sheet (one-tap + multi-link) ─────────── */}
       <Modal
         visible={pinOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setPinOpen(false)}
+        onRequestClose={closePinSheet}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -818,7 +1197,7 @@ export default function AreaRankScreen() {
         >
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
-          onPress={() => setPinOpen(false)}
+          onPress={closePinSheet}
         >
           <Pressable
             style={{
@@ -833,54 +1212,91 @@ export default function AreaRankScreen() {
           >
             <Eyebrow style={{ color: c.textMute }}>Add from Pinterest</Eyebrow>
             <BodyStrong>Paste a pin link</BodyStrong>
-            <Small muted>
-              Open a pin in Pinterest, tap Share → Copy link, and paste it here. We'll save the
-              image to your inspiration.
-            </Small>
-            <TextInput
-              value={pinUrl}
-              onChangeText={(t) => {
-                setPinUrl(t)
-                if (pinError) setPinError(null)
-              }}
-              placeholder="https://pin.it/…"
-              placeholderTextColor={c.textMute}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              style={{
-                borderWidth: 1,
-                borderColor: pinError ? c.warn : c.line,
-                borderRadius: theme.radii.control,
-                paddingHorizontal: SPACE.md,
-                paddingVertical: SPACE.sm,
-                color: c.text,
-                backgroundColor: c.paper,
-                marginTop: SPACE.xs,
-              }}
-            />
-            {pinError ? (
-              <Small style={{ color: c.warn }}>{pinError}</Small>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
-              <Button
-                title="Cancel"
-                variant="ghost"
-                size="md"
-                onPress={() => setPinOpen(false)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={addByLink.isPending ? 'Adding…' : 'Add'}
-                variant="primary"
-                size="md"
-                loading={addByLink.isPending}
-                onPress={() => {
-                  if (pinUrl.trim()) addByLink.mutate()
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
+
+            {pinResults ? (
+              <>
+                <Small style={{ marginTop: SPACE.xs, fontWeight: '600', color: c.text }}>
+                  {PS.resultLine(pinResults.ok, pinResults.fails.length)}
+                </Small>
+                {pinResults.fails.length > 0 ? (
+                  <View style={{ gap: 4 }}>
+                    {pinResults.fails.map((reason, i) => (
+                      <Small key={i} muted>
+                        {reason}
+                      </Small>
+                    ))}
+                  </View>
+                ) : null}
+                <Button
+                  title={PS.done}
+                  variant="primary"
+                  size="md"
+                  onPress={closePinSheet}
+                  style={{ marginTop: SPACE.sm }}
+                />
+              </>
+            ) : (
+              <>
+                <Small muted>
+                  Open a pin in Pinterest, tap Share → Copy link, and paste it here — or paste
+                  several links at once. We'll save each image to your inspiration.
+                </Small>
+                <Button
+                  title={PS.pasteButton}
+                  variant="secondary"
+                  size="md"
+                  leading={<Feather name="clipboard" size={16} color={c.accentDeep} />}
+                  onPress={() => void pasteFromPinterest()}
+                  style={{ marginTop: SPACE.xs }}
+                />
+                <TextInput
+                  value={pinUrl}
+                  onChangeText={(t) => {
+                    setPinUrl(t)
+                    if (pinError) setPinError(null)
+                  }}
+                  placeholder="https://pin.it/… (one or more, one per line)"
+                  placeholderTextColor={c.textMute}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  keyboardType="url"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: pinError ? c.warn : c.line,
+                    borderRadius: theme.radii.control,
+                    paddingHorizontal: SPACE.md,
+                    paddingVertical: SPACE.sm,
+                    color: c.text,
+                    backgroundColor: c.paper,
+                    marginTop: SPACE.xs,
+                    minHeight: 44,
+                  }}
+                />
+                {pinError ? (
+                  <Small style={{ color: c.warn }}>{pinError}</Small>
+                ) : null}
+                <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+                  <Button
+                    title="Cancel"
+                    variant="ghost"
+                    size="md"
+                    onPress={closePinSheet}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    title={pinSubmitting ? 'Adding…' : 'Add'}
+                    variant="primary"
+                    size="md"
+                    loading={pinSubmitting}
+                    onPress={() => {
+                      if (pinUrl.trim()) void submitPins()
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
+            )}
           </Pressable>
         </Pressable>
         </KeyboardAvoidingView>
@@ -964,6 +1380,227 @@ export default function AreaRankScreen() {
             />
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* ── "Settle this together" conflict sheet ───────────────────────── */}
+      <Modal
+        visible={!!conflictSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setConflictSheet(null)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+            onPress={() => setConflictSheet(null)}
+          >
+            <Pressable
+              style={{
+                backgroundColor: c.card,
+                borderTopLeftRadius: theme.radii.card,
+                borderTopRightRadius: theme.radii.card,
+                padding: SPACE.lg,
+                paddingBottom: insets.bottom + SPACE.lg,
+                gap: SPACE.md,
+                maxHeight: '85%',
+              }}
+              onPress={() => {}}
+            >
+              {conflictSheet ? (
+                <ScrollView contentContainerStyle={{ gap: SPACE.md }}>
+                  <Eyebrow style={{ color: c.textMute }}>{CONFLICT_STR.en.sheetEyebrow}</Eyebrow>
+                  <BodyStrong>{CONFLICT_STR.en.sheetTitle}</BodyStrong>
+
+                  {(() => {
+                    const sides = conflictSides(conflictSheet, contributors, myContributorId)
+                    return (
+                      <>
+                        <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                          <Card padded style={{ flex: 1 }}>
+                            <Micro muted>{sides.a.name}</Micro>
+                            <Body style={{ marginTop: 4, fontWeight: '600' }}>{sides.a.value}</Body>
+                          </Card>
+                          <Card padded style={{ flex: 1 }}>
+                            <Micro muted>{sides.b.name}</Micro>
+                            <Body style={{ marginTop: 4, fontWeight: '600' }}>{sides.b.value}</Body>
+                          </Card>
+                        </View>
+
+                        {conflictReadOnly ? (
+                          <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.quiet }}>
+                            <Small muted>{CONFLICT_STR.en.readOnlyNotice}</Small>
+                          </Card>
+                        ) : (
+                          <>
+                            <Button
+                              title={CONFLICT_STR.en.keepA(sides.a.name)}
+                              variant="primary"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'keep_a'
+                              }
+                              onPress={() => resolveConflictMut.mutate({ resolution: 'keep_a' })}
+                            />
+                            <Button
+                              title={CONFLICT_STR.en.keepB(sides.b.name)}
+                              variant="primary"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'keep_b'
+                              }
+                              onPress={() => resolveConflictMut.mutate({ resolution: 'keep_b' })}
+                            />
+
+                            <View style={{ gap: SPACE.sm }}>
+                              <Small muted>{CONFLICT_STR.en.compromiseLabel}</Small>
+                              <TextInput
+                                value={conflictNote}
+                                onChangeText={setConflictNote}
+                                placeholder={CONFLICT_STR.en.compromisePlaceholder}
+                                placeholderTextColor={c.textMute}
+                                multiline
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: c.line,
+                                  borderRadius: theme.radii.control,
+                                  paddingHorizontal: SPACE.md,
+                                  paddingVertical: SPACE.sm,
+                                  color: c.text,
+                                  backgroundColor: c.paper,
+                                  minHeight: 44,
+                                }}
+                              />
+                              <Button
+                                title={CONFLICT_STR.en.compromiseCta}
+                                variant="secondary"
+                                size="md"
+                                loading={
+                                  resolveConflictMut.isPending &&
+                                  resolveConflictMut.variables?.resolution === 'compromise'
+                                }
+                                onPress={() => {
+                                  if (conflictNote.trim().length >= 3) {
+                                    resolveConflictMut.mutate({
+                                      resolution: 'compromise',
+                                      note: conflictNote.trim(),
+                                    })
+                                  }
+                                }}
+                              />
+                            </View>
+
+                            <Button
+                              title={CONFLICT_STR.en.deferLabel}
+                              variant="ghost"
+                              size="md"
+                              loading={
+                                resolveConflictMut.isPending &&
+                                resolveConflictMut.variables?.resolution === 'defer_to_architect'
+                              }
+                              onPress={() =>
+                                resolveConflictMut.mutate({ resolution: 'defer_to_architect' })
+                              }
+                            />
+                          </>
+                        )}
+
+                        <Button
+                          title={CONFLICT_STR.en.cancel}
+                          variant="ghost"
+                          size="md"
+                          onPress={() => setConflictSheet(null)}
+                        />
+                      </>
+                    )
+                  })()}
+                </ScrollView>
+              ) : null}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── "Close, adjust" note sheet — optional note on an adjust decision ── */}
+      <Modal
+        visible={!!adjustSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAdjustSheet(null)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
+            onPress={() => setAdjustSheet(null)}
+          >
+            <Pressable
+              style={{
+                backgroundColor: c.card,
+                borderTopLeftRadius: theme.radii.card,
+                borderTopRightRadius: theme.radii.card,
+                padding: SPACE.lg,
+                paddingBottom: insets.bottom + SPACE.lg,
+                gap: SPACE.sm,
+              }}
+              onPress={() => {}}
+            >
+              <Eyebrow style={{ color: c.textMute }}>{THEME_DECISION_STR.en.adjustSheetEyebrow}</Eyebrow>
+              <BodyStrong>{THEME_DECISION_STR.en.adjustSheetTitle}</BodyStrong>
+              <TextInput
+                value={adjustNote}
+                onChangeText={setAdjustNote}
+                placeholder={THEME_DECISION_STR.en.adjustPlaceholder}
+                placeholderTextColor={c.textMute}
+                multiline
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.line,
+                  borderRadius: theme.radii.control,
+                  paddingHorizontal: SPACE.md,
+                  paddingVertical: SPACE.sm,
+                  color: c.text,
+                  backgroundColor: c.paper,
+                  minHeight: 44,
+                }}
+              />
+              <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm }}>
+                <Button
+                  title={THEME_DECISION_STR.en.cancel}
+                  variant="ghost"
+                  size="md"
+                  onPress={() => setAdjustSheet(null)}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title={
+                    adjustNote.trim()
+                      ? THEME_DECISION_STR.en.adjustSubmit
+                      : THEME_DECISION_STR.en.adjustSkip
+                  }
+                  variant="primary"
+                  size="md"
+                  loading={decideThemeMut.isPending}
+                  onPress={() =>
+                    adjustSheet &&
+                    decideThemeMut.mutate({
+                      themeId: adjustSheet.id,
+                      action: 'adjust',
+                      note: adjustNote.trim() || undefined,
+                    })
+                  }
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   )

@@ -1,0 +1,19 @@
+[
+  {
+    "_comment": "Schema per entry: pack (str, display name of the style pack e.g. 'Warm Minimal'), title (str, caption for this specific image), area_kind (str, one of the AreaKind enum values in app/models/profiler.py — currently 'interior' | 'house_build' | 'element'), area_key (str|null, a room key like 'kitchen'/'master_bedroom'/'facade', or null to offer this image for ANY area of that area_kind), file (str, path to the image relative to THIS manifest's directory — put real images in a '<pack-slug>/' subdirectory, e.g. 'warm-minimal/oak-stone.jpg'). Run: python -m scripts.seed_profiler_presets --from-dir assets/presets — idempotent, safe to re-run per batch. The images below are tiny placeholder gradients checked in so the manifest is runnable out of the box; replace them with real licensed photos (see README.md in this directory) before using this catalog for real."
+  },
+  {
+    "pack": "Warm Minimal",
+    "title": "Oak & stone",
+    "area_kind": "interior",
+    "area_key": "kitchen",
+    "file": "warm-minimal/oak-stone.jpg"
+  },
+  {
+    "pack": "Modern Indian",
+    "title": "Jaali facade",
+    "area_kind": "house_build",
+    "area_key": null,
+    "file": "modern-indian/jaali-facade.jpg"
+  }
+]

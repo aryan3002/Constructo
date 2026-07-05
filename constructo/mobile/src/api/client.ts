@@ -408,12 +408,18 @@ export interface ProfilerTheme {
   evidence_reference_ids: string[]
   status: string
   created_at: string
+  /** Who committed the decision (approve/adjust/reject); null while `suggested`. */
+  decided_by: string | null
 }
+
+export type ThemeDecisionAction = 'approve' | 'adjust' | 'reject'
 export interface ProfilerConflict {
   id: string
   area_id: string
   dimension: string
   value: string
+  contributor_a_id: string | null
+  contributor_b_id: string | null
   resolution_status: string
   decision_note: string | null
 }
@@ -569,6 +575,21 @@ export const design = {
     request<ProfilerTheme[]>(`/api/v1/design/profiles/${profileId}/areas/${areaId}/themes`),
   conflicts: (profileId: string) =>
     request<ProfilerConflict[]>(`/api/v1/design/profiles/${profileId}/conflicts`),
+  /** Homeowner "commit a theme decision" — owner/co-owner only (403
+   *  approve_forbidden + {can_comment:true} otherwise). `note` is optional
+   *  context, mainly used with `adjust`. */
+  decideTheme: (themeId: string, action: ThemeDecisionAction, note?: string) =>
+    request<ProfilerTheme>(`/api/v1/design/themes/${themeId}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ action, note: note ?? null }),
+    }),
+  /** Homeowner "settle this together" sheet — owner/co-owner only (403
+   *  approve_forbidden + {can_comment:true} otherwise). */
+  resolveConflict: (id: string, body: { resolution: string; note?: string }) =>
+    request<ProfilerConflict>(`/api/v1/design/conflicts/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   brief: (profileId: string, audience: 'homeowner' | 'architect' | 'contractor' = 'homeowner') =>
     request<ProfilerBriefRendering>(
       `/api/v1/design/profiles/${profileId}/brief?audience=${audience}`,

@@ -39,3 +39,15 @@ test('actOnBrief POSTs the action', async () => {
   expect(url).toContain('/api/v1/design/briefs/b1/approval')
   expect(JSON.parse(init.body as string)).toEqual({ action: 'send_to_architect' })
 })
+
+test('resolveConflict POSTs resolution + note to the conflict resolve path', async () => {
+  mockOk({ id: 'conf-1', resolution_status: 'resolved' })
+  await design.resolveConflict('conf-1', { resolution: 'compromise', note: 'Warm oak, cool walls' })
+  const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+  expect(url).toContain('/api/v1/design/conflicts/conf-1/resolve')
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body as string)).toEqual({
+    resolution: 'compromise',
+    note: 'Warm oak, cool walls',
+  })
+})

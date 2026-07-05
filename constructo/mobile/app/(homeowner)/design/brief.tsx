@@ -39,7 +39,7 @@
  *
  * Membrane: owner/co_owner → can_approve; others see "You can comment."
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -71,6 +71,8 @@ import {
   briefAudienceTabs,
   PROFILER_STR,
 } from '../../../src/homeowner/design_profiler.util'
+import { briefStateCard } from '../../../src/homeowner/brief_state.util'
+import { briefDiff, type BriefDiffArea } from '../../../src/homeowner/brief_diff.util'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -252,8 +254,11 @@ export default function BriefScreen() {
   const actMut = useMutation({
     mutationFn: (action: string) =>
       design.actOnBrief(briefId as string, { action }),
-    onSuccess: () => {
-      toast('Done', 'check')
+    onSuccess: (result) => {
+      // Same copy map as the DPHub banner, so "Done" always names whose move
+      // is next rather than a bare acknowledgement.
+      const nextLine = briefStateCard(result.state)?.title
+      toast(nextLine ? `Done — ${nextLine}` : 'Done', 'check')
       void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
     },
     onError: (e: unknown) => {
@@ -267,12 +272,32 @@ export default function BriefScreen() {
     },
   })
 
+  // Same call as the DPHub banner's "Regenerate brief" (design.tsx) — kept in
+  // sync here so a homeowner who navigated straight into the brief screen
+  // (rather than tapping the banner) still has the action available.
+  const regenMut = useMutation({
+    mutationFn: () => design.generateBrief(pid as string),
+    onSuccess: () => {
+      toast('Brief regenerated', 'check')
+      void qc.invalidateQueries({ queryKey: ['design', 'profiler'] })
+    },
+    onError: (e: unknown) => toast((e as Error).message),
+  })
+
   const canApprove = capQ.data?.can_approve ?? false
   // The homeowner can only "approve" once the brief is contractor-ready (after
   // designer sign-off). In review states their action is send-to-designer /
   // request-changes — showing Approve there always 409s.
   const briefState = briefQ.data?.state ?? null
   const canApproveNow = briefState === 'contractor_brief_ready'
+  const needsRevision = briefState === 'revision_requested'
+  // "Submit for designer review" is only the homeowner's actual next move in
+  // homeowner_review (or a legacy row with no state at all, which predates
+  // this state machine and behaves as if freshly in review). Every other
+  // state (architect_review, contractor_brief_ready, approved, locked) has
+  // its own action/banner already — showing this button there guaranteed a
+  // 409 on tap since send_to_architect is an invalid transition from them.
+  const canSubmitForReview = briefState === 'homeowner_review' || briefState == null
 
   // Parse content_json from the brief
   const content = briefQ.data?.content_json as
@@ -323,6 +348,35 @@ export default function BriefScreen() {
 
   // Version history from approvals
   const approvals = approvalsQ.data ?? []
+
+  // "Since you last looked" — a v1, honestly-scoped what-changed. There's no
+  // backend endpoint for a specific prior version, so this diffs against
+  // whatever rendering was cached in this component from before the version
+  // last incremented (e.g. right before a regenerate). A cold mount (first
+  // render for this session) has no "before" snapshot, so the diff is empty —
+  // never fabricated. lastSeenRef survives audience-tab switches within this
+  // screen but resets on navigate-away/back (a fresh, honest "no prior view").
+  const lastSeenRef = useRef<{ version: number; areas: BriefDiffArea[] } | null>(null)
+  const [whatChanged, setWhatChanged] = useState<ReturnType<typeof briefDiff>>([])
+  const currentVersion = briefQ.data?.version ?? null
+
+  useEffect(() => {
+    if (currentVersion == null) return
+    const last = lastSeenRef.current
+    if (last === null) {
+      // First time we've seen any version this mount — nothing to diff against.
+      lastSeenRef.current = { version: currentVersion, areas }
+      setWhatChanged([])
+      return
+    }
+    if (last.version === currentVersion) return
+    // Version incremented (a regenerate landed) — diff the rendering we had
+    // cached against the one that just arrived, then adopt it as the new
+    // "last seen" baseline.
+    setWhatChanged(briefDiff(last.areas, areas))
+    lastSeenRef.current = { version: currentVersion, areas }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVersion])
 
   // Audience tabs (protocol: You | Designer | Contractor)
   const audTabs = briefAudienceTabs('en')
@@ -537,14 +591,25 @@ export default function BriefScreen() {
               {/* Approval actions */}
               {briefId ? (
                 canApprove ? (
-                  <Button
-                    title="Submit for designer review"
-                    variant="primary"
-                    size="md"
-                    loading={actMut.isPending}
-                    leading={<Feather name="send" size={16} color={c.onAccent} />}
-                    onPress={() => actMut.mutate('send_to_architect')}
-                  />
+                  needsRevision ? (
+                    <Button
+                      title="Regenerate with my updates"
+                      variant="primary"
+                      size="md"
+                      loading={regenMut.isPending}
+                      leading={<Feather name="refresh-cw" size={16} color={c.onAccent} />}
+                      onPress={() => regenMut.mutate()}
+                    />
+                  ) : canSubmitForReview ? (
+                    <Button
+                      title="Submit for designer review"
+                      variant="primary"
+                      size="md"
+                      loading={actMut.isPending}
+                      leading={<Feather name="send" size={16} color={c.onAccent} />}
+                      onPress={() => actMut.mutate('send_to_architect')}
+                    />
+                  ) : null
                 ) : (
                   <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.quiet }}>
                     <Small muted>{S.onlyOwnerCanApprove}</Small>
@@ -720,6 +785,38 @@ export default function BriefScreen() {
                 </Card>
               ) : null}
             </View>
+          </FadeInUp>
+        ) : null}
+
+        {/* ── Since you last looked — honest, client-side what-changed ──── */}
+        {briefId && whatChanged.length > 0 ? (
+          <FadeInUp delay={20}>
+            <Eyebrow style={{ color: c.textMute }}>SINCE YOU LAST LOOKED</Eyebrow>
+            <Card padded>
+              <View style={{ gap: SPACE.sm }}>
+                {whatChanged.map((d) => (
+                  <View key={d.area_key} style={{ gap: 2 }}>
+                    <BodyStrong style={{ fontSize: 13 }}>
+                      {d.area_key.replace(/_/g, ' ')}
+                    </BodyStrong>
+                    {d.added.map((m) => (
+                      <View key={`add-${m}`} style={{ flexDirection: 'row', gap: 6 }}>
+                        <Feather name="plus-circle" size={14} color={c.ok} />
+                        <Small style={{ color: c.text }}>{m}</Small>
+                      </View>
+                    ))}
+                    {d.removed.map((m) => (
+                      <View key={`rm-${m}`} style={{ flexDirection: 'row', gap: 6 }}>
+                        <Feather name="minus-circle" size={14} color={c.textMute} />
+                        <Small muted style={{ textDecorationLine: 'line-through' }}>
+                          {m}
+                        </Small>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            </Card>
           </FadeInUp>
         ) : null}
 
