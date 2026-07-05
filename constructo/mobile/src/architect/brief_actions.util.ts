@@ -79,3 +79,33 @@ const _ACTION_LABELS: Record<string, string> = {
 export function actionLabel(action: string): string {
   return _ACTION_LABELS[action] ?? action
 }
+
+/** Brief-state -> StatusPill tone for the architect hub's per-card pill.
+ *  Mirrors the backend BriefState enum; unknown/future states read as
+ *  'quiet' rather than surfacing a wrong signal. */
+const _STATE_TONE: Record<string, 'quiet' | 'info' | 'warn' | 'ok'> = {
+  homeowner_review: 'quiet',
+  architect_review: 'info',
+  revision_requested: 'warn',
+  contractor_brief_ready: 'ok',
+  approved: 'ok',
+  locked: 'quiet',
+}
+
+export function stateTone(state: string): 'quiet' | 'info' | 'warn' | 'ok' {
+  return _STATE_TONE[state] ?? 'quiet'
+}
+
+/** Brief-state -> a short, homeowner/designer-legible label for the hub pill. */
+const _STATE_LABEL: Record<string, string> = {
+  homeowner_review: 'With homeowner',
+  architect_review: 'For your review',
+  revision_requested: 'Changes requested',
+  contractor_brief_ready: 'Signed off',
+  approved: 'Approved',
+  locked: 'Locked',
+}
+
+export function stateLabel(state: string): string {
+  return _STATE_LABEL[state] ?? state
+}

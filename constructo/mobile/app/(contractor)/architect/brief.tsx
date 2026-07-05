@@ -17,6 +17,7 @@ import { AP, SPACE, type Status } from '../../../src/theme/tokens'
 import { design as designEngine } from '../../../src/api/client'
 import { design, profileStatusLabel, type ProfileDetail, type ProfileStatus } from '../../../src/api/ownerDesign'
 import { supervisorApi } from '../../../src/api/supervisor'
+import { stateLabel, stateTone } from '../../../src/architect/brief_actions.util'
 import { Body, Card, Small, StatusPill, Title } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from './_components'
 
@@ -36,11 +37,17 @@ export default function DesignerBrief() {
     queryFn: async () => {
       const [profiles, sites] = await Promise.all([design.profiles(), supervisorApi.sites()])
       const names = new Map(sites.items.map((s) => [s.id, s.name]))
-      const details = await Promise.all(profiles.map((p) => design.profile(p.id).catch(() => null)))
+      // Small-N (a designer's active sites) — one brief-state fetch per profile
+      // card. A 404 (no brief drafted yet) resolves to `null`, not an error.
+      const [details, briefs] = await Promise.all([
+        Promise.all(profiles.map((p) => design.profile(p.id).catch(() => null))),
+        Promise.all(profiles.map((p) => designEngine.brief(p.id, 'architect').catch(() => null))),
+      ])
       return profiles.map((p, i) => ({
         profile: p,
         siteName: names.get(p.site_id) ?? 'Site',
         detail: details[i] as ProfileDetail | null,
+        briefState: briefs[i]?.state ?? null,
       }))
     },
   })
@@ -108,7 +115,7 @@ export default function DesignerBrief() {
         <>
           <SectionLabel>Active briefs</SectionLabel>
           <View style={{ gap: SPACE.md }}>
-            {rows.map(({ profile, siteName, detail }) => {
+            {rows.map(({ profile, siteName, detail, briefState }) => {
               const tone = statusTone(profile.status)
               const rooms = detail?.areas?.length ?? 0
               const conflict = hasConflict(detail)
@@ -125,6 +132,11 @@ export default function DesignerBrief() {
                       {conflict ? <Meta icon="alert-circle" text="conflict" color={theme.colors.warn} /> : null}
                       <Ionicons name="chevron-forward" size={18} color={theme.colors.textMute} style={{ marginLeft: 'auto' }} />
                     </View>
+                    {briefState ? (
+                      <View style={{ flexDirection: 'row', marginTop: SPACE.sm }}>
+                        <StatusPill status={stateTone(briefState)} size="sm" label={stateLabel(briefState)} />
+                      </View>
+                    ) : null}
                   </Card>
                 </Pressable>
               )
