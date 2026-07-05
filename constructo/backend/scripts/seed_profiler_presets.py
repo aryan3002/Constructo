@@ -1,26 +1,35 @@
-"""Seed the curated Design-Profiler preset catalog (Phase 3).
+"""Seed the curated Design-Profiler preset catalog (Phase 3 + Phase 4 Task 1).
 
-Generates a small set of pleasant gradient placeholder images (so packs render
-out-of-the-box for the pilot), uploads them to the configured storage backend
-(local MEDIA_DIR in dev, R2 when STORAGE_BACKEND=s3), and upserts profiler_presets
-rows. Idempotent — re-running reuses the same ids (uuid5 of the R2 key) and
-overwrites the image bytes, never duplicating.
+Two modes:
 
-Swap the generated images for real licensed designer photos by pointing
-`_load_bytes` at a folder of files; the row/upsert logic is unchanged.
+- Default (no flags): generates a small set of pleasant gradient placeholder
+  images (so packs render out-of-the-box for the pilot/dev), uploads them to
+  the configured storage backend (local MEDIA_DIR in dev, R2 when
+  STORAGE_BACKEND=s3), and upserts profiler_presets rows.
+- ``--from-dir <dir>``: reads real images from a manifest-driven directory
+  (see ``assets/presets/manifest.json`` for the schema + a starter catalog)
+  and ingests those instead. Both modes share the SAME upsert identity —
+  uuid5 of the R2 key via ``_slug`` — so re-running (in either mode) reuses
+  the same rows and overwrites image bytes, never duplicating.
 
-Run:  python -m scripts.seed_profiler_presets
+Run:
+    python -m scripts.seed_profiler_presets                       # gradients (dev/pilot)
+    python -m scripts.seed_profiler_presets --from-dir assets/presets  # real photos
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
+from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from PIL import Image, ImageDraw
 
 from app.db import SessionLocal
-from app.models.profiler import ProfilerPreset
+from app.models.profiler import AreaKind, ProfilerPreset
 from app.storage import get_storage
 
 # (area_kind, area_key|None, pack, title, gradient top RGB, gradient bottom RGB)
@@ -46,6 +55,64 @@ def _slug(*parts: str) -> str:
     return "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in raw).strip("-")
 
 
+@dataclass(frozen=True)
+class ManifestItem:
+    """One resolved+validated entry from a preset manifest.json."""
+
+    pack: str
+    title: str
+    area_kind: str
+    area_key: str | None
+    bytes_path: Path
+
+
+def load_manifest(directory: Path | str) -> list[ManifestItem]:
+    """Pure loader — no DB, no storage I/O. Reads ``<directory>/manifest.json``
+    (a JSON array; see ``assets/presets/manifest.json`` for the schema) and
+    resolves+validates every entry: area_kind must be a real AreaKind value
+    and ``file`` must exist on disk (resolved relative to ``directory``).
+
+    Raises ValueError naming the offending entry BEFORE returning anything —
+    a manifest with one bad entry produces zero items, never a partial list,
+    so a bad batch can never write a partial catalog.
+    """
+    directory = Path(directory)
+    manifest_path = directory / "manifest.json"
+    raw_entries = json.loads(manifest_path.read_text())
+
+    valid_kinds = {kind.value for kind in AreaKind}
+    items: list[ManifestItem] = []
+    for entry in raw_entries:
+        if isinstance(entry, dict) and "_comment" in entry and len(entry) == 1:
+            continue  # schema-documentation entry — not a real preset
+
+        area_kind = entry["area_kind"]
+        if area_kind not in valid_kinds:
+            raise ValueError(
+                f"manifest entry {entry.get('title')!r} has invalid area_kind "
+                f"{area_kind!r}; must be one of {sorted(valid_kinds)}"
+            )
+
+        file_rel = entry["file"]
+        bytes_path = (directory / file_rel).resolve()
+        if not bytes_path.is_file():
+            raise ValueError(
+                f"manifest entry {entry.get('title')!r} references missing file "
+                f"{file_rel!r} (resolved: {bytes_path})"
+            )
+
+        items.append(
+            ManifestItem(
+                pack=entry["pack"],
+                title=entry["title"],
+                area_kind=area_kind,
+                area_key=entry.get("area_key"),
+                bytes_path=bytes_path,
+            )
+        )
+    return items
+
+
 def _make_image(title: str, pack: str, top: tuple, bottom: tuple) -> bytes:
     w, h = 800, 600
     img = Image.new("RGB", (w, h))
@@ -62,6 +129,7 @@ def _make_image(title: str, pack: str, top: tuple, bottom: tuple) -> bytes:
 
 
 async def seed() -> dict:
+    """Gradient placeholder mode (default, no flags) — unchanged behavior."""
     storage = get_storage()
     created = updated = 0
     async with SessionLocal() as session:
@@ -86,6 +154,54 @@ async def seed() -> dict:
     return {"created": created, "updated": updated, "total": len(_CATALOG)}
 
 
+async def seed_from_manifest(directory: Path | str) -> dict:
+    """Real-image mode (``--from-dir``) — validates the WHOLE manifest first
+    (via `load_manifest`, which raises before any write on a bad entry), then
+    uploads bytes + upserts rows through the SAME identity scheme as `seed()`.
+    """
+    items = load_manifest(directory)  # raises loud + early — no partial catalogs
+    storage = get_storage()
+    created = updated = 0
+    async with SessionLocal() as session:
+        for sort, item in enumerate(items):
+            key = f"presets/{item.area_kind}/{_slug(item.area_key or 'any', item.pack, item.title)}.jpg"  # noqa: E501
+            data = item.bytes_path.read_bytes()
+            storage.put_bytes(key, data, "image/jpeg")
+            ident: UUID = uuid5(NAMESPACE_URL, key)
+            row = await session.get(ProfilerPreset, ident)
+            if row is None:
+                session.add(
+                    ProfilerPreset(
+                        id=ident, area_kind=item.area_kind, area_key=item.area_key,
+                        pack=item.pack, title=item.title, image_r2_key=key, sort=sort,
+                    )
+                )
+                created += 1
+            else:
+                row.area_kind, row.area_key, row.pack = item.area_kind, item.area_key, item.pack
+                row.title, row.image_r2_key, row.sort = item.title, key, sort
+                updated += 1
+        await session.commit()
+    return {"created": created, "updated": updated, "total": len(items)}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed the Design-Profiler preset catalog")
+    parser.add_argument(
+        "--from-dir",
+        default=None,
+        help="directory with manifest.json + real images (see assets/presets/manifest.json); "
+             "omit for the default gradient placeholder mode",
+    )
+    args = parser.parse_args()
+
+    if args.from_dir:
+        result = asyncio.run(seed_from_manifest(args.from_dir))
+        print(f"profiler presets seeded from manifest ({args.from_dir}): {result}")
+    else:
+        result = asyncio.run(seed())
+        print(f"profiler presets seeded: {result}")
+
+
 if __name__ == "__main__":
-    result = asyncio.run(seed())
-    print(f"profiler presets seeded: {result}")
+    main()
