@@ -5,12 +5,15 @@ import pytest
 
 from app.auth.jwt import create_access_token
 from app.common.errors import AppError
+from app.config import settings
 from app.main import app
 from app.models import UserRole
 from app.profiler.pinterest import (
     HttpPinResolver,
     get_pin_resolver,
+    is_board_url,
     is_pinterest_url,
+    parse_board_pins,
     parse_og_image,
 )
 from app.storage import get_storage
@@ -60,6 +63,73 @@ def test_is_pinterest_url_accepts_pin_hosts():
 def test_is_pinterest_url_rejects_others():
     assert not is_pinterest_url("https://example.com/x.jpg")
     assert not is_pinterest_url("https://notpinterest.evil.com/")
+
+
+# --- board-link import (flag-gated) -----------------------------------------
+
+BOARD_HTML = """<html><body>
+<script id="__PWS_DATA__" type="application/json">
+{"props":{"initialReduxState":{"pins":{
+  "1":{"images":{"orig":{"url":"https://i.pinimg.com/originals/aa/p1.jpg"}}},
+  "2":{"images":{"orig":{"url":"https://i.pinimg.com/originals/bb/p2.jpg"}}}
+}}}}</script></body></html>"""
+
+
+def test_parse_board_pins_extracts_orig_urls():
+    assert parse_board_pins(BOARD_HTML) == [
+        "https://i.pinimg.com/originals/aa/p1.jpg",
+        "https://i.pinimg.com/originals/bb/p2.jpg",
+    ]
+
+
+def test_parse_board_pins_empty_on_shape_change():
+    assert parse_board_pins("<html><script id='__PWS_DATA__'>{}</script></html>") == []
+
+
+def test_parse_board_pins_empty_when_script_missing():
+    assert parse_board_pins("<html><body>no data here</body></html>") == []
+
+
+def test_parse_board_pins_empty_on_invalid_json():
+    html = '<html><script id="__PWS_DATA__" type="application/json">{not json</script></html>'
+    assert parse_board_pins(html) == []
+
+
+def test_parse_board_pins_skips_non_dict_pins_and_missing_urls():
+    html = """<html><script id="__PWS_DATA__" type="application/json">
+    {"props":{"initialReduxState":{"pins":{
+      "1":"not-a-dict",
+      "2":{"images":{}},
+      "3":{"images":{"orig":{"url":"https://i.pinimg.com/originals/cc/p3.jpg"}}}
+    }}}}</script></html>"""
+    assert parse_board_pins(html) == ["https://i.pinimg.com/originals/cc/p3.jpg"]
+
+
+def test_parse_board_pins_respects_limit():
+    pins = {
+        str(i): {"images": {"orig": {"url": f"https://i.pinimg.com/originals/x/{i}.jpg"}}}
+        for i in range(5)
+    }
+    import json
+
+    html = (
+        '<html><script id="__PWS_DATA__" type="application/json">'
+        + json.dumps({"props": {"initialReduxState": {"pins": pins}}})
+        + "</script></html>"
+    )
+    assert len(parse_board_pins(html, limit=3)) == 3
+
+
+def test_is_board_url():
+    assert is_board_url("https://www.pinterest.com/ary/dream-kitchen/")
+    assert not is_board_url("https://www.pinterest.com/pin/123/")
+
+
+def test_is_board_url_rejects_non_pinterest_and_wrong_segment_count():
+    assert not is_board_url("https://example.com/ary/dream-kitchen/")
+    assert not is_board_url("https://www.pinterest.com/ary/")
+    assert not is_board_url("https://www.pinterest.com/ary/dream-kitchen/extra/")
+    assert not is_board_url("https://www.pinterest.com/")
 
 
 # --- SSRF: the scraped og:image URL is guarded before fetch -----------------
@@ -267,5 +337,140 @@ async def test_reference_from_link_propagates_app_error(client, factory):
         )
         assert resp.status_code == 422
         assert resp.json()["error"]["code"] == "pinterest_unresolved"
+    finally:
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+# --- e2e: board-link import (flag-gated) ------------------------------------
+
+BOARD_URL = "https://www.pinterest.com/ary/dream-kitchen/"
+
+
+def _board_transport() -> httpx.MockTransport:
+    """MockTransport serving BOARD_HTML for the board URL and JPEG bytes for
+    every i.pinimg.com image request — mirrors the single-pin mock pattern."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "i.pinimg.com" in url:
+            return httpx.Response(
+                200, headers={"content-type": "image/jpeg"}, content=b"\xff\xd8\xff IMG"
+            )
+        if url == BOARD_URL:
+            return httpx.Response(200, headers={"content-type": "text/html"}, text=BOARD_HTML)
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+async def test_reference_from_board_link_flag_on_creates_references(
+    client, factory, monkeypatch
+):
+    monkeypatch.setattr(settings, "pinterest_board_import", True)
+    app.dependency_overrides[get_pin_resolver] = lambda: HttpPinResolver(
+        transport=_board_transport()
+    )
+    try:
+        architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+        resp = await client.post(
+            "/api/v1/design/references/from-link",
+            json={"area_id": area_id, "contributor_id": contributor_id, "url": BOARD_URL},
+            headers=auth(architect),
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.headers["x-board-imported"] == "2"
+        body = resp.json()
+        assert body["source_type"] == "pinterest_link"
+
+        refs = (
+            await client.get(
+                f"/api/v1/design/profiles/{pid}/areas/{area_id}/references",
+                headers=auth(architect),
+            )
+        ).json()
+        assert len(refs) == 2
+        urls = {r["source_url"] for r in refs}
+        assert urls == {
+            "https://i.pinimg.com/originals/aa/p1.jpg",
+            "https://i.pinimg.com/originals/bb/p2.jpg",
+        }
+    finally:
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+async def test_reference_from_board_link_flag_off_is_422(client, factory):
+    assert settings.pinterest_board_import is False  # default
+    app.dependency_overrides[get_pin_resolver] = lambda: HttpPinResolver(
+        transport=_board_transport()
+    )
+    try:
+        architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+        resp = await client.post(
+            "/api/v1/design/references/from-link",
+            json={"area_id": area_id, "contributor_id": contributor_id, "url": BOARD_URL},
+            headers=auth(architect),
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "pinterest_board_unsupported"
+    finally:
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+async def test_reference_from_board_link_zero_images_is_422(client, factory, monkeypatch):
+    monkeypatch.setattr(settings, "pinterest_board_import", True)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text='<html><script id="__PWS_DATA__">{}</script></html>',
+        )
+
+    app.dependency_overrides[get_pin_resolver] = lambda: HttpPinResolver(
+        transport=httpx.MockTransport(handler)
+    )
+    try:
+        architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+        resp = await client.post(
+            "/api/v1/design/references/from-link",
+            json={"area_id": area_id, "contributor_id": contributor_id, "url": BOARD_URL},
+            headers=auth(architect),
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "pinterest_unresolved"
+    finally:
+        app.dependency_overrides.pop(get_pin_resolver, None)
+
+
+async def test_reference_from_board_link_redirect_off_pinterest_is_refused(
+    client, factory, monkeypatch
+):
+    """A board page that redirects off-pinterest must be refused before any
+    internal/external host is fetched (mirrors the single-pin SSRF-redirect
+    test discipline)."""
+    monkeypatch.setattr(settings, "pinterest_board_import", True)
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested.append(url)
+        if url == BOARD_URL:
+            return httpx.Response(
+                302, headers={"location": "http://169.254.169.254/latest/"}
+            )
+        return httpx.Response(200, content=b"SECRET")
+
+    app.dependency_overrides[get_pin_resolver] = lambda: HttpPinResolver(
+        transport=httpx.MockTransport(handler)
+    )
+    try:
+        architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+        resp = await client.post(
+            "/api/v1/design/references/from-link",
+            json={"area_id": area_id, "contributor_id": contributor_id, "url": BOARD_URL},
+            headers=auth(architect),
+        )
+        assert resp.status_code == 422
+        assert not any("169.254" in u for u in requested)
     finally:
         app.dependency_overrides.pop(get_pin_resolver, None)

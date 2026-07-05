@@ -2,12 +2,13 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
+from app.config import settings
 from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.homeowner.authority import APPROVERS, can_approve
@@ -59,7 +60,7 @@ from app.profiler.engine import (
 )
 from app.profiler.events import notify_design_event
 from app.profiler.extraction import extract_reference_attributes, get_llm
-from app.profiler.pinterest import PinResolver, get_pin_resolver
+from app.profiler.pinterest import PinResolver, get_pin_resolver, is_board_url
 from app.profiler.schemas import (
     AreaOut,
     BriefApprovalIn,
@@ -879,23 +880,90 @@ async def add_reference(
     return _reference_out(ref, storage)
 
 
+def _new_pinterest_reference(
+    area: ProfilerArea, contributor_id: UUID | None, key: str, source_url: str
+) -> ProfilerReference:
+    """Build (unsaved) a pinterest_link reference row — shared by the single-pin
+    and board-import paths so both create identical rows."""
+    return ProfilerReference(
+        profile_id=area.profile_id,
+        area_id=area.id,
+        contributor_id=contributor_id,
+        source_type=ReferenceSource.pinterest_link,
+        image_r2_key=key,
+        source_url=source_url,
+    )
+
+
 @router.post("/references/from-link", response_model=ReferenceOut, status_code=201)
 async def add_reference_from_link(
     body: ReferenceFromLinkIn,
+    response: Response,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     llm: LLMClient = Depends(get_llm),
     resolver: PinResolver = Depends(get_pin_resolver),
 ) -> ReferenceOut:
-    """Add an inspiration reference from a pasted Pinterest pin link. The pin's
-    preview image is RE-HOSTED into our R2 so the reference is permanent and flows
-    through display + vision + ranking exactly like an upload."""
+    """Add an inspiration reference from a pasted Pinterest pin (or, flag-gated,
+    board) link. Each image is RE-HOSTED into our R2 so the reference is
+    permanent and flows through display + vision + ranking exactly like an
+    upload.
+
+    Membrane note: profile access + contributor validation run BEFORE any
+    network I/O — the cross-company write matrix (test_profiler_membrane.py)
+    pins this with a resolver that raises if ``fetch``/``fetch_board`` is ever
+    called for a request that should 404.
+    """
     area = await session.get(ProfilerArea, body.area_id)
     if area is None:
         raise AppError(404, "not_found", "Area not found")
     profile = await _load_accessible_profile(session, area.profile_id, user)
     if body.contributor_id is not None:
         await _validate_contributor(session, profile, body.contributor_id, user)
+
+    if is_board_url(body.url):
+        if not settings.pinterest_board_import:
+            raise AppError(
+                422, "pinterest_board_unsupported",
+                "Board import is coming — paste individual pins for now.",
+            )
+        try:
+            images = await resolver.fetch_board(body.url)
+        except AppError:
+            raise
+        except Exception as exc:  # network/parse failure -> friendly 422, never 500
+            logger.info("profiler: pinterest board resolve failed for %s: %s", body.url, exc)
+            raise AppError(
+                422, "pinterest_unresolved",
+                "Couldn't read that Pinterest board. Try copying the board link again.",
+            ) from exc
+        if not images:
+            raise AppError(
+                422, "pinterest_unresolved",
+                "Couldn't find any images on that board.",
+            )
+
+        storage = get_storage()
+        refs: list[ProfilerReference] = []
+        for data, content_type, image_url in images:
+            key = f"design/{profile.site_id}/{uuid4().hex}.jpg"
+            storage.put_bytes(key, data, content_type or "image/jpeg")
+            ref = _new_pinterest_reference(area, body.contributor_id, key, image_url)
+            session.add(ref)
+            await session.flush()
+            await _run_vision(session, llm, ref, area, storage.url_for(key))
+            refs.append(ref)
+
+        # Run the auto-propose hook ONCE for the whole board, not per image.
+        propose_summary = await refresh_taste_and_maybe_propose(
+            session, llm, profile.id, area.id
+        )
+        await session.commit()
+        for ref in refs:
+            await session.refresh(ref)
+        await _emit_propose_summary(session, profile, propose_summary)
+        response.headers["X-Board-Imported"] = str(len(refs))
+        return _reference_out(refs[0], storage)
 
     try:
         data, content_type, _resolved = await resolver.fetch(body.url)
@@ -912,14 +980,7 @@ async def add_reference_from_link(
     key = f"design/{profile.site_id}/{uuid4().hex}.jpg"
     storage.put_bytes(key, data, content_type or "image/jpeg")
 
-    ref = ProfilerReference(
-        profile_id=area.profile_id,
-        area_id=area.id,
-        contributor_id=body.contributor_id,
-        source_type=ReferenceSource.pinterest_link,
-        image_r2_key=key,
-        source_url=body.url,
-    )
+    ref = _new_pinterest_reference(area, body.contributor_id, key, body.url)
     session.add(ref)
     await session.flush()
     await _run_vision(session, llm, ref, area, storage.url_for(key))

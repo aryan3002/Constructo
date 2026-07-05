@@ -9,9 +9,17 @@ through display + vision + ranking).
 The pure helpers (`parse_og_image`, `is_pinterest_url`) are network-free and
 unit-tested directly. og:image scraping is intentionally simple; if Pinterest
 changes its markup this one module is the only thing that breaks.
+
+Board-link import (``is_board_url`` / ``parse_board_pins`` / ``fetch_board``)
+is flag-gated (``settings.pinterest_board_import``) because it depends on
+Pinterest's embedded ``__PWS_DATA__`` JSON blob — a private implementation
+detail, not a public contract like og:image — so it is more likely to drift
+silently. Every level of that JSON walk is guarded (``.get`` + ``isinstance``)
+so a shape change degrades to an empty list rather than a 500.
 """
 from __future__ import annotations
 
+import json
 import re
 from urllib.parse import urlparse
 
@@ -25,15 +33,86 @@ _META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
 _OG_IMAGE_PROP_RE = re.compile(r'(?:property|name)=["\']og:image(?::secure_url)?["\']', re.I)
 _TWITTER_IMAGE_PROP_RE = re.compile(r'(?:property|name)=["\']twitter:image["\']', re.I)
 _CONTENT_ATTR_RE = re.compile(r'content=["\']([^"\']+)["\']', re.I)
+_PWS_DATA_RE = re.compile(
+    r'<script\b[^>]*\bid=["\']__PWS_DATA__["\'][^>]*>(.*?)</script>', re.I | re.S
+)
 _FETCH_TIMEOUT = 10.0
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024  # match the upload ceiling
 _MAX_PAGE_REDIRECTS = 3
+_DEFAULT_BOARD_LIMIT = 10
 
 
 def is_pinterest_url(url: str) -> bool:
     """True only for pinterest.* / pin.it hosts (keeps the fetcher off arbitrary URLs)."""
     host = (urlparse(url).hostname or "").lower()
     return bool(_PIN_HOST_RE.search(host))
+
+
+def is_board_url(url: str) -> bool:
+    """True for a pinterest.* board URL: ``/<user>/<board>/`` — exactly two
+    non-empty path segments, the first of which is not ``pin`` (a single-pin
+    URL is ``/pin/<id>/``, one segment after the host)."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if not re.search(r"(^|\.)pinterest\.[a-z.]+$", host, re.I):
+        return False
+    segments = [seg for seg in parsed.path.split("/") if seg]
+    if len(segments) != 2:
+        return False
+    return segments[0].lower() != "pin"
+
+
+def parse_board_pins(html: str, limit: int = _DEFAULT_BOARD_LIMIT) -> list[str]:
+    """Image URLs for the pins embedded in a Pinterest board page's
+    ``__PWS_DATA__`` JSON blob, else ``[]``.
+
+    Walks ``props.initialReduxState.pins`` (a dict keyed by pin id) and reads
+    each pin's ``images.orig.url``. Every level is guarded with ``.get`` /
+    ``isinstance`` checks — a non-dict pin, a missing key, or a wholesale
+    markup change all degrade to an empty (or partial) list rather than
+    raising, since this parses Pinterest's private page-state blob, not a
+    documented API.
+
+    Order is deterministic: pins are sorted by their (string) key so repeated
+    parses of the same page yield the same URL order, then truncated to
+    ``limit``.
+    """
+    match = _PWS_DATA_RE.search(html)
+    if not match:
+        return []
+    try:
+        data = json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    pins = (
+        data.get("props", {})
+        .get("initialReduxState", {})
+        .get("pins", {})
+        if isinstance(data.get("props"), dict)
+        and isinstance(data["props"].get("initialReduxState"), dict)
+        else {}
+    )
+    if not isinstance(pins, dict):
+        return []
+    urls: list[str] = []
+    for key in sorted(pins.keys(), key=str):
+        pin = pins[key]
+        if not isinstance(pin, dict):
+            continue
+        images = pin.get("images")
+        if not isinstance(images, dict):
+            continue
+        orig = images.get("orig")
+        if not isinstance(orig, dict):
+            continue
+        url = orig.get("url")
+        if isinstance(url, str) and url:
+            urls.append(url)
+        if len(urls) >= limit:
+            break
+    return urls
 
 
 def parse_og_image(html: str) -> str | None:
@@ -60,6 +139,13 @@ class PinResolver:
     """Resolve a pin URL to (image_bytes, content_type, resolved_image_url)."""
 
     async def fetch(self, url: str) -> tuple[bytes, str, str]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    async def fetch_board(
+        self, url: str, limit: int = 10
+    ) -> list[tuple[bytes, str, str]]:  # pragma: no cover - interface
+        """Resolve a board URL to a list of (image_bytes, content_type,
+        resolved_image_url) tuples, one per pin (up to ``limit``)."""
         raise NotImplementedError
 
 
@@ -123,21 +209,57 @@ class HttpPinResolver(PinResolver):
                 raise AppError(
                     422, "pinterest_unresolved", "Couldn't find an image on that pin."
                 )
-            # SSRF: the scraped og:image is attacker-influenceable — guard it against
-            # private/loopback/link-local/metadata hosts BEFORE fetching, and do not
-            # follow redirects on the image request (a 3xx would be rejected below).
-            assert_safe_media_url(image_url)
-            img = await hc.get(image_url, follow_redirects=False)
-            img.raise_for_status()
-            content_type = img.headers.get("content-type", "image/jpeg")
-            if not content_type.startswith("image/"):
-                raise AppError(
-                    422, "pinterest_unresolved", "That link didn't resolve to an image."
-                )
-            data = img.content
-            if not data or len(data) > _MAX_IMAGE_BYTES:
-                raise AppError(422, "pinterest_unresolved", "That image is empty or too large.")
-            return data, content_type, image_url
+            return await self._fetch_image(hc, image_url)
+
+    @staticmethod
+    async def _fetch_image(hc: httpx.AsyncClient, image_url: str) -> tuple[bytes, str, str]:
+        """Download and validate ONE already-scraped image URL. Shared by the
+        single-pin and board-import paths so the SSRF guard + size cap + content-type
+        check can never drift between them."""
+        # SSRF: the scraped image URL is attacker-influenceable — guard it against
+        # private/loopback/link-local/metadata hosts BEFORE fetching, and do not
+        # follow redirects on the image request (a 3xx would be rejected below).
+        assert_safe_media_url(image_url)
+        img = await hc.get(image_url, follow_redirects=False)
+        img.raise_for_status()
+        content_type = img.headers.get("content-type", "image/jpeg")
+        if not content_type.startswith("image/"):
+            raise AppError(422, "pinterest_unresolved", "That link didn't resolve to an image.")
+        data = img.content
+        if not data or len(data) > _MAX_IMAGE_BYTES:
+            raise AppError(422, "pinterest_unresolved", "That image is empty or too large.")
+        return data, content_type, image_url
+
+    async def fetch_board(self, url: str, limit: int = _DEFAULT_BOARD_LIMIT) -> list[
+        tuple[bytes, str, str]
+    ]:
+        """Resolve a Pinterest BOARD url to up to ``limit`` (image_bytes,
+        content_type, resolved_image_url) tuples, one per pin.
+
+        Uses the SAME no-redirect + per-hop pinterest host-check discipline as
+        ``fetch`` for the board page itself, then every extracted pin image URL
+        goes through the identical ``_fetch_image`` guard (SSRF check + size cap)
+        as the single-pin path. A pin whose individual image fetch fails is
+        skipped rather than failing the whole board import.
+        """
+        if not is_board_url(url):
+            raise AppError(422, "pinterest_unresolved", "Paste a Pinterest board link.")
+        async with httpx.AsyncClient(
+            timeout=_FETCH_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NeevBot/1.0)"},
+            transport=self._transport,
+        ) as hc:
+            page = await self._get_pinterest_page(hc, url)
+            image_urls = parse_board_pins(page.text, limit=limit)
+            results: list[tuple[bytes, str, str]] = []
+            for image_url in image_urls:
+                try:
+                    results.append(await self._fetch_image(hc, image_url))
+                except AppError:
+                    # One bad pin image (private, deleted, non-image) shouldn't
+                    # sink the whole board import — skip it and keep going.
+                    continue
+            return results
 
 
 def get_pin_resolver() -> PinResolver:

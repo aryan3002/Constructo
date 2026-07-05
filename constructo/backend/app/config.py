@@ -140,6 +140,13 @@ class Settings(BaseSettings):
     #   BRIDGE_KEY   = shared secret (must match the bridge's BRIDGE_KEY)
     bot_enabled: bool = True
 
+    # Design Profiler: Pinterest BOARD-link import (paste a board URL, not just a
+    # single pin). Off by default — the parser depends on Pinterest's embedded
+    # __PWS_DATA__ JSON blob, a private implementation detail more likely to
+    # drift than the public og:image meta tag the single-pin path uses. Flip on
+    # per-deploy once verified against live Pinterest markup.
+    pinterest_board_import: bool = False
+
     @model_validator(mode="after")
     def _enforce_prod_security(self) -> "Settings":
         """Fail-CLOSED in a prod posture: refuse to boot with world-open auth or
