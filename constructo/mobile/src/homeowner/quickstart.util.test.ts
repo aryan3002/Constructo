@@ -77,4 +77,11 @@ describe('QUICKSTART_STR', () => {
     expect(QUICKSTART_STR.en.entryTitle).toBeTruthy()
     expect(QUICKSTART_STR.hi.entryTitle).toBeTruthy()
   })
+
+  test('non-contributor notice exists in both languages and matches the [area].tsx copy', () => {
+    expect(QUICKSTART_STR.en.readOnlyNotice).toBe(
+      'Only members of this home can rank references.',
+    )
+    expect(QUICKSTART_STR.hi.readOnlyNotice).toBeTruthy()
+  })
 })

@@ -11,6 +11,12 @@
  * idempotent server-side (preset dedupe), so leaving mid-deck and coming
  * back later loses nothing and never double-counts.
  *
+ * Membrane: ranking requires a contributor identity (RankingIn.contributor_id
+ * is a required UUID server-side). Same gate as [area].tsx's `canRank` — a
+ * viewer without my_contributor_id gets a calm read-only notice, never an
+ * interactive deck that would 422 on every tap. On a rank failure the card
+ * STAYS (retry or Skip explicitly) — "N rated" counts successful ranks only.
+ *
  * Finishing (or skipping through all 10) shows a closing card — no further
  * network calls, just a summary + a way back to the area.
  */
@@ -102,6 +108,9 @@ export default function QuickstartScreen() {
     enabled: !!pid,
   })
   const myContributorId = profileQ.data?.my_contributor_id ?? null
+  // Same membrane gate as [area].tsx — without a contributor identity the
+  // server rejects every ranking, so the deck must not render at all.
+  const canRank = !!myContributorId
   const areaDetail = profileQ.data?.areas?.find((a) => a.id === area)
   const areaKind = areaDetail?.area_kind ?? 'interior'
 
@@ -120,14 +129,25 @@ export default function QuickstartScreen() {
   const done = total === 0 || index >= total
 
   const rateMut = useMutation({
-    mutationFn: async ({ presetId, stars }: { presetId: string; stars: number }) => {
+    // contributorId is threaded through the variables (narrowed non-null at the
+    // call site by the `canRank` gate) — never a `?? ''` fallback the server
+    // would 422 on.
+    mutationFn: async ({
+      presetId,
+      stars,
+      contributorId,
+    }: {
+      presetId: string
+      stars: number
+      contributorId: string
+    }) => {
       const ref = await design.referenceFromPreset({
         area_id: area as string,
-        contributor_id: myContributorId ?? undefined,
+        contributor_id: contributorId,
         preset_id: presetId,
       })
       await design.rankReference(ref.id, {
-        contributor_id: myContributorId ?? '',
+        contributor_id: contributorId,
         stars,
         tags: {},
       })
@@ -137,15 +157,15 @@ export default function QuickstartScreen() {
       setIndex((i) => i + 1)
     },
     onError: (e: Error) => {
+      // Honest failure: keep the card so she can retry (tap a star again) or
+      // Skip explicitly — never advance-and-count a rating that didn't land.
       toast(e.message)
-      // Still advance — she can always add it again from Inspiration later.
-      setIndex((i) => i + 1)
     },
   })
 
   function handleStar(stars: number) {
-    if (!current || rateMut.isPending) return
-    rateMut.mutate({ presetId: current.id, stars })
+    if (!current || !myContributorId || rateMut.isPending) return
+    rateMut.mutate({ presetId: current.id, stars, contributorId: myContributorId })
   }
 
   function handleSkip() {
@@ -161,13 +181,26 @@ export default function QuickstartScreen() {
     <Screen floatingNav padded={false}>
       <SubHeader
         title={`Quick start — ${areaLabel}`}
-        subtitle={!done ? S.progress(index + 1, total) : undefined}
+        subtitle={canRank && !done ? S.progress(index + 1, total) : undefined}
         onBack={() => router.back()}
       />
 
       <View style={{ paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, gap: SPACE.md }}>
         {presetsQ.isLoading || profileQ.isLoading ? (
           <Small muted>Loading designer picks…</Small>
+        ) : !canRank ? (
+          /* No contributor identity — ranking is impossible (server requires
+             it), so no interactive deck. Same calm notice as [area].tsx. */
+          <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.quiet }}>
+            <Small muted>{S.readOnlyNotice}</Small>
+            <Button
+              title={S.seeArea}
+              variant="secondary"
+              size="md"
+              onPress={goToArea}
+              style={{ marginTop: SPACE.md }}
+            />
+          </Card>
         ) : total === 0 ? (
           <Card padded>
             <BodyStrong>No preset packs yet</BodyStrong>

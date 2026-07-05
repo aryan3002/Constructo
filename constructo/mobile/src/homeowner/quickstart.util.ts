@@ -55,6 +55,8 @@ export const QUICKSTART_STR = {
     finishedBody: 'Check AI Notes to see what we’re reading from your picks.',
     seeArea: 'See my area',
     starHint: 'How much do you like this?',
+    // Same copy as [area].tsx's non-contributor notice — rating requires membership.
+    readOnlyNotice: 'Only members of this home can rank references.',
   },
   hi: {
     entryTitle: 'कहाँ से शुरू करें, तय नहीं?',
@@ -66,6 +68,7 @@ export const QUICKSTART_STR = {
     finishedBody: 'आपकी पसंद से हम क्या समझ रहे हैं, यह देखने के लिए AI नोट्स देखें।',
     seeArea: 'मेरा क्षेत्र देखें',
     starHint: 'यह आपको कितना पसंद है?',
+    readOnlyNotice: 'सिर्फ़ इस घर के सदस्य ही रेटिंग दे सकते हैं।',
   },
 } as const
 
