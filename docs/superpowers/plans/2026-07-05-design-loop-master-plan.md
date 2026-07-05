@@ -26,12 +26,12 @@
 | Phase | What | Detailed plan | Depends on |
 |---|---|---|---|
 | 0 | Land the in-flight fix pass (incl. the Pinterest parse fix = "Pinterest doesn't work" root cause) | ✅ **DONE — merged as PR #243 (`4936256`) 2026-07-05**; plan doc kept for the record | — |
-| 1 | Backend ignition + authority + hygiene | `2026-07-05-design-loop-phase1-ignition.md` ✅ ready | 0 |
-| 2 | Design events → push + bell inbox + activity + badges | `2026-07-05-design-loop-phase2-events.md` ✅ ready | 1 |
-| 3 | Designer cockpit completion (mobile architect + web) | `2026-07-05-design-loop-phase3-designer-cockpit.md` ✅ ready | 1 (2 for badges) |
-| 4 | Homeowner loop completion (incl. P2/P3/P4 Pinterest, Q1/Q3/Q5 presets) | `2026-07-05-design-loop-phase4-homeowner.md` ✅ ready | 1 (2 for banners) |
-| 5 | One inspiration surface + visible payoff | `2026-07-05-design-loop-phase5-unify-payoff.md` ✅ ready | 4 |
-| 6 | Full-loop seeds, sim smoke, verify, deploy | `2026-07-05-design-loop-phase6-prove-ship.md` ✅ ready | all |
+| 1 | Backend ignition + authority + hygiene | ✅ **MERGED** (PR #244) | 0 |
+| 2 | Design events → push + bell inbox + activity + badges | ✅ **MERGED** (PR #248, né #245) | 1 |
+| 3 | Designer cockpit completion (mobile architect + web) | ✅ **MERGED** (PR #246; incl. the request_changes membrane fix) | 1 (2 for badges) |
+| 4 | Homeowner loop completion (incl. P2/P3/P4 Pinterest, Q1/Q3/Q5 presets) | ✅ **MERGED** (PR #247) | 1 (2 for banners) |
+| 5 | One inspiration surface + visible payoff | ✅ **MERGED** (PR #249; incl. Decision→Spec sync + site_id fixes) | 4 |
+| 6 | Full-loop seeds, sim smoke, verify, deploy | ✅ seed + 15/15 API loop-walk PASS; deploy in flight (this PR) | all |
 
 Phases 3 and 4 parallelize (different apps, same contracts). Workstream Q1–Q2 (preset catalog pipeline) has no dependencies and can run any time after Phase 0.
 
