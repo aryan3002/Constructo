@@ -918,6 +918,12 @@ async def retry_extraction(
     vision_url = storage.url_for(ref.image_r2_key) if ref.image_r2_key else ref.source_url
     await _run_vision(session, llm, ref, area, vision_url)
 
+    # A successful retry produces a fresh attributes row that the area's persisted
+    # taste model doesn't yet reflect (only ranking/reference writes trigger this
+    # elsewhere) — recompute now so the reducer isn't blind to this reference until
+    # some unrelated later write happens to touch the same area.
+    await refresh_taste_and_maybe_propose(session, llm, ref.profile_id, ref.area_id)
+
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)

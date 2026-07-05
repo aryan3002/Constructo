@@ -5,7 +5,7 @@ from app.auth.jwt import create_access_token
 from app.extraction.llm import FakeLLMClient
 from app.main import app
 from app.models import UserRole
-from app.models.profiler import ProfilerReference, ProfilerReferenceAttributes
+from app.models.profiler import ProfilerArea, ProfilerReference, ProfilerReferenceAttributes
 from app.profiler.extraction import extract_reference_attributes, get_llm
 
 
@@ -110,23 +110,44 @@ async def test_retry_extraction_replaces_stale_attributes_and_reports_ok(
             "/api/v1/design/profiles",
             json={"site_id": str(site.id),
                   "areas": [{"area_kind": "interior", "area_key": "kitchen"}],
-                  "contributors": []},
+                  "contributors": [{"role": "co_owner", "is_decision_owner": True,
+                                     "user_id": str(architect.id)}]},
             headers=_auth(architect),
         )
         pid = created.json()["id"]
         detail = await client.get(f"/api/v1/design/profiles/{pid}", headers=_auth(architect))
         area_id = detail.json()["areas"][0]["id"]
+        contributor_id = detail.json()["my_contributor_id"]
 
         ref = await client.post(
             "/api/v1/design/references",
             json={"area_id": area_id, "source_type": "upload",
-                  "source_url": "https://example.test/pin.jpg"},
+                  "source_url": "https://example.test/pin.jpg",
+                  "contributor_id": contributor_id},
             headers=_auth(architect),
         )
         ref_id = ref.json()["id"]
         assert ref.json()["extraction_status"] == "failed"
+
+        # A ranking (with no attributes yet, since extraction failed) so the
+        # reducer has a star weight to apply once attributes DO land on retry —
+        # otherwise aggregate_dimension_scores has nothing to multiply and the
+        # taste-model assertion below couldn't distinguish "refreshed" from "still
+        # empty because there was never a ranking".
+        rank = await client.post(f"/api/v1/design/references/{ref_id}/rankings", json={
+            "contributor_id": contributor_id, "stars": 5, "tags": {},
+        }, headers=_auth(architect))
+        assert rank.status_code == 201, rank.text
     finally:
         app.dependency_overrides.pop(get_llm, None)
+
+    # The failed extraction leaves no attributes, so the area's persisted taste
+    # model has only empty per-dimension shells (build_taste_model always emits
+    # DIMENSIONS keys) and no actual scored values yet — confirm the pre-fix
+    # baseline before the retry.
+    area_before = await db_session.get(ProfilerArea, area_id)
+    await db_session.refresh(area_before)
+    assert all(not v for v in area_before.taste_model.values())
 
     app.dependency_overrides[get_llm] = lambda: FakeLLMClient(canned=canned)
     try:
@@ -146,6 +167,14 @@ async def test_retry_extraction_replaces_stale_attributes_and_reports_ok(
         ).scalars().all()
         assert len(rows) == 1
         assert rows[0].attributes["style"] == "minimal"
+
+        # A successful retry must refresh the area's persisted taste model, not
+        # just the reference's own attributes row — otherwise the taste engine
+        # stays blind to a reference until some unrelated later write touches it.
+        area_after = await db_session.get(ProfilerArea, area_id)
+        await db_session.refresh(area_after)
+        assert area_after.taste_model != {}
+        assert area_after.taste_model.get("style", {}).get("minimal") is not None
     finally:
         app.dependency_overrides.pop(get_llm, None)
 
