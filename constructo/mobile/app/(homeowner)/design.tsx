@@ -17,10 +17,9 @@
  * are built inline with RN + tokens — no hardcoded hex values.
  */
 import { useState } from 'react'
-import { Alert, Pressable, ScrollView, View } from 'react-native'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Pressable, ScrollView, View } from 'react-native'
+import { useQuery } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
-import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
@@ -251,9 +250,13 @@ function DPHubSection({ profileId }: { profileId?: string }) {
 
   const areas = q.data?.areas ?? []
   const groups = groupAreasByKind(areas)
-  const ranked = areas.reduce((s, a) => s + (a.status === 'ready' ? a.recommended_count : 0), 0)
+  const ranked = areas.reduce((s, a) => s + (a.my_ranked_count ?? 0), 0)
   const recTotal = areas.reduce((s, a) => s + a.recommended_count, 0)
   const pct = recTotal > 0 ? Math.round((ranked / recTotal) * 100) : 0
+
+  // Overall confidence across all areas — average (matches design/profiler.tsx).
+  const avgConfidence =
+    areas.length > 0 ? areas.reduce((s, a) => s + a.confidence, 0) / areas.length : 0
 
   const catIcon: Record<string, React.ComponentProps<typeof Feather>['name']> = {
     house_build: 'home',
@@ -316,7 +319,7 @@ function DPHubSection({ profileId }: { profileId?: string }) {
             <Eyebrow style={{ color: c.ok }}>Design profile</Eyebrow>
             <Title style={{ marginTop: 4 }}>Building your brief</Title>
           </View>
-          <ConfPill confidence={0.5} />
+          <ConfPill confidence={avgConfidence} />
         </View>
         <View style={{ marginTop: SPACE.md }}>
           <DPProgressBar pct={pct} tone="warn" />
@@ -335,8 +338,8 @@ function DPHubSection({ profileId }: { profileId?: string }) {
             style={{ flex: 1 }}
           />
           <Button
-            title="Design chat"
-            variant="secondary"
+            title="Design chat (soon)"
+            variant="ghost"
             size="md"
             leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
             onPress={() => toast('Coming soon — design chat is not yet backed by the engine.')}
@@ -530,7 +533,6 @@ export default function Design() {
   const { theme } = useTheme()
   const c = theme.colors
   const router = useRouter()
-  const qc = useQueryClient()
   const insets = useSafeAreaInsets()
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<string>('profile')
@@ -553,10 +555,6 @@ export default function Design() {
     queryKey: ['design', 'drawings'],
     queryFn: () => homeowner.drawings(),
   })
-  const referencesQ = useQuery({
-    queryKey: ['design', 'references'],
-    queryFn: () => homeowner.designReferences(),
-  })
   const capsQ = useQuery({
     queryKey: ['homeowner', 'capabilities'],
     queryFn: () => homeowner.capabilities(),
@@ -578,27 +576,6 @@ export default function Design() {
 
   // selection groups
   const selGroups = groupSelections(selections, T.wholeHouse)
-
-  // ---- add inspiration -------------------------------------------------------
-  const addRefMut = useMutation({
-    mutationFn: (image_url: string) => homeowner.references({ image_url, source: 'upload' }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['design', 'references'] })
-      toast('Inspiration added', 'check')
-    },
-    onError: (err: Error) => toast(err.message),
-  })
-
-  async function pickInspiration() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert(STR.inspirationTitle, STR.permissionDenied)
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 })
-    if (result.canceled || !result.assets?.length) return
-    addRefMut.mutate(result.assets[0].uri)
-  }
 
   // ============================================================================
   // TAB: Profile — DPHub inline
@@ -799,7 +776,7 @@ export default function Design() {
                               style={{
                                 fontSize: 14,
                                 fontWeight: decided ? '500' : '600',
-                                color: decided ? c.textMute : decided ? c.text : c.warn,
+                                color: decided ? c.textMute : c.warn,
                                 flex: 1,
                               }}
                             >

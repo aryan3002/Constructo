@@ -2,6 +2,51 @@
 the advisory (never-gatekeeping) consistency check."""
 from .conftest import auth
 
+JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIFfake-bytes"
+
+
+async def test_reference_upload_persists_real_bytes_and_resolves(
+    client, ctx, tmp_path, monkeypatch
+):
+    """P1: the Design tab's "add a photo" flow must actually upload the image
+    to storage and get back a real object key — not record the device's local
+    file path (file://...) as if it were a permanent, fetchable URL. That is
+    exactly what made every reference photo render as a broken image."""
+    monkeypatch.setattr("app.config.settings.media_dir", str(tmp_path))
+
+    uploaded = await client.post(
+        "/api/v1/homeowner/design/references/upload",
+        files={"media": ("inspo.jpg", JPEG, "image/jpeg")},
+        headers=auth(ctx.homeowner),
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    key = uploaded.json()["image_url"]
+    assert key.startswith(f"homeowner/{ctx.site.id}/design/")
+    # Bytes actually landed in storage under that key (local backend in tests).
+    assert (tmp_path / key).read_bytes() == JPEG
+
+    ref = await client.post(
+        "/api/v1/homeowner/design/references",
+        json={"image_url": key, "room_tag": "living", "source": "upload"},
+        headers=auth(ctx.homeowner),
+    )
+    assert ref.status_code == 201, ref.text
+    # Resolved on the way out (mirrors test_reference_key_is_served_as_resolved_url)
+    # — the value the app renders points at a real object, not a dead reference.
+    out_url = ref.json()["image_url"]
+    assert key in out_url
+    assert out_url != key
+
+
+async def test_reference_upload_rejects_non_image(client, ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.config.settings.media_dir", str(tmp_path))
+    resp = await client.post(
+        "/api/v1/homeowner/design/references/upload",
+        files={"media": ("note.txt", b"hello", "text/plain")},
+        headers=auth(ctx.homeowner),
+    )
+    assert resp.status_code == 415, resp.text
+
 
 async def test_references_and_selections(client, ctx):
     ref = await client.post(

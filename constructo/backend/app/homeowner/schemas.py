@@ -338,6 +338,14 @@ class ReferenceCreateIn(BaseModel):
     source: ReferenceSource = ReferenceSource.upload
 
 
+class ReferenceUploadOut(BaseModel):
+    """A bare private-bucket object key — pass it as `image_url` to
+    POST /design/references to actually create the reference row (mirrors the
+    presign/upload -> addReference split used by the design profiler engine)."""
+
+    image_url: str
+
+
 class ReferenceOut(BaseModel):
     id: UUID
     site_id: UUID

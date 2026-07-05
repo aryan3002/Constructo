@@ -21,7 +21,7 @@
  * Per-reference state is isolated in RefRankRow so ratings don't bleed.
  */
 import { useState } from 'react'
-import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native'
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import type { ViewStyle } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -508,7 +508,7 @@ export default function AreaRankScreen() {
   const progLabel = areaProgressLabel(ranked, recommended)
 
   return (
-    <Screen floatingNav style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE, paddingTop: 0 }} padded={false}>
+    <Screen floatingNav style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }} padded={false}>
       {/* SubHeader with confidence pill on right */}
       <SubHeader
         title={areaLabel}
@@ -812,6 +812,10 @@ export default function AreaRankScreen() {
         animationType="slide"
         onRequestClose={() => setPinOpen(false)}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
           onPress={() => setPinOpen(false)}
@@ -879,6 +883,7 @@ export default function AreaRankScreen() {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Presets picker sheet ──────────────────────────────────────── */}

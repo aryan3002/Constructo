@@ -255,8 +255,8 @@ export default function ProfilerHubScreen() {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Design chat"
-                variant="secondary"
+                title="Design chat (soon)"
+                variant="ghost"
                 size="md"
                 leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
                 onPress={() =>

@@ -87,6 +87,25 @@ async def test_list_presets_matches_across_space_underscore(client, factory, db_
     assert any(r["title"] == "Soft neutrals" for r in resp.json())
 
 
+async def test_list_presets_falls_back_to_generic_pack_for_uncataloged_area(
+    client, factory, db_session
+):
+    """An area with no room-specific catalog entry (e.g. a custom room like
+    "pooja") must still see the area_kind's generic (area_key=None) packs —
+    otherwise "Use presets" looks broken for every area that isn't one of the
+    handful of named rooms in the seed catalog."""
+    await _seed_preset(
+        db_session, area_key=None, title="Designer picks", image_r2_key="presets/any.jpg",
+    )
+    user = await factory.user(role=UserRole.architect)
+    resp = await client.get(
+        "/api/v1/design/presets?area_kind=interior&area_key=pooja", headers=auth(user)
+    )
+    assert resp.status_code == 200
+    titles = {r["title"] for r in resp.json()}
+    assert "Designer picks" in titles
+
+
 async def test_reference_from_preset_creates_reference(client, factory, db_session):
     preset = await _seed_preset(db_session)
     architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
