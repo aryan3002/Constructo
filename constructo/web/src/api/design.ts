@@ -66,7 +66,7 @@ export interface BriefNarrative {
 export interface DesignBrief {
   /** The rendering ID */
   id: string
-  /** The parent brief ID (used for materialize) */
+  /** The parent brief ID (used for materialize / actOnBrief / approvals) */
   brief_id: string
   audience: string
   scope: string
@@ -80,6 +80,9 @@ export interface DesignBrief {
   narrative: BriefNarrative
   areas: BriefAreaPayload[]
   version?: number
+  /** The owning brief's lifecycle state (drives designerActions()). Null/undefined
+   *  on backends that predate this field — callers must treat that as no actions. */
+  state?: string | null
 }
 
 export interface BriefAreaPayload {
@@ -132,6 +135,40 @@ export interface DesignInboxSummary {
   briefs_awaiting_signoff: number
   answered_clarifications: number
   deferred_conflicts: number
+}
+
+/** ClarificationOut — one homeowner Q&A row (GET /profiles/{id}/clarifications). */
+export interface DesignClarification {
+  id: string
+  area_id: string | null
+  question: string
+  answer: string | null
+  asked_at: string
+  answered_at: string | null
+}
+
+/** ConflictOut — a taste conflict between two contributors on one dimension
+ *  (GET /profiles/{id}/conflicts). resolution_status includes
+ *  'deferred_to_architect' rows the homeowner side punted to the designer. */
+export interface DesignConflict {
+  id: string
+  area_id: string
+  dimension: string
+  value: string
+  contributor_a_id: string | null
+  contributor_b_id: string | null
+  resolution_status: 'open' | 'resolved' | 'deferred_to_architect' | string
+  decision_note: string | null
+}
+
+/** BriefApprovalOut — one row of the brief's attributed approval timeline. */
+export interface DesignBriefApproval {
+  id: string
+  brief_id: string
+  actor_role: string
+  action: string
+  note: string | null
+  created_at: string
 }
 
 // ---------------------------------------------------------------------------
@@ -312,12 +349,73 @@ const MOCK_BRIEF: DesignBrief = {
   ],
   version: 2,
   created_at: '2026-06-10T12:00:00Z',
+  state: 'architect_review',
 }
 
 // In-memory mock theme store (mutable so themeDecision updates status)
 const _mockThemes: Map<string, DesignTheme> = new Map(
   Object.values(MOCK_THEMES_BY_AREA).flat().map((t) => [t.id, { ...t }])
 )
+
+// One answered clarification + one still waiting — exercises both halves of
+// the "Homeowner Q&A" section.
+const MOCK_CLARIFICATIONS: DesignClarification[] = [
+  {
+    id: 'clar-1',
+    area_id: 'area-lr',
+    question: 'Should the living room floor be matte or polished?',
+    answer: 'Matte — easier to maintain with kids around.',
+    asked_at: '2026-06-09T09:00:00Z',
+    answered_at: '2026-06-09T14:30:00Z',
+  },
+  {
+    id: 'clar-2',
+    area_id: 'area-mb',
+    question: 'Any preference between walnut and teak for the headboard?',
+    answer: null,
+    asked_at: '2026-06-11T08:00:00Z',
+    answered_at: null,
+  },
+]
+
+// One open conflict — exercises the resolve (keep_a/keep_b/compromise) panel.
+const MOCK_CONFLICTS: DesignConflict[] = [
+  {
+    id: 'conflict-1',
+    area_id: 'area-lr',
+    dimension: 'palette',
+    value: 'Warm Contemporary vs. Cool Minimalist',
+    contributor_a_id: 'contrib-1',
+    contributor_b_id: 'contrib-2',
+    resolution_status: 'open',
+    decision_note: null,
+  },
+]
+
+// In-memory mock conflict store (mutable so resolveConflict updates status)
+const _mockConflicts: Map<string, DesignConflict> = new Map(
+  MOCK_CONFLICTS.map((c) => [c.id, { ...c }])
+)
+
+// Two approval rows — the timeline's minimum viable "it moved" proof.
+const MOCK_APPROVALS: DesignBriefApproval[] = [
+  {
+    id: 'appr-1',
+    brief_id: MOCK_BRIEF_ID,
+    actor_role: 'homeowner',
+    action: 'send_to_architect',
+    note: null,
+    created_at: '2026-06-10T11:00:00Z',
+  },
+  {
+    id: 'appr-2',
+    brief_id: MOCK_BRIEF_ID,
+    actor_role: 'architect',
+    action: 'architect_sign_off',
+    note: null,
+    created_at: '2026-06-10T15:00:00Z',
+  },
+]
 
 // ---------------------------------------------------------------------------
 // designApi
@@ -360,6 +458,10 @@ export const designApi = {
         scope: string
         content_json: DesignBrief['content_json']
         created_at: string
+        // BriefRenderingOut carries the owning brief's lifecycle state + version
+        // directly — drives designerActions() without a separate lookup.
+        state?: string | null
+        version?: number | null
       }>(`/api/v1/design/profiles/${encodeURIComponent(profileId)}/brief?audience=${encodeURIComponent(audience)}`)
       return {
         id: raw.id,
@@ -370,6 +472,8 @@ export const designApi = {
         created_at: raw.created_at,
         narrative: raw.content_json?.narrative ?? { headline: '', summary: '', sections: [] },
         areas: raw.content_json?.areas ?? [],
+        version: raw.version ?? undefined,
+        state: raw.state ?? null,
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return null
@@ -469,5 +573,79 @@ export const designApi = {
     return call<MaterializeOut>(`/api/v1/design/briefs/${encodeURIComponent(briefId)}/materialize`, {
       method: 'POST',
     })
+  },
+
+  /**
+   * POST /api/v1/design/briefs/{briefId}/approval
+   * body: { action: 'approve' | 'request_changes' | 'send_to_architect' |
+   *         'architect_sign_off' | 'contractor_received', note? }
+   * Drives the brief's lifecycle (designerActions()). Returns the updated brief.
+   */
+  async actOnBrief(briefId: string, body: { action: string; note?: string }): Promise<{ id: string; state: string }> {
+    if (USE_MOCKS) {
+      return Promise.resolve({ id: briefId, state: 'contractor_brief_ready' })
+    }
+    return call<{ id: string; state: string }>(`/api/v1/design/briefs/${encodeURIComponent(briefId)}/approval`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /**
+   * GET /api/v1/design/profiles/{profileId}/clarifications
+   * The homeowner Q&A for this profile — answered rows plus rows still waiting.
+   */
+  async clarifications(profileId: string): Promise<DesignClarification[]> {
+    if (USE_MOCKS) {
+      return Promise.resolve(MOCK_CLARIFICATIONS.map((c) => ({ ...c })))
+    }
+    return call<DesignClarification[]>(
+      `/api/v1/design/profiles/${encodeURIComponent(profileId)}/clarifications`
+    )
+  },
+
+  /**
+   * GET /api/v1/design/profiles/{profileId}/conflicts
+   * Taste conflicts between contributors, including any the homeowner side
+   * deferred to the architect ('deferred_to_architect').
+   */
+  async conflicts(profileId: string): Promise<DesignConflict[]> {
+    if (USE_MOCKS) {
+      return Promise.resolve(Array.from(_mockConflicts.values()).map((c) => ({ ...c })))
+    }
+    return call<DesignConflict[]>(`/api/v1/design/profiles/${encodeURIComponent(profileId)}/conflicts`)
+  },
+
+  /**
+   * POST /api/v1/design/conflicts/{conflictId}/resolve
+   * body: { resolution: 'keep_a' | 'keep_b' | 'compromise' | 'defer_to_architect', note? }
+   * Returns the updated ConflictOut.
+   */
+  async resolveConflict(
+    conflictId: string,
+    body: { resolution: 'keep_a' | 'keep_b' | 'compromise' | 'defer_to_architect'; note?: string }
+  ): Promise<DesignConflict> {
+    if (USE_MOCKS) {
+      const c = _mockConflicts.get(conflictId)
+      if (!c) throw new ApiError(404, 'Conflict not found')
+      c.resolution_status = body.resolution === 'defer_to_architect' ? 'deferred_to_architect' : 'resolved'
+      c.decision_note = body.note ?? null
+      return Promise.resolve({ ...c })
+    }
+    return call<DesignConflict>(`/api/v1/design/conflicts/${encodeURIComponent(conflictId)}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /**
+   * GET /api/v1/design/briefs/{briefId}/approvals
+   * The attributed approval timeline: every action with actor role + date.
+   */
+  async briefApprovals(briefId: string): Promise<DesignBriefApproval[]> {
+    if (USE_MOCKS) {
+      return Promise.resolve(MOCK_APPROVALS.map((a) => ({ ...a })))
+    }
+    return call<DesignBriefApproval[]>(`/api/v1/design/briefs/${encodeURIComponent(briefId)}/approvals`)
   },
 }

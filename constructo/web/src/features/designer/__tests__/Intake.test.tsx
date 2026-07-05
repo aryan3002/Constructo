@@ -28,6 +28,12 @@ const mockBrief = vi.fn()
 const mockThemesForArea = vi.fn()
 const mockThemeDecision = vi.fn()
 const mockMaterialize = vi.fn()
+const mockActOnBrief = vi.fn()
+const mockGenerateBrief = vi.fn()
+const mockClarifications = vi.fn()
+const mockConflicts = vi.fn()
+const mockResolveConflict = vi.fn()
+const mockBriefApprovals = vi.fn()
 
 vi.mock('../../../api/design', () => ({
   designApi: {
@@ -36,6 +42,12 @@ vi.mock('../../../api/design', () => ({
     themesForArea: (...a: unknown[]) => mockThemesForArea(...a),
     themeDecision: (...a: unknown[]) => mockThemeDecision(...a),
     materialize: (...a: unknown[]) => mockMaterialize(...a),
+    actOnBrief: (...a: unknown[]) => mockActOnBrief(...a),
+    generateBrief: (...a: unknown[]) => mockGenerateBrief(...a),
+    clarifications: (...a: unknown[]) => mockClarifications(...a),
+    conflicts: (...a: unknown[]) => mockConflicts(...a),
+    resolveConflict: (...a: unknown[]) => mockResolveConflict(...a),
+    briefApprovals: (...a: unknown[]) => mockBriefApprovals(...a),
   },
 }))
 
@@ -111,7 +123,57 @@ const MOCK_BRIEF = {
   areas: [],
   version: 2,
   created_at: '2026-06-10T12:00:00Z',
+  // Default state supports materialize so the pre-existing materialize tests
+  // (which don't care about the action cockpit) keep working unmodified.
+  // Tests exercising sign-off/request-changes override state explicitly.
+  state: 'contractor_brief_ready',
 }
+
+const MOCK_CLARIFICATIONS = [
+  {
+    id: 'clar-1',
+    area_id: 'area-lr',
+    question: 'Matte or polished floor?',
+    answer: 'Matte, please.',
+    asked_at: '2026-06-09T09:00:00Z',
+    answered_at: '2026-06-09T14:30:00Z',
+  },
+]
+
+const MOCK_CONFLICTS = [
+  {
+    id: 'conflict-1',
+    area_id: 'area-lr',
+    dimension: 'palette',
+    value: 'Warm Contemporary vs. Cool Minimalist',
+    contributor_a_id: 'contrib-1',
+    contributor_b_id: 'contrib-2',
+    resolution_status: 'open',
+    decision_note: null,
+  },
+]
+
+const MOCK_DEFERRED_CONFLICT = {
+  id: 'conflict-2',
+  area_id: 'area-mb',
+  dimension: 'materials',
+  value: 'Walnut vs. teak headboard',
+  contributor_a_id: 'contrib-1',
+  contributor_b_id: 'contrib-3',
+  resolution_status: 'deferred_to_architect',
+  decision_note: null,
+}
+
+const MOCK_APPROVALS = [
+  {
+    id: 'appr-1',
+    brief_id: 'brief-1',
+    actor_role: 'homeowner',
+    action: 'send_to_architect',
+    note: null,
+    created_at: '2026-06-10T11:00:00Z',
+  },
+]
 
 const MOCK_THEMES_LR = [
   {
@@ -188,6 +250,12 @@ describe('Intake', () => {
       specs_reused: 0,
       skipped_areas: [],
     })
+    mockClarifications.mockResolvedValue([])
+    mockConflicts.mockResolvedValue([])
+    mockBriefApprovals.mockResolvedValue([])
+    mockActOnBrief.mockResolvedValue({ id: 'brief-1', state: 'contractor_brief_ready' })
+    mockGenerateBrief.mockResolvedValue({ id: 'brief-1', version: 3, state: 'homeowner_review' })
+    mockResolveConflict.mockResolvedValue({ ...MOCK_CONFLICTS[0], resolution_status: 'resolved' })
   })
 
   // -------------------------------------------------------------------------
@@ -430,5 +498,152 @@ describe('Intake', () => {
     wrap(<Intake siteId="site-1" />)
     await screen.findByText(/No brief generated yet/i)
     expect(screen.queryByRole('button', { name: /Materialize/i })).toBeNull()
+  })
+
+  // -------------------------------------------------------------------------
+  // 9. Designer action cockpit — sign-off, request-changes, conflicts, Q&A, timeline
+  // -------------------------------------------------------------------------
+
+  it('shows the sign-off button when the brief is in architect_review', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'architect_review' })
+    mockThemesForArea.mockResolvedValue([])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    expect(screen.getByRole('button', { name: /Sign off brief/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Request changes/i })).toBeInTheDocument()
+  })
+
+  it('does not render materialize while the brief is in homeowner_review', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'homeowner_review' })
+    mockThemesForArea.mockResolvedValue([])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    expect(screen.queryByTestId('materialize-btn')).toBeNull()
+    // No sign-off/request-changes either — homeowner_review is read-only for the designer
+    expect(screen.queryByRole('button', { name: /Sign off brief/i })).toBeNull()
+  })
+
+  it('renders materialize when the brief is contractor_brief_ready', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'contractor_brief_ready' })
+    mockThemesForArea.mockResolvedValue([])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    expect(screen.getByTestId('materialize-btn')).toBeInTheDocument()
+  })
+
+  it('request-changes confirm is disabled under 3 characters, enabled at 3+', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'architect_review' })
+    mockThemesForArea.mockResolvedValue([])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await userEvent.click(screen.getByRole('button', { name: /Request changes/i }))
+    const textarea = await screen.findByTestId('request-changes-textarea')
+    const confirmBtn = screen.getByTestId('request-changes-confirm')
+
+    expect(confirmBtn).toBeDisabled()
+
+    await userEvent.type(textarea, 'ab')
+    expect(confirmBtn).toBeDisabled()
+
+    await userEvent.type(textarea, 'c')
+    expect(confirmBtn).not.toBeDisabled()
+
+    await userEvent.click(confirmBtn)
+    await waitFor(() => {
+      expect(mockActOnBrief).toHaveBeenCalledWith('brief-1', { action: 'request_changes', note: 'abc' })
+    })
+  })
+
+  it('renders the Homeowner Q&A section with answered and waiting rows', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue(MOCK_BRIEF)
+    mockThemesForArea.mockResolvedValue([])
+    mockClarifications.mockResolvedValue([
+      ...MOCK_CLARIFICATIONS,
+      {
+        id: 'clar-2',
+        area_id: 'area-mb',
+        question: 'Walnut or teak headboard?',
+        answer: null,
+        asked_at: '2026-06-11T08:00:00Z',
+        answered_at: null,
+      },
+    ])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await screen.findByText(/Matte or polished floor/i)
+    expect(screen.getByText('Matte, please.')).toBeInTheDocument()
+    expect(screen.getByText(/Walnut or teak headboard/i)).toBeInTheDocument()
+    expect(screen.getByText(/Waiting for homeowner/i)).toBeInTheDocument()
+  })
+
+  it('resolves an open conflict with keep_a', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue(MOCK_BRIEF)
+    mockThemesForArea.mockResolvedValue([])
+    mockConflicts.mockResolvedValue(MOCK_CONFLICTS)
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await screen.findByText(/Warm Contemporary vs\. Cool Minimalist/i)
+    await userEvent.click(screen.getByRole('button', { name: /Keep A/i }))
+
+    await waitFor(() => {
+      expect(mockResolveConflict).toHaveBeenCalledWith('conflict-1', { resolution: 'keep_a', note: undefined })
+    })
+  })
+
+  it('a deferred_to_architect conflict renders the "Homeowner asked you to decide" badge', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue(MOCK_BRIEF)
+    mockThemesForArea.mockResolvedValue([])
+    mockConflicts.mockResolvedValue([MOCK_DEFERRED_CONFLICT])
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await screen.findByText(/Homeowner asked you to decide/i)
+  })
+
+  it('renders the approval timeline', async () => {
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue(MOCK_BRIEF)
+    mockThemesForArea.mockResolvedValue([])
+    mockBriefApprovals.mockResolvedValue(MOCK_APPROVALS)
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    await screen.findByText('Approval timeline')
+    expect(screen.getByText('Brief sent to designer')).toBeInTheDocument()
+  })
+
+  it('supervisor (read-only role) sees no designer actions or conflict resolve buttons', async () => {
+    mockUseMeRole.mockReturnValue('supervisor')
+    mockProfileBySite.mockResolvedValue(MOCK_PROFILE)
+    mockBrief.mockResolvedValue({ ...MOCK_BRIEF, state: 'architect_review' })
+    mockThemesForArea.mockResolvedValue([])
+    mockConflicts.mockResolvedValue(MOCK_CONFLICTS)
+
+    wrap(<Intake siteId="site-1" />)
+    await screen.findByText('A warm, nature-rooted home')
+
+    expect(screen.queryByRole('button', { name: /Sign off brief/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Keep A/i })).toBeNull()
   })
 })

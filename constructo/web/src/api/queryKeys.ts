@@ -76,4 +76,10 @@ export const qk = {
   /** Design-profiler: themes for one area (D5). */
   designThemes: (profileId: string, areaId: string) =>
     ['design_themes', profileId, areaId] as const,
+  /** Design-profiler: homeowner Q&A clarifications for a profile (D5 cockpit parity). */
+  designClarifications: (profileId: string) => ['design_clarifications', profileId] as const,
+  /** Design-profiler: taste conflicts for a profile (D5 cockpit parity). */
+  designConflicts: (profileId: string) => ['design_conflicts', profileId] as const,
+  /** Design-profiler: approval timeline for a brief (D5 cockpit parity). */
+  designApprovals: (briefId: string) => ['design_approvals', briefId] as const,
 } as const
