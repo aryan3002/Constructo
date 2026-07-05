@@ -17,7 +17,9 @@
 
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useMeRole } from '../../auth/useCan'
+import { designApi } from '../../api/design'
 import { useSites } from '../../api/hooks'
 import { useT } from '../../i18n'
 import {
@@ -94,11 +96,31 @@ export function DesignerWorkspace() {
     setActiveTab(TAB_SELECTIONS)
   }
 
+  // Inbox badge — suffix the Intake tab with the count of things waiting on
+  // the designer. Best-effort: any fetch failure (incl. a backend without the
+  // endpoint yet → 404) leaves the plain label.
+  const inboxQuery = useQuery({
+    queryKey: ['design', 'inbox-summary'],
+    queryFn: () => designApi.inboxSummary(),
+    retry: false,
+  })
+  const inboxCount = inboxQuery.isSuccess
+    ? inboxQuery.data.briefs_awaiting_signoff +
+      inboxQuery.data.answered_clarifications +
+      inboxQuery.data.deferred_conflicts
+    : 0
+
   // Tab definitions for the TabBar (not the AppShell nav)
   const internalTabs = [
     { id: TAB_SELECTIONS, label: t('designer.tab.selections') },
     { id: TAB_SITE_CHANGES, label: t('designer.tab.site_changes') },
-    { id: TAB_INTAKE, label: t('designer.tab.intake') },
+    {
+      id: TAB_INTAKE,
+      label:
+        inboxCount > 0
+          ? `${t('designer.tab.intake')} (${inboxCount})`
+          : t('designer.tab.intake'),
+    },
   ]
 
   return (
