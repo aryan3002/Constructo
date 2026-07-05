@@ -129,6 +129,7 @@ def _reference_out(ref: ProfilerReference, storage: Storage) -> ReferenceOut:
     stored key, else the external source_url) so the app can render the photo."""
     out = ReferenceOut.model_validate(ref)
     out.image_url = storage.url_for(ref.image_r2_key) or ref.source_url
+    out.extraction_status = ref.extraction_status
     return out
 
 
@@ -149,6 +150,7 @@ async def _run_vision(
     except Exception:  # never fail the request on extraction
         logger.exception("profiler: vision extraction failed for reference %s", ref.id)
         attrs = None
+        ref.extraction_status = "failed"
     if attrs:
         confidence = float(attrs.get("confidence") or 0.0)
         session.add(
@@ -159,6 +161,7 @@ async def _run_vision(
         verdict = check_consistency(attrs, area.taste_model or {})
         ref.consistency_status = verdict["status"]
         ref.consistency_note = verdict["reason"]
+        ref.extraction_status = "ok"
 
 
 async def _area_counts(
@@ -874,6 +877,45 @@ async def add_reference_from_preset(
     await _run_vision(session, llm, ref, area, storage.url_for(preset.image_r2_key))
 
     await refresh_taste_and_maybe_propose(session, llm, profile.id, area.id)
+    await session.commit()
+    await session.refresh(ref)
+    return _reference_out(ref, storage)
+
+
+@router.post("/references/{reference_id}/extract", response_model=ReferenceOut)
+async def retry_extraction(
+    reference_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(get_llm),
+) -> ReferenceOut:
+    """Re-run vision for a reference whose extraction failed (or never ran).
+    Any member who can see the profile may retry — it commits nothing new
+    authority-wise (no _gate_design_commit; read-membrane only)."""
+    ref = await session.get(ProfilerReference, reference_id)
+    if ref is None:
+        raise AppError(404, "not_found", "Reference not found")
+    await _load_accessible_profile(session, ref.profile_id, user)
+    area = await session.get(ProfilerArea, ref.area_id)
+    if area is None:
+        raise AppError(404, "not_found", "Area not found")
+
+    stale = (
+        await session.execute(
+            select(ProfilerReferenceAttributes).where(
+                ProfilerReferenceAttributes.reference_id == ref.id
+            )
+        )
+    ).scalars().all()
+    for row in stale:
+        await session.delete(row)
+
+    storage = get_storage()
+    # Vision needs a FETCHABLE url, never a bare R2 key — resolve the stored key
+    # (presigned GET) or pass the external source_url through (mirrors add_reference).
+    vision_url = ref.source_url or storage.url_for(ref.image_r2_key)
+    await _run_vision(session, llm, ref, area, vision_url)
+
     await session.commit()
     await session.refresh(ref)
     return _reference_out(ref, storage)

@@ -100,6 +100,7 @@ class ReferenceOut(BaseModel):
     # from image_r2_key, else the external source_url). Not on the ORM row.
     image_url: str | None = None
     consistency_status: str | None = None
+    extraction_status: str | None = None
     created_at: datetime
 
 
