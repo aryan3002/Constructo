@@ -6,7 +6,7 @@ from app.auth.jwt import create_access_token
 from app.extraction.llm import FakeLLMClient
 from app.main import app
 from app.models import PushToken
-from app.models.profiler import ProfilerArea, ProfilerTheme, ThemeStatus
+from app.models.profiler import AreaStatus, ProfilerArea, ProfilerTheme, ThemeStatus
 from app.profiler.extraction import get_llm
 from app.push.sender import dry_run_log, reset_dry_run_log
 from tests.test_profiler_presets import _profile_with_area  # architect+site+area+contributor
@@ -186,6 +186,54 @@ async def test_second_contributor_disagreement_syncs_conflicts_without_new_refs(
     conflicts = conflicts_resp.json()
     assert conflicts, "second contributor's disagreement must surface an OPEN conflict"
     assert all(c["resolution_status"] == "open" for c in conflicts)
+
+
+async def test_first_reference_below_threshold_moves_status_to_in_progress(
+    client, factory, db_session
+):
+    """The hook only ever runs on a reference/ranking write, so its mere running
+    implies activity: a first ranked reference below recommended_count should
+    lift status out of not_started into in_progress (never all the way to ready
+    without crossing the threshold)."""
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    area = await db_session.get(ProfilerArea, area_id)
+    assert area.status == AreaStatus.not_started
+    area.recommended_count = 5
+    await db_session.commit()
+    await _add_and_rank(client, auth(architect), pid, area_id, contributor_id, 1)
+    await db_session.refresh(area)
+    assert area.status == AreaStatus.in_progress
+
+
+async def test_crossing_threshold_moves_status_to_ready(client, factory, db_session):
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    area = await db_session.get(ProfilerArea, area_id)
+    area.recommended_count = 3
+    await db_session.commit()
+    await _add_and_rank(client, auth(architect), pid, area_id, contributor_id, 3)
+    await db_session.refresh(area)
+    assert area.status == AreaStatus.ready
+
+
+async def test_reranking_after_ready_does_not_downgrade_status(client, factory, db_session):
+    """Status is monotonic: a re-rank that leaves ranked_count unchanged (or even
+    one that would otherwise recompute a lower signal) must never flap a ready
+    area back to in_progress."""
+    architect, site, pid, area_id, contributor_id = await _profile_with_area(client, factory)
+    area = await db_session.get(ProfilerArea, area_id)
+    area.recommended_count = 2
+    await db_session.commit()
+    ids = await _add_and_rank(client, auth(architect), pid, area_id, contributor_id, 2)
+    await db_session.refresh(area)
+    assert area.status == AreaStatus.ready
+
+    # re-rank ref 0 (ranked_count stays 2 == threshold, still "ready" territory,
+    # but this must not flap through in_progress or regress in any way)
+    await client.post(f"/api/v1/design/references/{ids[0]}/rankings", json={
+        "contributor_id": contributor_id, "stars": 1, "tags": {},
+    }, headers=auth(architect))
+    await db_session.refresh(area)
+    assert area.status == AreaStatus.ready
 
 
 async def test_same_ranked_count_does_not_regenerate(client, factory, db_session):
