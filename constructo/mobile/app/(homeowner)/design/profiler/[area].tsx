@@ -53,6 +53,7 @@ import {
 } from '../../../../src/ui'
 import {
   areaProgressLabel,
+  areaTabForParam,
   confidenceBand,
   PROFILER_STR,
   RANKING_TAGS,
@@ -452,10 +453,11 @@ export default function AreaRankScreen() {
   }>()
 
   const areaLabel = String(key ?? 'Area').replace(/_/g, ' ')
-  // Deep-link support: ?tab=notes opens straight to AI Notes (used by the
-  // DPHub "Questions for you" card). Any other/absent value is ignored —
+  // Deep-link support: ?tab=notes opens straight to AI Notes (DPHub's
+  // "Questions for you" card); ?tab=ranking opens straight to Ranking (the
+  // room References screen's "Rank these" button). Any other/absent value
   // falls back to the default Inspiration tab.
-  const [tab, setTab] = useState(tabParam === 'notes' ? 'AI Notes' : 'Inspiration')
+  const [tab, setTab] = useState(areaTabForParam(tabParam))
   // Tabs are persistent (no remount) — a useState initializer only applies the
   // param on first mount, so a SECOND deep-link into an already-open area
   // screen (e.g. tapping the "Questions for you" card twice, or for two
@@ -467,7 +469,7 @@ export default function AreaRankScreen() {
   useEffect(() => {
     if (tabParam === undefined || tabParam === lastSeededTab.current) return
     lastSeededTab.current = tabParam
-    if (tabParam === 'notes') setTab('AI Notes')
+    setTab(areaTabForParam(tabParam))
   }, [tabParam])
 
   const refsQ = useQuery({

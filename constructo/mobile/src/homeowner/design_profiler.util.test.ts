@@ -1,5 +1,6 @@
 import {
   areaProgressLabel,
+  areaTabForParam,
   briefAudienceTabs,
   confidenceBand,
   designChatDraft,
@@ -20,6 +21,24 @@ describe('areaProgressLabel', () => {
   it('reads as time/shape progress, never a %', () => {
     expect(areaProgressLabel(2, 6)).toBe('2 of 6 ranked')
     expect(areaProgressLabel(0, 0)).toBe('Not started')
+  })
+})
+
+describe('areaTabForParam', () => {
+  it('opens AI Notes for the "notes" deep-link (DPHub "Questions for you")', () => {
+    expect(areaTabForParam('notes')).toBe('AI Notes')
+  })
+
+  it('opens Ranking for the "ranking" deep-link ("Rank these" from References)', () => {
+    expect(areaTabForParam('ranking')).toBe('Ranking')
+  })
+
+  it('falls back to Inspiration for an absent param', () => {
+    expect(areaTabForParam(undefined)).toBe('Inspiration')
+  })
+
+  it('falls back to Inspiration for an unknown param (never crashes into a blank segment)', () => {
+    expect(areaTabForParam('brief')).toBe('Inspiration')
   })
 })
 

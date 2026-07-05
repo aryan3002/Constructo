@@ -22,6 +22,19 @@ export function areaProgressLabel(ranked: number, recommended: number): string {
   return `${ranked} of ${recommended} ranked`
 }
 
+/**
+ * Resolve the area screen's SegmentedTabs key for a `?tab=` deep-link param.
+ * Callers (the DPHub "Questions for you" card → `notes`; the room References
+ * screen's "Rank these" button → `ranking`) push a lowercase param; any other
+ * or absent value falls back to the default Inspiration tab so an unknown
+ * param never crashes into a blank segment.
+ */
+export function areaTabForParam(tabParam: string | undefined): string {
+  if (tabParam === 'notes') return 'AI Notes'
+  if (tabParam === 'ranking') return 'Ranking'
+  return 'Inspiration'
+}
+
 const _KIND_ORDER: Array<ProfilerArea['area_kind']> = ['house_build', 'interior', 'element']
 const _KIND_LABEL: Record<string, string> = {
   house_build: 'House build',
