@@ -19,6 +19,7 @@ import { MessageBubble } from './MessageBubble'
 import { CaptureCard } from './CaptureCard'
 import { NivaanProposalCard } from './NivaanProposalCard'
 import { SystemNotice } from './SystemNotice'
+import { initials } from './ConversationRow'
 import { ChatComposer } from './ChatComposer'
 import { BriefPin } from './insights/BriefPin'
 import { RadarDrawer } from './insights/RadarDrawer'
@@ -59,6 +60,16 @@ function differentDay(a: string, b: string): boolean {
     da.getMonth() !== db.getMonth() ||
     da.getDate() !== db.getDate()
   )
+}
+
+/** A "plain bubble" message — one routed to MessageBubble, i.e. NOT a Nivaan
+ *  proposal, a capture card, or a system notice. Drives WhatsApp-style
+ *  same-sender grouping (avatar/name once per run, timestamp on the run's end). */
+function isPlainBubbleMsg(m: ChatMessage): boolean {
+  if (m.meta?.proposal) return false
+  if (m.events && m.events.filter((e) => e.event_type !== 'unknown').length > 0) return false
+  if (isSystemNotice(m)) return false
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +317,7 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
       <div
         ref={listRef}
         data-testid="message-list"
-        className="flex-1 overflow-y-auto px-4 py-3"
+        className="flex-1 overflow-y-auto bg-surface-sunken px-4 py-3"
         onScroll={handleScroll}
       >
         {/* Pinned brief (Phase D) — site threads with risks only */}
@@ -356,9 +367,27 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
             {/* Confirmed messages */}
             {messages.map((message, idx) => {
               const prev = idx > 0 ? messages[idx - 1] : null
+              const next = idx < messages.length - 1 ? messages[idx + 1] : null
               const showDaySep =
                 prev !== null && differentDay(prev.created_at, message.created_at)
               const mine = message.sender_id === me?.id
+
+              // WhatsApp-style grouping: a "run" = consecutive plain bubbles from
+              // the same sender on the same day. Avatar + sender name show on the
+              // FIRST of a run; the timestamp + tick show on the LAST.
+              const bubbleMsg = isPlainBubbleMsg(message)
+              const firstOfGroup =
+                !bubbleMsg ||
+                prev === null ||
+                !isPlainBubbleMsg(prev) ||
+                prev.sender_id !== message.sender_id ||
+                differentDay(prev.created_at, message.created_at)
+              const lastOfGroup =
+                !bubbleMsg ||
+                next === null ||
+                !isPlainBubbleMsg(next) ||
+                next.sender_id !== message.sender_id ||
+                differentDay(next.created_at, message.created_at)
 
               // ── Choose the right primitive ──────────────────────────────
               let content: React.ReactNode
@@ -392,7 +421,8 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
                   <MessageBubble
                     message={message}
                     mine={mine}
-                    showSenderName={!mine}
+                    showSenderName={!mine && firstOfGroup}
+                    lastOfGroup={lastOfGroup}
                     deliveryState={deliveryState(message.seq)}
                     onReply={setReply}
                     resolveParent={resolveParent}
@@ -402,27 +432,48 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
 
               return (
                 <div key={message.id}>
-                  {/* Day separator */}
+                  {/* Day separator — a centered pill on the chat canvas. */}
                   {showDaySep ? (
                     <div
                       data-testid="day-separator"
                       className="my-3 flex items-center gap-2"
                       aria-label={dayLabel(message.created_at)}
                     >
-                      <div className="flex-1 border-t border-edge" />
-                      <span className="font-body text-micro text-text-muted">
+                      <div className="flex-1 border-t border-divider" />
+                      <span className="rounded-full border border-edge bg-surface-card px-2.5 py-0.5 font-body text-micro text-text-muted">
                         {dayLabel(message.created_at)}
                       </span>
-                      <div className="flex-1 border-t border-edge" />
+                      <div className="flex-1 border-t border-divider" />
                     </div>
                   ) : null}
 
-                  {/* Message row — `group` so MessageBubble's reply btn hover works */}
+                  {/* Message row — `group` so MessageBubble's reply btn hover works.
+                      Tight spacing inside a run; a full gap where the run ends. */}
                   <div
-                    className="group mb-1.5 flex flex-col"
+                    className={`group flex flex-col ${lastOfGroup ? 'mb-3' : 'mb-0.5'}`}
                     data-msgid={message.id}
                   >
-                    {content}
+                    {bubbleMsg && !mine ? (
+                      /* Received bubble → leading avatar on the first of a run, an
+                         aligning spacer otherwise, so the run reads as one speaker. */
+                      <div className="flex items-end gap-2">
+                        {firstOfGroup ? (
+                          <span
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle"
+                            aria-hidden="true"
+                          >
+                            <span className="font-body text-micro font-semibold text-brand-text">
+                              {initials(message.sender_name ?? '#')}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="w-8 shrink-0" aria-hidden="true" />
+                        )}
+                        <div className="min-w-0 flex-1">{content}</div>
+                      </div>
+                    ) : (
+                      content
+                    )}
                   </div>
                 </div>
               )

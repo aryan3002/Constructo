@@ -75,6 +75,10 @@ export interface MessageBubbleProps {
   onReply?: (m: ChatMessage) => void
   /** Returns the parent message for reply_to_id, or undefined if not in cache. */
   resolveParent?: (id: string) => ChatMessage | undefined
+  /** When false, this bubble is mid-run (the same sender continues below), so its
+   *  timestamp + tick are hidden — shown only on the LAST bubble of a run
+   *  (WhatsApp grouping). Defaults true so a standalone bubble shows its meta. */
+  lastOfGroup?: boolean
 }
 
 export function MessageBubble({
@@ -84,6 +88,7 @@ export function MessageBubble({
   deliveryState,
   onReply,
   resolveParent,
+  lastOfGroup = true,
 }: MessageBubbleProps) {
   const tick = mine ? tickInfo(deliveryState) : null
   const timestamp = message.created_at ? fmtTime(message.created_at) : null
@@ -95,11 +100,13 @@ export function MessageBubble({
     message.attachment_url &&
     (message.media_type === 'document' || message.media_type === 'voice')
 
-  // ── Bubble container: own → right, other → left ──────────────────────────
+  // ── Bubble container: own → right (amber tint, tail bottom-right), other →
+  //    left (card + hairline, tail bottom-left). Rounded with a small tail corner
+  //    + subtle shadow, so the thread reads as a chat, not a list. ─────────────
   const bubbleBase =
-    'relative flex w-fit max-w-[80%] flex-col gap-0.5 rounded-sheet px-3 py-2'
-  const ownClasses = `${bubbleBase} ml-auto bg-brand-subtle text-text-primary`
-  const otherClasses = `${bubbleBase} mr-auto border border-edge bg-surface-card text-text-primary`
+    'relative flex w-fit max-w-[80%] flex-col gap-0.5 rounded-2xl px-3 py-2 shadow-sm'
+  const ownClasses = `${bubbleBase} ml-auto rounded-br-md bg-brand-subtle text-text-primary`
+  const otherClasses = `${bubbleBase} mr-auto rounded-bl-md border border-edge bg-surface-card text-text-primary`
   const bubbleClasses = mine ? ownClasses : otherClasses
 
   // ── Right-click / context-menu reply handler ──────────────────────────────
@@ -158,8 +165,8 @@ export function MessageBubble({
         <p className="font-body text-body leading-snug">{message.body}</p>
       ) : null}
 
-      {/* Timestamp + delivery ticks row */}
-      {timestamp ? (
+      {/* Timestamp + delivery ticks row — shown on the LAST bubble of a run. */}
+      {timestamp && lastOfGroup ? (
         <span
           className={`flex items-center gap-1 cstk-mono text-micro text-text-muted ${mine ? 'ml-auto' : ''}`}
         >
