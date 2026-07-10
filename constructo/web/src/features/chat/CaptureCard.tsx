@@ -19,7 +19,7 @@ import type { ChatEvent, ChatMessage } from '../../api/chat'
 
 type GlyphProps = { className?: string; 'aria-hidden'?: boolean }
 
-const G = {
+export const G = {
   /** users — attendance */
   users: (p: GlyphProps) => (
     <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
@@ -105,7 +105,7 @@ interface EvMeta {
   hi: string
 }
 
-const EVENT_META: Record<string, EvMeta> = {
+export const EVENT_META: Record<string, EvMeta> = {
   attendance:       { icon: 'users',         en: 'Attendance',  hi: 'हाज़िरी'   },
   material_delivery:{ icon: 'truck',         en: 'Delivery',    hi: 'डिलीवरी'  },
   progress_update:  { icon: 'trendingUp',    en: 'Progress',    hi: 'प्रगति'   },
