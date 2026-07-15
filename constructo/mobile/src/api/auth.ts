@@ -85,4 +85,15 @@ export const authApi = {
       body: JSON.stringify({ otp }),
     })
   },
+
+  /**
+   * Permanently delete the signed-in user's own account. Requires a fresh
+   * step-up token from `stepUpVerify`.
+   */
+  deleteAccount(stepUpToken: string): Promise<void> {
+    return request('/api/v1/users/me', {
+      method: 'DELETE',
+      headers: { 'X-Step-Up-Token': stepUpToken },
+    })
+  },
 }
