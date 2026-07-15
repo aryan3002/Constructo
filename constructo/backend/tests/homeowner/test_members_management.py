@@ -77,7 +77,7 @@ async def test_owner_can_invite_member(client, ctx):
     assert body["sub_role"] == "family"
     assert body["display_name"] == "Papa"
     assert body["status"] == "invited"
-    assert body["invite_link"].startswith("constructo://join?code=")
+    assert body["invite_link"].startswith("neev://join?code=")
     # Owner-mint discriminator: invited_by points at the inviting owner's row.
     assert body["invited_by_member_id"] == str(ctx.member.id)
     assert body["invited_at"] is not None

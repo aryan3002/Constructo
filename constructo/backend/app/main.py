@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Constructo API", version="0.1.0", openapi_url="/openapi.json", lifespan=lifespan
+    title="Neev API", version="0.1.0", openapi_url="/openapi.json", lifespan=lifespan
 )
 install_error_handlers(app)
 
