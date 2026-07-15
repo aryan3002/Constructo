@@ -167,6 +167,13 @@ export const hi: Dict = {
     tallyExportSub: 'Tally के लिए लेजर डाउनलोड करें',
     languageCurrent: 'हिन्दी',
     signOut: 'साइन आउट',
+    deleteAccount: 'मेरा खाता हटाएँ',
+    deleteAccountConfirmTitle: 'अपना खाता हटाएँ?',
+    deleteAccountConfirmMsg:
+      'इससे आपका नाम और फ़ोन नंबर हट जाएगा। आपके जोड़े गए रिकॉर्ड आपकी टीम के पास रहेंगे।',
+    deleteAccountConfirmOk: 'हटाएँ',
+    deleteAccountConfirmCancel: 'रद्द करें',
+    deleteAccountError: 'खाता हटाया नहीं जा सका। कृपया फिर कोशिश करें।',
     opensInBrowser: 'ब्राउज़र में खुलेगा',
   },
   team: {

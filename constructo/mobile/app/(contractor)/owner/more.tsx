@@ -13,10 +13,11 @@
  *   • Settings       — Language toggle
  *   • Sign out
  */
-import { Linking, View } from 'react-native'
+import { Alert, Linking, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
+import { useDeleteAccount } from '../../../src/auth/useDeleteAccount'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { WEB_BASE } from '../../../src/api/config'
 import { SPACE } from '../../../src/theme/tokens'
@@ -30,6 +31,7 @@ import {
   SettingsGroup,
   SettingsRow,
   Small,
+  StepUpModal,
 } from '../../../src/ui'
 import { buildProfileSubtitle, ROUTES } from './_account.util'
 
@@ -52,6 +54,18 @@ export default function AccountHub() {
   async function onSignOut() {
     await signOut()
     router.replace('/(auth)/login')
+  }
+
+  const { stepUpVisible, beginDelete, cancelStepUp, onStepUpVerified } = useDeleteAccount({
+    afterDeleteHref: '/(auth)/login',
+    genericErrorMessage: t('account.deleteAccountError'),
+  })
+
+  function confirmDeleteAccount() {
+    Alert.alert(t('account.deleteAccountConfirmTitle'), t('account.deleteAccountConfirmMsg'), [
+      { text: t('account.deleteAccountConfirmCancel'), style: 'cancel' },
+      { text: t('account.deleteAccountConfirmOk'), style: 'destructive', onPress: beginDelete },
+    ])
   }
 
   const companyLine = buildProfileSubtitle({
@@ -179,17 +193,30 @@ export default function AccountHub() {
         />
       </SettingsGroup>
 
-      {/* ── Sign out ── */}
+      {/* ── Sign out / delete account ── */}
       <SettingsGroup style={{ marginTop: SPACE.md }}>
         <SettingsRow
           icon="log-out"
           title={t('account.signOut')}
           tone="risk"
           hideChevron
-          last
           onPress={onSignOut}
         />
+        <SettingsRow
+          icon="trash-2"
+          title={t('account.deleteAccount')}
+          tone="risk"
+          hideChevron
+          last
+          onPress={confirmDeleteAccount}
+        />
       </SettingsGroup>
+
+      <StepUpModal
+        visible={stepUpVisible}
+        onVerified={onStepUpVerified}
+        onCancel={cancelStepUp}
+      />
     </Screen>
   )
 }

@@ -165,6 +165,13 @@ export const en = {
     tallyExportSub: 'Download ledger for Tally',
     languageCurrent: 'English',
     signOut: 'Sign out',
+    deleteAccount: 'Delete my account',
+    deleteAccountConfirmTitle: 'Delete your account?',
+    deleteAccountConfirmMsg:
+      "This removes your name and phone number. Records you added stay with your team.",
+    deleteAccountConfirmOk: 'Delete',
+    deleteAccountConfirmCancel: 'Cancel',
+    deleteAccountError: 'Could not delete your account. Please try again.',
     opensInBrowser: 'Opens in browser',
   },
   team: {
