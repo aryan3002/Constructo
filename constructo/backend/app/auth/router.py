@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role, require_step_up
@@ -22,7 +22,7 @@ from app.auth.phone import normalize_phone, phone_candidates
 from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
-from app.models import Company, PushToken, User, UserRole
+from app.models import Company, HomeownerMember, PushToken, User, UserRole
 from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -344,6 +344,21 @@ async def delete_own_account(
     user.phone = f"deleted:{user.id}"
     user.is_active = False
     user.deleted_at = datetime.now(UTC)
+    # HomeownerMember keeps its OWN denormalized phone/display_name (shown to
+    # the rest of the household via the roster endpoint) — scrub those too, or
+    # the caller's real phone/name would survive the users-row scrub above and
+    # stay visible to their household. A user can belong to more than one
+    # property (no unique constraint on user_id), so this clears every
+    # membership row, not just one. display_name=None is the right value, not
+    # just "blank": the model's own comment says it falls back to
+    # User.name/phone when null, so this naturally falls back to the
+    # already-scrubbed "Deleted user". phone=None is safe: that field is
+    # "informational only; matching is by join_code" (see HomeownerMember.phone).
+    await session.execute(
+        update(HomeownerMember)
+        .where(HomeownerMember.user_id == user.id)
+        .values(phone=None, display_name=None)
+    )
     await session.commit()
 
 

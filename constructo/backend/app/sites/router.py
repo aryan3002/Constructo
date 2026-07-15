@@ -531,7 +531,10 @@ def _user_out(u: User) -> UserOut:
         id=u.id,
         company_id=u.company_id,
         name=u.name,
-        phone=u.phone,
+        # A deleted user's `phone` column holds the internal `deleted:<uuid>`
+        # tombstone (see delete_own_account) — don't leak that raw sentinel to
+        # team-roster views; blank it instead (name already reads "Deleted user").
+        phone="" if u.deleted_at is not None else u.phone,
         role=u.role,
         is_active=u.is_active,
     )

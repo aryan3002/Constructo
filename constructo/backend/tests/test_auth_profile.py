@@ -1,6 +1,6 @@
 """Auth profile + language + landing endpoints (network-free)."""
 from app.auth.landing import landing_for
-from app.models import UserRole
+from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, UserRole
 
 
 async def _login(client, phone: str) -> str:
@@ -240,6 +240,46 @@ async def test_delete_own_account_anonymizes_not_hard_deletes(client, db_session
     assert updated.phone == f"deleted:{user_id}"
     assert updated.is_active is False
     assert updated.deleted_at is not None
+
+
+async def test_delete_own_account_scrubs_homeowner_member_phone_and_display_name(
+    client, factory, db_session
+):
+    """Whole-branch review finding: HomeownerMember keeps its OWN denormalized
+    copies of phone/display_name (shown to the rest of the household via the
+    roster endpoint), so scrubbing the users row alone left the deleted
+    homeowner's real phone + name visible to their household. Deletion must
+    also null both fields on every HomeownerMember row for that user (a user
+    can belong to more than one property)."""
+    phone = "+15551119023"
+    company = await factory.company()
+    site = await factory.site(company, name="Sunrise Villa")
+    homeowner = await factory.user(company=company, role=UserRole.homeowner, phone=phone)
+    member = HomeownerMember(
+        site_id=site.id,
+        user_id=homeowner.id,
+        sub_role=HomeownerSubRole.primary_owner,
+        status=MemberStatus.active,
+        phone="+15551234567",
+        display_name="Real Name",
+    )
+    db_session.add(member)
+    await db_session.flush()
+    await db_session.commit()
+
+    # Log in as the same pre-existing homeowner (tolerant phone lookup finds
+    # the factory-created row rather than provisioning a new one).
+    token = await _login(client, phone)
+    headers = {"Authorization": f"Bearer {token}"}
+    step_up = await _step_up_token(client, token)
+    resp = await client.delete(
+        "/api/v1/users/me", headers={**headers, "X-Step-Up-Token": step_up}
+    )
+    assert resp.status_code == 204, resp.text
+
+    await db_session.refresh(member)
+    assert member.phone is None
+    assert member.display_name is None
 
 
 async def test_delete_own_account_without_step_up_is_rejected(client):
