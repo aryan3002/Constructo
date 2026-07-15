@@ -47,6 +47,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", default=True
     )
+    # Self-service account deletion (App Store / Play Store compliance):
+    # distinguishes a permanent deletion from an owner-initiated
+    # `is_active=False` deactivation, which stays reversible. Deletion also
+    # flips `is_active=False` (reuses the existing auth lockout) and scrubs
+    # name/phone in place — see delete_own_account() in app/auth/router.py.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
