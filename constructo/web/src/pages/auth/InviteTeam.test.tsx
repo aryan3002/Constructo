@@ -86,7 +86,7 @@ describe('auth/InviteTeam', () => {
             phone: body.phone ?? null,
             display_name: body.display_name ?? null,
             join_code: 'JOIN-ABC123',
-            invite_link: 'constructo://join?code=JOIN-ABC123',
+            invite_link: 'neev://join?code=JOIN-ABC123',
             status: 'invited',
           }),
         }
