@@ -55,7 +55,7 @@ export const hi: Dict = {
   contractor: {
     comingSoonTitle: 'बिल्डर ऐप जल्द आ रहा है',
     comingSoonBody:
-      'फ़िलहाल, अपनी साइट्स Constructo वेब डैशबोर्ड पर मैनेज करें। पूरा बिल्डर अनुभव जल्द ही मोबाइल पर आएगा।',
+      'फ़िलहाल, अपनी साइट्स नींव वेब डैशबोर्ड पर मैनेज करें। पूरा बिल्डर अनुभव जल्द ही मोबाइल पर आएगा।',
   },
   pm: {
     tabDpr: 'DPR',
@@ -110,7 +110,7 @@ export const hi: Dict = {
     siteAtRisk: '{amount} जोखिम में',
     paymentsTitle: 'भुगतान',
     paymentsSubtitle: 'पैसे के आने-जाने का रिकॉर्ड। सिर्फ़ ट्रैकिंग।',
-    trackingOnly: 'सिर्फ़ ट्रैकिंग — Constructo कभी पैसा नहीं भेजता। यह रिकॉर्ड है, ट्रांसफ़र नहीं।',
+    trackingOnly: 'सिर्फ़ ट्रैकिंग — नींव कभी पैसा नहीं भेजता। यह रिकॉर्ड है, ट्रांसफ़र नहीं।',
     inflow: 'आया',
     outflow: 'गया',
     net: 'शुद्ध',
@@ -203,7 +203,7 @@ export const hi: Dict = {
     // Invite result — client
     inviteClientTitle: 'क्लाइंट आमंत्रण तैयार',
     inviteClientCode: 'जॉइन कोड',
-    inviteClientInstructions: 'उन्हें Constructo डाउनलोड करने, "मेरे पास जॉइन कोड है" टैप करने, और ऊपर का कोड डालने को कहें।',
+    inviteClientInstructions: 'उन्हें नींव डाउनलोड करने, "मेरे पास जॉइन कोड है" टैप करने, और ऊपर का कोड डालने को कहें।',
     inviteClientCopy: 'कोड कॉपी करें',
     // Client site picker
     inviteClientSite: 'साइट',
@@ -272,7 +272,7 @@ export const hi: Dict = {
   },
   gallery: {
     title: 'कॉम्पोनेंट गैलरी',
-    subtitle: 'दोनों थीम में Constructo किट।',
+    subtitle: 'दोनों थीम में नींव किट।',
   },
   stepUp: {
     title: 'पहचान सत्यापित करें',

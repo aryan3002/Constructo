@@ -120,7 +120,7 @@ export function LivingHomeHero({
         ]}
       >
         <Small color="#ffffff" style={styles.wordmark}>
-          CONSTRUCTO
+          NEEV
         </Small>
         <Link href={onAvatarHref} asChild>
           <Pressable

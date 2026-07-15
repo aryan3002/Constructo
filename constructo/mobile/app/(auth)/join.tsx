@@ -4,7 +4,7 @@
  * Improvements over the original:
  *   - `requestOtp` fires automatically on phone blur (O1).
  *   - 30-second resend countdown timer.
- *   - Deep-link autofill: `constructo://join?code=abc123` pre-fills the join code
+ *   - Deep-link autofill: `neev://join?code=abc123` pre-fills the join code
  *     and immediately requests the OTP (J1).
  *   - OTP field has `textContentType="oneTimeCode"` for SMS autofill.
  *   - On success: routes to `(homeowner)/welcome` (not `replace('/')`), passing
@@ -48,7 +48,7 @@ export default function Join() {
   const router = useRouter()
   const { refresh, setJoinData } = useAuth()
 
-  // Deep-link: constructo://join?code=<joinCode>
+  // Deep-link: neev://join?code=<joinCode>
   const params = useLocalSearchParams<{ code?: string }>()
 
   const [joinCode, setJoinCode] = useState(params.code ?? '')

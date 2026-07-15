@@ -145,7 +145,7 @@ describe('owner.inviteClient', () => {
       phone: '+919000000001',
       display_name: 'Priya Sharma',
       join_code: 'JOIN123',
-      invite_link: 'constructo://join?code=JOIN123',
+      invite_link: 'neev://join?code=JOIN123',
       status: 'invited',
     }
     mockOk(fakeResult)

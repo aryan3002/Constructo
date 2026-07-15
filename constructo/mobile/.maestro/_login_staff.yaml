@@ -10,7 +10,7 @@ appId: host.exp.Exponent
     commands:
       - tapOn: "Builder / site team"
       - waitForAnimationToEnd
-- assertVisible: "Welcome to Constructo"
+- assertVisible: "Welcome to Neev"
 # phone field autofocuses; clear the "+91" prefill, then type the full number
 - eraseText: 20
 - inputText: "${PHONE}"
