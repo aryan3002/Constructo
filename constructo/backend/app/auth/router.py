@@ -5,6 +5,7 @@ is wired. Sending an OTP is a polite no-op endpoint today so the web login can
 present a real "request code -> enter code" flow (and re-OTP recovery) without
 branching on whether SMS exists yet.
 """
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -13,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user, require_role
+from app.auth.deps import get_current_user, require_role, require_step_up
 from app.auth.jwt import create_access_token, create_step_up_token
 from app.auth.landing import landing_for
 from app.auth.otp import assert_otp_valid, dev_otp_hint
@@ -320,6 +321,30 @@ async def update_me(
     await session.commit()
     await session.refresh(user)
     return await _me_out_with_company(session, user)
+
+
+@users_router.delete("/me", status_code=204)
+async def delete_own_account(
+    user: User = Depends(require_step_up),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Self-service account deletion (App Store / Play Store compliance).
+
+    Anonymizes name/phone and deactivates the row rather than hard-deleting
+    it: ~40 FKs from `users.id` are attribution columns on shared project
+    history (decisions, audits, payments, photos) that the rest of the
+    project team still relies on. A hard delete would SET NULL across all
+    of them, making every deleted user's historical contributions
+    indistinguishable from one another; anonymizing in place preserves
+    per-row provenance while removing the person's identity. Deletion is
+    unconditionally sensitive, so — unlike `update_me` — this always
+    requires a fresh step-up token; there is no non-sensitive path.
+    """
+    user.name = "Deleted user"
+    user.phone = f"deleted:{user.id}"
+    user.is_active = False
+    user.deleted_at = datetime.now(UTC)
+    await session.commit()
 
 
 # POST /api/v1/me/push-token — register THIS device's Expo push token (C-F).
