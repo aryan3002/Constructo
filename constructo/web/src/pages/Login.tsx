@@ -43,7 +43,7 @@ export function Login() {
       <div className="flex min-h-screen items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm rounded-sheet border border-line bg-card p-6 shadow-card">
           <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
-            Constructo
+            Neev
           </Micro>
           <Display as="h1" className="mt-1 !text-h1">
             Sign in

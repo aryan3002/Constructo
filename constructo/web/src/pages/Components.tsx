@@ -274,7 +274,7 @@ export function Components() {
       <div className="mx-auto max-w-6xl px-4 py-8">
         <header className="mb-6">
           <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
-            Constructo design system
+            Neev design system
           </Micro>
           <Display as="h1">Blueprint &amp; Daylight</Display>
           <Body className="mt-1 max-w-2xl">

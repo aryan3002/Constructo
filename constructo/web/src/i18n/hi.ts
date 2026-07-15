@@ -4,7 +4,7 @@
 import type { TranslationKey } from './en'
 
 export const hi: Record<TranslationKey, string> = {
-  'app.name': 'कंस्ट्रक्टो',
+  'app.name': 'नींव',
 
   'nav.brief': 'ब्रीफ़',
   'nav.latest': 'नवीनतम',
@@ -125,7 +125,7 @@ export const hi: Record<TranslationKey, string> = {
   'auth.error.generic': 'साइन इन विफल रहा। कृपया फिर कोशिश करें।',
   'auth.error.phone_required': 'अपना फ़ोन नंबर डालें',
 
-  'auth.onboard.welcome': 'कंस्ट्रक्टो में आपका स्वागत है',
+  'auth.onboard.welcome': 'नींव में आपका स्वागत है',
   'auth.onboard.company.title': 'अपनी कंपनी का नाम रखें',
   'auth.onboard.company.subtitle': 'इसे बाद में बदल सकते हैं।',
   'auth.onboard.company.label': 'कंपनी का नाम',
@@ -145,7 +145,7 @@ export const hi: Record<TranslationKey, string> = {
     'आर्किटेक्ट, साइट इंजीनियर, PM और अकाउंटेंट को जोड़ें — सबको एक जॉइन लिंक मिलेगा।',
   'auth.onboard.whatsapp.title': 'अपनी साइट का व्हाट्सएप ग्रुप जोड़ें',
   'auth.onboard.whatsapp.subtitle':
-    'कंस्ट्रक्टो आपकी टीम की मौजूदा चैट पढ़ता है — कोई नई आदत नहीं। अभी जोड़ें या फ़िलहाल छोड़ें।',
+    'नींव आपकी टीम की मौजूदा चैट पढ़ता है — कोई नई आदत नहीं। अभी जोड़ें या फ़िलहाल छोड़ें।',
   'auth.onboard.whatsapp.connect': 'व्हाट्सएप ग्रुप जोड़ें',
   'auth.onboard.skip': 'फ़िलहाल छोड़ें',
   'auth.onboard.continue': 'आगे बढ़ें',
@@ -172,7 +172,7 @@ export const hi: Record<TranslationKey, string> = {
   'invite.link.copy': 'लिंक कॉपी करें',
   'invite.link.copied': 'कॉपी हो गया',
   'invite.link.another': 'किसी और को बुलाएँ',
-  'invite.message': '{company} पर {role} के रूप में कंस्ट्रक्टो जॉइन करें: {link}',
+  'invite.message': '{company} पर {role} के रूप में नींव जॉइन करें: {link}',
   'invite.pending.title': 'लंबित इनवाइट',
   'invite.status.pending': 'लंबित',
   'invite.status.accepted': 'जुड़ गए',
@@ -187,9 +187,9 @@ export const hi: Record<TranslationKey, string> = {
   'invite.client.copy_code': 'कोड कॉपी करें',
   'invite.client.them': 'आपका क्लाइंट',
   'invite.client.instructions':
-    '{name} से कहें कि Constructo ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और यह जॉइन कोड डालें।',
+    '{name} से कहें कि नींव ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और यह जॉइन कोड डालें।',
   'invite.client.message':
-    'आपको Constructo पर {company} को फ़ॉलो करने का न्योता है। ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और जॉइन कोड डालें: {code}',
+    'आपको नींव पर {company} को फ़ॉलो करने का न्योता है। ऐप डाउनलोड करें, अपने फ़ोन से साइन-इन करें, और जॉइन कोड डालें: {code}',
 
   'join.title': 'आपको आमंत्रित किया गया है',
   'join.subtitle': '{company} में {role} के रूप में जुड़ें।',
