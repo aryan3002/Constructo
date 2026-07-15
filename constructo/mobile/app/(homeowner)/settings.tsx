@@ -12,7 +12,7 @@
  * mechanism still comes from the shared provider).
  */
 import { useEffect, useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { Alert, Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { homeowner } from '../../src/api/client'
 import { useAuth } from '../../src/auth/AuthContext'
+import { useDeleteAccount } from '../../src/auth/useDeleteAccount'
 import { useT } from '../../src/i18n/I18nProvider'
 import type { Language } from '../../src/api/types'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -34,6 +35,7 @@ import {
   SettingsGroup,
   SettingsRow,
   Small,
+  StepUpModal,
 } from '../../src/ui'
 import { summaryCadence, type Lang } from './_settings.util'
 import { POLICY_KEY } from './_storage.util'
@@ -60,6 +62,13 @@ const STR = {
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'Phone & profile',
     signOut: 'Sign out',
+    deleteAccount: 'Delete my account',
+    deleteAccountConfirmTitle: 'Delete your account?',
+    deleteAccountConfirmMsg:
+      "This removes your name and phone number. Records you're part of stay with your household.",
+    deleteAccountConfirmOk: 'Delete',
+    deleteAccountConfirmCancel: 'Cancel',
+    deleteAccountError: 'Could not delete your account. Please try again.',
     english: 'English',
     hindi: 'हिन्दी',
     footer: 'Constructo · your calm view of the build',
@@ -84,6 +93,13 @@ const STR = {
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'फ़ोन और प्रोफ़ाइल',
     signOut: 'साइन आउट',
+    deleteAccount: 'मेरा खाता हटाएँ',
+    deleteAccountConfirmTitle: 'अपना खाता हटाएँ?',
+    deleteAccountConfirmMsg:
+      'इससे आपका नाम और फ़ोन नंबर हट जाएगा। आप जिन रिकॉर्ड का हिस्सा हैं, वे आपके परिवार के पास रहेंगे।',
+    deleteAccountConfirmOk: 'हटाएँ',
+    deleteAccountConfirmCancel: 'रद्द करें',
+    deleteAccountError: 'खाता हटाया नहीं जा सका। कृपया फिर कोशिश करें।',
     english: 'English',
     hindi: 'हिन्दी',
     footer: 'Constructo · आपका शांत निर्माण दृष्टिकोण',
@@ -130,6 +146,18 @@ export default function Settings() {
   async function onSignOut() {
     await signOut()
     router.replace('/')
+  }
+
+  const { stepUpVisible, beginDelete, cancelStepUp, onStepUpVerified } = useDeleteAccount({
+    afterDeleteHref: '/',
+    genericErrorMessage: tx.deleteAccountError,
+  })
+
+  function confirmDeleteAccount() {
+    Alert.alert(tx.deleteAccountConfirmTitle, tx.deleteAccountConfirmMsg, [
+      { text: tx.deleteAccountConfirmCancel, style: 'cancel' },
+      { text: tx.deleteAccountConfirmOk, style: 'destructive', onPress: beginDelete },
+    ])
   }
 
   function toggleLanguage() {
@@ -227,7 +255,7 @@ export default function Settings() {
         </SettingsGroup>
       </FadeInUp>
 
-      {/* ACCOUNT — sign out only (profile identity lives in the top card). */}
+      {/* ACCOUNT — sign out + delete account. */}
       <FadeInUp delay={120} style={{ gap: SPACE.sm }}>
         <Eyebrow>{tx.account}</Eyebrow>
         <SettingsGroup>
@@ -236,8 +264,15 @@ export default function Settings() {
             title={tx.signOut}
             tone="risk"
             hideChevron
-            last
             onPress={() => void onSignOut()}
+          />
+          <SettingsRow
+            icon="trash-2"
+            title={tx.deleteAccount}
+            tone="risk"
+            hideChevron
+            last
+            onPress={confirmDeleteAccount}
           />
         </SettingsGroup>
       </FadeInUp>
@@ -256,6 +291,12 @@ export default function Settings() {
           {tx.footer}
         </Small>
       </View>
+
+      <StepUpModal
+        visible={stepUpVisible}
+        onVerified={onStepUpVerified}
+        onCancel={cancelStepUp}
+      />
     </Screen>
   )
 }
