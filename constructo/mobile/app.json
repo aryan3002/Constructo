@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Constructo",
+    "name": "Neev",
     "slug": "constructo",
-    "scheme": "constructo",
+    "scheme": "neev",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,14 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.constructo.app",
+      "bundleIdentifier": "build.neev.app",
       "infoPlist": {
-        "NSPhotoLibraryAddUsageDescription": "Constructo saves your site photos here.",
+        "NSPhotoLibraryAddUsageDescription": "Neev saves your site photos here.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "ai.constructo.app",
+      "package": "build.neev.app",
       "adaptiveIcon": {
         "backgroundColor": "#f7f5f0",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -55,20 +55,20 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Constructo uses your photos so you can share progress and flag issues."
+          "photosPermission": "Neev uses your photos so you can share progress and flag issues."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Constructo uses your camera so you can capture site photos."
+          "cameraPermission": "Neev uses your camera so you can capture site photos."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Constructo saves your site photos to your gallery.",
-          "savePhotosPermission": "Constructo saves your site photos to your gallery.",
+          "photosPermission": "Neev saves your site photos to your gallery.",
+          "savePhotosPermission": "Neev saves your site photos to your gallery.",
           "isAccessMediaLocationEnabled": true
         }
       ],
