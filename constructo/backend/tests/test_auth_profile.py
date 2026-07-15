@@ -9,6 +9,16 @@ async def _login(client, phone: str) -> str:
     return resp.json()["token"]
 
 
+async def _step_up_token(client, token: str) -> str:
+    resp = await client.post(
+        "/api/v1/auth/step-up/verify",
+        json={"otp": "000000"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["step_up_token"]
+
+
 async def test_request_otp_returns_sent(client):
     resp = await client.post("/api/v1/auth/request-otp", json={"phone": "+15551110000"})
     assert resp.status_code == 200
@@ -202,3 +212,70 @@ async def test_rename_company_requires_owner(client, factory, db_session):
         "/api/v1/auth/company", json={"name": "Nope"}, headers=headers
     )
     assert resp.status_code == 403
+
+
+async def test_delete_own_account_anonymizes_not_hard_deletes(client, db_session):
+    """The row must survive deletion (anonymized in place), not be hard-deleted —
+    ~40 FKs from users.id are attribution columns on shared project history that
+    would otherwise SET NULL and become indistinguishable from any other deleted
+    user."""
+    token = await _login(client, "+15551119020")
+    headers = {"Authorization": f"Bearer {token}"}
+    me = await client.get("/api/v1/auth/me", headers=headers)
+    user_id = me.json()["id"]
+
+    step_up = await _step_up_token(client, token)
+    resp = await client.delete(
+        "/api/v1/users/me", headers={**headers, "X-Step-Up-Token": step_up}
+    )
+    assert resp.status_code == 204, resp.text
+
+    from uuid import UUID
+
+    from app.models import User as UserModel
+
+    updated = await db_session.get(UserModel, UUID(user_id))
+    assert updated is not None  # anonymized in place, never hard-deleted
+    assert updated.name == "Deleted user"
+    assert updated.phone == f"deleted:{user_id}"
+    assert updated.is_active is False
+    assert updated.deleted_at is not None
+
+
+async def test_delete_own_account_without_step_up_is_rejected(client):
+    token = await _login(client, "+15551119021")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.delete("/api/v1/users/me", headers=headers)  # no X-Step-Up-Token
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "step_up_required"
+
+    # Untouched — the existing token still works.
+    me = await client.get("/api/v1/auth/me", headers=headers)
+    assert me.status_code == 200
+
+
+async def test_deleted_account_locks_out_old_token_but_allows_fresh_signup(client):
+    phone = "+15551119022"
+    token = await _login(client, phone)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    step_up = await _step_up_token(client, token)
+    resp = await client.delete(
+        "/api/v1/users/me", headers={**headers, "X-Step-Up-Token": step_up}
+    )
+    assert resp.status_code == 204
+
+    # The old token is immediately locked out (is_active=False reuses the
+    # existing deactivation check in get_current_user).
+    assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 403
+
+    # Logging in again with the same phone number succeeds — but because the
+    # phone column was overwritten to a tombstone value, this provisions a
+    # brand-new user rather than reviving the deleted one. Re-signup after
+    # deletion is a fresh start, not account recovery (see "Why anonymize,
+    # not hard-delete" at the top of this plan).
+    login2 = await client.post(
+        "/api/v1/auth/login", json={"phone": phone, "otp": "000000"}
+    )
+    assert login2.status_code == 200
