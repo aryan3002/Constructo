@@ -870,6 +870,8 @@ export const hi: Record<TranslationKey, string> = {
   // === documents register (W5 Slice 2a) ===
   'documents.title': 'ड्रॉइंग रजिस्टर',
   'documents.subtitle': 'इस परियोजना के लिए जारी हर ड्रॉइंग का अपरिवर्तनीय रिकॉर्ड।',
+  'documents.denied.title': 'पहुँच नहीं',
+  'documents.denied.hint': 'यह अनुभाग मालिक, प्रोजेक्ट मैनेजर, आर्किटेक्ट और साइट इंजीनियर के लिए उपलब्ध है।',
   'documents.drawings_heading': 'वर्तमान ड्रॉइंग',
   'documents.upload_revision': 'नया संस्करण अपलोड करें',
   'documents.new_drawing': 'नई ड्रॉइंग',

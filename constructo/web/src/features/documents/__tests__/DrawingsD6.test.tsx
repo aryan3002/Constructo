@@ -52,7 +52,7 @@ vi.mock('../../../api/siteChanges', () => ({
 
 vi.mock('../../../auth/useCan', () => ({
   useMeRole: () => 'owner',
-  useCan: (cap: string) => cap === 'manage_settings',
+  useCan: () => true,
 }))
 
 vi.mock('../../../ui', async (orig) => {

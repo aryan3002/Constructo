@@ -2,7 +2,10 @@
  * DocumentsPage — D6 elevation (drawings register flagship upgrade).
  *
  * Route: /settings/documents
- * Gate: owner | pm | architect (manage_settings)
+ * Access — the "company registers" group (view AND manage both tabs):
+ *   owner | pm | architect | supervisor   (capability: view_documents)
+ * Everyone else (accountant, procurement, labour) is denied and the nav item
+ * is hidden from them. The backend enforces the same set on writes.
  *
  * Two tabs:
  *   Drawings — append-only register with:
@@ -437,7 +440,10 @@ export function DocumentsPage() {
   const t = useT()
   const role = useMeRole() ?? 'owner'
   const tabs = useRoleTabs(role as ShellRole)
-  const canManage = useCan('manage_settings')
+  // The "company registers" group (owner/pm/architect/supervisor) has full
+  // view + manage access to both tabs; everyone else is denied. The backend
+  // enforces the same set on writes, so a single flag drives the whole page.
+  const canAccess = useCan('view_documents')
   const qc = useQueryClient()
 
   const [activeTab, setActiveTab] = useState<PageTab>('drawings')
@@ -577,11 +583,15 @@ export function DocumentsPage() {
         <Small className="mt-1 block text-text-mute">{t('documents.subtitle')}</Small>
       </header>
 
-      {/* Access gate */}
-      {!canManage ? (
+      {/*
+       * Access gate — the company-registers group (owner/pm/architect/supervisor)
+       * has full view + manage of both tabs. The nav hides this item from other
+       * roles, but guard the route directly too (URLs are addressable).
+       */}
+      {!canAccess ? (
         <section className="rounded-sheet border border-line bg-card p-6 shadow-card">
-          <H2 as="h2">{t('admin.denied.title')}</H2>
-          <Body className="mt-2 text-text-mute">{t('admin.denied.hint')}</Body>
+          <H2 as="h2">{t('documents.denied.title')}</H2>
+          <Body className="mt-2 text-text-mute">{t('documents.denied.hint')}</Body>
         </section>
       ) : (
         <>
@@ -617,7 +627,7 @@ export function DocumentsPage() {
           </div>
 
           {/* ── Documents tab ── */}
-          {activeTab === 'documents' && <DocumentsTab canManage={canManage} />}
+          {activeTab === 'documents' && <DocumentsTab canManage={canAccess} />}
 
           {/* ── Drawings tab ── */}
           {activeTab === 'drawings' && (
@@ -650,7 +660,7 @@ export function DocumentsPage() {
                   <option value="title_az">{t('drawings.sort.title_az')}</option>
                   <option value="site">{t('drawings.sort.site')}</option>
                 </select>
-                {!showNewDrawing && (
+                {canAccess && !showNewDrawing && (
                   <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
                     {t('documents.new_drawing')}
                   </Button>
@@ -693,7 +703,7 @@ export function DocumentsPage() {
                   title={t('drawings.empty.title')}
                   hint={t('drawings.empty.hint')}
                   action={
-                    canManage ? (
+                    canAccess ? (
                       <Button variant="primary" onClick={() => setShowNewDrawing(true)}>
                         {t('drawings.empty.cta')}
                       </Button>
@@ -745,7 +755,7 @@ export function DocumentsPage() {
           onClose={closeDrawer}
           current={drawerRow}
           chain={drawerChain}
-          canManage={canManage}
+          canManage={canAccess}
           siteId={drawerRow.site_id}
           autoUpload={drawerAutoUpload}
         />

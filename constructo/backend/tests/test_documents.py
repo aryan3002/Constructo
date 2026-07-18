@@ -7,7 +7,8 @@ Scenarios:
   - GET resolves file_url (mock get_storage().url_for → https://signed/...)
   - PATCH updates expiry_on + notes
   - PATCH is_active=false archives; excluded from GET unless ?include_archived=true
-  - supervisor role POST → 403
+  - supervisor role POST → 201 (part of the company-registers group)
+  - accountant role POST → 403 (outside the group)
   - POST /api/v1/documents/presign in-scope → {key, put_url, mode}
   - presigned_put raises NotImplementedError → mode:"unavailable", 200
 """
@@ -42,6 +43,7 @@ async def doc_ctx(factory, db_session):
     company_a = await factory.company(name="BuildersA")
     owner_a = await factory.user(company=company_a, role=UserRole.owner)
     sup_a = await factory.user(company=company_a, role=UserRole.supervisor)
+    acc_a = await factory.user(company=company_a, role=UserRole.accountant)
     site_a = await factory.site(company_a, name="Site Alpha")
 
     company_b = await factory.company(name="BuildersB")
@@ -53,6 +55,7 @@ async def doc_ctx(factory, db_session):
         company_a=company_a,
         owner_a=owner_a,
         sup_a=sup_a,
+        acc_a=acc_a,
         site_a=site_a,
         company_b=company_b,
         owner_b=owner_b,
@@ -221,8 +224,22 @@ async def test_archive_hides_from_default_list(client, doc_ctx):
         assert rows[0]["is_active"] is False
 
 
-async def test_supervisor_cannot_create_document(client, doc_ctx):
-    """supervisor role → 403 on POST."""
+async def test_supervisor_can_create_document(client, doc_ctx):
+    """supervisor role → 201 on POST (part of the company-registers group)."""
+    resp = await client.post(
+        "/api/v1/documents",
+        json={
+            "doc_type": "contract",
+            "title": "Site Engineer Upload",
+            "file_url": "documents/abc/site-eng.pdf",
+        },
+        headers=auth(doc_ctx.sup_a),
+    )
+    assert resp.status_code == 201, resp.text
+
+
+async def test_accountant_cannot_create_document(client, doc_ctx):
+    """accountant role → 403 on POST (outside the company-registers group)."""
     resp = await client.post(
         "/api/v1/documents",
         json={
@@ -230,7 +247,7 @@ async def test_supervisor_cannot_create_document(client, doc_ctx):
             "title": "Should Fail",
             "file_url": "documents/abc/fail.pdf",
         },
-        headers=auth(doc_ctx.sup_a),
+        headers=auth(doc_ctx.acc_a),
     )
     assert resp.status_code == 403, resp.text
 

@@ -36,6 +36,12 @@ describe('navForRole', () => {
     expect(labelKeyFor(sites, 'pm')).toBe('nav.sites')
   })
 
+  it('accountant is outside the company-registers group: no Drawings item', () => {
+    const z = navForRole('accountant')
+    expect(routes(z.shared)).toEqual(['/sites', '/chat', '/permits', '/reports', '/search'])
+    expect(routes(z.shared)).not.toContain('/settings/documents')
+  })
+
   it('Settings uses exact match; Drawings/Admin do not', () => {
     const settings = navForRole('owner').admin.find((i) => i.to === '/settings')!
     expect(settings.end).toBe(true)
