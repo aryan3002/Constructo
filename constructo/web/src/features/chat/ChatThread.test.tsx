@@ -13,9 +13,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement } from 'react'
 import { ToastProvider } from '../../ui/Toast'
-import { ChatThread } from './ChatThread'
+import { ChatThread, isRealCapture } from './ChatThread'
 import { actionItemsApi } from '../../api/actionItems'
-import type { ChatMessage } from '../../api/chat'
+import type { ChatEvent, ChatMessage } from '../../api/chat'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -169,6 +169,42 @@ function renderThread(ui: ReactElement) {
 
 const mockCreateTodo = actionItemsApi.create as ReturnType<typeof vi.fn>
 
+describe('isRealCapture', () => {
+  const ev = (over: Partial<ChatEvent>): ChatEvent => ({
+    id: 'e1',
+    event_type: 'material_delivery',
+    occurred_on: DAY1,
+    summary: '',
+    fields: {},
+    confidence: 0.9,
+    needs_clarification: false,
+    contested: false,
+    ...over,
+  })
+
+  it('drops a low-confidence guess with no fields + a placeholder summary', () => {
+    expect(isRealCapture(ev({ confidence: 0.18, summary: 'No message provided' }))).toBe(false)
+    expect(isRealCapture(ev({ confidence: 0.18, summary: 'No message to process' }))).toBe(false)
+  })
+  it('drops an unknown event type', () => {
+    expect(isRealCapture(ev({ event_type: 'unknown', confidence: 0.99, summary: 'x' }))).toBe(false)
+  })
+  it('keeps a delivery with real structured fields, even at low confidence', () => {
+    expect(
+      isRealCapture(ev({ confidence: 0.2, fields: { quantity: 50, unit: 'bags', material: 'cement' } })),
+    ).toBe(true)
+  })
+  it('keeps a confident typed event with a real summary but no numerals', () => {
+    expect(isRealCapture(ev({ event_type: 'issue', confidence: 0.85, summary: 'Crack reported in slab' }))).toBe(true)
+  })
+  it('drops a low-confidence typed event even with a summary', () => {
+    expect(isRealCapture(ev({ event_type: 'issue', confidence: 0.3, summary: 'maybe a crack' }))).toBe(false)
+  })
+  it('keeps a contested event regardless of confidence', () => {
+    expect(isRealCapture(ev({ confidence: 0.1, contested: true }))).toBe(true)
+  })
+})
+
 describe('ChatThread', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -179,13 +215,18 @@ describe('ChatThread', () => {
   it('renders a MessageBubble for a plain text message', () => {
     renderThread(<ChatThread address={address} title="Site Chat" />)
     // MessageBubble renders data-testid="bubble-other" (not mine, since me.id ≠ sender_id)
-    expect(screen.getByTestId('bubble-other')).toBeInTheDocument()
+    expect(screen.getAllByTestId('bubble-other').length).toBeGreaterThan(0)
+    expect(screen.getByText('Hello from the site')).toBeInTheDocument()
   })
 
-  it('renders a CaptureCard for a message with a known event type', () => {
+  it('renders a secondary capture annotation (not a full card) for a real capture', () => {
     renderThread(<ChatThread address={address} />)
-    // CaptureCard renders data-testid="capture-card"
-    expect(screen.getByTestId('capture-card')).toBeInTheDocument()
+    // A real capture (attendance · 95% sure · headcount 18) renders the real
+    // message as a normal bubble PLUS a compact annotation with the data — not
+    // the old full card that buried the message behind a "Show proof" toggle.
+    const ann = screen.getByTestId('capture-annotation')
+    expect(ann).toHaveTextContent('18 workers')
+    expect(screen.queryByTestId('capture-card')).not.toBeInTheDocument()
   })
 
   it('renders a SystemNotice for a system-kind message', () => {

@@ -16,7 +16,8 @@ import { useLayoutEffect, useRef, useCallback, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChatThread } from './useChatThread'
 import { MessageBubble } from './MessageBubble'
-import { CaptureCard } from './CaptureCard'
+import { keyFields } from './CaptureCard'
+import { CaptureAnnotation } from './CaptureAnnotation'
 import { NivaanProposalCard } from './NivaanProposalCard'
 import { SystemNotice } from './SystemNotice'
 import { initials } from './ConversationRow'
@@ -62,14 +63,32 @@ function differentDay(a: string, b: string): boolean {
   )
 }
 
-/** A "plain bubble" message — one routed to MessageBubble, i.e. NOT a Nivaan
- *  proposal, a capture card, or a system notice. Drives WhatsApp-style
- *  same-sender grouping (avatar/name once per run, timestamp on the run's end). */
+/** A "plain bubble" message — one whose primary render is a MessageBubble
+ *  (photo / text), i.e. NOT a Nivaan proposal or a system notice. A real capture
+ *  now renders as a bubble PLUS a secondary annotation, so it still counts as a
+ *  bubble here. Drives WhatsApp-style same-sender grouping (avatar/name once per
+ *  run, timestamp on the run's end). */
 function isPlainBubbleMsg(m: ChatMessage): boolean {
   if (m.meta?.proposal) return false
-  if (m.events && m.events.filter((e) => e.event_type !== 'unknown').length > 0) return false
   if (isSystemNotice(m)) return false
   return true
+}
+
+/** A REAL AI capture worth surfacing as a secondary annotation under the bubble.
+ *  Everything else — a low-confidence guess on a plain photo, an empty
+ *  "No message provided" summary — is dropped so the message reads as a normal
+ *  photo/text bubble. The AI's read never masks or replaces the real content. */
+export function isRealCapture(e: ChatEvent): boolean {
+  if (e.event_type === 'unknown') return false
+  if (e.contested) return true // already actioned → always keep
+  if ((e.fields as { status?: string } | undefined)?.status === 'approved') return true
+  if (keyFields(e.event_type, e.fields).trim() !== '') return true // real structured data
+  // Typed events without extractable numerals (issue / progress / approval) must
+  // be confident AND carry a non-placeholder summary to earn an annotation.
+  const summary = (e.summary ?? '').trim()
+  const placeholder =
+    summary === '' || /^no (message|input)\b/i.test(summary) || /no message to process/i.test(summary)
+  return e.confidence >= 0.6 && !placeholder
 }
 
 // ---------------------------------------------------------------------------
@@ -399,34 +418,35 @@ export function ChatThread({ address, title, hasHomeowner, onManageGroup, siteId
                     onConfirm={sendProposal}
                   />
                 )
-              } else if (
-                message.events &&
-                message.events.filter((e) => e.event_type !== 'unknown').length > 0
-              ) {
-                content = message.events
-                  .filter((e) => e.event_type !== 'unknown')
-                  .map((ev) => (
-                    <CaptureCard
-                      key={ev.id}
-                      event={ev}
-                      message={message}
-                      onDispute={siteId ? () => setDisputeFor({ eventId: ev.id, contested: ev.contested }) : undefined}
-                      onMakeTodo={siteId ? () => makeTodo(message, ev) : undefined}
-                    />
-                  ))
               } else if (isSystemNotice(message)) {
                 content = <SystemNotice message={message} />
               } else {
+                // Default: the real message (photo / text) as a normal bubble. A
+                // REAL capture is appended BELOW as a compact annotation; junk
+                // low-confidence guesses are dropped so they never mask the photo.
+                const captures = (message.events ?? []).filter(isRealCapture)
                 content = (
-                  <MessageBubble
-                    message={message}
-                    mine={mine}
-                    showSenderName={!mine && firstOfGroup}
-                    lastOfGroup={lastOfGroup}
-                    deliveryState={deliveryState(message.seq)}
-                    onReply={setReply}
-                    resolveParent={resolveParent}
-                  />
+                  <>
+                    <MessageBubble
+                      message={message}
+                      mine={mine}
+                      showSenderName={!mine && firstOfGroup}
+                      lastOfGroup={lastOfGroup}
+                      deliveryState={deliveryState(message.seq)}
+                      onReply={setReply}
+                      resolveParent={resolveParent}
+                    />
+                    {captures.map((ev) => (
+                      <CaptureAnnotation
+                        key={ev.id}
+                        event={ev}
+                        message={message}
+                        mine={mine}
+                        onDispute={siteId ? () => setDisputeFor({ eventId: ev.id, contested: ev.contested }) : undefined}
+                        onMakeTodo={siteId ? () => makeTodo(message, ev) : undefined}
+                      />
+                    ))}
+                  </>
                 )
               }
 
