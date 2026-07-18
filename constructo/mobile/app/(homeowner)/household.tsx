@@ -209,7 +209,7 @@ export default function Household() {
   async function shareMember(member: HomeownerMember) {
     try {
       await Share.share({
-        message: `Join my home on Constructo: ${member.invite_link}`,
+        message: `Join my home on Neev: ${member.invite_link}`,
         url: member.invite_link,
       })
     } catch {

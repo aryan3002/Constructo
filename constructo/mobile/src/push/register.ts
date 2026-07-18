@@ -19,7 +19,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'Constructo',
+      name: 'Neev',
       importance: Notifications.AndroidImportance.DEFAULT,
       lightColor: '#f2a100',
     })

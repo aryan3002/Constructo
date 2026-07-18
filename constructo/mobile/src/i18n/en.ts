@@ -53,7 +53,7 @@ export const en = {
   contractor: {
     comingSoonTitle: 'The builder app is on its way',
     comingSoonBody:
-      'For now, manage your sites on the Constructo web dashboard. The full builder experience is coming to mobile soon.',
+      'For now, manage your sites on the Neev web dashboard. The full builder experience is coming to mobile soon.',
   },
   pm: {
     tabDpr: 'DPR',
@@ -108,7 +108,7 @@ export const en = {
     siteAtRisk: '{amount} at risk',
     paymentsTitle: 'Payments',
     paymentsSubtitle: 'A record of money in and out. Tracking only.',
-    trackingOnly: 'Tracking only — Constructo never moves money. This is a record, not a transfer.',
+    trackingOnly: 'Tracking only — Neev never moves money. This is a record, not a transfer.',
     inflow: 'In',
     outflow: 'Out',
     net: 'Net',
@@ -201,7 +201,7 @@ export const en = {
     // Invite result — client
     inviteClientTitle: 'Client invite ready',
     inviteClientCode: 'Join code',
-    inviteClientInstructions: 'Ask them to download Constructo, tap "I have a join code", and enter the code above.',
+    inviteClientInstructions: 'Ask them to download Neev, tap "I have a join code", and enter the code above.',
     inviteClientCopy: 'Copy code',
     // Client site picker
     inviteClientSite: 'Site',
@@ -270,7 +270,7 @@ export const en = {
   },
   gallery: {
     title: 'Component gallery',
-    subtitle: 'The Constructo kit, in both themes.',
+    subtitle: 'The Neev kit, in both themes.',
   },
   stepUp: {
     title: 'Verify your identity',

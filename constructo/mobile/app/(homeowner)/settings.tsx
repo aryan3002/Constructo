@@ -57,7 +57,7 @@ const STR = {
     storageSub: (days: number | 'all') =>
       days === 'all' ? 'Keep everything' : `Keep last ${days} days`,
     designTaste: 'Design taste',
-    designTasteSub: 'Tell Constructo what you love',
+    designTasteSub: 'Tell Neev what you love',
     profile: 'Account',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'Phone & profile',
@@ -71,7 +71,7 @@ const STR = {
     deleteAccountError: 'Could not delete your account. Please try again.',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo · your calm view of the build',
+    footer: 'Neev · your calm view of the build',
   },
   hi: {
     title: 'सेटिंग्स',
@@ -88,7 +88,7 @@ const STR = {
     storageSub: (days: number | 'all') =>
       days === 'all' ? 'सब कुछ रखें' : `पिछले ${days} दिन रखें`,
     designTaste: 'डिज़ाइन पसंद',
-    designTasteSub: 'Constructo को बताएं आपको क्या पसंद है',
+    designTasteSub: 'नींव को बताएं आपको क्या पसंद है',
     profile: 'खाता',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'फ़ोन और प्रोफ़ाइल',
@@ -102,7 +102,7 @@ const STR = {
     deleteAccountError: 'खाता हटाया नहीं जा सका। कृपया फिर कोशिश करें।',
     english: 'English',
     hindi: 'हिन्दी',
-    footer: 'Constructo · आपका शांत निर्माण दृष्टिकोण',
+    footer: 'नींव · आपका शांत निर्माण दृष्टिकोण',
   },
 } as const
 

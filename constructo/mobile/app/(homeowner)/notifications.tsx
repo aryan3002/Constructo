@@ -152,7 +152,7 @@ const STR = {
     noMemberTitle: 'Settings unavailable',
     noMember: 'We couldn’t load your notification settings just now.',
     delivery: 'Delivery channels',
-    deliverySub: 'Where Constructo reaches you.',
+    deliverySub: 'Where Neev reaches you.',
     deliveryNote: "Your choice is saved, but WhatsApp/Email delivery isn't sending yet.",
   },
   hi: {
@@ -168,7 +168,7 @@ const STR = {
     noMemberTitle: 'सेटिंग उपलब्ध नहीं',
     noMember: 'अभी आपकी सूचना सेटिंग लोड नहीं हो सकीं।',
     delivery: 'डिलीवरी चैनल',
-    deliverySub: 'Constructo आपसे कहाँ संपर्क करे।',
+    deliverySub: 'नींव आपसे कहाँ संपर्क करे।',
     deliveryNote: 'आपकी पसंद सहेज ली जाती है, पर व्हाट्सएप/ईमेल डिलीवरी अभी नहीं भेजी जा रही।',
   },
 } as const

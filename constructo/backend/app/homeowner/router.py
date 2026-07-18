@@ -312,7 +312,7 @@ async def homeowner_ask(
 
 def _invite_link(join_code: str) -> str:
     # Deep link the contractor shares; the H1 app reads the code from it.
-    return f"constructo://join?code={join_code}"
+    return f"neev://join?code={join_code}"
 
 
 def _member_out(m: HomeownerMember) -> MemberOut:

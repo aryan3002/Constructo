@@ -177,7 +177,7 @@ async def approve_payment(
     """Proof-Locked Approval (2.5 L1): physically REFUSE to confirm a payment
     without bound evidence, and refuse if any evidence event is contested (1.7).
     On approve, stamp approver + time + evidence and a reversible-until window.
-    Constructo never moves money — this approves the RECORD."""
+    Neev never moves money — this approves the RECORD."""
     payment = await _scoped_payment_or_error(session, user, payment_id)
     if user.role not in _APPROVE_ROLES:
         raise AppError(403, "forbidden", "Only an owner or PM can approve a payment")
@@ -214,7 +214,7 @@ async def undo_approval(
     session: AsyncSession = Depends(get_session),
 ) -> ProofApprovalOut:
     """Undo a proof-locked approval within its reversible window — reverts the
-    RECORD to 'recorded' (Constructo never moved money)."""
+    RECORD to 'recorded' (Neev never moved money)."""
     payment = await _scoped_payment_or_error(session, user, payment_id)
     if user.role not in _APPROVE_ROLES:
         raise AppError(403, "forbidden", "Only an owner or PM can undo an approval")

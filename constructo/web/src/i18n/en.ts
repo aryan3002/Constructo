@@ -7,7 +7,7 @@
 //   'nav.*'     bottom-tab / nav labels
 // Add every new user-facing string here FIRST, then mirror it in hi.ts.
 export const en = {
-  'app.name': 'Constructo',
+  'app.name': 'Neev',
 
   // Navigation (bottom tabs / shell)
   'nav.brief': 'Brief',
@@ -137,7 +137,7 @@ export const en = {
   'auth.error.phone_required': 'Enter your phone number',
 
   // Owner first-run
-  'auth.onboard.welcome': 'Welcome to Constructo',
+  'auth.onboard.welcome': 'Welcome to Neev',
   'auth.onboard.company.title': 'Name your company',
   'auth.onboard.company.subtitle': 'You can change this later.',
   'auth.onboard.company.label': 'Company name',
@@ -157,7 +157,7 @@ export const en = {
     'Add your architect, site engineer, PM and accountant — they each get a join link.',
   'auth.onboard.whatsapp.title': "Connect your site's WhatsApp group",
   'auth.onboard.whatsapp.subtitle':
-    "Constructo reads your team's existing chat — no new habits. Connect it now or skip for now.",
+    "Neev reads your team's existing chat — no new habits. Connect it now or skip for now.",
   'auth.onboard.whatsapp.connect': 'Connect WhatsApp group',
   'auth.onboard.skip': 'Skip for now',
   'auth.onboard.continue': 'Continue',
@@ -185,7 +185,7 @@ export const en = {
   'invite.link.copy': 'Copy link',
   'invite.link.copied': 'Copied',
   'invite.link.another': 'Invite someone else',
-  'invite.message': 'Join {company} on Constructo as {role}: {link}',
+  'invite.message': 'Join {company} on Neev as {role}: {link}',
   'invite.pending.title': 'Pending invites',
   'invite.status.pending': 'Pending',
   'invite.status.accepted': 'Joined',
@@ -200,9 +200,9 @@ export const en = {
   'invite.client.copy_code': 'Copy code',
   'invite.client.them': 'your client',
   'invite.client.instructions':
-    'Ask {name} to download the Constructo app, sign in with their phone, and enter this join code.',
+    'Ask {name} to download the Neev app, sign in with their phone, and enter this join code.',
   'invite.client.message':
-    "You're invited to follow {company} on Constructo. Download the app, sign in with your phone, and enter join code: {code}",
+    "You're invited to follow {company} on Neev. Download the app, sign in with your phone, and enter join code: {code}",
 
   // Join (invitee accepts an invite)
   'join.title': 'You have been invited',

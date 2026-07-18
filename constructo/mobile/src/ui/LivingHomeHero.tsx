@@ -4,7 +4,7 @@
  * The hero IS the header (handoff §2.3): there is no separate top bar. It is a
  * FULL-BLEED REAL PHOTO (never an AI/3D render — Hard Rule §8) with a bottom-up
  * dark scrim so the white overlay text stays legible on any photo. Overlaid:
- *   - "CONSTRUCTO" wordmark (top-left) + a circular avatar/settings button
+ *   - "NEEV" wordmark (top-left) + a circular avatar/settings button
  *     (top-right, 48px) that opens Settings.
  *   - greeting + property name + a status chip {tone, icon, label} bottom-left.
  *
@@ -120,7 +120,7 @@ export function LivingHomeHero({
         ]}
       >
         <Small color="#ffffff" style={styles.wordmark}>
-          CONSTRUCTO
+          NEEV
         </Small>
         <Link href={onAvatarHref} asChild>
           <Pressable

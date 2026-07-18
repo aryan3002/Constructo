@@ -436,7 +436,7 @@ export const authApi = {
    * Invite the Client (homeowner) for a site. The homeowner is NOT a contractor
    * web role — they redeem a join code in the mobile app — so this hits the
    * site-scoped homeowner-member endpoint (mints a member + join code), not the
-   * contractor `/invites` flow. Returns the join code + `constructo://` deep link.
+   * contractor `/invites` flow. Returns the join code + `neev://` deep link.
    */
   inviteClient(body: {
     siteId: string
@@ -450,7 +450,7 @@ export const authApi = {
         phone: body.phone ?? null,
         display_name: body.name ?? null,
         join_code: '123456',
-        invite_link: 'constructo://join/123456',
+        invite_link: 'neev://join?code=123456',
         status: 'pending',
       })
     }
