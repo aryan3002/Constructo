@@ -190,8 +190,10 @@ export function StepUpModal({ visible, onVerified, onCancel }: StepUpModalProps)
               />
             </View>
 
-            {/* Dev hint */}
-            {devHint ? (
+            {/* Dev hint — __DEV__ only. The server still returns `dev_otp` in prod
+                while DEV_OTP_ENABLED is on, so gating on the response alone would
+                print the code to real users. Matches app/(auth)/login.tsx. */}
+            {__DEV__ && devHint ? (
               <Micro muted style={{ textAlign: 'center' }}>
                 {t('auth.devOtpHint')}
               </Micro>

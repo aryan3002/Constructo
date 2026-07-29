@@ -14,7 +14,9 @@ import { Body, Button, Card, Display, H2, Screen } from '../../../src/ui'
 import { VoiceOutButton } from './_voice'
 
 // TODO(config): wire the real site/office support number from the bound site.
-const SUPPORT_PHONE = '+910000000000'
+// Until a real number exists the call button stays hidden — dialling a placeholder
+// is a broken feature to users and a rejection risk in Play review.
+const SUPPORT_PHONE: string | null = null
 
 const STR = {
   en: {
@@ -89,14 +91,17 @@ export default function Help() {
         </View>
       </Card>
 
-      {/* Call a human — big primary action (ink); phone call is not an AI "yes"). */}
-      <Button
-        title={str.call}
-        variant="primary"
-        size="lg"
-        block
-        onPress={callOffice}
-      />
+      {/* Call a human — big primary action (ink); phone call is not an AI "yes").
+          Hidden until SUPPORT_PHONE is wired to the bound site's real number. */}
+      {SUPPORT_PHONE ? (
+        <Button
+          title={str.call}
+          variant="primary"
+          size="lg"
+          block
+          onPress={callOffice}
+        />
+      ) : null}
 
       <Button
         title={str.signOut}
