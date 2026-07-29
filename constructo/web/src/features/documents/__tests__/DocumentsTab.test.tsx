@@ -70,7 +70,7 @@ vi.mock('../../../api/drawings', async (orig) => {
 // useMeRole → 'owner' so the gate passes.
 vi.mock('../../../auth/useCan', () => ({
   useMeRole: () => 'owner',
-  useCan: (cap: string) => cap === 'manage_settings',
+  useCan: () => true,
 }))
 
 // Suppress AppShell chrome.

@@ -28,10 +28,11 @@ vi.mock('../../../api/drawings', async (orig) => {
   }
 })
 
-// Mock useMeRole → 'owner' so the gate passes.
+// Mock useMeRole → 'owner'. The owner holds every capability, so useCan is true
+// for all of them (view_documents, …) and this suite exercises the full page.
 vi.mock('../../../auth/useCan', () => ({
   useMeRole: () => 'owner',
-  useCan: (cap: string) => cap === 'manage_settings',
+  useCan: () => true,
 }))
 
 // Suppress AppShell chrome (no router tab-bar needed in tests).

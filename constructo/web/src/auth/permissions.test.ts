@@ -25,6 +25,15 @@ describe('permissions (client RBAC model)', () => {
     expect(roleCan('contractor', 'capture')).toBe(true)
   })
 
+  it('company registers (drawings + documents): owner/pm/architect/supervisor have access; others do not', () => {
+    for (const r of ['owner', 'pm', 'architect', 'supervisor']) {
+      expect(roleCan(r, 'view_documents')).toBe(true)
+    }
+    for (const r of ['accountant', 'procurement', 'labor_contractor', 'contractor']) {
+      expect(roleCan(r, 'view_documents')).toBe(false)
+    }
+  })
+
   it('unknown / missing role has zero capabilities', () => {
     expect(capsFor(undefined).size).toBe(0)
     expect(capsFor(null).size).toBe(0)

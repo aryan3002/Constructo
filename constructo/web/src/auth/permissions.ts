@@ -19,6 +19,7 @@ export type Capability =
   | 'manage_team' // owner (+ pm invite) — team & roles
   | 'manage_sites' // owner, pm — site CRUD
   | 'manage_settings' // owner — company/integrations/billing
+  | 'view_documents' // owner/pm/architect/supervisor — the company registers (Drawings + Documents): view AND manage. Gates the nav item, the page, and both tabs' write actions.
   | 'manage_specs' // architect/owner/pm — the Material Specification schedule (spec-desk)
   | 'view_payments' // owner/accountant/pm/procurement — tracking ledger (read)
   | 'view_permits'
@@ -35,6 +36,7 @@ const ALL: Capability[] = [
   'manage_team',
   'manage_sites',
   'manage_settings',
+  'view_documents',
   'manage_specs',
   'view_payments',
   'view_permits',
@@ -53,13 +55,15 @@ const CAPS: Record<string, Capability[]> = {
     'review_dpr',
     'capture',
     'manage_sites',
+    'view_documents',
     'manage_specs',
     'view_payments',
     'view_permits',
     'search',
   ],
-  // Architect (interior fit-out) — owns the Material Specification schedule.
-  architect: ['manage_specs', 'view_permits', 'search'],
+  // Architect (interior fit-out) — owns the Material Specification schedule and
+  // is part of the company-registers group (drawings + documents).
+  architect: ['view_documents', 'manage_specs', 'view_permits', 'search'],
   accountant: [
     'propose_decision',
     'reconcile',
@@ -76,7 +80,9 @@ const CAPS: Record<string, Capability[]> = {
     'view_permits',
     'search',
   ],
-  supervisor: ['capture', 'view_permits', 'search'],
+  // Site engineer (supervisor) — captures on site and is part of the
+  // company-registers group (drawings + documents).
+  supervisor: ['capture', 'view_documents', 'view_permits', 'search'],
   labor_contractor: ['capture'],
   contractor: ['capture'], // legacy alias
 }

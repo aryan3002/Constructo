@@ -5,8 +5,8 @@ NOC, insurance, licences, and other.  They are editable + archivable (unlike
 drawings which are append-only versioned).
 
 GET  /api/v1/documents            — any member; company-scoped; resolves URLs
-POST /api/v1/documents            — owner / pm / architect only
-PATCH /api/v1/documents/{doc_id} — owner / pm / architect only
+POST /api/v1/documents            — owner / pm / architect / supervisor
+PATCH /api/v1/documents/{doc_id} — owner / pm / architect / supervisor
 POST /api/v1/documents/presign    — any member
 """
 from __future__ import annotations
@@ -109,10 +109,12 @@ async def presign_document(
 @router.post("", response_model=DocumentOut, status_code=201)
 async def create_document(
     body: DocumentCreateIn,
-    user: User = Depends(require_role(UserRole.owner, UserRole.pm, UserRole.architect)),
+    user: User = Depends(
+        require_role(UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> DocumentOut:
-    """Create a company document (owner / pm / architect)."""
+    """Create a company document (owner / pm / architect / supervisor)."""
     if body.site_id is not None:
         from app.sites.router import effective_visible_site_ids
 
@@ -135,10 +137,12 @@ async def create_document(
 async def update_document(
     doc_id: UUID,
     body: DocumentUpdateIn,
-    user: User = Depends(require_role(UserRole.owner, UserRole.pm, UserRole.architect)),
+    user: User = Depends(
+        require_role(UserRole.owner, UserRole.pm, UserRole.architect, UserRole.supervisor)
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> DocumentOut:
-    """Partial edit of a company document (owner / pm / architect).
+    """Partial edit of a company document (owner / pm / architect / supervisor).
 
     Cross-company access returns 404 to avoid leaking IDs.
     """

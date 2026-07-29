@@ -46,7 +46,7 @@ const SITES: NavItem = {
   labelKeyByRole: { owner: 'nav.projects', supervisor: 'nav.my_sites' }, iconName: 'building',
 }
 const CHAT: NavItem = { to: '/chat', labelKey: 'nav.chat', iconName: 'message' }
-const DRAWINGS: NavItem = { to: '/settings/documents', labelKey: 'nav.documents', iconName: 'doc' }
+const DRAWINGS: NavItem = { to: '/settings/documents', labelKey: 'nav.documents', iconName: 'doc', cap: 'view_documents' }
 const PERMITS: NavItem = { to: '/permits', labelKey: 'nav.permits', iconName: 'shield', cap: 'view_permits' }
 const REPORTS: NavItem = { to: '/reports', labelKey: 'nav.reports', iconName: 'chart', cap: 'export_tally' }
 const SEARCH: NavItem = { to: '/search', labelKey: 'nav.search', iconName: 'search', cap: 'search' }

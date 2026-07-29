@@ -896,6 +896,8 @@ export const en = {
   // === documents register (W5 Slice 2a) ===
   'documents.title': 'Drawings Register',
   'documents.subtitle': 'Append-only record of every drawing issued for this project.',
+  'documents.denied.title': 'No access',
+  'documents.denied.hint': 'This section is available to the owner, project managers, architects, and site engineers.',
   'documents.drawings_heading': 'Current drawings',
   'documents.upload_revision': 'Upload new revision',
   'documents.new_drawing': 'New drawing',
