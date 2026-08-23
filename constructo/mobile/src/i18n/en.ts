@@ -69,6 +69,8 @@ export const en = {
       invalid_code: "We don't recognise that join code. Check it with your builder.",
       not_found: 'That home is no longer on Neev. Ask your builder for a new code.',
       already_claimed: 'This invite was already used. If that was you, sign in instead.',
+      phone_mismatch:
+        'This code was sent to a different number. Use the number your builder invited, or ask them for a new code.',
       not_homeowner: 'This number belongs to a builder account, not a homeowner.',
       network: "Can't reach Neev. Check your connection and try again.",
       generic: 'Something went wrong. Please try again.',
@@ -88,6 +90,7 @@ export const en = {
       newOwnerNote:
         'This number started a fresh workspace. Set up your company and first site on the Neev web dashboard — the app follows.',
       goTo: 'Go to {tab}',
+      newWorkspace: 'Your new workspace',
     },
   },
   nav: {

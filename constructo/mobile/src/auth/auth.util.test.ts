@@ -62,6 +62,7 @@ describe('mapAuthError', () => {
     ['invalid_code', 404, 'auth.err.invalid_code', 'backToCode', undefined],
     ['not_found', 404, 'auth.err.not_found', 'backToCode', undefined],
     ['already_claimed', 409, 'auth.err.already_claimed', 'signIn', undefined],
+    ['phone_mismatch', 403, 'auth.err.phone_mismatch', 'changeNumber', undefined],
   ] as const)('maps %s', (code, status, key, action, helpSection) => {
     const view = mapAuthError(new ApiError(status, 'raw backend text', code), t)
     expect(view.message).toBe(key)

@@ -37,6 +37,15 @@ import {
   StatusPill,
 } from '../../src/ui'
 
+/** Backend placeholder for auto-created owners (see auth/router.py). */
+const PLACEHOLDER_COMPANY = 'Default Company'
+
+function displayHeadline(company: string | null | undefined, name: string | null): string | null {
+  if (company && company !== PLACEHOLDER_COMPANY) return company
+  if (name && name.trim()) return name
+  return null
+}
+
 export default function BuilderWelcome() {
   const { t, lang } = useT()
   const { theme } = useTheme()
@@ -71,9 +80,11 @@ export default function BuilderWelcome() {
         <Logo size={44} />
         <View style={{ gap: SPACE.sm }}>
           <Eyebrow>{t('auth.welcome.builderTitle')}</Eyebrow>
-          {/* Templated truth: the company they belong to, or their name. */}
+          {/* Templated truth: the company they belong to, or their name. A
+              brand-new owner sits in the backend's placeholder company until
+              they name it on the web — never show that placeholder. */}
           <Display style={{ fontFamily: 'Eczar-SemiBold', lineHeight: 44 }}>
-            {me.company_name || me.name || t('auth.welcome.builderTitle')}
+            {displayHeadline(me.company_name, me.name) ?? t('auth.welcome.newWorkspace')}
           </Display>
           <StatusPill status="info" icon="briefcase" label={roleLabel} />
         </View>

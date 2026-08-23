@@ -4,7 +4,7 @@
  * reach this screen. The two-step body is the shared `PhoneOtpFlow`.
  *
  * After a successful verify:
- *   first sign-in on this device → /(contractor)/welcome (the role tour)
+ *   first sign-in on this device → /(contractor)/tour (the role tour)
  *   otherwise                    → homeFor(role)
  * A returning, already-authed session redirects straight home.
  */
@@ -55,7 +55,7 @@ function LoginInner() {
         seen = true // can't tell → don't trap the user in a tour
       }
       const isStaff = me.role !== 'homeowner'
-      setTarget(isStaff && !seen ? '/(contractor)/welcome' : homeFor(me.role))
+      setTarget(isStaff && !seen ? '/(contractor)/tour' : homeFor(me.role))
       return null
     },
     [refresh, t],

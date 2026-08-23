@@ -105,7 +105,7 @@ export function AuthFrame({
               <Feather name="arrow-left" size={24} color={c.text} />
             </Pressable>
           ) : null}
-          <Logo size={40} />
+          <Logo size={40} variant={theme.name === 'daylight' ? 'homeowner' : 'neev'} />
           <View style={{ flex: 1 }} />
           <LangToggle />
           <Pressable

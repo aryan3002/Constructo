@@ -1,9 +1,16 @@
 import { Svg, Rect, G, Circle, Path } from 'react-native-svg'
 import { useAuth } from '../auth/AuthContext'
 
-export function Logo({ size = 64 }: { size?: number }) {
+export function Logo({
+  size = 64,
+  variant,
+}: {
+  size?: number
+  /** Force a mark regardless of the signed-in role (signed-out screens pick by theme). */
+  variant?: 'homeowner' | 'neev'
+}) {
   const { role } = useAuth()
-  const isHomeowner = role === 'homeowner'
+  const isHomeowner = variant ? variant === 'homeowner' : role === 'homeowner'
 
   if (isHomeowner) {
     return (

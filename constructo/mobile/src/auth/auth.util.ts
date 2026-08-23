@@ -74,6 +74,7 @@ const CODE_MAP: Record<string, Omit<AuthErrorView, 'message'> & { key: string }>
   invalid_code: { key: 'auth.err.invalid_code', action: 'backToCode' },
   not_found: { key: 'auth.err.not_found', action: 'backToCode' },
   already_claimed: { key: 'auth.err.already_claimed', action: 'signIn' },
+  phone_mismatch: { key: 'auth.err.phone_mismatch', action: 'changeNumber' },
 }
 
 export function mapAuthError(err: unknown, t: Translate): AuthErrorView {
