@@ -9,10 +9,10 @@ import { Link, Redirect, useRouter } from 'expo-router'
 
 import { authApi } from '../../src/api/auth'
 import { useAuth } from '../../src/auth/AuthContext'
-import { PhoneOtpFlow } from '../../src/auth/ui'
+import { PhoneOtpFlow, useAuthLinkColor } from '../../src/auth/ui'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { Body, Small } from '../../src/ui'
+import { BodyStrong, Small } from '../../src/ui'
 
 export default function HomeownerLogin() {
   const { t } = useT()
@@ -20,6 +20,7 @@ export default function HomeownerLogin() {
   const router = useRouter()
   const { refresh, signOut, status, role } = useAuth()
   const verifying = useRef(false)
+  const link = useAuthLinkColor()
 
   const verify = useCallback(
     async (phone: string, otp: string) => {
@@ -64,7 +65,7 @@ export default function HomeownerLogin() {
       }}
       footer={
         <Link href="/(auth)/join" asChild>
-          <Body color={theme.colors.accent}>{t('auth.firstTime')}</Body>
+          <BodyStrong color={link}>{t('auth.firstTime')}</BodyStrong>
         </Link>
       }
     />

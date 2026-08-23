@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons'
 
 import { useT } from '../../i18n/I18nProvider'
 import { useTheme } from '../../theme/ThemeProvider'
+import { useAuthLinkColor } from './useAuthLinkColor'
 import { SPACE, TAP } from '../../theme/tokens'
 import { Body, BodyStrong } from '../../ui'
 import type { AuthErrorAction, AuthErrorView } from '../auth.util'
@@ -22,6 +23,7 @@ export function AuthError({
   const { t } = useT()
   const { theme } = useTheme()
   const c = theme.colors
+  const link = useAuthLinkColor()
   if (!view) return null
   // `retry` is implicit (the form is still there) — only offer explicit steps.
   const action = view.action && view.action !== 'retry' ? view.action : null
@@ -54,7 +56,7 @@ export function AuthError({
               opacity: pressed ? 0.7 : 1,
             })}
           >
-            <BodyStrong color={c.accentDeep}>{t(`auth.action.${action}`)} →</BodyStrong>
+            <BodyStrong color={link}>{t(`auth.action.${action}`)} →</BodyStrong>
           </Pressable>
         ) : null}
       </View>

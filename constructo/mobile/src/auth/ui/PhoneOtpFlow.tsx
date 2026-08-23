@@ -14,7 +14,6 @@ import { Pressable, View } from 'react-native'
 
 import { authApi } from '../../api/auth'
 import { useT } from '../../i18n/I18nProvider'
-import { useTheme } from '../../theme/ThemeProvider'
 import { SPACE, TAP } from '../../theme/tokens'
 import { Body, BodyStrong, Button, CalmVerify, FadeInUp, Small, type VerifyPhase } from '../../ui'
 import {
@@ -31,6 +30,7 @@ import { AuthFrame, useAuthGuide } from './AuthFrame'
 import { OtpField } from './OtpField'
 import { PhoneField } from './PhoneField'
 import { ResendCode } from './ResendCode'
+import { useAuthLinkColor } from './useAuthLinkColor'
 
 export interface PhoneOtpFlowProps {
   /** Step-1 title (e.g. "Your phone number" / "Welcome back"). */
@@ -84,7 +84,7 @@ export function PhoneOtpFlow(props: PhoneOtpFlowProps) {
 
 function SentTo({ phone, onChange }: { phone: string; onChange: () => void }) {
   const { t } = useT()
-  const { theme } = useTheme()
+  const link = useAuthLinkColor()
   return (
     <View style={{ gap: SPACE.xs }}>
       <Body muted>{t('auth.otpSentTo', { phone: maskPhone(phone) })}</Body>
@@ -93,7 +93,7 @@ function SentTo({ phone, onChange }: { phone: string; onChange: () => void }) {
         onPress={onChange}
         style={({ pressed }) => ({ minHeight: TAP - 12, justifyContent: 'center', alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}
       >
-        <BodyStrong color={theme.colors.accentDeep}>{t('auth.changeNumber')}</BodyStrong>
+        <BodyStrong color={link}>{t('auth.changeNumber')}</BodyStrong>
       </Pressable>
     </View>
   )

@@ -15,10 +15,10 @@ import { Link, Redirect, useRouter } from 'expo-router'
 import { authApi } from '../../src/api/auth'
 import { homeFor, welcomeKey } from '../../src/auth/auth.util'
 import { useAuth } from '../../src/auth/AuthContext'
-import { PhoneOtpFlow } from '../../src/auth/ui'
+import { PhoneOtpFlow, useAuthLinkColor } from '../../src/auth/ui'
 import { useT } from '../../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
-import { Body } from '../../src/ui'
+import { BodyStrong } from '../../src/ui'
 
 export default function Login() {
   return (
@@ -33,6 +33,7 @@ function LoginInner() {
   const { theme } = useTheme()
   const router = useRouter()
   const { refresh, status, role } = useAuth()
+  const link = useAuthLinkColor()
 
   // Where to go once the check has settled (decided inside `verify`).
   const [target, setTarget] = useState<string | null>(null)
@@ -76,7 +77,7 @@ function LoginInner() {
       serifTitle
       footer={
         <Link href="/(auth)/join" asChild>
-          <Body color={theme.colors.accentDeep}>{t('auth.homeownerLink')}</Body>
+          <BodyStrong color={link}>{t('auth.homeownerLink')}</BodyStrong>
         </Link>
       }
     />
