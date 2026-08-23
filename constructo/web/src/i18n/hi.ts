@@ -119,11 +119,92 @@ export const hi: Record<TranslationKey, string> = {
   'auth.action.sending': 'भेजा जा रहा है…',
   'auth.action.sign_in': 'साइन इन करें',
   'auth.action.signing_in': 'साइन इन हो रहा है…',
-  'auth.action.resend': 'कोड फिर भेजें',
+  'auth.action.resend': 'कोड दोबारा भेजें',
   'auth.action.change_phone': 'नंबर बदलें',
   'auth.code_sent': 'हमने {phone} पर कोड भेजा है',
   'auth.error.generic': 'साइन इन विफल रहा। कृपया फिर कोशिश करें।',
   'auth.error.phone_required': 'अपना फ़ोन नंबर डालें',
+
+  // Auth UX overhaul — shared vocabulary with mobile (spec §4 / §6 / §7).
+  'auth.phone.title': 'आपका फ़ोन नंबर',
+  'auth.phone.hint':
+    'वही नंबर डालें जिस पर आपकी कंपनी ने बुलाया। नया नंबर नया बिल्डर वर्कस्पेस बनाता है।',
+  'auth.otp.title': 'कोड डालें',
+  'auth.otp.sent_to': 'हमने {phone} पर 6 अंकों का कोड भेजा',
+  'auth.action.continue': 'आगे बढ़ें',
+  'auth.action.resend_in': '{s} सेकंड में दोबारा भेजें',
+  'auth.action.use_join_code': 'जॉइन कोड इस्तेमाल करें',
+  'auth.action.help': 'क्या क्या है',
+  'auth.action.retry': 'फिर कोशिश करें',
+  'auth.code_resent': 'कोड दोबारा भेज दिया',
+  'auth.checking': 'जाँच हो रही है…',
+  'auth.verified': 'सत्यापित · स्वागत है',
+  'auth.step_of': 'चरण {n} / {total}',
+  'auth.no_password': 'कोई पासवर्ड नहीं। हम एक बार का कोड भेजते हैं।',
+  'auth.homeowner_q': 'घर-मालिक?',
+  'auth.homeowner_note': 'Neev ऐप आपका दरवाज़ा है — अपने बिल्डर से जॉइन कोड माँगें।',
+  'auth.lang.label': 'भाषा',
+  'auth.lang.switch_en': 'अंग्रेज़ी में बदलें',
+  'auth.lang.switch_hi': 'हिंदी में बदलें',
+  'auth.how.title': 'साइन इन कैसे होता है',
+  'auth.how.details': 'यह कैसे काम करता है',
+  'auth.how.step1': 'अपना फ़ोन नंबर डालें',
+  'auth.how.step2': 'हमारा भेजा 6 अंकों का कोड डालें',
+  'auth.how.step3': 'आप अंदर हैं — कभी कोई पासवर्ड नहीं',
+  'auth.firstrun.title': 'सेटअप में बस एक मिनट लगता है',
+  'auth.firstrun.step1': 'अपनी कंपनी का नाम रखें',
+  'auth.firstrun.step2': 'अपनी पहली साइट जोड़ें',
+  'auth.firstrun.step3': 'अपनी टीम जोड़ें',
+  'auth.firstrun.step4': 'साइट का WhatsApp ग्रुप जोड़ें',
+  // "What's what" guide (six sections, same as mobile)
+  'auth.guide.title': 'क्या क्या है',
+  'auth.guide.doors.title': 'दो दरवाज़े',
+  'auth.guide.doors.body1':
+    'घर-मालिक — अपने घर का बनना देखें: तस्वीरें, अपडेट, फ़ैसले। बिल्डर से मिला जॉइन कोड डालकर Neev ऐप में आएँ।',
+  'auth.guide.doors.body2':
+    'बिल्डर / साइट टीम — अपनी साइट और टीम चलाएँ: मालिक, PM, सुपरवाइज़र, अकाउंटेंट, मुकादम, आर्किटेक्ट। अपने फ़ोन नंबर से साइन इन करें।',
+  'auth.guide.join_code.title': 'जॉइन कोड',
+  'auth.guide.join_code.body1':
+    'एक छोटा कोड जो आपका बिल्डर आपके घर के लिए बनाता है, ताकि सिर्फ़ आपका परिवार उसे देखे।',
+  'auth.guide.join_code.body2':
+    'आपका बिल्डर इसे WhatsApp या SMS पर भेजता है। लिंक टैप किया? यह खुद भर जाएगा।',
+  'auth.guide.join_code.body3': 'खो गया? अपने बिल्डर से दोबारा भेजने को कहें।',
+  'auth.guide.otp.title': 'एक बार का कोड',
+  'auth.guide.otp.body1':
+    'कोई पासवर्ड नहीं। हर बार साइन इन पर हम आपके फ़ोन पर 6 अंकों का कोड भेजते हैं।',
+  'auth.guide.otp.body2': 'नहीं मिला? 30 सेकंड बाद दोबारा भेज सकते हैं।',
+  'auth.guide.otp.dev': 'डेमो कोड: 000000',
+  'auth.guide.roles.title': 'साइट पर कौन क्या है',
+  'auth.guide.roles.owner': 'मालिक — कंपनी चलाते हैं; हर साइट देखते हैं, खर्च मंज़ूर करते हैं।',
+  'auth.guide.roles.pm': 'PM — हर साइट को समय पर रखते हैं; रोज़ की रिपोर्ट देखते हैं।',
+  'auth.guide.roles.supervisor':
+    'सुपरवाइज़र — रोज़ साइट पर; फ़ोटो और आवाज़ से काम दर्ज करते हैं।',
+  'auth.guide.roles.accountant': 'अकाउंटेंट — भुगतान को चालान और बिल से मिलाते हैं।',
+  'auth.guide.roles.mukadam':
+    'मुकादम — लेबर ठेकेदार; हर सुबह टीम की हाज़िरी लगाते हैं।',
+  'auth.guide.roles.architect': 'आर्किटेक्ट — ड्रॉइंग और मटीरियल स्पेक के मालिक।',
+  'auth.guide.roles.homeowner':
+    'घर-मालिक — जिस परिवार के लिए घर बन रहा है; प्रगति देखते हैं और फ़िनिश तय करते हैं।',
+  'auth.guide.not_enabled.title': 'नंबर चालू नहीं है?',
+  'auth.guide.not_enabled.body1':
+    'Neev अभी पायलट में है, इसलिए सिर्फ़ बुलाए गए नंबर साइन इन कर सकते हैं।',
+  'auth.guide.not_enabled.body2':
+    'अपने Neev संपर्क से अपना नंबर जुड़वाएँ — एक मिनट लगता है।',
+  'auth.guide.privacy.title': 'आपका नंबर और निजता',
+  'auth.guide.privacy.body1':
+    'आपका नंबर सिर्फ़ साइन इन करने और टीम को आपका नाम दिखाने के लिए इस्तेमाल होता है। हम इसे कभी साझा या बेचते नहीं।',
+  // Error copy (spec §6)
+  'auth.err.invalid_otp': 'वह कोड मेल नहीं खाया। SMS देखें और फिर कोशिश करें।',
+  'auth.err.not_allowed': 'यह नंबर अभी Neev के लिए चालू नहीं है।',
+  'auth.err.deactivated':
+    'यह खाता निष्क्रिय कर दिया गया है। अपनी कंपनी के मालिक से इसे बहाल करने को कहें।',
+  'auth.err.invalid_code': 'हम इस जॉइन कोड को नहीं पहचानते। अपने बिल्डर से जाँचें।',
+  'auth.err.not_found': 'वह घर अब Neev पर नहीं है। अपने बिल्डर से नया कोड माँगें।',
+  'auth.err.already_claimed':
+    'यह इनवाइट पहले ही इस्तेमाल हो चुका है। अगर वह आप थे, तो साइन इन करें।',
+  'auth.err.not_homeowner': 'यह नंबर बिल्डर खाते का है, घर-मालिक का नहीं।',
+  'auth.err.network': 'Neev तक नहीं पहुँच पा रहे। अपना कनेक्शन जाँचें और फिर कोशिश करें।',
+  'auth.err.generic': 'कुछ गड़बड़ हो गई। कृपया फिर कोशिश करें।',
 
   'auth.onboard.welcome': 'नींव में आपका स्वागत है',
   'auth.onboard.company.title': 'अपनी कंपनी का नाम रखें',
@@ -206,6 +287,7 @@ export const hi: Record<TranslationKey, string> = {
   'join.coachmark.default': 'यह रहा आपका होम। ज़रूरी चीज़ें पहले आती हैं।',
   'join.coachmark.got_it': 'समझ गया',
   'join.error.invalid': 'यह इनवाइट लिंक अब मान्य नहीं है।',
+  'join.role_card.title': '{role} के रूप में, आप…',
 
   'settings.title': 'सेटिंग्स',
   'settings.profile.title': 'प्रोफ़ाइल',
