@@ -37,20 +37,28 @@ const FIRSTRUN_STEPS: TranslationKey[] = [
   'auth.firstrun.step4',
 ]
 
-/** Neev = foundation: three courses, widening downward. */
+/** The Neev mark (dot · roof · base) — the same glyph as the app icon and the
+ *  mobile `Logo`, drawn in marigold for the ink panel. */
 function BrandMark({ size = 40 }: { size?: number }) {
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 100 100"
       width={size}
       height={size}
       aria-hidden
       focusable="false"
       style={{ color: AMBER }}
     >
-      <rect x="11" y="4" width="10" height="6" rx="1.5" fill="currentColor" />
-      <rect x="6" y="13" width="20" height="6" rx="1.5" fill="currentColor" />
-      <rect x="1" y="22" width="30" height="6" rx="1.5" fill="currentColor" />
+      <circle cx="50" cy="28" r="5.5" fill="currentColor" />
+      <path
+        d="M29 67 L50 45 L71 67"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="8.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="24" y="74" width="52" height="8" rx="4" fill="currentColor" />
     </svg>
   )
 }

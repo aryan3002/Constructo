@@ -20,6 +20,9 @@ type KnownCode =
   | 'invalid_code'
   | 'not_found'
   | 'already_claimed'
+  | 'phone_mismatch'
+  | 'invite_used'
+  | 'invite_revoked'
 
 const VIEWS: Record<KnownCode, AuthErrorView> = {
   invalid_otp: { messageKey: 'auth.err.invalid_otp' },
@@ -28,6 +31,9 @@ const VIEWS: Record<KnownCode, AuthErrorView> = {
   invalid_code: { messageKey: 'auth.err.invalid_code' },
   not_found: { messageKey: 'auth.err.not_found' },
   already_claimed: { messageKey: 'auth.err.already_claimed', action: 'signIn' },
+  phone_mismatch: { messageKey: 'auth.err.phone_mismatch', action: 'changeNumber' },
+  invite_used: { messageKey: 'auth.err.invite_used', action: 'signIn' },
+  invite_revoked: { messageKey: 'auth.err.invite_revoked' },
 }
 
 const NETWORK: AuthErrorView = { messageKey: 'auth.err.network', action: 'retry' }

@@ -205,6 +205,10 @@ export const hi: Record<TranslationKey, string> = {
   'auth.err.not_homeowner': 'यह नंबर बिल्डर खाते का है, घर-मालिक का नहीं।',
   'auth.err.network': 'Neev तक नहीं पहुँच पा रहे। अपना कनेक्शन जाँचें और फिर कोशिश करें।',
   'auth.err.generic': 'कुछ गड़बड़ हो गई। कृपया फिर कोशिश करें।',
+  'auth.err.phone_mismatch':
+    'यह कोड किसी और नंबर के लिए भेजा गया था। वही नंबर डालें जो बिल्डर ने बुलाया, या नया कोड माँगें।',
+  'auth.err.invite_used': 'यह निमंत्रण पहले इस्तेमाल हो चुका है। अगर वह आप थे, तो साइन इन करें।',
+  'auth.err.invite_revoked': 'यह निमंत्रण रद्द कर दिया गया। कंपनी मालिक से नया माँगें।',
 
   'auth.onboard.welcome': 'नींव में आपका स्वागत है',
   'auth.onboard.company.title': 'अपनी कंपनी का नाम रखें',

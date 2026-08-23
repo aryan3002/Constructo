@@ -42,6 +42,23 @@ describe('auth/mapAuthError', () => {
     })
   })
 
+  it('403 phone_mismatch -> change number', () => {
+    expect(mapAuthError(new ApiError(403, 'x', 'phone_mismatch'))).toEqual({
+      messageKey: 'auth.err.phone_mismatch',
+      action: 'changeNumber',
+    })
+  })
+
+  it('staff invite codes: invite_used -> sign in, invite_revoked -> no action', () => {
+    expect(mapAuthError(new ApiError(409, 'x', 'invite_used'))).toEqual({
+      messageKey: 'auth.err.invite_used',
+      action: 'signIn',
+    })
+    expect(mapAuthError(new ApiError(409, 'x', 'invite_revoked'))).toEqual({
+      messageKey: 'auth.err.invite_revoked',
+    })
+  })
+
   it('falls back to the message when the code is carried there (mock API)', () => {
     // authApi mocks throw `new ApiError(401, 'invalid_otp')` with no code field.
     expect(mapAuthError(new ApiError(401, 'invalid_otp'))).toEqual({
