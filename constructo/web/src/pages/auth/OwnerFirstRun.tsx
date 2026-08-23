@@ -4,9 +4,10 @@ import { authApi } from '../../api/auth'
 import { useMe } from './useMe'
 import { ApiError, api } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
-import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
+import { Body, Button, Display, Small } from '../../ui'
 import { MessageIcon } from '../../ui/icons'
-import { AuthCard, SelectField, TextField } from './fields'
+import { AuthLayout } from './AuthLayout'
+import { SelectField, TextField } from './fields'
 import { InviteTeam } from './InviteTeam'
 import { markOnboarded } from './Login'
 
@@ -96,131 +97,126 @@ export function OwnerFirstRun() {
   }
 
   return (
-    <ThemeProvider defaultTheme="site">
-      <AuthCard>
-        <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
-          {t('auth.onboard.welcome')}
-        </Micro>
-        <Small className="mt-1">
-          {t('auth.onboard.step', { current: stepIndex + 1, total: STEPS.length })}
-        </Small>
+    <AuthLayout steps="firstrun" title={t('auth.onboard.welcome')}>
+      <Small>
+        {t('auth.onboard.step', { current: stepIndex + 1, total: STEPS.length })}
+      </Small>
 
-        {step === 'company' && (
-          <form onSubmit={saveCompany} className="mt-4 space-y-4" noValidate>
-            <div>
-              <Display as="h1" className="!text-h1">
-                {t('auth.onboard.company.title')}
-              </Display>
-              <Small className="mt-1">{t('auth.onboard.company.subtitle')}</Small>
-            </div>
-            <TextField
-              label={t('auth.onboard.company.label')}
-              required
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder={t('auth.onboard.company.placeholder')}
-            />
-            {error && (
-              <p role="alert" className="font-body text-small font-medium text-risk">
-                {error}
-              </p>
-            )}
-            <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-              {t('auth.onboard.continue')}
-            </Button>
-          </form>
-        )}
-
-        {step === 'site' && (
-          <form onSubmit={saveSite} className="mt-4 space-y-4" noValidate>
-            <div>
-              <Display as="h1" className="!text-h1">
-                {t('auth.onboard.site.title')}
-              </Display>
-              <Small className="mt-1">{t('auth.onboard.site.subtitle')}</Small>
-            </div>
-            <TextField
-              label={t('auth.onboard.site.name_label')}
-              required
-              value={siteName}
-              onChange={(e) => setSiteName(e.target.value)}
-              placeholder={t('auth.onboard.site.name_placeholder')}
-            />
-            <SelectField
-              label={t('auth.onboard.site.type_label')}
-              value={siteType}
-              onChange={(e) => setSiteType(e.target.value)}
-            >
-              {SITE_TYPES.map((tp) => (
-                <option key={tp} value={tp}>
-                  {t(`auth.onboard.site.type.${tp}` as TranslationKey)}
-                </option>
-              ))}
-            </SelectField>
-            {error && (
-              <p role="alert" className="font-body text-small font-medium text-risk">
-                {error}
-              </p>
-            )}
-            <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-              {t('auth.onboard.continue')}
-            </Button>
-          </form>
-        )}
-
-        {step === 'team' && (
-          <div className="mt-4 space-y-4">
-            <div>
-              <Display as="h1" className="!text-h1">
-                {t('auth.onboard.team.title')}
-              </Display>
-              <Small className="mt-1">{t('auth.onboard.team.subtitle')}</Small>
-            </div>
-            <InviteTeam companyName={company || undefined} />
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              onClick={() => setStep('whatsapp')}
-            >
-              {t('auth.onboard.continue')}
-            </Button>
-            <Button variant="ghost" block onClick={() => setStep('whatsapp')}>
-              {t('auth.onboard.skip')}
-            </Button>
+      {step === 'company' && (
+        <form onSubmit={saveCompany} className="mt-4 space-y-4" noValidate>
+          <div>
+            <Display as="h1" className="!text-h1">
+              {t('auth.onboard.company.title')}
+            </Display>
+            <Small className="mt-1">{t('auth.onboard.company.subtitle')}</Small>
           </div>
-        )}
+          <TextField
+            label={t('auth.onboard.company.label')}
+            required
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            placeholder={t('auth.onboard.company.placeholder')}
+          />
+          {error && (
+            <p role="alert" className="font-body text-small font-medium text-risk">
+              {error}
+            </p>
+          )}
+          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
+            {t('auth.onboard.continue')}
+          </Button>
+        </form>
+      )}
 
-        {step === 'whatsapp' && (
-          <div className="mt-4 space-y-4">
-            <div className="flex items-start gap-3">
-              <span className="mt-1 text-2xl text-ok" aria-hidden>
-                <MessageIcon />
-              </span>
-              <div>
-                <Display as="h1" className="!text-h1">
-                  {t('auth.onboard.whatsapp.title')}
-                </Display>
-                <Body className="mt-1 text-text-mute">
-                  {t('auth.onboard.whatsapp.subtitle')}
-                </Body>
-              </div>
-            </div>
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              leadingIcon={<MessageIcon />}
-              onClick={finish}
-            >
-              {t('auth.onboard.whatsapp.connect')}
-            </Button>
-            <Button variant="ghost" block onClick={finish}>
-              {t('auth.onboard.skip')}
-            </Button>
+      {step === 'site' && (
+        <form onSubmit={saveSite} className="mt-4 space-y-4" noValidate>
+          <div>
+            <Display as="h1" className="!text-h1">
+              {t('auth.onboard.site.title')}
+            </Display>
+            <Small className="mt-1">{t('auth.onboard.site.subtitle')}</Small>
           </div>
-        )}
-      </AuthCard>
-    </ThemeProvider>
+          <TextField
+            label={t('auth.onboard.site.name_label')}
+            required
+            value={siteName}
+            onChange={(e) => setSiteName(e.target.value)}
+            placeholder={t('auth.onboard.site.name_placeholder')}
+          />
+          <SelectField
+            label={t('auth.onboard.site.type_label')}
+            value={siteType}
+            onChange={(e) => setSiteType(e.target.value)}
+          >
+            {SITE_TYPES.map((tp) => (
+              <option key={tp} value={tp}>
+                {t(`auth.onboard.site.type.${tp}` as TranslationKey)}
+              </option>
+            ))}
+          </SelectField>
+          {error && (
+            <p role="alert" className="font-body text-small font-medium text-risk">
+              {error}
+            </p>
+          )}
+          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
+            {t('auth.onboard.continue')}
+          </Button>
+        </form>
+      )}
+
+      {step === 'team' && (
+        <div className="mt-4 space-y-4">
+          <div>
+            <Display as="h1" className="!text-h1">
+              {t('auth.onboard.team.title')}
+            </Display>
+            <Small className="mt-1">{t('auth.onboard.team.subtitle')}</Small>
+          </div>
+          <InviteTeam companyName={company || undefined} />
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            onClick={() => setStep('whatsapp')}
+          >
+            {t('auth.onboard.continue')}
+          </Button>
+          <Button variant="ghost" block onClick={() => setStep('whatsapp')}>
+            {t('auth.onboard.skip')}
+          </Button>
+        </div>
+      )}
+
+      {step === 'whatsapp' && (
+        <div className="mt-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 text-2xl text-ok" aria-hidden>
+              <MessageIcon />
+            </span>
+            <div>
+              <Display as="h1" className="!text-h1">
+                {t('auth.onboard.whatsapp.title')}
+              </Display>
+              <Body className="mt-1 text-text-mute">
+                {t('auth.onboard.whatsapp.subtitle')}
+              </Body>
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            leadingIcon={<MessageIcon />}
+            onClick={finish}
+          >
+            {t('auth.onboard.whatsapp.connect')}
+          </Button>
+          <Button variant="ghost" block onClick={finish}>
+            {t('auth.onboard.skip')}
+          </Button>
+        </div>
+      )}
+    </AuthLayout>
   )
 }

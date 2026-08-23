@@ -11,7 +11,7 @@ import { digitsOnly, formatIndianMobile } from './phone'
 const fieldBase =
   'mt-1 w-full min-h-tap rounded-control border border-line bg-paper-2 px-3 ' +
   'font-body text-body text-text placeholder:text-text-mute ' +
-  'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40'
+  'focus:border-strong focus:outline-none focus:ring-2 focus:ring-brand'
 
 const labelClass = 'block font-body text-small font-semibold text-text'
 
@@ -114,7 +114,7 @@ export function PhoneField({
       <div
         className={
           'mt-1 flex min-h-tap items-stretch overflow-hidden rounded-control border bg-paper-2 ' +
-          'focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/40 ' +
+          'focus-within:border-strong focus-within:ring-2 focus-within:ring-brand ' +
           (error ? 'border-risk' : 'border-line')
         }
       >
@@ -247,7 +247,7 @@ export function ResendCode({
           type="button"
           onClick={onResend}
           disabled={busy}
-          className="min-h-tap font-semibold text-primary-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-control px-1 disabled:opacity-50"
+          className="min-h-tap rounded-control px-1 font-semibold text-brand-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50"
         >
           {t('auth.action.resend')}
         </button>

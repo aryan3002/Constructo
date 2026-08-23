@@ -12,10 +12,12 @@ import {
 } from 'react'
 import { useLanguage, useT, type Language, type TranslationKey } from '../../i18n'
 import { Modal, ThemeProvider } from '../../ui'
+import { ChevronDownIcon } from '../../ui/icons'
 import { guideSectionDomId, guideSections, type GuideSectionId } from './guide.content'
 
 const INK = '#15171c'
-const AMBER = '#f2a100'
+const AMBER = '#f2a100' // fills + the mark on ink only
+const AMBER_TEXT = '#ffb72e' // lifted amber: the only amber allowed AS TEXT, and only on ink
 const PAPER = '#f4f0e7'
 
 // --- Guide context: any child (e.g. an AuthError "What's what" action) can open the guide at a section.
@@ -88,8 +90,8 @@ function LangToggle() {
   const t = useT()
   const { lang, setLanguage } = useLanguage()
   const pill = (active: boolean) =>
-    'min-h-[40px] min-w-[44px] rounded-[6px] px-2 font-body text-small font-semibold cstk-animate transition ' +
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ' +
+    'min-h-tap min-w-tap rounded-[6px] px-2 font-body text-small font-semibold cstk-animate transition ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ' +
     (active ? 'bg-card text-text shadow-card' : 'text-text-mute hover:text-text')
   const opt = (code: Language, label: string, aria: TranslationKey) => (
     <button
@@ -107,7 +109,7 @@ function LangToggle() {
     <div
       role="group"
       aria-label={t('auth.lang.label')}
-      className="inline-flex min-h-tap items-center gap-0.5 rounded-control bg-paper-2 p-1"
+      className="inline-flex items-center gap-0.5 rounded-control bg-paper-2 p-0.5"
     >
       {opt('en', 'EN', 'auth.lang.switch_en')}
       {opt('hi', 'हिं', 'auth.lang.switch_hi')}
@@ -169,7 +171,7 @@ export function AuthLayout({
             <div>
               <p
                 className="mb-4 font-body text-micro font-semibold uppercase tracking-widest"
-                style={{ color: AMBER }}
+                style={{ color: AMBER_TEXT }}
               >
                 {t(stepsTitle)}
               </p>
@@ -203,7 +205,7 @@ export function AuthLayout({
             <div className="w-full max-w-md">
               <div className="rounded-sheet border border-line bg-card p-6 shadow-card sm:p-8">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-body text-micro font-semibold uppercase tracking-widest text-primary-deep">
+                  <span className="font-body text-micro font-semibold uppercase tracking-widest text-brand-text">
                     {title ?? t('app.name')}
                   </span>
                   <div className="flex items-center gap-2">
@@ -213,7 +215,7 @@ export function AuthLayout({
                       onClick={() => openGuide()}
                       aria-label={t('auth.guide.title')}
                       aria-haspopup="dialog"
-                      className="inline-flex min-h-tap min-w-tap items-center justify-center rounded-control border border-line bg-paper-2 font-display text-h2 font-bold text-text cstk-animate transition hover:border-primary hover:text-primary-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="inline-flex min-h-tap min-w-tap items-center justify-center rounded-control border border-line bg-paper-2 font-display text-h2 font-bold text-text cstk-animate transition hover:border-strong hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     >
                       ?
                     </button>
@@ -226,12 +228,12 @@ export function AuthLayout({
               <details className="mt-4 rounded-card border border-line bg-card px-4 md:hidden">
                 <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between font-body text-body font-semibold text-text marker:content-none">
                   {t('auth.how.details')}
-                  <span aria-hidden className="text-text-mute">
-                    ▾
+                  <span aria-hidden className="text-[1.25em] text-text-mute">
+                    <ChevronDownIcon />
                   </span>
                 </summary>
                 <div className="space-y-4 pb-4">
-                  <p className="font-body text-micro font-semibold uppercase tracking-widest text-primary-deep">
+                  <p className="font-body text-micro font-semibold uppercase tracking-widest text-brand-text">
                     {t(stepsTitle)}
                   </p>
                   <StepList keys={stepKeys} tone="paper" />
@@ -262,7 +264,7 @@ export function AuthLayout({
                     id={`${guideSectionDomId(s.id)}-title`}
                     className="flex items-center gap-2 font-display text-h2 font-semibold text-text"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-primary/15 text-primary-deep">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-subtle text-brand-text">
                       <Icon />
                     </span>
                     {t(s.titleKey)}

@@ -1,19 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi } from '../../api/auth'
-import { ApiError, api } from '../../api/client'
+import { api } from '../../api/client'
 import { useT } from '../../i18n'
-import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
-import { AuthCard, TextField } from './fields'
+import { Body, Button, Display, Small } from '../../ui'
+import { AuthLayout, useAuthGuide } from './AuthLayout'
+import { mapAuthError, type AuthErrorAction, type AuthErrorView } from './authErrors'
+import { AuthError, OtpField, PhoneField, ResendCode, StepDots } from './fields'
+import { isValidIndianMobile, maskPhone, toE164 } from './phone'
+import { useCountdown } from './useCountdown'
 
-const DEV_OTP = '000000'
-
-/**
- * Phone + OTP login (no passwords). Two steps so it reads like the SMS flow
- * users expect: enter phone -> "Send code" -> enter code -> "Sign in". A
- * "Resend code" affordance gives re-OTP recovery. The dev OTP stays 000000 and
- * the field is prefilled in dev so a tester is one tap from in.
- */
 /** Per-user "owner first-run complete" flag (local; the flow itself is the gate). */
 export function markOnboarded(userId: string): void {
   try {
@@ -52,42 +48,74 @@ async function ownerIsSetUp(userId: string): Promise<boolean> {
   return false
 }
 
+/**
+ * Builder / site-team sign-in (spec §7). Two steps that read like the SMS flow
+ * users expect: phone (fixed +91, 10 digits) -> "Continue" -> 6-digit one-time
+ * code, which auto-submits on the 6th digit (the "Sign in" button stays for
+ * keyboard users). No passwords; the dev OTP is never pre-filled, only hinted.
+ */
 export function Login() {
+  return (
+    <AuthLayout steps="signin">
+      <LoginForm />
+    </AuthLayout>
+  )
+}
+
+function LoginForm() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = params.get('next')
   const t = useT()
+  const { openGuide } = useAuthGuide()
+  const { seconds, start } = useCountdown()
+
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
-  const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState(DEV_OTP)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [digits, setDigits] = useState('')
+  const [otp, setOtp] = useState('')
+  const [busy, setBusy] = useState<'idle' | 'sending' | 'checking' | 'verified'>('idle')
+  const [error, setError] = useState<AuthErrorView | null>(null)
+  const [resent, setResent] = useState(false)
+
+  const phone = toE164(digits)
+  const phoneValid = isValidIndianMobile(digits)
+
+  function toPhoneStep() {
+    setStep('phone')
+    setOtp('')
+    setError(null)
+    setResent(false)
+  }
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault()
+    if (!phoneValid || busy !== 'idle') return
     setError(null)
-    if (!phone.trim()) {
-      setError(t('auth.error.phone_required'))
-      return
-    }
-    setLoading(true)
+    setBusy('sending')
     try {
       await authApi.requestOtp(phone)
-      setStep('otp')
-    } catch {
-      // Sending is a dev no-op; still advance so login isn't blocked.
-      setStep('otp')
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      // Sending is a server-side no-op until SMS is wired, so an API error
+      // must not block sign-in. Only an unreachable network stops us here.
+      if (err instanceof TypeError) {
+        setError(mapAuthError(err))
+        setBusy('idle')
+        return
+      }
     }
+    setBusy('idle')
+    setResent(false)
+    start()
+    setStep('otp')
   }
 
-  async function signIn(e: React.FormEvent) {
-    e.preventDefault()
+  async function signIn(code: string) {
+    if (code.length !== 6 || busy !== 'idle') return
     setError(null)
-    setLoading(true)
+    setBusy('checking')
     try {
-      await authApi.login(phone, otp)
+      await authApi.login(phone, code)
+      setBusy('verified')
       // If we came from an invite link, return there to accept it.
       if (next) {
         navigate(next, { replace: true })
@@ -103,105 +131,121 @@ export function Login() {
         navigate('/', { replace: true })
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('auth.error.generic'))
-    } finally {
-      setLoading(false)
+      setError(mapAuthError(err))
+      setOtp('')
+      setBusy('idle')
     }
   }
 
   async function resend() {
     setError(null)
+    setOtp('')
     try {
       await authApi.requestOtp(phone)
     } catch {
       /* dev no-op */
     }
+    setResent(true)
+    start()
   }
 
-  return (
-    <ThemeProvider defaultTheme="site">
-      <AuthCard>
-        <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
-          {t('app.name')}
-        </Micro>
-        <Display as="h1" className="mt-1 !text-h1">
-          {t('auth.action.sign_in')}
-        </Display>
-        <Body className="mt-1 text-text-mute">
-          <Small as="span">{t('auth.tagline')}</Small>
-        </Body>
+  function onErrorAction(action: AuthErrorAction) {
+    switch (action) {
+      case 'help':
+        openGuide(error?.helpSection)
+        break
+      case 'changeNumber':
+        toPhoneStep()
+        break
+      case 'retry':
+        setError(null)
+        break
+      default:
+        break
+    }
+  }
 
-        {step === 'phone' ? (
-          <form onSubmit={sendCode} className="mt-6 space-y-4" noValidate>
-            <TextField
-              label={t('auth.phone.label')}
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              inputMode="tel"
-              required
-              mono
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder={t('auth.phone.placeholder')}
-            />
-            {error && (
-              <p role="alert" className="font-body text-small font-medium text-risk">
-                {error}
-              </p>
-            )}
-            <Button type="submit" variant="primary" size="lg" block disabled={loading}>
-              {loading ? t('auth.action.sending') : t('auth.action.send_code')}
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={signIn} className="mt-6 space-y-4" noValidate>
-            <Body className="text-small text-text-mute">
-              {t('auth.code_sent', { phone })}
-            </Body>
-            <TextField
-              label={t('auth.otp.label')}
-              name="otp"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
-              mono
-              className="tracking-widest"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              hint={t('auth.otp.hint', { code: DEV_OTP })}
-            />
-            {error && (
-              <p role="alert" className="font-body text-small font-medium text-risk">
-                {error}
-              </p>
-            )}
-            <Button type="submit" variant="primary" size="lg" block disabled={loading}>
-              {loading ? t('auth.action.signing_in') : t('auth.action.sign_in')}
-            </Button>
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('phone')
-                  setError(null)
-                }}
-                className="min-h-tap font-body text-small font-semibold text-text-mute hover:text-text"
-              >
-                {t('auth.action.change_phone')}
-              </button>
-              <button
-                type="button"
-                onClick={resend}
-                className="min-h-tap font-body text-small font-semibold text-primary-deep hover:underline"
-              >
-                {t('auth.action.resend')}
-              </button>
-            </div>
-          </form>
-        )}
-      </AuthCard>
-    </ThemeProvider>
+  if (step === 'phone') {
+    return (
+      <form onSubmit={sendCode} className="space-y-5" noValidate>
+        <StepDots n={1} total={2} />
+        <div>
+          <Display as="h1" className="!text-h1">
+            {t('auth.phone.title')}
+          </Display>
+          <Small className="mt-1">{t('auth.no_password')}</Small>
+        </div>
+        <PhoneField
+          label={t('auth.phone.label')}
+          hint={t('auth.phone.hint')}
+          digits={digits}
+          onChange={setDigits}
+          error={!!error}
+          autoFocus
+        />
+        <AuthError view={error} onAction={onErrorAction} />
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          block
+          disabled={!phoneValid || busy !== 'idle'}
+        >
+          {busy === 'sending' ? t('auth.action.sending') : t('auth.action.continue')}
+        </Button>
+      </form>
+    )
+  }
+
+  const checking = busy === 'checking' || busy === 'verified'
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        void signIn(otp)
+      }}
+      className="space-y-5"
+      noValidate
+    >
+      <StepDots n={2} total={2} />
+      <div>
+        <Display as="h1" className="!text-h1">
+          {t('auth.otp.title')}
+        </Display>
+        <Body className="mt-1 text-small text-text-mute">
+          {t('auth.otp.sent_to', { phone: maskPhone(phone) })}
+          {' · '}
+          <button
+            type="button"
+            onClick={toPhoneStep}
+            className="inline-flex min-h-tap items-center font-semibold text-text underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-control"
+          >
+            {t('auth.action.change_phone')}
+          </button>
+        </Body>
+      </div>
+      <OtpField
+        label={t('auth.otp.label')}
+        hint={import.meta.env.DEV ? t('auth.otp.hint', { code: '000000' }) : undefined}
+        value={otp}
+        onChange={(v) => {
+          setOtp(v)
+          if (error) setError(null)
+        }}
+        onComplete={(v) => void signIn(v)}
+        error={!!error}
+        disabled={checking}
+        autoFocus
+      />
+      <AuthError view={error} onAction={onErrorAction} />
+      <Button type="submit" variant="primary" size="lg" block disabled={otp.length !== 6 || checking}>
+        {busy === 'verified'
+          ? t('auth.verified')
+          : busy === 'checking'
+            ? t('auth.checking')
+            : t('auth.action.sign_in')}
+      </Button>
+      <ResendCode seconds={seconds} onResend={resend} resent={resent} busy={checking} />
+    </form>
   )
 }
