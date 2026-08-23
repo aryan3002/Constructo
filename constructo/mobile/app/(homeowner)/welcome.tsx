@@ -23,6 +23,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 
 import type { HomeownerSubRole } from '../../src/api/types'
+import { roleTour } from '../../src/auth/guide.content'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, type Status } from '../../src/theme/tokens'
@@ -208,6 +209,46 @@ export default function Welcome() {
             </View>
           </View>
         </Card>
+      </FadeInUp>
+
+      {/* "What's what" — the tab bar they're about to see, explained once.
+          Icon + name + one plain line each (templated truth, no hype). */}
+      <FadeInUp delay={120}>
+        <View style={{ gap: SPACE.sm }}>
+          <Eyebrow>{L === 'hi' ? 'यहाँ क्या क्या है' : "Here's what's what"}</Eyebrow>
+          <Card style={{ paddingVertical: SPACE.xs }}>
+            {roleTour('homeowner', L).map((row, i) => (
+              <View
+                key={row.title}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACE.md,
+                  paddingVertical: SPACE.md,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: theme.colors.line,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: theme.colors.accentWarm,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather name={row.icon} size={18} color={theme.colors.accentDeep} />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <BodyStrong>{row.title}</BodyStrong>
+                  <Small muted>{row.body}</Small>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </View>
       </FadeInUp>
 
       {/* CTA — one warm primary action. */}
