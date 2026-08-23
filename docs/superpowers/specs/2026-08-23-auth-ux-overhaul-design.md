@@ -122,7 +122,7 @@ All screens compose these; none hand-roll inputs any more.
 
 **Homeowner welcome `(homeowner)/welcome`** — keep the templated-truth greeting, role pill and calm card; add a **"What's what"** list (Home · Photos · Updates · Messages · Design · Ask) — icon + tab name + one line each, from `guide.content.ts`, so it reads as the tour of the bar they're about to see. CTAs unchanged.
 
-**Builder welcome `(contractor)/welcome`** (new) — Neev theme, once per user per device (`AsyncStorage` `neev.welcome.<userId>`). "Welcome to Neev" / company name (from `me.company_name`) / role pill. "Here's what's what" rows for the role's real tabs:
+**Builder welcome `(contractor)/tour`** (new; named `tour` so it never shares the `/welcome` URL with the homeowner welcome) — Neev theme, once per user per device (`AsyncStorage` `neev.welcome.<userId>`). "Welcome to Neev" / company name (from `me.company_name`) / role pill. "Here's what's what" rows for the role's real tabs:
 - owner: Brief · Sites · Chat · Specs · Approvals
 - supervisor: Home · Tasks · Capture · Chat · More
 - pm: DPR · Chat · More
@@ -148,6 +148,8 @@ A one-line **"New here?"** note for owners: "This number started a fresh workspa
 | `404 invalid_code` | We don't recognise that join code. Check it with your builder. | back to code step |
 | `404 not_found` (property) | That home is no longer on Neev. Ask your builder for a new code. | back to code step |
 | `409 already_claimed` | This invite was already used. If that was you, sign in instead. | action: **Sign in** |
+| `403 phone_mismatch` | This code was sent to a different number. Use the number your builder invited, or ask them for a new code. | change number |
+| `409 invite_used` / `invite_revoked` (web staff invite) | This invite was already used… / This invite was cancelled. Ask your company owner for a new one. | sign in / — |
 | not homeowner (client) | This number belongs to a builder account, not a homeowner. | action: **Use a join code** / **Builder sign in** |
 | network | Can't reach Neev. Check your connection and try again. | retry |
 | other | Something went wrong. Please try again. | retry |
@@ -169,6 +171,13 @@ HI equivalents live next to EN in the i18n catalogs.
 - **Mobile** (`npm run typecheck`, `npx jest src/auth`): pure tests for phone formatting/validation/E.164/mask, `mapAuthError` for every code in §6, `homeFor` map, guide content EN/HI parity + every role present, countdown reducer. UI is not mountable in this repo's jest harness (see `wave0-kit.test.tsx`), so screens are verified by typecheck + simulator run.
 - **Web** (`npm run build` — NOT `lint` — and `npm test`): update `auth/Login.test.tsx` for the new labels/steps, add `authErrors.test.ts`, `fields.test.tsx` (PhoneField grouping, OtpField auto-submit, ResendCode cooldown), `AuthLayout` smoke, `Join` role-card-before-accept. Browser verification of `/login`, `/join/:token` (mocks) at desktop + mobile widths.
 
-## 9. Out of scope
+## 9. Implementation notes (2026-08-23)
+
+- Shipped on branch `claude/login-signup-ux-overhaul-31c1e3`; both clients verified live (mobile via Expo web on :8082 against the local backend, web via Vite on :5173).
+- Pre-existing bug fixed on the way: `DrawnCheck` restarted (and never finished) its stroke whenever the parent re-rendered mid-draw, so `CalmVerify.onSettled` could never fire and the user was stuck on a half-drawn check. The callback now lives in a ref.
+- Web `ApiError` gained an optional `code` (the backend envelope code) so §6 mapping works without string-matching messages.
+- Web fonts: the web theme declares Anek/Hind but never loads them (app-wide, pre-existing) — flagged as a separate task.
+
+## 10. Out of scope
 
 Backend changes (join-code preview endpoint, real SMS), owner first-run on mobile (the web dashboard owns company/site setup — the builder welcome says so), Hindi copy review by a native speaker (flagged for the founder), password/email auth of any kind.

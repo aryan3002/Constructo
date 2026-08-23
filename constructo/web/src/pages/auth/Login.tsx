@@ -214,15 +214,14 @@ function LoginForm() {
         </Display>
         <Body className="mt-1 text-small text-text-mute">
           {t('auth.otp.sent_to', { phone: maskPhone(phone) })}
-          {' · '}
-          <button
-            type="button"
-            onClick={toPhoneStep}
-            className="inline-flex min-h-tap items-center font-semibold text-text underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-control"
-          >
-            {t('auth.action.change_phone')}
-          </button>
         </Body>
+        <button
+          type="button"
+          onClick={toPhoneStep}
+          className="inline-flex min-h-tap items-center rounded-control font-body text-small font-semibold text-text underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          {t('auth.action.change_phone')}
+        </button>
       </div>
       <OtpField
         label={t('auth.otp.label')}
