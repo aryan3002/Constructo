@@ -43,12 +43,18 @@ export function DrawnCheck({
   const draw = useRef(new Animated.Value(reduced ? 1 : 0)).current
   const disc = useRef(new Animated.Value(reduced ? 1 : 0)).current
 
+  // Hold the callback in a ref so a parent re-render (e.g. the auth context
+  // settling after login) doesn't re-run the effect and restart — and never
+  // finish — the stroke. The draw depends on `play` only.
+  const onDrawnRef = useRef(onDrawn)
+  onDrawnRef.current = onDrawn
+
   useEffect(() => {
     if (!play) return undefined
     if (reduced) {
       draw.setValue(1)
       disc.setValue(1)
-      const id = setTimeout(() => onDrawn?.(), 60)
+      const id = setTimeout(() => onDrawnRef.current?.(), 60)
       return () => clearTimeout(id)
     }
     const discIn = Animated.timing(disc, {
@@ -66,13 +72,13 @@ export function DrawnCheck({
     })
     discIn.start()
     stroke.start(({ finished }) => {
-      if (finished) onDrawn?.()
+      if (finished) onDrawnRef.current?.()
     })
     return () => {
       discIn.stop()
       stroke.stop()
     }
-  }, [play, reduced, draw, disc, onDrawn])
+  }, [play, reduced, draw, disc])
 
   const offset = draw.interpolate({ inputRange: [0, 1], outputRange: [CHECK_LEN, 0] })
 

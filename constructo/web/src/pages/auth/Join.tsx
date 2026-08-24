@@ -6,11 +6,21 @@ import {
   type InvitePreview,
   type Role,
 } from '../../api/auth'
-import { ApiError } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
-import { Body, Button, Display, Micro, Small, ThemeProvider } from '../../ui'
-import { CheckCircleIcon } from '../../ui/icons'
-import { AuthCard } from './fields'
+import { Body, Button, Display, Small } from '../../ui'
+import {
+  BuildingIcon,
+  CameraIcon,
+  ChartBarIcon,
+  CheckCircleIcon,
+  CompassIcon,
+  DocIcon,
+  ScaleIcon,
+  UsersIcon,
+} from '../../ui/icons'
+import { AuthLayout } from './AuthLayout'
+import { mapAuthError, type AuthErrorAction, type AuthErrorView } from './authErrors'
+import { AuthError } from './fields'
 
 const ROLE_KEY: Record<Role, TranslationKey> = {
   owner: 'invite.role.owner',
@@ -32,20 +42,52 @@ const COACHMARK_KEY: Record<Role, TranslationKey> = {
   labor_contractor: 'join.coachmark.labor_contractor',
 }
 
+const ROLE_ICON: Record<Role, (p: React.SVGProps<SVGSVGElement>) => JSX.Element> = {
+  owner: BuildingIcon,
+  pm: ChartBarIcon,
+  architect: CompassIcon,
+  supervisor: CameraIcon,
+  accountant: ScaleIcon,
+  procurement: DocIcon,
+  labor_contractor: UsersIcon,
+}
+
+/** "As {role}, you'll…" + the one-line coachmark — shown BEFORE accepting so the tap is informed. */
+function RoleCard({ role }: { role: Role }) {
+  const t = useT()
+  const Icon = ROLE_ICON[role]
+  return (
+    <div className="flex items-start gap-3 rounded-card border border-line bg-paper-2 p-4">
+      <span
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-brand-subtle text-[1.25em] text-brand-text"
+        aria-hidden
+      >
+        <Icon />
+      </span>
+      <div className="min-w-0">
+        <p className="font-body text-small font-semibold text-text">
+          {t('join.role_card.title', { role: t(ROLE_KEY[role]) })}
+        </p>
+        <p className="mt-0.5 font-body text-body text-text-mute">{t(COACHMARK_KEY[role])}</p>
+      </div>
+    </div>
+  )
+}
+
 /**
  * Invitee join screen. Resolves the invite from its token (public preview),
- * requires a phone+OTP login, accepts, then shows ONE role-specific coachmark
- * before sending the user to their IA landing. Supervisor & mukadam are
- * near-zero friction: a single tap to accept, a single coachmark.
+ * shows what the role can do, requires a phone+OTP login, accepts, then shows
+ * ONE role-specific coachmark before sending the user to their IA landing.
+ * Supervisor & mukadam are near-zero friction: a single tap to accept.
  */
 export function Join() {
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const t = useT()
   const [preview, setPreview] = useState<InvitePreview | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<AuthErrorView | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AuthErrorView | null>(null)
   const [accepted, setAccepted] = useState<{ role: Role } | null>(null)
 
   useEffect(() => {
@@ -53,12 +95,11 @@ export function Join() {
     authApi
       .previewInvite(token)
       .then((p) => alive && setPreview(p))
-      .catch(() => alive && setLoadError(t('join.error.invalid')))
+      .catch(() => alive && setLoadError({ messageKey: 'join.error.invalid' }))
     return () => {
       alive = false
     }
-    // token is stable for the screen's life; t identity is stable per language.
-  }, [token, t])
+  }, [token])
 
   async function accept() {
     setError(null)
@@ -67,7 +108,7 @@ export function Join() {
       const res = await authApi.acceptInvite(token)
       setAccepted({ role: res.role })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.error'))
+      setError(mapAuthError(err))
     } finally {
       setBusy(false)
     }
@@ -78,77 +119,68 @@ export function Join() {
     navigate(`/login?next=${encodeURIComponent(`/join/${token}`)}`)
   }
 
+  function onErrorAction(action: AuthErrorAction) {
+    if (action === 'signIn') goLogin()
+    else if (action === 'retry') setError(null)
+  }
+
   return (
-    <ThemeProvider defaultTheme="site">
-      <AuthCard>
-        {loadError ? (
-          <p role="alert" className="font-body text-body font-medium text-risk">
-            {loadError}
-          </p>
-        ) : accepted ? (
-          <div className="space-y-4 text-center">
-            <span className="mx-auto block text-4xl text-ok" aria-hidden>
-              <CheckCircleIcon />
-            </span>
+    <AuthLayout steps="signin">
+      {loadError ? (
+        <AuthError view={loadError} />
+      ) : accepted ? (
+        <div className="space-y-4 text-center">
+          <span className="mx-auto block text-4xl text-ok" aria-hidden>
+            <CheckCircleIcon />
+          </span>
+          <Display as="h1" className="!text-h1">
+            {t('join.welcome')}
+          </Display>
+          <Body className="text-text-mute">{t(COACHMARK_KEY[accepted.role])}</Body>
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            onClick={() => navigate('/', { replace: true })}
+          >
+            {t('join.coachmark.got_it')}
+          </Button>
+        </div>
+      ) : preview ? (
+        <div className="space-y-5">
+          <div>
             <Display as="h1" className="!text-h1">
-              {t('join.welcome')}
+              {t('join.title')}
             </Display>
-            <Body className="text-text-mute">{t(COACHMARK_KEY[accepted.role])}</Body>
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              onClick={() => navigate('/', { replace: true })}
-            >
-              {t('join.coachmark.got_it')}
+            <Body className="mt-1 text-text-mute">
+              {t('join.subtitle', {
+                company: preview.company_name,
+                role: t(ROLE_KEY[preview.role]),
+              })}
+            </Body>
+          </div>
+
+          <RoleCard role={preview.role} />
+
+          <AuthError view={error} onAction={onErrorAction} />
+
+          {isAuthenticated() ? (
+            <Button variant="primary" size="lg" block onClick={accept} disabled={busy}>
+              {busy ? t('join.action.accepting') : t('join.action.accept')}
             </Button>
-          </div>
-        ) : preview ? (
-          <div className="space-y-4">
-            <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
-              {t('app.name')}
-            </Micro>
-            <div>
-              <Display as="h1" className="!text-h1">
-                {t('join.title')}
-              </Display>
-              <Body className="mt-1 text-text-mute">
-                {t('join.subtitle', {
-                  company: preview.company_name,
-                  role: t(ROLE_KEY[preview.role]),
-                })}
-              </Body>
-            </div>
-
-            {error && (
-              <p role="alert" className="font-body text-small font-medium text-risk">
-                {error}
-              </p>
-            )}
-
-            {isAuthenticated() ? (
-              <Button
-                variant="primary"
-                size="lg"
-                block
-                onClick={accept}
-                disabled={busy}
-              >
-                {busy ? t('join.action.accepting') : t('join.action.accept')}
+          ) : (
+            <>
+              <Small>{t('join.signed_out')}</Small>
+              <Button variant="primary" size="lg" block onClick={goLogin}>
+                {t('auth.action.sign_in')}
               </Button>
-            ) : (
-              <>
-                <Small>{t('join.signed_out')}</Small>
-                <Button variant="primary" size="lg" block onClick={goLogin}>
-                  {t('auth.action.sign_in')}
-                </Button>
-              </>
-            )}
-          </div>
-        ) : (
-          <Body className="text-text-mute">{t('common.loading')}</Body>
-        )}
-      </AuthCard>
-    </ThemeProvider>
+              <Small className="text-center">{t('auth.no_password')}</Small>
+            </>
+          )}
+        </div>
+      ) : (
+        <Body className="text-text-mute">{t('common.loading')}</Body>
+      )}
+    </AuthLayout>
   )
 }

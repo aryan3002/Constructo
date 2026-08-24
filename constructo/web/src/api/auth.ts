@@ -138,13 +138,15 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
     let detail = res.statusText
+    let code: string | undefined
     try {
       const body = await res.json()
       detail = body?.error?.message ?? body?.detail ?? body?.message ?? detail
+      code = typeof body?.error?.code === 'string' ? body.error.code : undefined
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, code)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T

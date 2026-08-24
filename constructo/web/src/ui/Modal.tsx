@@ -89,7 +89,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
           aria-labelledby={titleId}
           data-state={entered ? 'open' : 'closed'}
           className={[
-            'relative flex flex-col w-full max-w-md pointer-events-auto',
+            'relative flex flex-col w-full max-w-md max-h-[calc(100vh-2rem)] pointer-events-auto',
             'bg-card rounded-sheet shadow-pop',
             'transition-[transform,opacity] duration-200 ease-out cstk-animate',
             entered ? 'scale-100 opacity-100' : 'scale-95 opacity-0',

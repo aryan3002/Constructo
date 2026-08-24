@@ -1,37 +1,56 @@
 /**
- * Homeowner join — redeem the join code your builder shared, with phone + OTP.
+ * Homeowner join — redeem the join code your builder shared. Three small steps
+ * on one screen instead of four fields and a disabled button:
  *
- * Improvements over the original:
- *   - `requestOtp` fires automatically on phone blur (O1).
- *   - 30-second resend countdown timer.
- *   - Deep-link autofill: `neev://join?code=abc123` pre-fills the join code
- *     and immediately requests the OTP (J1).
- *   - OTP field has `textContentType="oneTimeCode"` for SMS autofill.
- *   - On success: routes to `(homeowner)/welcome` (not `replace('/')`), passing
- *     display_name / company_name / sub_role from the JoinOut response.
+ *   1/3  Your join code      [code]  "Where do I find my code?" → guide
+ *   2/3  About you           [name] [+91 | phone]                 (Send code)
+ *   3/3  Enter the code      [□□□□□□] auto-submits · Resend · Change number
+ *        → CalmVerify → (homeowner)/welcome with the JoinOut params
+ *
+ * Deep link `neev://join?code=<joinCode>` pre-fills the code and opens on
+ * step 2. The code can't be pre-validated (no preview endpoint) — an
+ * `invalid_code` on the final submit jumps back to step 1 with the reason.
  */
-import { useEffect, useRef, useState } from 'react'
-import { Pressable, TextInput, View } from 'react-native'
+import { useCallback, useState } from 'react'
+import { TextInput, View, Pressable } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { Link, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { authApi } from '../../src/api/auth'
-import { ApiError } from '../../src/api/client'
+import {
+  isValidIndianMobile,
+  mapAuthError,
+  maskPhone,
+  toE164,
+  type AuthErrorAction,
+  type AuthErrorView,
+} from '../../src/auth/auth.util'
 import { useAuth } from '../../src/auth/AuthContext'
+import {
+  AuthError,
+  AuthFrame,
+  OtpField,
+  PhoneField,
+  ResendCode,
+  useAuthGuide,
+  useAuthLinkColor,
+} from '../../src/auth/ui'
+import { useCountdown } from '../../src/auth/useCountdown'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
+import { SPACE, TAP } from '../../src/theme/tokens'
 import {
   Body,
+  BodyStrong,
   Button,
   CalmVerify,
-  Display,
-  Screen,
+  FadeInUp,
   Small,
   useInputStyle,
-  Logo,
   type VerifyPhase,
 } from '../../src/ui'
+
+type Step = 1 | 2 | 3
 
 type JoinNavParams = {
   sub_role: string
@@ -40,163 +59,233 @@ type JoinNavParams = {
   company_name: string
 }
 
-const RESEND_SECONDS = 30
-
 export default function Join() {
   const { t } = useT()
-  const { theme } = useTheme()
   const router = useRouter()
-  const { refresh, setJoinData } = useAuth()
-
-  // Deep-link: neev://join?code=<joinCode>
+  const link = useAuthLinkColor()
   const params = useLocalSearchParams<{ code?: string }>()
+  const linkedCode = params.code?.trim() ?? ''
 
-  const [joinCode, setJoinCode] = useState(params.code ?? '')
+  const [step, setStep] = useState<Step>(linkedCode ? 2 : 1)
+  const [code, setCode] = useState(linkedCode)
+  const [digits, setDigits] = useState('')
+
+  const title =
+    step === 1 ? t('auth.joinTitle') : step === 2 ? t('auth.aboutYouTitle') : t('auth.otpTitle')
+
+  return (
+    <AuthFrame
+      back={step === 1 ? true : () => setStep((s) => (s === 3 ? 2 : 1))}
+      step={{ n: step, total: 3 }}
+      title={title}
+      subtitle={
+        step === 1 ? (
+          t('auth.joinSub')
+        ) : step === 3 ? (
+          <SentTo phone={toE164(digits)} onChange={() => setStep(2)} />
+        ) : undefined
+      }
+      guideSection="joinCode"
+      footer={
+        <Link href="/(auth)/login" asChild>
+          <BodyStrong color={link}>{t('auth.staffLink')}</BodyStrong>
+        </Link>
+      }
+    >
+      <JoinBody
+        step={step}
+        setStep={setStep}
+        code={code}
+        setCode={setCode}
+        digits={digits}
+        setDigits={setDigits}
+        onSignIn={() => router.replace('/(auth)/homeowner-login')}
+        onJoined={(nav) => router.replace({ pathname: '/(homeowner)/welcome', params: nav })}
+      />
+    </AuthFrame>
+  )
+}
+
+function SentTo({ phone, onChange }: { phone: string; onChange: () => void }) {
+  const { t } = useT()
+  const link = useAuthLinkColor()
+  return (
+    <View style={{ gap: SPACE.xs }}>
+      <Body muted>{t('auth.otpSentTo', { phone: maskPhone(phone) })}</Body>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onChange}
+        style={({ pressed }) => ({ minHeight: TAP - 12, justifyContent: 'center', alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}
+      >
+        <BodyStrong color={link}>{t('auth.changeNumber')}</BodyStrong>
+      </Pressable>
+    </View>
+  )
+}
+
+function JoinBody({
+  step,
+  setStep,
+  code,
+  setCode,
+  digits,
+  setDigits,
+  onSignIn,
+  onJoined,
+}: {
+  step: Step
+  setStep: (s: Step) => void
+  code: string
+  setCode: (c: string) => void
+  digits: string
+  setDigits: (d: string) => void
+  onSignIn: () => void
+  onJoined: (nav: JoinNavParams) => void
+}) {
+  const { t } = useT()
+  const { theme } = useTheme()
+  const c = theme.colors
+  const guide = useAuthGuide()
+  const link = useAuthLinkColor()
+  const inputStyle = useInputStyle()
+  const { refresh, setJoinData } = useAuth()
+  const { seconds, start } = useCountdown()
+
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('+91')
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  // Calm-verify settle: on a successful join we draw the check, hold a beat,
-  // then route to welcome (params captured at join time).
+  const [resent, setResent] = useState(false)
+  const [error, setError] = useState<AuthErrorView | null>(null)
   const [verifyPhase, setVerifyPhase] = useState<VerifyPhase | null>(null)
   const [navTarget, setNavTarget] = useState<JoinNavParams | null>(null)
 
-  // OTP request state
-  const [otpRequested, setOtpRequested] = useState(false)
-  const [otpBusy, setOtpBusy] = useState(false)
-  const [resendCountdown, setResendCountdown] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const phone = toE164(digits)
+  const validPhone = isValidIndianMobile(digits)
+  const canSend = name.trim().length > 0 && validPhone
 
-  // If a deep-link code was provided, auto-request OTP once the phone is +91 default.
-  useEffect(() => {
-    if (params.code && params.code.trim().length > 0) {
-      setJoinCode(params.code.trim())
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function startResendTimer() {
-    setResendCountdown(RESEND_SECONDS)
-    if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      setResendCountdown((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [])
-
-  async function requestOtp() {
-    const trimmedPhone = phone.trim()
-    if (trimmedPhone.length < 10) return
-    if (otpBusy || resendCountdown > 0) return
-    setOtpBusy(true)
-    setError(null)
-    try {
-      await authApi.requestOtp(trimmedPhone)
-      setOtpRequested(true)
-      startResendTimer()
-    } catch {
-      // requestOtp is best-effort in dev (returns sent:true); don't block the user.
-      setOtpRequested(true)
-      startResendTimer()
-    } finally {
-      setOtpBusy(false)
-    }
-  }
-
-  async function join() {
+  async function sendCode(isResend = false) {
+    if (!canSend || busy) return
     setBusy(true)
-    setVerifyPhase('checking')
     setError(null)
     try {
-      const resp = await authApi.joinAsHomeowner(
-        joinCode.trim(),
-        phone.trim(),
-        otp.trim(),
-        name.trim(),
-      )
-      // Persist sub_role + site_id before calling refresh() so routing can branch.
-      await setJoinData(resp.sub_role, resp.site_id)
-      const me = await refresh()
-      if (!me) {
-        setVerifyPhase(null)
-        setError(t('common.somethingWrong'))
-        return
-      }
-      // Capture the welcome params, then let CalmVerify draw the check + settle;
-      // onSettled performs the replace (carrying display_name / company_name if
-      // the backend returns JoinOut; empty strings are a graceful fallback).
-      setNavTarget({
-        sub_role: resp.sub_role,
-        site_id: resp.site_id,
-        display_name: resp.display_name ?? '',
-        company_name: resp.company_name ?? '',
-      })
-      setVerifyPhase('verified')
+      await authApi.requestOtp(phone)
+      start()
+      setResent(isResend)
+      setStep(3)
     } catch (e) {
-      setVerifyPhase(null)
-      setError(e instanceof ApiError ? e.message : t('common.somethingWrong'))
+      setError(mapAuthError(e, t))
     } finally {
       setBusy(false)
     }
   }
 
-  function onVerifiedSettled() {
-    if (!navTarget) return
-    router.replace({ pathname: '/(homeowner)/welcome', params: navTarget })
+  const join = useCallback(
+    async (otpValue: string) => {
+      setVerifyPhase('checking')
+      setError(null)
+      try {
+        const resp = await authApi.joinAsHomeowner(code.trim(), phone, otpValue, name.trim())
+        // Persist sub_role + site_id before refresh() so routing can branch.
+        await setJoinData(resp.sub_role, resp.site_id)
+        const me = await refresh()
+        if (!me) {
+          setVerifyPhase(null)
+          setOtp('')
+          setError({ message: t('auth.err.generic'), action: 'retry' })
+          return
+        }
+        setNavTarget({
+          sub_role: resp.sub_role,
+          site_id: resp.site_id,
+          display_name: resp.display_name ?? '',
+          company_name: resp.company_name ?? '',
+        })
+        setVerifyPhase('verified')
+      } catch (e) {
+        const view = mapAuthError(e, t)
+        setVerifyPhase(null)
+        setOtp('')
+        setError(view)
+        // A bad / expired code is a step-1 problem — take them straight there.
+        if (view.action === 'backToCode') setStep(1)
+      }
+    },
+    [code, phone, name, setJoinData, refresh, t, setStep],
+  )
+
+  function handleAction(action: AuthErrorAction) {
+    setError(null)
+    if (action === 'backToCode') setStep(1)
+    else if (action === 'changeNumber') setStep(2)
+    else if (action === 'signIn') onSignIn()
+    else if (action === 'help') guide.open(error?.helpSection)
   }
 
-  const inputStyle = useInputStyle()
+  if (verifyPhase) {
+    return (
+      <CalmVerify
+        phase={verifyPhase}
+        checkingLabel={t('auth.checking')}
+        verifiedLabel={t('auth.verified')}
+        color={c.accent}
+        onSettled={() => navTarget && onJoined(navTarget)}
+      />
+    )
+  }
 
-  const canJoin =
-    name.trim().length > 0 &&
-    joinCode.trim().length > 0 &&
-    phone.trim().length >= 10 &&
-    otp.trim().length === 6
-
-  return (
-    <Screen>
-      {/* Back button → chooser */}
-      <Pressable
-        onPress={() => router.back()}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        style={{ alignSelf: 'flex-start', padding: SPACE.sm, marginBottom: SPACE.xs ?? 4 }}
-      >
-        <Feather name="arrow-left" size={24} color={theme.colors.text} />
-      </Pressable>
-
-      <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
-        <Logo size={48} />
-        <Display>{t('auth.joinTitle')}</Display>
-        <Small muted>{t('auth.joinSubtitle')}</Small>
-      </View>
-
-      {verifyPhase ? (
-        // The settle — breathing dots → drawn sage check, then route to welcome.
-        <View style={{ marginTop: SPACE.xl }}>
-          <CalmVerify
-            phase={verifyPhase}
-            checkingLabel={t('auth.checking')}
-            verifiedLabel={t('auth.verified')}
-            color={theme.colors.accent}
-            onSettled={onVerifiedSettled}
+  if (step === 1) {
+    return (
+      <FadeInUp key="code" duration={240} style={{ gap: SPACE.lg }}>
+        <View style={{ gap: SPACE.xs }}>
+          <Small muted>{t('auth.joinCodeLabel')}</Small>
+          <TextInput
+            value={code}
+            onChangeText={(v) => {
+              setCode(v)
+              if (error) setError(null)
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            returnKeyType="next"
+            onSubmitEditing={() => code.trim() && setStep(2)}
+            accessibilityLabel={t('auth.joinCodeLabel')}
+            placeholder="abc123"
+            placeholderTextColor={c.textMute}
+            style={[inputStyle, { fontSize: 18, borderColor: error ? c.risk : c.line }]}
           />
+          <Small muted>{t('auth.joinCodeHint')}</Small>
         </View>
-      ) : (
-        <View style={{ gap: SPACE.md, marginTop: SPACE.xl }}>
-          {/* Name — so Members / Settings show a real name, not a bare phone */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => guide.open('joinCode')}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACE.sm,
+            minHeight: TAP - 8,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Feather name="help-circle" size={16} color={link} />
+          <BodyStrong color={link}>{t('auth.whereFindCode')}</BodyStrong>
+        </Pressable>
+        <AuthError view={error} onAction={handleAction} />
+        <Button
+          title={t('auth.continue')}
+          block
+          size="lg"
+          disabled={code.trim().length === 0}
+          onPress={() => setStep(2)}
+        />
+      </FadeInUp>
+    )
+  }
+
+  if (step === 2) {
+    return (
+      <FadeInUp key="about" duration={240} style={{ gap: SPACE.lg }}>
+        <View style={{ gap: SPACE.xs }}>
           <Small muted>{t('auth.nameLabel')}</Small>
           <TextInput
             value={name}
@@ -204,85 +293,53 @@ export default function Join() {
             autoCapitalize="words"
             autoComplete="name"
             textContentType="name"
-            autoFocus={!params.code}
-            style={inputStyle}
+            autoFocus
+            returnKeyType="next"
+            accessibilityLabel={t('auth.nameLabel')}
             placeholder={t('auth.namePlaceholder')}
-            placeholderTextColor={theme.colors.textMute}
-          />
-
-          {/* Join code */}
-          <Small muted>{t('auth.joinCodeLabel')}</Small>
-          <TextInput
-            value={joinCode}
-            onChangeText={setJoinCode}
-            autoCapitalize="none"
-            autoCorrect={false}
+            placeholderTextColor={c.textMute}
             style={inputStyle}
-            placeholder="abc123…"
-            placeholderTextColor={theme.colors.textMute}
           />
-
-          {/* Phone — OTP auto-fires on blur; +91 prefix is non-deletable */}
-          <Small muted>{t('auth.phoneLabel')}</Small>
-          <TextInput
-            value={phone}
-            onChangeText={(text) => {
-              // Preserve the +91 prefix — never let it be removed
-              if (!text.startsWith('+91')) {
-                setPhone('+91')
-              } else {
-                setPhone(text)
-              }
-            }}
-            keyboardType="phone-pad"
-            style={inputStyle}
-            placeholderTextColor={theme.colors.textMute}
-            onBlur={() => void requestOtp()}
-          />
-
-          {/* OTP — auto-requested on phone blur; a quiet resend link, no second button. */}
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <Small muted>{t('auth.otpLabel')}</Small>
-            {otpRequested && (
-              <Small
-                color={resendCountdown > 0 ? theme.colors.textMute : theme.colors.accent}
-                onPress={resendCountdown > 0 || otpBusy ? undefined : () => void requestOtp()}
-              >
-                {resendCountdown > 0 ? `Resend in ${resendCountdown}s` : 'Resend OTP'}
-              </Small>
-            )}
-          </View>
-          <TextInput
-            value={otp}
-            onChangeText={setOtp}
-            keyboardType="number-pad"
-            maxLength={6}
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-            style={[inputStyle, { letterSpacing: 8, textAlign: 'center' }]}
-            placeholder="••••••"
-            placeholderTextColor={theme.colors.textMute}
-          />
-
-          {/* One clear primary action — no competing Send-OTP button, no dev line. */}
-          <Button
-            title={t('auth.joinCta')}
-            block
-            loading={busy}
-            disabled={!canJoin}
-            onPress={() => void join()}
-          />
-          {error ? <Small color={theme.colors.risk}>{error}</Small> : null}
+          <Small muted>{t('auth.nameHint')}</Small>
         </View>
-      )}
+        <PhoneField
+          digits={digits}
+          onChange={(d) => {
+            setDigits(d)
+            if (error) setError(null)
+          }}
+          hint={t('auth.phoneHintHomeowner')}
+          error={!!error}
+          onSubmit={() => void sendCode()}
+        />
+        <AuthError view={error} onAction={handleAction} />
+        <Button
+          title={t('auth.sendCode')}
+          block
+          size="lg"
+          loading={busy}
+          disabled={!canSend}
+          onPress={() => void sendCode()}
+        />
+      </FadeInUp>
+    )
+  }
 
-      <View style={{ marginTop: SPACE.xl, alignItems: 'center' }}>
-        <Link href="/(auth)/login" asChild>
-          <Body color={theme.colors.accentDeep}>{t('auth.staffLogin')}</Body>
-        </Link>
-      </View>
-    </Screen>
+  return (
+    <FadeInUp key="otp" duration={240} style={{ gap: SPACE.lg }}>
+      <OtpField
+        value={otp}
+        onChange={(v) => {
+          setOtp(v)
+          if (error) setError(null)
+        }}
+        onComplete={(v) => void join(v)}
+        error={!!error}
+        autoFocus
+      />
+      <AuthError view={error} onAction={handleAction} />
+      <ResendCode seconds={seconds} busy={busy} resent={resent} onResend={() => void sendCode(true)} />
+      {__DEV__ ? <Small muted>{t('auth.devOtpHint')}</Small> : null}
+    </FadeInUp>
   )
 }

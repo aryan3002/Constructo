@@ -136,6 +136,90 @@ export const en = {
   'auth.error.generic': 'Sign in failed. Please try again.',
   'auth.error.phone_required': 'Enter your phone number',
 
+  // Auth UX overhaul — shared vocabulary with mobile (spec §4 / §6 / §7).
+  'auth.phone.title': 'Your phone number',
+  'auth.phone.hint':
+    'Use the number your company invited. A new number starts a fresh builder workspace.',
+  'auth.otp.title': 'Enter the code',
+  'auth.otp.sent_to': 'We texted a 6-digit code to {phone}',
+  'auth.action.continue': 'Continue',
+  'auth.action.resend_in': 'Resend in {s}s',
+  'auth.action.use_join_code': 'Use a join code',
+  'auth.action.help': "What's what",
+  'auth.action.retry': 'Try again',
+  'auth.code_resent': 'Code sent again',
+  'auth.checking': 'Checking…',
+  'auth.verified': 'Verified · welcome in',
+  'auth.step_of': 'Step {n} of {total}',
+  'auth.no_password': 'No password. We text you a one-time code.',
+  'auth.homeowner_q': 'Homeowner?',
+  'auth.homeowner_note': 'The Neev app is your door — ask your builder for a join code.',
+  'auth.lang.label': 'Language',
+  'auth.lang.switch_en': 'Switch to English',
+  'auth.lang.switch_hi': 'Switch to Hindi',
+  'auth.how.title': 'How signing in works',
+  'auth.how.details': 'How it works',
+  'auth.how.step1': 'Enter your phone number',
+  'auth.how.step2': 'Type the 6-digit code we text you',
+  'auth.how.step3': "You're in — no password, ever",
+  'auth.firstrun.title': 'Setting up takes a minute',
+  'auth.firstrun.step1': 'Name your company',
+  'auth.firstrun.step2': 'Add your first site',
+  'auth.firstrun.step3': 'Invite your team',
+  'auth.firstrun.step4': "Connect the site's WhatsApp group",
+  // "What's what" guide (six sections, same as mobile)
+  'auth.guide.title': "What's what",
+  'auth.guide.doors.title': 'Two doors',
+  'auth.guide.doors.body1':
+    'Homeowner — follow your home being built: photos, updates, decisions. You enter the Neev app with the join code your builder sent.',
+  'auth.guide.doors.body2':
+    'Builder / site team — run your sites and crew: owner, PM, supervisor, accountant, mukadam, architect. Sign in with your phone number.',
+  'auth.guide.join_code.title': 'Join code',
+  'auth.guide.join_code.body1':
+    'A short code your builder creates for your home, so only your family sees it.',
+  'auth.guide.join_code.body2':
+    'Your builder shares it on WhatsApp or SMS. Tapped a link? It fills in by itself.',
+  'auth.guide.join_code.body3': 'Lost it? Ask your builder to re-send it.',
+  'auth.guide.otp.title': 'One-time code',
+  'auth.guide.otp.body1':
+    'No password. Each time you sign in we text a 6-digit code to your phone.',
+  'auth.guide.otp.body2': "Didn't get it? You can resend after 30 seconds.",
+  'auth.guide.otp.dev': 'Demo code: 000000',
+  'auth.guide.roles.title': "Who's who on a site",
+  'auth.guide.roles.owner': 'Owner — runs the company; sees every site, approves spend.',
+  'auth.guide.roles.pm': 'PM — keeps each site on schedule; reviews the daily report.',
+  'auth.guide.roles.supervisor':
+    'Supervisor — on site every day; logs work with photos and voice.',
+  'auth.guide.roles.accountant': 'Accountant — matches payments to challans and invoices.',
+  'auth.guide.roles.mukadam':
+    'Mukadam — the labour contractor; marks the crew present each morning.',
+  'auth.guide.roles.architect': 'Architect — owns the drawings and the material spec.',
+  'auth.guide.roles.homeowner':
+    'Homeowner — the family the home is for; follows progress and decides finishes.',
+  'auth.guide.not_enabled.title': 'Number not enabled?',
+  'auth.guide.not_enabled.body1': 'Neev is in a pilot, so only invited numbers can sign in.',
+  'auth.guide.not_enabled.body2':
+    'Ask your Neev contact to add your number — it takes a minute.',
+  'auth.guide.privacy.title': 'Your number & privacy',
+  'auth.guide.privacy.body1':
+    'Your number is used only to sign you in and to show your name to your team. We never share or sell it.',
+  // Error copy (spec §6) — friendly sentence + a next step
+  'auth.err.invalid_otp': "That code didn't match. Check the SMS and try again.",
+  'auth.err.not_allowed': "This number isn't enabled for Neev yet.",
+  'auth.err.deactivated':
+    'This account was deactivated. Ask your company owner to restore it.',
+  'auth.err.invalid_code': "We don't recognise that join code. Check it with your builder.",
+  'auth.err.not_found': 'That home is no longer on Neev. Ask your builder for a new code.',
+  'auth.err.already_claimed':
+    'This invite was already used. If that was you, sign in instead.',
+  'auth.err.not_homeowner': 'This number belongs to a builder account, not a homeowner.',
+  'auth.err.network': "Can't reach Neev. Check your connection and try again.",
+  'auth.err.generic': 'Something went wrong. Please try again.',
+  'auth.err.phone_mismatch':
+    'This code was sent to a different number. Use the number your builder invited, or ask them for a new code.',
+  'auth.err.invite_used': 'This invite was already used. If that was you, sign in instead.',
+  'auth.err.invite_revoked': 'This invite was cancelled. Ask your company owner for a new one.',
+
   // Owner first-run
   'auth.onboard.welcome': 'Welcome to Neev',
   'auth.onboard.company.title': 'Name your company',
@@ -227,6 +311,7 @@ export const en = {
   'join.coachmark.default': "Here's your home. The important things come first.",
   'join.coachmark.got_it': 'Got it',
   'join.error.invalid': 'This invite link is no longer valid.',
+  'join.role_card.title': "As {role}, you'll…",
 
   // Settings / profile
   'settings.title': 'Settings',
