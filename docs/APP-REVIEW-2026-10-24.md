@@ -7,7 +7,7 @@
 
 Neev has a real product underneath. The idea is clear, nearly every screen runs on live data, the empty states are well written, sign-in is polished, and 451 mobile tests pass. It is not ready for store submission yet.
 
-The review found **9 stop-ship problems**. A release build shows junk tabs that crash the app. Anyone can sign in as anyone. New builders who sign up land in one shared company. Settings is a dead end on iPhone. Store requirements are missing: a privacy policy, account deletion for most roles, consent for AI processing, and Android photo permissions that Google Play will flag. A further 9 problems lose user data or show wrong facts, chat included.
+The review found **9 stop-ship problems**. A release build shows junk tabs that crash the app. Anyone can sign in as anyone. New builders can land inside another builder’s company. Settings is a dead end on iPhone. Store requirements are missing: an in-app privacy policy link, account deletion for most roles, consent for AI processing, and Android photo permissions that Google Play will flag. A further 9 problems lose user data or show wrong facts, chat included.
 
 On design, the “not up to the mark” feeling doesn’t come from any single screen. The contractor app runs two visual systems, and many screens contradict themselves: “All calm” above four items that need you, “Delayed” in a list and “Healthy 100/100” on the same site’s page. Fixing coherence and honesty will do more for the app than restyling it.
 
@@ -33,12 +33,12 @@ There is no SMS provider. The OTP is the fixed code 000000, and `/auth/request-o
 
 **Where:** `backend/app/auth/otp.py`, `auth/router.py:119`, `config.py:150`
 
-### S3. New builders who sign up share one company  
+### S3. New builders can land in another builder’s company  
 *Reproduced*
 
-An unknown phone number becomes an owner of a shared company called “Default Company”. The mobile app has no company-setup step, so the second builder who signs up from the store lands in the first builder’s company and sees their sites, team, payments and chat. A teammate who mistypes their number also silently creates a workspace.
+Builders sign up on the web, but web and mobile share one login endpoint. Any unknown number becomes an owner of a shared company named “Default Company”, and the web first-run screen then renames that shared company. So isolation only holds if each builder finishes naming their company before the next person signs up. A builder who closes the tab at first-run, or anyone who types an unregistered number into the mobile app, ends up as an owner inside someone else’s company with their sites, team, payments and chat.
 
-**Fix:** Create a company per signup with a short setup step (company name, first site), or make launch invite-only. Ask before creating anything: “This number isn’t registered. Start a new company?”
+**Fix:** On the server, create a fresh company for every web signup, and never create accounts from the mobile app: an unknown number there should see “This number isn’t registered. Ask your company for an invite, or sign up on the web.”
 
 **Where:** `backend/app/auth/router.py:106-156`
 
@@ -69,14 +69,14 @@ Only homeowners and owners can delete their account in the app. Site engineers, 
 
 **Where:** `backend/app/auth/router.py:326`, `push/sender.py:121`; mobile has it only in `(homeowner)/settings.tsx` and `owner/more.tsx`
 
-### S7. No privacy policy, and no consent for AI processing  
+### S7. Privacy policy isn’t linked in the app, and no consent for AI processing  
 *Verified in code*
 
-Neither the app nor the web console links to a privacy policy or terms, and both stores require one (Apple wants it inside the app too). Photos, voice notes and chat messages go to OpenAI or Azure OpenAI for extraction, transcription and drafting. Apple guideline 5.1.2(i) requires telling people and getting explicit permission before sharing personal data with third-party AI.
+The privacy policy lives on the marketing website, but nothing in the app or the web console links to it. Apple requires the link inside the app as well as in App Store Connect, and Play requires it in the listing. Separately, photos, voice notes and chat messages go to OpenAI or Azure OpenAI for extraction, transcription and drafting. Apple guideline 5.1.2(i) requires explicit permission before sharing personal data with third-party AI; a policy page alone doesn’t meet that.
 
-**Fix:** Write and host a privacy policy and terms, and link both from sign-in and settings. Add a one-time consent screen that names the AI providers and what gets sent.
+**Fix:** Link the website’s privacy policy and terms from sign-in and from every role’s Account section. Check that the policy names the AI providers, and add a one-time consent screen that says what gets sent to them.
 
-**Where:** Whole app; no `privacy` or `terms` link exists in `mobile/` or `web/`
+**Where:** No `privacy` or `terms` link in `mobile/` or `web/`; the policy page is on the marketing site
 
 ### S8. Android photo permissions will be flagged by Google Play  
 *Verified in code*
@@ -237,7 +237,7 @@ No native splash is configured, so launch goes white, then cream, then sand. Thi
 ### Apple App Store
 
 - ❌ Demo login for the reviewer (needs the review number from S2)
-- ❌ Privacy policy link in App Store Connect and inside the app (5.1.1(i))
+- ❌ Privacy policy linked inside the app as well as in App Store Connect (5.1.1(i)); the website page exists
 - ❌ In-app account deletion for every account type (5.1.1(v)); 2 of 7 roles have it
 - ❌ Disclosure and explicit consent before sending personal data to third-party AI (5.1.2(i))
 - ❌ No placeholder content (2.1): about ten “coming soon” stubs, and the dev gallery opens from a deep link
@@ -251,7 +251,7 @@ No native splash is configured, so launch goes white, then cream, then sand. Thi
 - ❌ Data safety form, including a web link for account deletion
 - ❌ Photo and video permissions (S8)
 - ❌ App access instructions with a test login
-- ❌ Privacy policy URL
+- ✅ Privacy policy URL for the listing (on the website); make sure it covers the AI providers
 - ⚠️ New personal developer accounts must run a closed test with 12+ testers for 14 days before production. Start early; organisation accounts are exempt
 - ⚠️ AI-generated content: let people report an AI answer (Ask, drafts)
 - ⚠️ Notification icon must be monochrome
@@ -270,7 +270,7 @@ No native splash is configured, so launch goes white, then cream, then sand. Thi
 
 | Severity | Issue | Where |
 |---|---|---|
-| Critical | Every self-signup joins one shared company as an owner (S3) | `auth/router.py:106-156` |
+| Critical | Signups and unknown numbers join one shared company as owners until it is renamed (S3) | `auth/router.py:106-156` |
 | Critical | Service key defaults to `dev-ingest-key` and isn’t in the prod guard (S4) | `config.py:29` |
 | High | Payment records can be created, edited and deleted by any role, on any site | `payments/router.py:300-339` |
 | High | Homeowners receive internal approvals with vendor and price (T4) | `homeowner/router.py:2427` |
@@ -308,7 +308,7 @@ The contractor desk is real software on the live API, with visible keyboard focu
 ### Phase 0: Stop-ship fixes (about 2 weeks)
 
 - [ ] Move helper files out of `app/`, add the route test, smoke-test a release build (S1).
-- [ ] Backend: a company per signup with a setup step, owner-only approvals, payment write roles, block PM-to-owner, bind and expire join codes, service-key guard, rate limits, docs off in production (S3, S4, S9).
+- [ ] Backend: a fresh company per web signup and no account creation from mobile, owner-only approvals, payment write roles, block PM-to-owner, bind and expire join codes, service-key guard, rate limits, docs off in production (S3, S4, S9).
 - [ ] Real OTP provider plus a review number (S2). Start DLT or WhatsApp template approval on day one.
 - [ ] Pushed screens into a Stack with one Header (S5, D3).
 - [ ] An Account section for every role, `resetSession()`, push-token unregister (S6, T2).
@@ -317,7 +317,7 @@ The contractor desk is real software on the live API, with visible keyboard focu
 
 ### Phase 1: Store paperwork and config (about 1 week, alongside Phase 0)
 
-- [ ] Privacy policy, terms, account-deletion web page, AI consent screen.
+- [ ] In-app links to the website’s privacy policy and terms, an account-deletion web page, an AI consent screen.
 - [ ] Android permissions, splash screen, notification icon.
 - [ ] `eas.json` autoIncrement and submit config, Sentry, API on your own domain, `supportsTablet: false`.
 - [ ] Hide “coming soon” stubs, Labs screens and the dev gallery.
@@ -338,7 +338,6 @@ The contractor desk is real software on the live API, with visible keyboard focu
 
 - **Contractor design direction:** Calm Cockpit for every role, which I recommend (D1), or Neev for every role?
 - **Launch roles:** Ship PM, mukadam and procurement, or hide them as the feature ledger says?
-- **Sign-up at launch:** Open self-serve for builders, or invite-only?
 - **OTP channel:** SMS (needs DLT registration) or WhatsApp authentication messages?
 
 ## All other findings
