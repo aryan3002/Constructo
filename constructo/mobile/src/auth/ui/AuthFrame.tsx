@@ -20,6 +20,7 @@ import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 
 import { useT } from '../../i18n/I18nProvider'
+import { useAuth } from '../AuthContext'
 import { useTheme } from '../../theme/ThemeProvider'
 import { SPACE, TAP } from '../../theme/tokens'
 import { Display, FadeInUp, Logo, Screen, Small } from '../../ui'
@@ -66,6 +67,7 @@ export function AuthFrame({
   children,
 }: AuthFrameProps) {
   const { t } = useT()
+  const { sessionExpired } = useAuth()
   const { theme } = useTheme()
   const c = theme.colors
   const router = useRouter()
@@ -138,7 +140,28 @@ export function AuthFrame({
           {typeof subtitle === 'string' ? <Small muted>{subtitle}</Small> : subtitle}
         </FadeInUp>
 
-        <View style={{ marginTop: SPACE.lg, gap: SPACE.md }}>{children}</View>
+        <View style={{ marginTop: SPACE.lg, gap: SPACE.md }}>
+          {/* An expired login sent them here — say so on every sign-in step. */}
+          {sessionExpired ? (
+            <View
+              accessibilityRole="alert"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: SPACE.sm,
+                padding: SPACE.md,
+                borderRadius: theme.radii.card,
+                backgroundColor: c.card,
+                borderWidth: 1,
+                borderColor: c.line,
+              }}
+            >
+              <Feather name="info" size={16} color={c.accentDeep} />
+              <Small style={{ flex: 1 }}>{t('auth.sessionExpired')}</Small>
+            </View>
+          ) : null}
+          {children}
+        </View>
 
         {footer ? (
           <View style={{ marginTop: SPACE.xl, alignItems: 'center', minHeight: TAP, justifyContent: 'center' }}>

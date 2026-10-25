@@ -10,7 +10,6 @@ import { Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 
-import { useAuth } from '../../src/auth/AuthContext'
 import { AuthFrame, useAuthGuide } from '../../src/auth/ui'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
@@ -124,7 +123,6 @@ export default function ChooseRole() {
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
-  const { sessionExpired } = useAuth()
 
   return (
     <AuthFrame
@@ -138,24 +136,6 @@ export default function ChooseRole() {
         </View>
       }
     >
-      {sessionExpired ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: SPACE.sm,
-            padding: SPACE.md,
-            borderRadius: theme.radii.card,
-            backgroundColor: theme.colors.card,
-            borderWidth: 1,
-            borderColor: theme.colors.line,
-          }}
-        >
-          <Feather name="info" size={16} color={theme.colors.accentDeep} />
-          <Small style={{ flex: 1 }}>{t('auth.sessionExpired')}</Small>
-        </View>
-      ) : null}
       <RoleCard
         icon="home"
         title={t('auth.homeownerCard')}
