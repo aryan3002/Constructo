@@ -1,9 +1,10 @@
 """S9 — who may settle a decision: role × kind × action.
 
 Money kinds (approval, hold_payment) are the owner's call; generic and
-homeowner questions may be settled by an owner or PM; ``respond`` is also open
-to the assignee for non-money kinds. A refusal is 403 ``owner_only`` on money
-kinds so clients can offer "Propose to owner" instead.
+homeowner questions may be settled by an owner or PM; ``respond`` and
+``acknowledge`` are also open to the assignee for non-money kinds. A refusal is
+403 ``owner_only`` on money kinds so clients can offer "Propose to owner"
+instead.
 """
 import pytest
 import pytest_asyncio
@@ -115,10 +116,18 @@ async def test_assign(client, db_session, world, role, kind):
         assert resp.status_code == 200, resp.text
 
 
+@pytest.mark.parametrize(
+    ("path", "body", "settled"),
+    [("respond", {"action": "confirm"}, "resolved"), ("acknowledge", None, "acknowledged")],
+)
 @pytest.mark.parametrize("kind", list(DecisionKind))
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("is_assignee", [True, False])
-async def test_respond(client, db_session, world, role, kind, is_assignee):
+async def test_respond_and_acknowledge(
+    client, db_session, world, role, kind, is_assignee, path, body, settled
+):
+    # Acknowledging takes a decision off the owner's pending list, so it
+    # follows the same rule as answering it.
     company, site, users = world
     caller = users[role]
     assignee = caller if is_assignee else users[UserRole.supervisor]
@@ -126,7 +135,7 @@ async def test_respond(client, db_session, world, role, kind, is_assignee):
         assignee = users[UserRole.architect]
     d = await _decision(db_session, company, site, kind, assigned_to=assignee.id)
     resp = await client.post(
-        f"/api/v1/approvals/{d.id}/respond", json={"action": "confirm"}, headers=auth(caller)
+        f"/api/v1/approvals/{d.id}/{path}", json=body, headers=auth(caller)
     )
     if kind in MONEY:
         allowed = role is UserRole.owner
@@ -134,14 +143,14 @@ async def test_respond(client, db_session, world, role, kind, is_assignee):
         allowed = is_assignee or role in DECIDERS
     if allowed:
         assert resp.status_code == 200, resp.text
-        assert resp.json()["state"] == "resolved"
+        assert resp.json()["state"] == settled
     else:
         _assert_refused(resp, kind)
         await db_session.refresh(d)
         assert d.state is DecisionState.pending
 
 
-async def test_mukadam_cannot_approve_the_invoice_but_can_still_see_it(
+async def test_mukadam_sees_the_invoice_but_cannot_settle_or_hide_it(
     client, db_session, world
 ):
     company, site, users = world
@@ -151,13 +160,7 @@ async def test_mukadam_cannot_approve_the_invoice_but_can_still_see_it(
     assert seen.status_code == 200
     resp = await client.post(f"/api/v1/approvals/{d.id}/approve", headers=auth(mukadam))
     _assert_refused(resp, DecisionKind.approval)
-
-
-async def test_acknowledge_stays_open_to_any_in_scope_member(client, db_session, world):
-    company, site, users = world
-    d = await _decision(db_session, company, site, DecisionKind.approval)
-    resp = await client.post(
-        f"/api/v1/approvals/{d.id}/acknowledge", headers=auth(users[UserRole.supervisor])
-    )
-    assert resp.status_code == 200
-    assert resp.json()["state"] == "acknowledged"
+    hide = await client.post(f"/api/v1/approvals/{d.id}/acknowledge", headers=auth(mukadam))
+    _assert_refused(hide, DecisionKind.approval)
+    await db_session.refresh(d)
+    assert d.state is DecisionState.pending

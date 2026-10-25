@@ -135,8 +135,8 @@ def _assert_can_decide(user: User, decision: Decision) -> None:
 
 
 def _assert_can_respond(user: User, decision: Decision) -> None:
-    """The assignee's reply: money kinds stay owner-only; other kinds may be
-    answered by their assignee, or by an owner or PM."""
+    """The assignee's reply or acknowledgement: money kinds stay owner-only;
+    other kinds may be answered by their assignee, or by an owner or PM."""
     if decision.kind in _OWNER_ONLY_KINDS:
         if user.role is not UserRole.owner:
             raise _owner_only()
@@ -261,8 +261,11 @@ async def acknowledge_decision(
     user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
-    # Acknowledging ("seen") decides nothing, so any in-scope member may.
+    # "Seen" decides nothing, but it moves the decision out of the pending
+    # queues the owner works from, so it follows the respond rule (a mukadam
+    # can't take the invoice off the owner's list).
     decision = await _get_in_scope(session, user, decision_id)
+    _assert_can_respond(user, decision)
     updated = await apply_action(
         session, decision, DecisionAction.acknowledge, note=(body or DecisionResolveIn()).note
     )
