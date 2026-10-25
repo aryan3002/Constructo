@@ -4,7 +4,7 @@
  * role; here we only set up Query, i18n, auth, safe-area, and load fonts.
  */
 import { useEffect, useMemo, useRef } from 'react'
-import { AppState, View } from 'react-native'
+import { AppState, Platform, View } from 'react-native'
 import { QueryClient, QueryClientProvider, focusManager, useQueryClient } from '@tanstack/react-query'
 import { Stack, usePathname, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -112,6 +112,12 @@ function ChatPushForeground() {
   return null
 }
 
+// expo-notifications has no notification responses on web (the native method
+// throws there), so the web build gets a no-op. Picked once at module load, so
+// the hook order is stable.
+const useLastNotificationResponse =
+  Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse
+
 function ChatPushDeepLink() {
   const router = useRouter()
   const pathname = usePathname()
@@ -119,7 +125,7 @@ function ChatPushDeepLink() {
   const qc = useQueryClient()
   // Covers both a tap while running AND the tap that launched the app from
   // closed (a listener registered after launch would miss that one).
-  const response = Notifications.useLastNotificationResponse()
+  const response = useLastNotificationResponse()
   const handled = useRef<string | null>(null)
 
   useEffect(() => {
