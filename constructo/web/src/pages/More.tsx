@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { clearToken, type Role } from '../api/auth'
+import { authApi, clearToken, type Role } from '../api/auth'
 import { useMeRole } from '../auth/useCan'
 import { useT, type TranslationKey } from '../i18n'
 import { AppShell, Display, H2, Small, useRoleTabs, type Role as ShellRole } from '../ui'
@@ -67,6 +67,7 @@ export function More() {
   const workLinks = ROLE_MORE[role] ?? []
 
   function signOut() {
+    void authApi.logout()
     clearToken()
     navigate('/login', { replace: true })
   }

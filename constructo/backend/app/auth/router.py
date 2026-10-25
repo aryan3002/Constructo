@@ -10,12 +10,14 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user, require_role, require_step_up
-from app.auth.jwt import create_access_token, create_step_up_token
+from app.auth.deps import _bearer, get_current_user, require_role, require_step_up
+from app.auth.jwt import STEP_UP_SCOPE, create_access_token, create_step_up_token, decode_token
 from app.auth.landing import landing_for
 from app.auth.otp import assert_otp_valid, dev_otp_hint
 from app.auth.phone import normalize_phone, phone_candidates
@@ -29,6 +31,7 @@ from app.models import (
     PhotoComment,
     PushToken,
     RawMessageModel,
+    RevokedToken,
     User,
     UserRole,
 )
@@ -196,6 +199,33 @@ async def login(
 
     token = create_access_token(str(user.id), user.role.value)
     return TokenOut(token=token)
+
+
+@router.post("/logout", status_code=204)
+async def logout(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """End the presented access token on the server (sign-out). Idempotent:
+    an already-revoked token, or a pre-jti token with nothing to revoke, is a
+    no-op. Expired revocations are purged here, so the table stays small."""
+    if creds is None:
+        raise AppError(401, "not_authenticated", "Missing bearer token")
+    try:
+        payload = decode_token(creds.credentials)
+    except Exception as exc:
+        raise AppError(401, "invalid_token", "Invalid or expired token") from exc
+    jti = payload.get("jti")
+    if jti is None or payload.get("scope") == STEP_UP_SCOPE:
+        return
+    now = datetime.now(UTC)
+    await session.execute(
+        pg_insert(RevokedToken)
+        .values(jti=jti, expires_at=datetime.fromtimestamp(payload["exp"], UTC))
+        .on_conflict_do_nothing(index_elements=["jti"])
+    )
+    await session.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
+    await session.commit()
 
 
 # --- step-up (re-verify for sensitive/irreversible actions) -----------------

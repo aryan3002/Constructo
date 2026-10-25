@@ -87,6 +87,22 @@ export const authApi = {
   },
 
   /**
+   * End `authToken` on the server (sign-out). Takes the token explicitly
+   * because the caller has usually cleared it from the keychain already.
+   * Best-effort: never throws, so an offline sign-out doesn't hang.
+   */
+  async logout(authToken: string): Promise<void> {
+    try {
+      await request('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
+    } catch {
+      /* best-effort — the token still expires on its own */
+    }
+  },
+
+  /**
    * Permanently delete the signed-in user's own account. Requires a fresh
    * step-up token from `stepUpVerify`.
    */

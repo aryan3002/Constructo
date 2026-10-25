@@ -76,6 +76,7 @@ export function Settings() {
   }
 
   function signOut() {
+    void authApi.logout()
     clearToken()
     navigate('/login', { replace: true })
   }

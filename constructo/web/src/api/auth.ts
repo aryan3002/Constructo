@@ -259,6 +259,24 @@ export const authApi = {
   },
 
   /**
+   * End the current login on the server (sign-out). Fire it, then clear the
+   * local token: the token is read synchronously here, before any await.
+   * Best-effort — never throws, so an offline sign-out still signs out.
+   */
+  async logout(): Promise<void> {
+    const token = getToken()
+    if (USE_MOCKS || !token) return
+    try {
+      await fetch(`${API_BASE}/api/v1/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      /* best-effort — the token still expires on its own */
+    }
+  },
+
+  /**
    * Re-verify the current user with a fresh OTP to unlock a sensitive action
    * (e.g. Tally export). Returns a short-lived step-up token + its lifetime (s).
    */

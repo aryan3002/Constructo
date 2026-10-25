@@ -13,6 +13,10 @@ const mockUnregister = jest.fn(async (_t: string | null) => undefined)
 jest.mock('../../push/register', () => ({
   unregisterDevicePushToken: (t: string | null) => mockUnregister(t),
 }))
+const mockLogout = jest.fn(async (_t: string) => undefined)
+jest.mock('../../api/auth', () => ({
+  authApi: { logout: (t: string) => mockLogout(t) },
+}))
 const mockCloseSocket = jest.fn()
 jest.mock('../../chat/useChatThread', () => ({ closeSharedSocket: () => mockCloseSocket() }))
 
@@ -55,6 +59,12 @@ test('sign-out clears everything user-scoped', async () => {
   expect(mockClearToken).toHaveBeenCalled()
   expect(mockCloseSocket).toHaveBeenCalled()
   expect(mockUnregister).toHaveBeenCalledWith('jwt-1')
+  // The server-side sign-out runs after the push unregister, with the same JWT.
+  await new Promise((r) => setTimeout(r, 0))
+  expect(mockLogout).toHaveBeenCalledWith('jwt-1')
+  expect(mockUnregister.mock.invocationCallOrder[0]).toBeLessThan(
+    mockLogout.mock.invocationCallOrder[0],
+  )
   expect(await loadThreadCache('conv-1')).toEqual([])
   expect(await listChatOutbox()).toEqual([])
   expect(await list()).toEqual([])
@@ -66,6 +76,8 @@ test('an expired login keeps the queued messages and captures', async () => {
   const qc = new QueryClient()
   await seed(qc)
   await resetSession({ queryClient: qc, keepQueued: true })
+  await new Promise((r) => setTimeout(r, 0))
+  expect(mockLogout).not.toHaveBeenCalled()
 
   expect(qc.getQueryData(['owner', 'home'])).toBeUndefined()
   expect(await loadThreadCache('conv-1')).toEqual([])

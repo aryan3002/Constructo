@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import STEP_UP_SCOPE, decode_token
 from app.common.errors import AppError
 from app.db import get_session
-from app.models import User, UserRole
+from app.models import RevokedToken, User, UserRole
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -29,6 +29,11 @@ async def get_current_user(
         # A step-up token only unlocks one sensitive action via X-Step-Up-Token
         # (require_step_up); it is never a bearer login token.
         raise AppError(401, "invalid_token", "Invalid or expired token")
+    # Signed out on the server. Tokens minted before access tokens carried a
+    # jti have nothing to look up and simply run out.
+    jti = payload.get("jti")
+    if jti is not None and await session.get(RevokedToken, jti) is not None:
+        raise AppError(401, "invalid_token", "This session has been signed out")
 
     user = await session.get(User, user_id)
     if user is None:

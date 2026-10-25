@@ -30,4 +30,27 @@ describe('AvatarMenu', () => {
     expect(spy).toHaveBeenCalled()
     expect(nav).toHaveBeenCalledWith('/login', { replace: true })
   })
+
+  it('ends the login on the server with the token it is clearing', () => {
+    vi.restoreAllMocks()
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    auth.setToken('jwt-out')
+    render(
+      <LanguageProvider>
+        <MemoryRouter>
+          <AvatarMenu roleBadge={{ name: 'Owner', initials: 'OW' }} />
+        </MemoryRouter>
+      </LanguageProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /owner/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /sign out/i }))
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/v1/auth/logout'))
+    expect(call).toBeTruthy()
+    const init = call![1] as RequestInit
+    expect(init.method).toBe('POST')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt-out')
+    expect(auth.getToken()).toBeNull()
+    vi.unstubAllGlobals()
+  })
 })

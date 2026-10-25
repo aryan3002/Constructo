@@ -8,6 +8,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { QueryClient } from '@tanstack/react-query'
 
+import { authApi } from '../api/auth'
 import { clearThreadCaches } from '../chat/cache'
 import { clearChatOutbox } from '../chat/outbox'
 import { closeSharedSocket } from '../chat/useChatThread'
@@ -46,10 +47,16 @@ export async function resetSession(opts: {
    *  the next sign-in if a DIFFERENT user signs in (see AuthContext). */
   keepQueued?: boolean
 }): Promise<void> {
-  // Unregister push with the JWT captured now — the token is cleared below, so
-  // the request must not wait on it (and an offline sign-out must not hang).
+  // Unregister push, then end the login on the server, with the JWT captured
+  // now — the token is cleared below, so neither request may wait on it (and an
+  // offline sign-out must not hang). Logout goes second: the unregister needs
+  // the token still valid. An expired login (keepQueued) has nothing to end.
   const authToken = await getToken()
-  void unregisterDevicePushToken(opts.keepQueued ? null : authToken)
+  const serverToken = opts.keepQueued ? null : authToken
+  void (async () => {
+    await unregisterDevicePushToken(serverToken)
+    if (serverToken) await authApi.logout(serverToken)
+  })()
   await clearToken()
   closeSharedSocket()
   await opts.queryClient.cancelQueries()

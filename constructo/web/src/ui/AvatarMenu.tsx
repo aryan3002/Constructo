@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { clearToken } from '../api/auth'
+import { authApi, clearToken } from '../api/auth'
 import { useT } from '../i18n'
 import { SettingsIcon, SignOutIcon } from './icons'
 
@@ -28,6 +28,7 @@ export function AvatarMenu({ roleBadge }: { roleBadge: { name: string; initials:
   }, [open])
 
   function signOut() {
+    void authApi.logout()
     clearToken()
     navigate('/login', { replace: true })
   }

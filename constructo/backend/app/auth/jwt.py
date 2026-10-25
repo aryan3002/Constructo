@@ -1,5 +1,6 @@
 """JWT encode/decode helpers."""
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import jwt
 
@@ -14,6 +15,8 @@ def create_access_token(subject: str, role: str) -> str:
     payload = {
         "sub": subject,
         "role": role,
+        # Unique id so sign-out can revoke this one token (revoked_tokens).
+        "jti": uuid4().hex,
         "iat": now,
         "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
     }
