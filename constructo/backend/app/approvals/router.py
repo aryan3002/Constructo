@@ -30,7 +30,7 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
-from app.models import Decision, DecisionState, User
+from app.models import Decision, DecisionKind, DecisionState, User, UserRole
 from app.sites.router import effective_visible_site_ids
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
@@ -94,6 +94,39 @@ async def _get_in_scope(
         if decision.site_id not in visible:
             raise AppError(403, "forbidden", "Decision not in scope")
     return decision
+
+
+# ---- who may decide (S9) ---------------------------------------------------
+
+# Money decisions (an invoice approval, a held payment) are the owner's call;
+# everyone else proposes to the owner. Decisions carry no amount, so the rule is
+# by kind.
+_OWNER_ONLY_KINDS = frozenset({DecisionKind.approval, DecisionKind.hold_payment})
+_DECIDER_ROLES = frozenset({UserRole.owner, UserRole.pm})
+
+
+def _owner_only() -> AppError:
+    return AppError(403, "owner_only", "Only the owner can decide this — propose it to them")
+
+
+def _assert_can_decide(user: User, decision: Decision) -> None:
+    """Approve / reject / batch / assign: owner-only money kinds, owner or PM
+    for the rest."""
+    if decision.kind in _OWNER_ONLY_KINDS:
+        if user.role is not UserRole.owner:
+            raise _owner_only()
+    elif user.role not in _DECIDER_ROLES:
+        raise AppError(403, "forbidden", "Only the owner or a PM can decide this")
+
+
+def _assert_can_respond(user: User, decision: Decision) -> None:
+    """The assignee's reply: money kinds stay owner-only; other kinds may be
+    answered by their assignee, or by an owner or PM."""
+    if decision.kind in _OWNER_ONLY_KINDS:
+        if user.role is not UserRole.owner:
+            raise _owner_only()
+    elif decision.assigned_to != user.id and user.role not in _DECIDER_ROLES:
+        raise AppError(403, "forbidden", "Only the assignee, the owner or a PM can answer this")
 
 
 # ---- list / create ---------------------------------------------------------
@@ -198,6 +231,7 @@ async def _action(
     session: AsyncSession,
 ) -> DecisionOut:
     decision = await _get_in_scope(session, user, decision_id)
+    _assert_can_decide(user, decision)
     updated = await apply_action(session, decision, action, note=note)
     return _out(updated)
 
@@ -209,9 +243,12 @@ async def acknowledge_decision(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
-    return await _action(
-        decision_id, DecisionAction.acknowledge, (body or DecisionResolveIn()).note, user, session
+    # Acknowledging ("seen") decides nothing, so any in-scope member may.
+    decision = await _get_in_scope(session, user, decision_id)
+    updated = await apply_action(
+        session, decision, DecisionAction.acknowledge, note=(body or DecisionResolveIn()).note
     )
+    return _out(updated)
 
 
 @router.post("/{decision_id}/approve", response_model=DecisionOut)
@@ -267,6 +304,7 @@ async def respond_to_decision(
     """
     body = body or DecisionRespondIn()
     decision = await _get_in_scope(session, user, decision_id)
+    _assert_can_respond(user, decision)
     action = _RESPOND_ACTION[body.action]
     updated = await apply_action(session, decision, action, note=body.note)
     return _out(updated)
@@ -280,6 +318,8 @@ async def assign_decision(
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     decision = await _get_in_scope(session, user, decision_id)
+    if decision.kind in _OWNER_ONLY_KINDS and user.role is not UserRole.owner:
+        raise _owner_only()
     target = await session.get(User, body.assigned_to)
     if target is None or target.company_id != user.company_id:
         raise AppError(404, "not_found", "Assignee not found")
@@ -298,9 +338,9 @@ async def batch_action(
 ) -> BatchResultOut:
     """Apply one action to many decisions (inbox multi-select).
 
-    Each item is validated/scoped independently; out-of-scope or illegally
-    transitioning ids are reported under ``skipped`` rather than failing the
-    whole batch.
+    Each item is validated/scoped independently; out-of-scope, not-yours-to-
+    decide (S9: money kinds are owner-only) or illegally transitioning ids are
+    reported under ``skipped`` rather than failing the whole batch.
     """
     updated: list[UUID] = []
     skipped: list[UUID] = []
@@ -315,6 +355,9 @@ async def batch_action(
                 skipped.append(decision_id)
                 continue
         try:
+            # A decision this role may not settle is skipped like any other
+            # out-of-reach id (the batch never fails as a whole).
+            _assert_can_decide(user, decision)
             await apply_action(session, decision, action, note=body.note)
             updated.append(decision_id)
         except AppError:

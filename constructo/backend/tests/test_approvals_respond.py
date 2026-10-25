@@ -29,7 +29,8 @@ async def _make_decision(db_session, company, site, assigned_to):
     d = Decision(
         company_id=company.id,
         site_id=site.id,
-        kind=DecisionKind.approval,
+        # A field ask (not a money decision — those are owner-only, S9).
+        kind=DecisionKind.generic,
         title="Confirm cement delivery",
         assigned_to=assigned_to,
     )

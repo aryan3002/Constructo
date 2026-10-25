@@ -1,7 +1,7 @@
 """Seed ONE live clarification into the supervisor's "Asks for you" inbox so the
 field → answer loop can be seen end-to-end on a real pilot DB.
 
-Creates a single PENDING Decision (kind=approval) assigned to the SUPERVISOR
+Creates a single PENDING Decision (kind=generic) assigned to the SUPERVISOR
 (default phone +919000010008), authored "by the designer". It shows up in the
 engineer's Tasks / Asks screen (GET /api/v1/approvals?for=me); answering it
 (confirm/reject) resolves it — that's the whole clarification lifecycle.
@@ -112,7 +112,9 @@ async def main(apply: bool, remove: bool, phone: str) -> None:
                     company_id=sup.company_id,
                     client_decision_id=CLIENT_KEY,
                     site_id=site_id,
-                    kind=DecisionKind.approval,
+                    # generic, not approval: approvals are the owner's money
+                    # decisions and a supervisor can't answer them (S9).
+                    kind=DecisionKind.generic,
                     title=TITLE,
                     detail=DETAIL,
                     raised_by=designer.id if designer else None,
@@ -123,6 +125,7 @@ async def main(apply: bool, remove: bool, phone: str) -> None:
             print("✓ Created the demo clarification (pending, assigned to the supervisor).")
         else:
             existing.state = DecisionState.pending
+            existing.kind = DecisionKind.generic
             existing.title = TITLE
             existing.detail = DETAIL
             existing.assigned_to = sup.id
