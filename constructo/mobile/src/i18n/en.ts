@@ -77,6 +77,8 @@ export const en = {
       phone_mismatch:
         'This code was sent to a different number. Use the number your builder invited, or ask them for a new code.',
       not_homeowner: 'This number belongs to a builder account, not a homeowner.',
+      rate_limited: 'Too many tries. Wait a few minutes, then try again.',
+      code_expired: 'This join code has expired. Ask your builder for a new one.',
       network: "Can't reach Neev. Check your connection and try again.",
       generic: 'Something went wrong. Please try again.',
     },

@@ -72,6 +72,8 @@ const CODE_MAP: Record<string, Omit<AuthErrorView, 'message'> & { key: string }>
   not_allowed: { key: 'auth.err.not_allowed', action: 'help', helpSection: 'notEnabled' },
   deactivated: { key: 'auth.err.deactivated', action: 'changeNumber' },
   not_registered: { key: 'auth.err.not_registered', action: 'changeNumber' },
+  rate_limited: { key: 'auth.err.rate_limited' },
+  code_expired: { key: 'auth.err.code_expired', action: 'backToCode' },
   invalid_code: { key: 'auth.err.invalid_code', action: 'backToCode' },
   not_found: { key: 'auth.err.not_found', action: 'backToCode' },
   already_claimed: { key: 'auth.err.already_claimed', action: 'signIn' },

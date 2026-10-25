@@ -22,7 +22,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,8 +32,10 @@ from app.auth.deps import get_current_user
 from app.auth.jwt import create_access_token
 from app.auth.otp import assert_otp_valid
 from app.auth.phone import phone_candidates
+from app.common import ratelimit
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
+from app.config import settings
 from app.db import get_session
 from app.extraction.llm import LLMClient
 from app.extraction.stt import transcribe
@@ -350,7 +352,9 @@ async def _can_access_site(session: AsyncSession, user: User, site_id: UUID) -> 
 
 
 @router.post("/join", response_model=JoinOut)
-async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> JoinOut:
+async def join(
+    body: JoinIn, request: Request, session: AsyncSession = Depends(get_session)
+) -> JoinOut:
     """Redeem a join code → materialise the homeowner user and a token.
 
     Public (no bearer): the homeowner proves identity with the join code + phone
@@ -358,6 +362,9 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
     Returns onboarding-friendly names (property display name + company name) so
     the app can greet the homeowner with their build, not a bare token.
     """
+    # Throttle guessing: per caller IP and per code tried.
+    await ratelimit.hit(f"join:ip:{ratelimit.client_ip(request)}", settings.rate_limit_join_per_ip)
+    await ratelimit.hit(f"join:code:{body.join_code}", settings.rate_limit_join_per_code)
     assert_otp_valid(body.phone, body.otp)
 
     member = (
@@ -367,6 +374,15 @@ async def join(body: JoinIn, session: AsyncSession = Depends(get_session)) -> Jo
     ).scalar_one_or_none()
     if member is None:
         raise AppError(404, "invalid_code", "Unknown join code")
+    # A code minted without a phone can be redeemed by whoever holds it, so it
+    # only lives JOIN_CODE_TTL_DAYS (a phone-bound code is matched to its phone
+    # below; a redeemed code has its phone filled in).
+    if member.phone is None and member.created_at < datetime.now(UTC) - timedelta(
+        days=settings.join_code_ttl_days
+    ):
+        raise AppError(
+            410, "code_expired", "This join code has expired. Ask your builder for a new one."
+        )
 
     site = await session.get(Site, member.site_id)
     if site is None:

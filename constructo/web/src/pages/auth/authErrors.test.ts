@@ -59,6 +59,12 @@ describe('auth/mapAuthError', () => {
     })
   })
 
+  it('rate_limited -> wait-and-retry copy', () => {
+    expect(mapAuthError(new ApiError(429, 'x', 'rate_limited'))).toEqual({
+      messageKey: 'auth.err.rate_limited',
+    })
+  })
+
   it('falls back to the message when the code is carried there (mock API)', () => {
     // authApi mocks throw `new ApiError(401, 'invalid_otp')` with no code field.
     expect(mapAuthError(new ApiError(401, 'invalid_otp'))).toEqual({

@@ -40,6 +40,18 @@ def _force_local_storage(monkeypatch):
     get_storage.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Every test starts with empty abuse-limit counters, so the suite's many
+    logins from the one test client IP never trip a limit meant for strangers.
+    The limiter's own tests set tight limits explicitly."""
+    from app.common.ratelimit import get_rate_limit_store
+
+    get_rate_limit_store().clear()
+    yield
+    get_rate_limit_store().clear()
+
+
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def _setup_database():
     """Create the test database (if needed) and build a fresh schema once per session.

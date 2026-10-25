@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.auth.jwt import create_access_token, create_step_up_token
 from app.auth.landing import landing_for
 from app.auth.otp import assert_otp_valid, dev_otp_hint
 from app.auth.phone import normalize_phone, phone_candidates
+from app.common import ratelimit
 from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
@@ -119,17 +120,40 @@ async def _create_signup_company(session: AsyncSession) -> Company:
     return company
 
 
+async def verify_otp_with_lockout(key: str, phone: str, otp: str) -> None:
+    """``assert_otp_valid`` behind a per-``key`` lockout: after
+    RATE_LIMIT_LOGIN_FAILURES wrong codes in the window, every try is 429."""
+    await ratelimit.assert_not_locked(key, settings.rate_limit_login_failures)
+    try:
+        assert_otp_valid(phone, otp)
+    except AppError as exc:
+        if exc.code == "invalid_otp":
+            await ratelimit.record_failure(key)
+        raise
+
+
 @router.post("/request-otp", response_model=RequestOtpOut)
-async def request_otp(body: RequestOtpIn) -> RequestOtpOut:
+async def request_otp(body: RequestOtpIn, request: Request) -> RequestOtpOut:
     """Request a login code. No-op until an SMS provider is wired (dev OTP
     stays 000000 while DEV_OTP_ENABLED). Always returns sent=true so the UI flow
     is identical in dev and prod, and powers re-OTP ("resend code") recovery."""
+    await ratelimit.hit(f"otp:ip:{ratelimit.client_ip(request)}", settings.rate_limit_otp_per_ip)
+    await ratelimit.hit(
+        f"otp:phone:{normalize_phone(body.phone)}", settings.rate_limit_otp_per_phone
+    )
     return RequestOtpOut(dev_otp=dev_otp_hint())
 
 
 @router.post("/login", response_model=TokenOut)
-async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
-    assert_otp_valid(body.phone, body.otp)
+async def login(
+    body: LoginIn, request: Request, session: AsyncSession = Depends(get_session)
+) -> TokenOut:
+    await ratelimit.hit(
+        f"login:ip:{ratelimit.client_ip(request)}", settings.rate_limit_login_per_ip
+    )
+    await verify_otp_with_lockout(
+        f"login:fail:{normalize_phone(body.phone)}", body.phone, body.otp
+    )
 
     # Tolerant lookup: match the existing user across equivalent phone forms
     # (+919800000001 / 919800000001 / 9800000001 / 0…), so a returning owner who
@@ -182,6 +206,7 @@ class StepUpTokenOut(BaseModel):
 async def step_up_request_otp(user: User = Depends(get_current_user)) -> RequestOtpOut:
     """Send a re-verification code to the current user (no-op in dev; OTP stays
     000000). Mirrors login's request-otp so the web step-up flow is identical."""
+    await ratelimit.hit(f"stepup:otp:{user.id}", settings.rate_limit_otp_per_phone)
     return RequestOtpOut(dev_otp=dev_otp_hint())
 
 
@@ -191,7 +216,7 @@ async def step_up_verify(
 ) -> StepUpTokenOut:
     """Exchange a fresh OTP for a short-lived step-up token (for the current
     user) that unlocks one sensitive-action window (e.g. a Tally export)."""
-    assert_otp_valid(user.phone, body.otp)
+    await verify_otp_with_lockout(f"stepup:fail:{user.id}", user.phone, body.otp)
     return StepUpTokenOut(
         step_up_token=create_step_up_token(str(user.id)),
         expires_in=settings.step_up_expire_minutes * 60,

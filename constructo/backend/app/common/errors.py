@@ -17,28 +17,39 @@ class AppError(Exception):
     """
 
     def __init__(
-        self, status_code: int, code: str, message: str, *, extra: dict | None = None
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        extra: dict | None = None,
+        headers: dict[str, str] | None = None,
     ):
         self.status_code = status_code
         self.code = code
         self.message = message
         self.extra = extra
+        self.headers = headers
         super().__init__(message)
 
 
 def _envelope(
-    status_code: int, code: str, message: str, extra: dict | None = None
+    status_code: int,
+    code: str,
+    message: str,
+    extra: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     error: dict = {"code": code, "message": message}
     if extra:
         error.update(extra)
-    return JSONResponse(status_code=status_code, content={"error": error})
+    return JSONResponse(status_code=status_code, content={"error": error}, headers=headers)
 
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
-        return _envelope(exc.status_code, exc.code, exc.message, exc.extra)
+        return _envelope(exc.status_code, exc.code, exc.message, exc.extra, exc.headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:

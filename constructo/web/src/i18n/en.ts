@@ -213,6 +213,7 @@ export const en = {
   'auth.err.already_claimed':
     'This invite was already used. If that was you, sign in instead.',
   'auth.err.not_homeowner': 'This number belongs to a builder account, not a homeowner.',
+  'auth.err.rate_limited': 'Too many tries. Wait a few minutes, then try again.',
   'auth.err.network': "Can't reach Neev. Check your connection and try again.",
   'auth.err.generic': 'Something went wrong. Please try again.',
   'auth.err.phone_mismatch':

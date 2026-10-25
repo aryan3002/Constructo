@@ -51,6 +51,25 @@ class Settings(BaseSettings):
     # everyone else — even before a real SMS provider is wired.
     auth_phone_allowlist: list[str] = []
 
+    # ---- Abuse limits (app.common.ratelimit) ----
+    # "memory" (default; production runs one replica and no Redis) or "redis"
+    # (counters shared across replicas via REDIS_URL).
+    rate_limit_backend: str = "memory"
+    rate_limit_enabled: bool = True
+    # One fixed window for every limit below.
+    rate_limit_window_seconds: int = 15 * 60
+    rate_limit_otp_per_phone: int = 5  # OTP sends (login + step-up) per phone/user
+    rate_limit_otp_per_ip: int = 20
+    rate_limit_login_failures: int = 5  # wrong codes per phone before lockout
+    rate_limit_login_per_ip: int = 30
+    rate_limit_join_per_ip: int = 20
+    rate_limit_join_per_code: int = 10
+    # Proxies in front of the app that append to X-Forwarded-For (Azure
+    # Container Apps' ingress = 1). 0 ignores the header (direct exposure).
+    trusted_proxy_hops: int = 0
+    # A join code minted without a phone stops working this long after creation.
+    join_code_ttl_days: int = 14
+
     # Browser origins allowed to call the API (CORS). The web dashboard dev
     # server runs on 5173 (Vite); 3000 covered for alternate setups.
     cors_origins: list[str] = [

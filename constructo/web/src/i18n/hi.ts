@@ -203,6 +203,7 @@ export const hi: Record<TranslationKey, string> = {
   'auth.err.already_claimed':
     'यह इनवाइट पहले ही इस्तेमाल हो चुका है। अगर वह आप थे, तो साइन इन करें।',
   'auth.err.not_homeowner': 'यह नंबर बिल्डर खाते का है, घर-मालिक का नहीं।',
+  'auth.err.rate_limited': 'बहुत ज़्यादा कोशिशें हो गईं। कुछ मिनट रुककर फिर कोशिश करें।',
   'auth.err.network': 'Neev तक नहीं पहुँच पा रहे। अपना कनेक्शन जाँचें और फिर कोशिश करें।',
   'auth.err.generic': 'कुछ गड़बड़ हो गई। कृपया फिर कोशिश करें।',
   'auth.err.phone_mismatch':
