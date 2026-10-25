@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from app.homeowner.nudge import run_request_nudge_sweep
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerRequest,
@@ -64,6 +65,7 @@ async def test_publisher_feed_push_decision_and_nudge_loop(client, ctx, db_sessi
     # The homeowner responds to a pending decision → resolved.
     decision = Decision(
         company_id=ctx.company.id, site_id=site.id, kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the tile sample?", state=DecisionState.pending,
     )
     db_session.add(decision)

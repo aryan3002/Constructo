@@ -37,6 +37,7 @@ from app.models import (
     Component,
     ComponentStatus,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     FindingSeverity,
@@ -158,6 +159,13 @@ async def seed() -> dict[str, int]:
             return _upsert(
                 session, Decision, _id("dec", key),
                 company_id=company.id, site_id=sites[skey].id, kind=kind, title=title,
+                # Only the homeowner question (d4) is the homeowner's; the
+                # rest are the PM's asks to the owner.
+                audience=(
+                    DecisionAudience.homeowner
+                    if kind == DecisionKind.homeowner_question
+                    else DecisionAudience.internal
+                ),
                 detail=detail, raised_by=pm.id, assigned_to=owner.id, state=state,
                 sla_due_at=sla, resolved_at=resolved, resolution_note=note,
                 evidence_event_ids=[uuid4() for _ in range(evidence)],

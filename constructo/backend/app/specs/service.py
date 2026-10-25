@@ -19,7 +19,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import apply_action
 from app.approvals.state_machine import DecisionAction
-from app.models import Decision, DecisionKind, DecisionState, Spec, SpecApprovalStatus, User
+from app.models import (
+    Decision,
+    DecisionAudience,
+    DecisionKind,
+    DecisionState,
+    Spec,
+    SpecApprovalStatus,
+    User,
+)
 
 
 def _client_decision_id(spec_id: UUID) -> str:
@@ -84,6 +92,8 @@ async def sync_spec_routed_decision(
         site_id=spec.site_id,
         spec_id=spec.id,
         kind=DecisionKind.approval,
+        # The selection sign-off is the homeowner's to give.
+        audience=DecisionAudience.homeowner,
         title=title,
         raised_by=actor.id,
         client_decision_id=cid,

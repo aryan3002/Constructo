@@ -24,7 +24,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
-from app.models import Company, Decision, DecisionKind, DecisionState, Permit, PermitStatus
+from app.models import (
+    Company,
+    Decision,
+    DecisionAudience,
+    DecisionKind,
+    DecisionState,
+    Permit,
+    PermitStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +248,7 @@ async def _sweep_company(
                 company_id=company_id,
                 site_id=alert.site_id,
                 kind=DecisionKind.generic,
+                audience=DecisionAudience.internal,
                 title=title,
                 detail=alert.detail,
                 state=DecisionState.pending,

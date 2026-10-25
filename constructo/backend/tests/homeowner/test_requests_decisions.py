@@ -9,6 +9,7 @@ from app.models import (
     Component,
     ComponentStatus,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerRequest,
@@ -221,6 +222,7 @@ async def test_decision_detail_humanizes_leaked_enum_token(client, ctx, db_sessi
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.approval,
+        audience=DecisionAudience.homeowner,
         title="Approve the invoice?",
         detail="unverified_invoice",  # raw token, as the import leaked it
         state=DecisionState.pending,
@@ -241,6 +243,7 @@ async def test_decision_detail_passes_prose_through(client, ctx, db_session):
     prose = "Invoice bills 120 bags but the site logged 100. ~₹12,000 at risk."
     decision = Decision(
         company_id=ctx.company.id, site_id=ctx.site.id, kind=DecisionKind.approval,
+        audience=DecisionAudience.homeowner,
         title="Approve?", detail=prose, state=DecisionState.pending,
     )
     db_session.add(decision)
@@ -255,6 +258,7 @@ async def test_respond_to_decision_resolves_it(client, ctx, db_session):
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the tile sample?",
         state=DecisionState.pending,
     )
@@ -311,6 +315,7 @@ async def test_comment_does_not_change_decision_state(client, ctx, db_session):
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the tile sample?",
         state=DecisionState.pending,
     )
@@ -346,6 +351,7 @@ async def test_cannot_respond_to_other_sites_decision(client, ctx, factory, db_s
         company_id=ctx.company.id,
         site_id=other_site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Someone else's call",
         state=DecisionState.pending,
     )
@@ -392,6 +398,7 @@ async def test_decisions_carry_spec_identity_when_routed(client, ctx, db_session
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the tile sample?",
         state=DecisionState.pending,
     )
@@ -493,6 +500,7 @@ async def test_responding_to_a_non_spec_decision_leaves_no_spec_touched(client, 
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the tile sample?",
         state=DecisionState.pending,
     )

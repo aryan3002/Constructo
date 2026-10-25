@@ -13,6 +13,7 @@ import pytest_asyncio
 
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerMember,
@@ -44,6 +45,7 @@ async def _pending_cost_decision(db_session, ctx) -> Decision:
         company_id=ctx.company.id,
         site_id=ctx.site.id,
         kind=DecisionKind.homeowner_question,
+        audience=DecisionAudience.homeowner,
         title="Approve the ₹40,000 marble upgrade?",
         state=DecisionState.pending,
     )

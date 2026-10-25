@@ -37,6 +37,7 @@ from app.dashboard.schemas import (
 from app.db import get_session
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     Site,
     SiteBaseline,
@@ -188,6 +189,8 @@ async def create_decision(
         company_id=user.company_id,
         site_id=body.site_id,
         kind=kind,
+        # The owner's approve/hold/assign chips — the builder's own call.
+        audience=DecisionAudience.internal,
         title=body.title,
         detail=body.detail,
         raised_by=user.id,

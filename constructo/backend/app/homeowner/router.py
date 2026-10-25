@@ -109,6 +109,7 @@ from app.models import (
     Component,
     ComponentStatus,
     Decision,
+    DecisionAudience,
     DecisionState,
     DesignProfile,
     DesignReference,
@@ -870,6 +871,9 @@ async def home(
             select(Decision)
             .where(
                 Decision.site_id == sid,
+                # Only decisions addressed to the homeowner — never the
+                # builder's internal approvals (T4).
+                Decision.audience == DecisionAudience.homeowner,
                 Decision.state.in_([DecisionState.pending, DecisionState.escalated]),
                 # Contractor-facing request-nudges surface on the owner Brief, not
                 # on the homeowner's own "Needs your input".
@@ -2443,6 +2447,7 @@ async def my_decisions(
             select(Decision)
             .where(
                 Decision.site_id.in_(ids),
+                Decision.audience == DecisionAudience.homeowner,  # T4
                 Decision.state.in_(
                     [DecisionState.pending, DecisionState.acknowledged, DecisionState.escalated]
                 ),
@@ -2479,7 +2484,11 @@ async def respond_to_decision(
     """Respond to a decision: approve, comment, or request a change."""
     decision = await session.get(Decision, decision_id)
     ids = await homeowner_site_ids(session, user)
-    if decision is None or decision.site_id not in ids:
+    if (
+        decision is None
+        or decision.site_id not in ids
+        or decision.audience != DecisionAudience.homeowner
+    ):
         raise AppError(404, "not_found", "Decision not found")
     # Money-safety gate: approving commits scope/spend → owners only. Family and
     # advisors get a graceful handoff (a comment box), never a silent commit.

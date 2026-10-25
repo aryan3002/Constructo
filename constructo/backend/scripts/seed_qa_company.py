@@ -28,6 +28,7 @@ from app.dpr.draft import draft_dpr
 from app.models import (
     Company,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     Dpr,
@@ -175,6 +176,7 @@ async def seed() -> dict[str, int]:
             company_id=company.id,
             site_id=site.id,
             kind=DecisionKind.approval,
+            audience=DecisionAudience.internal,
             title="Approve ACC cement invoice (₹36,000)?",
             detail="Invoice bills 60 bags but the site logged 50. ~₹6,000 at risk.",
             raised_by=None,
@@ -190,6 +192,7 @@ async def seed() -> dict[str, int]:
             company_id=company.id,
             site_id=site.id,
             kind=DecisionKind.approval,
+            audience=DecisionAudience.internal,
             title="Confirm next week's slab schedule?",
             detail="Owner to confirm the schedule with the team.",
             raised_by=None,

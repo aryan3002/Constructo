@@ -38,6 +38,7 @@ from app.models import (
     AuditStatus,
     Company,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     DrawingKind,
@@ -144,6 +145,8 @@ async def seed() -> dict[str, int]:
             return _upsert(
                 session, Decision, _id("ask", key), company_id=company.id,
                 site_id=sites[skey].id, kind=kind, title=title, detail=detail,
+                # Asks for the engineer (even a2's laminate-code check) — internal.
+                audience=DecisionAudience.internal,
                 raised_by=raiser.id, assigned_to=lokesh.id, state=DecisionState.pending,
                 sla_due_at=NOW + timedelta(days=due_days),
             )

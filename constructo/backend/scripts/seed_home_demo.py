@@ -30,6 +30,7 @@ from app.db import SessionLocal
 from app.models import (
     Change,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerMember,
@@ -268,6 +269,9 @@ async def seed() -> dict:  # noqa: PLR0915
                 company_id=company_id,
                 site_id=site_id,
                 kind=kind,
+                # Both are the homeowner's to answer (the layout approval has no
+                # spec link, so it must be marked explicitly).
+                audience=DecisionAudience.homeowner,
                 title=title,
                 detail=detail,
                 state=DecisionState.pending,

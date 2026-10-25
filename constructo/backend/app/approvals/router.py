@@ -30,10 +30,25 @@ from app.auth.deps import get_current_user
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
-from app.models import Decision, DecisionKind, DecisionState, User, UserRole
+from app.models import (
+    Decision,
+    DecisionKind,
+    DecisionState,
+    User,
+    UserRole,
+    default_audience,
+)
 from app.sites.router import effective_visible_site_ids
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
+
+
+async def _team_user(user: User = Depends(get_current_user)) -> User:
+    """The builder's team only. Homeowners read their own decisions through
+    /homeowner/decisions; this inbox holds internal ones (T4)."""
+    if user.role is UserRole.homeowner:
+        raise AppError(403, "forbidden", "Not available to homeowners")
+    return user
 
 
 def _parse_limit(limit: int) -> int:
@@ -134,7 +149,7 @@ def _assert_can_respond(user: User, decision: Decision) -> None:
 
 @router.get("", response_model=Page[DecisionOut])
 async def list_decisions(
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
     state: DecisionState | None = Query(None),
     for_: str | None = Query(None, alias="for"),
@@ -185,7 +200,7 @@ async def list_decisions(
 @router.post("", response_model=DecisionOut, status_code=201)
 async def create_decision(
     body: DecisionCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     """Raise a decision into the ledger (approval, homeowner question, hold…)."""
@@ -198,6 +213,9 @@ async def create_decision(
         company_id=user.company_id,
         site_id=body.site_id,
         kind=body.kind,
+        # A homeowner question is addressed to the homeowner; the rest of
+        # what the team raises here stays internal (T4).
+        audience=default_audience(body.kind),
         title=body.title,
         detail=body.detail,
         raised_by=body.raised_by,
@@ -214,7 +232,7 @@ async def create_decision(
 @router.get("/{decision_id}", response_model=DecisionOut)
 async def get_decision(
     decision_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     return _out(await _get_in_scope(session, user, decision_id))
@@ -240,7 +258,7 @@ async def _action(
 async def acknowledge_decision(
     decision_id: UUID,
     body: DecisionResolveIn | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     # Acknowledging ("seen") decides nothing, so any in-scope member may.
@@ -255,7 +273,7 @@ async def acknowledge_decision(
 async def approve_decision(
     decision_id: UUID,
     body: DecisionResolveIn | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     """Approve == resolve the decision (idempotent)."""
@@ -268,7 +286,7 @@ async def approve_decision(
 async def reject_decision(
     decision_id: UUID,
     body: DecisionResolveIn | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     return await _action(
@@ -289,7 +307,7 @@ _RESPOND_ACTION: dict[str, DecisionAction] = {
 async def respond_to_decision(
     decision_id: UUID,
     body: DecisionRespondIn | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     """Contractor-side respond to an ask/decision (C3 — stops the outbox 404).
@@ -314,7 +332,7 @@ async def respond_to_decision(
 async def assign_decision(
     decision_id: UUID,
     body: DecisionAssignIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionOut:
     decision = await _get_in_scope(session, user, decision_id)
@@ -333,7 +351,7 @@ async def assign_decision(
 async def batch_action(
     action: DecisionAction,
     body: BatchActionIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> BatchResultOut:
     """Apply one action to many decisions (inbox multi-select).
@@ -370,7 +388,7 @@ async def batch_action(
 
 @router.post("/sla/sweep", response_model=SlaSweepOut)
 async def trigger_sla_sweep(
-    user: User = Depends(get_current_user),
+    user: User = Depends(_team_user),
     session: AsyncSession = Depends(get_session),
 ) -> SlaSweepOut:
     """Run the SLA sweep for the caller's company.

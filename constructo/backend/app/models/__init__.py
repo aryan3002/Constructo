@@ -28,7 +28,13 @@ from app.models.company import Company
 from app.models.company_billing import CompanyBilling
 from app.models.company_document import CompanyDocument
 from app.models.conversation_member import ConversationMember, MemberRole
-from app.models.decision import Decision, DecisionKind, DecisionState
+from app.models.decision import (
+    Decision,
+    DecisionAudience,
+    DecisionKind,
+    DecisionState,
+    default_audience,
+)
 from app.models.dpr import Dpr, DprStatus
 from app.models.event_dispute import DisputeStatus, EventDispute
 from app.models.event_embedding import EventEmbedding
@@ -147,8 +153,10 @@ __all__ = [
     "ConversationRead",
     "MemberRole",
     "Decision",
+    "DecisionAudience",
     "DecisionKind",
     "DecisionState",
+    "default_audience",
     "DesignProfile",
     "DesignReference",
     "DesignSelection",

@@ -21,6 +21,7 @@ from app.common.site_events import latest_event_clause
 from app.db import get_session
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     RawMessageModel,
@@ -530,6 +531,8 @@ async def hold_payment(
         company_id=user.company_id,
         site_id=site_id,
         kind=DecisionKind.hold_payment,
+        # A held vendor payment never reaches the homeowner (T4).
+        audience=DecisionAudience.internal,
         title=title,
         detail=" ".join(detail_parts),
         raised_by=user.id,

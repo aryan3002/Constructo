@@ -37,6 +37,7 @@ from app.models import (
     Component,
     ComponentStatus,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerMember,
@@ -415,6 +416,8 @@ async def seed() -> dict[str, int]:
             company_id=company.id,
             site_id=site_a,
             kind=DecisionKind.approval,
+            # The builder's invoice check — never shown to the homeowner (T4).
+            audience=DecisionAudience.internal,
             title="Approve ACC cement invoice (₹72,000)?",
             detail="Invoice bills 120 bags but the site logged 100. ~₹12,000 at risk.",
             raised_by=users["accountant"].id,
@@ -430,6 +433,7 @@ async def seed() -> dict[str, int]:
             company_id=company.id,
             site_id=site_a,
             kind=DecisionKind.homeowner_question,
+            audience=DecisionAudience.homeowner,
             title="Homeowner: can we begin the parking-level slab this week?",
             detail="Owner needs to confirm the schedule with the homeowner.",
             raised_by=None,  # a homeowner (not a user)

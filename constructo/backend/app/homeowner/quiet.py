@@ -42,6 +42,7 @@ from app.extraction.llm import LLMClient, get_llm_client
 from app.homeowner.ai import draft_quiet_reason
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     Milestone,
@@ -255,6 +256,8 @@ async def run_quiet_period_sweep(
                     company_id=site.company_id,
                     site_id=site_id,
                     kind=DecisionKind.generic,
+                    # A nudge to the builder, not a homeowner question.
+                    audience=DecisionAudience.internal,
                     title=f"{QUIET_NUDGE_TAG}[{site_id}] Quiet site — add a reason",
                     detail=(
                         f"This site has had no homeowner-visible update for "

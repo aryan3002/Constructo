@@ -43,6 +43,7 @@ from app.models import (
     Conversation,
     ConversationKind,
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     HomeownerMember,
@@ -256,6 +257,8 @@ async def run(session_factory: Callable = SessionLocal) -> dict:
                     company_id=company_id,
                     site_id=site_id,
                     kind=DecisionKind.homeowner_question,
+                    # Drawn from the client⇄firm thread — the homeowner's decisions.
+                    audience=DecisionAudience.homeowner,
                     title=title[:200],
                     detail=detail,
                     raised_by=raised_by,

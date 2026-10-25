@@ -33,7 +33,15 @@ from sqlalchemy import select
 
 import app.models as models  # noqa: F401  register every table on Base.metadata
 from app.db import SessionLocal
-from app.models import Decision, DecisionKind, DecisionState, Site, User, UserRole
+from app.models import (
+    Decision,
+    DecisionAudience,
+    DecisionKind,
+    DecisionState,
+    Site,
+    User,
+    UserRole,
+)
 from app.sites.models import SiteAssignment
 
 NS = uuid5(NAMESPACE_URL, "constructo.seed.clarification-demo")
@@ -115,6 +123,7 @@ async def main(apply: bool, remove: bool, phone: str) -> None:
                     # generic, not approval: approvals are the owner's money
                     # decisions and a supervisor can't answer them (S9).
                     kind=DecisionKind.generic,
+                    audience=DecisionAudience.internal,
                     title=TITLE,
                     detail=DETAIL,
                     raised_by=designer.id if designer else None,
@@ -126,6 +135,7 @@ async def main(apply: bool, remove: bool, phone: str) -> None:
         else:
             existing.state = DecisionState.pending
             existing.kind = DecisionKind.generic
+            existing.audience = DecisionAudience.internal
             existing.title = TITLE
             existing.detail = DETAIL
             existing.assigned_to = sup.id
