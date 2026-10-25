@@ -161,4 +161,26 @@ describe('syncOrCache (offline-first thread load)', () => {
       ),
     ).rejects.toThrow('offline')
   })
+
+  test.each([401, 403, 404])('a %i surfaces instead of showing the cached history', async (status) => {
+    const err = Object.assign(new Error('denied'), { status })
+    await expect(
+      syncOrCache(
+        async () => {
+          throw err
+        },
+        async () => [m(1)],
+      ),
+    ).rejects.toBe(err)
+  })
+
+  test('a 5xx still falls back to the cache', async () => {
+    const got = await syncOrCache(
+      async () => {
+        throw Object.assign(new Error('down'), { status: 503 })
+      },
+      async () => [m(1)],
+    )
+    expect(got.map((x) => x.seq)).toEqual([1])
+  })
 })

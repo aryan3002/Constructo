@@ -144,6 +144,16 @@ export function getSharedSocket(): ChatSocket {
   return sharedSocket
 }
 
+/** Sign-out: close the shared socket for good (cancelling any pending
+ *  reconnect) so it can't keep receiving the previous user's frames. The next
+ *  thread mount creates a fresh one under the new login. */
+export function closeSharedSocket(): void {
+  sharedSocket?.close()
+  sharedSocket = null
+  socketConnecting = false
+  frameHandlers.clear()
+}
+
 /** Test seam: reset the module singleton + handler registry between tests. */
 export function __resetChatSocketForTests(): void {
   sharedSocket = null

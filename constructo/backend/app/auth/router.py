@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user, require_role, require_step_up
@@ -398,5 +398,38 @@ async def register_push_token(
         )
     elif body.platform is not None:
         existing.platform = body.platform
+    await session.commit()
+    return PushTokenOut()
+
+
+class PushTokenDeleteIn(BaseModel):
+    token: str = Field(min_length=1)
+
+
+# DELETE /api/v1/me/push-token — sign-out / account switch: stop pushing to
+# THIS device for the caller. Removes the caller's push_tokens row for the token
+# and the same token from any of their homeowner memberships' notif_prefs (the
+# homeowner path the sender also reads). Idempotent: an unknown token is a no-op.
+@me_router.delete("/push-token", response_model=PushTokenOut)
+async def unregister_push_token(
+    body: PushTokenDeleteIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PushTokenOut:
+    await session.execute(
+        delete(PushToken).where(
+            PushToken.user_id == user.id, PushToken.token == body.token
+        )
+    )
+    members = (
+        await session.execute(
+            select(HomeownerMember).where(HomeownerMember.user_id == user.id)
+        )
+    ).scalars().all()
+    for m in members:
+        prefs = m.notif_prefs or {}
+        if prefs.get("push_token") == body.token:
+            # Reassign (not mutate in place) so the JSONB change is tracked.
+            m.notif_prefs = {k: v for k, v in prefs.items() if k != "push_token"}
     await session.commit()
     return PushTokenOut()

@@ -27,6 +27,14 @@ export function __resetChatCacheForTests(): void {
   mem.clear()
 }
 
+/** Drop every conversation's cache, in memory and on disk (sign-out). */
+export async function clearThreadCaches(): Promise<void> {
+  mem.clear()
+  const keys = await AsyncStorage.getAllKeys()
+  const ours = keys.filter((k) => k.startsWith(KEY_PREFIX))
+  if (ours.length) await AsyncStorage.multiRemove(ours)
+}
+
 export async function loadThreadCache(convKey: string): Promise<ChatMessage[]> {
   const hit = mem.get(convKey)
   if (hit) return hit

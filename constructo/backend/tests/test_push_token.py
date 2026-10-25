@@ -3,7 +3,13 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from app.auth.jwt import create_access_token
-from app.models import PushToken, UserRole
+from app.models import (
+    HomeownerMember,
+    HomeownerSubRole,
+    MemberStatus,
+    PushToken,
+    UserRole,
+)
 from app.push import sender
 
 
@@ -80,3 +86,90 @@ async def test_notify_user_pushes_in_dry_run(client, db_session, supervisor):
 async def test_notify_user_no_token_is_empty(db_session, supervisor):
     targeted = await sender.notify_user(db_session, supervisor.id, "T", "B")
     assert targeted == []
+
+
+async def _tokens(db_session, user_id) -> list[str]:
+    rows = (
+        await db_session.execute(select(PushToken).where(PushToken.user_id == user_id))
+    ).scalars().all()
+    return sorted(r.token for r in rows)
+
+
+async def test_unregister_push_token_deletes_only_that_token(client, db_session, supervisor):
+    for tok in ("ExponentPushToken[old-phone]", "ExponentPushToken[other-phone]"):
+        r = await client.post(
+            "/api/v1/me/push-token", json={"token": tok}, headers=auth(supervisor)
+        )
+        assert r.status_code == 200, r.text
+
+    resp = await client.request(
+        "DELETE",
+        "/api/v1/me/push-token",
+        json={"token": "ExponentPushToken[old-phone]"},
+        headers=auth(supervisor),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
+    assert await _tokens(db_session, supervisor.id) == ["ExponentPushToken[other-phone]"]
+
+    # Idempotent: deleting it again (or an unknown token) is still ok.
+    again = await client.request(
+        "DELETE",
+        "/api/v1/me/push-token",
+        json={"token": "ExponentPushToken[old-phone]"},
+        headers=auth(supervisor),
+    )
+    assert again.status_code == 200
+
+
+async def test_unregister_push_token_leaves_other_users_rows(
+    client, db_session, factory, supervisor
+):
+    other = await factory.user(role=UserRole.supervisor)
+    shared = "ExponentPushToken[shared-phone]"
+    for u in (supervisor, other):
+        await client.post("/api/v1/me/push-token", json={"token": shared}, headers=auth(u))
+
+    resp = await client.request(
+        "DELETE", "/api/v1/me/push-token", json={"token": shared}, headers=auth(supervisor)
+    )
+    assert resp.status_code == 200
+    assert await _tokens(db_session, supervisor.id) == []
+    assert await _tokens(db_session, other.id) == [shared]
+
+
+async def test_unregister_push_token_clears_homeowner_notif_prefs(client, db_session, factory):
+    company = await factory.company()
+    site = await factory.site(company)
+    owner_of_home = await factory.user(company=company, role=UserRole.homeowner)
+    tok = "ExponentPushToken[home-phone]"
+    member = HomeownerMember(
+        site_id=site.id,
+        user_id=owner_of_home.id,
+        sub_role=HomeownerSubRole.primary_owner,
+        status=MemberStatus.active,
+        notif_prefs={"push_token": tok, "cadence": {"photos": "daily"}},
+    )
+    other_member = HomeownerMember(
+        site_id=site.id,
+        user_id=(await factory.user(company=company, role=UserRole.homeowner)).id,
+        sub_role=HomeownerSubRole.family,
+        status=MemberStatus.active,
+        notif_prefs={"push_token": tok},
+    )
+    db_session.add_all([member, other_member])
+    await db_session.commit()
+
+    resp = await client.request(
+        "DELETE", "/api/v1/me/push-token", json={"token": tok}, headers=auth(owner_of_home)
+    )
+    assert resp.status_code == 200, resp.text
+    await db_session.refresh(member)
+    await db_session.refresh(other_member)
+    assert member.notif_prefs == {"cadence": {"photos": "daily"}}
+    assert other_member.notif_prefs == {"push_token": tok}
+
+
+async def test_unregister_push_token_requires_auth(client):
+    resp = await client.request("DELETE", "/api/v1/me/push-token", json={"token": "X"})
+    assert resp.status_code == 401

@@ -12,6 +12,8 @@ import { useMutation } from '@tanstack/react-query'
 
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
+import { unregisterDevicePushToken } from '../push/register'
+import { getToken } from '../store/secure'
 import { useAuth } from './AuthContext'
 
 export function useDeleteAccount(opts: {
@@ -25,9 +27,15 @@ export function useDeleteAccount(opts: {
   const [stepUpVisible, setStepUpVisible] = useState(false)
 
   const deleteMut = useMutation({
-    mutationFn: (stepUpToken: string) => authApi.deleteAccount(stepUpToken),
+    mutationFn: async (stepUpToken: string) => {
+      // Unregister this phone's push token while the account can still
+      // authenticate; signOut()'s own attempt would be refused once it's gone.
+      await unregisterDevicePushToken(await getToken())
+      return authApi.deleteAccount(stepUpToken)
+    },
     onSuccess: async () => {
       setStepUpVisible(false)
+      // signOut() runs resetSession(): query cache, user storage, queues, socket.
       await signOut()
       router.replace(opts.afterDeleteHref)
     },

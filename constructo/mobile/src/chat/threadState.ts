@@ -13,6 +13,9 @@ import type { ChatMessage, CursorOut } from '../api/chat'
  * showing its messages instead of blanking to an error after the retries
  * exhaust. Only re-throws when there is genuinely nothing cached to show.
  *
+ * A 4xx is an answer, not an outage: a 403 (removed from the conversation) or
+ * 401 must surface, never be papered over with the cached history.
+ *
  * Dependencies are injected so this is unit-testable without mocking modules.
  */
 export async function syncOrCache(
@@ -22,6 +25,8 @@ export async function syncOrCache(
   try {
     return await fetchPage()
   } catch (err) {
+    const status = (err as { status?: number })?.status
+    if (typeof status === 'number' && status >= 400 && status < 500) throw err
     const cached = await loadCache()
     if (cached.length) return cached
     throw err

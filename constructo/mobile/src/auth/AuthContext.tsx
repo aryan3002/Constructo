@@ -26,6 +26,8 @@ import {
 import type { Capabilities, HomeownerSubRole, Me, Role } from '../api/types'
 import { clearToken, getToken } from '../store/secure'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useQueryClient } from '@tanstack/react-query'
+import { clearQueuedWork, resetSession, SESSION_USER_KEY } from './resetSession'
 
 type Status = 'loading' | 'authed' | 'guest'
 
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subRole, setSubRole] = useState<HomeownerSubRole | null>(null)
   const [siteId, setSiteId] = useState<string | null>(null)
   const [onboarded, setOnboarded] = useState(false)
+  const queryClient = useQueryClient()
 
   const refresh = useCallback(async (): Promise<Me | null> => {
     const token = await getToken()
@@ -85,6 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSiteId(null)
       setStatus('guest')
       return null
+    }
+
+    // A different person signed in on this phone: anything still queued
+    // belongs to the previous user (kept across an expired login) and must not
+    // post under this one. Runs before `me` is set, i.e. before any drain.
+    try {
+      const previousUser = await AsyncStorage.getItem(SESSION_USER_KEY)
+      if (previousUser && previousUser !== profile.id) await clearQueuedWork()
+      await AsyncStorage.setItem(SESSION_USER_KEY, profile.id)
+    } catch {
+      /* best-effort */
     }
 
     setMe(profile)
@@ -166,14 +180,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    await clearToken()
-    await AsyncStorage.multiRemove([ONBOARDED_KEY, SITE_ID_KEY, SUB_ROLE_KEY])
+    await resetSession({ queryClient })
     setMe(null)
     setSubRole(null)
     setSiteId(null)
     setOnboarded(false)
     setStatus('guest')
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     void refresh()

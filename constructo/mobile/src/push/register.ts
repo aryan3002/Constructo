@@ -46,6 +46,10 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 }
 
+// The token this device last registered for the signed-in user, so sign-out
+// can unregister exactly that one without prompting for permission again.
+let registeredToken: string | null = null
+
 /**
  * Register THIS device's push token against the caller's user row via
  * `POST /api/v1/me/push-token` (C-F). Works for any authenticated user —
@@ -70,6 +74,7 @@ export async function registerDevicePushToken(
           Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
       }),
     })
+    registeredToken = token
     return token
   } catch {
     return null // best-effort
@@ -90,6 +95,33 @@ export async function persistPushToken(token: string): Promise<void> {
       body: JSON.stringify({
         notif_prefs: { ...member.notif_prefs, push_token: token },
       }),
+    })
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * Stop pushing the signed-in user's notifications to THIS device (sign-out,
+ * account deletion): `DELETE /api/v1/me/push-token`, which also clears the token
+ * from the caller's homeowner notif_prefs. `authToken` is the JWT captured
+ * BEFORE the session token is cleared, so this can run fire-and-forget while
+ * sign-out proceeds. Never prompts for permission; best-effort.
+ */
+export async function unregisterDevicePushToken(authToken: string | null): Promise<void> {
+  try {
+    let token = registeredToken
+    if (!token && Device.isDevice && (await Notifications.getPermissionsAsync()).granted) {
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
+      token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data
+    }
+    registeredToken = null
+    if (!token || !authToken) return
+    await request('/api/v1/me/push-token', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ token }),
     })
   } catch {
     /* best-effort */
