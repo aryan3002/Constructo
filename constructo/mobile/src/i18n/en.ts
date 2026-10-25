@@ -15,6 +15,7 @@ export const en = {
     // ─── Front door ───────────────────────────────────────────────────────
     frontTitle: 'Welcome to Neev',
     frontSub: 'One app, two doors. Pick yours.',
+    sessionExpired: 'You were signed out. Please sign in again.',
     homeownerCard: "I'm a homeowner",
     homeownerCardSub: 'Follow your home being built — photos, updates, decisions.',
     homeownerCardHow: 'Enter with the join code your builder sent',

@@ -12,22 +12,26 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
+import NetInfo from '@react-native-community/netinfo'
+import { useRouter } from 'expo-router'
 
 import { authApi } from '../api/auth'
-import { ApiError, homeowner } from '../api/client'
+import { homeowner, setUnauthorizedHandler } from '../api/client'
 import {
   persistPushToken,
   registerDevicePushToken,
   registerForPushNotificationsAsync,
 } from '../push/register'
 import type { Capabilities, HomeownerSubRole, Me, Role } from '../api/types'
-import { clearToken, getToken } from '../store/secure'
+import { getToken } from '../store/secure'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQueryClient } from '@tanstack/react-query'
-import { clearQueuedWork, resetSession, SESSION_USER_KEY } from './resetSession'
+import { meFailureKind } from './auth.util'
+import { clearQueuedWork, resetSession, SESSION_ME_KEY, SESSION_USER_KEY } from './resetSession'
 
 type Status = 'loading' | 'authed' | 'guest'
 
@@ -53,6 +57,9 @@ interface AuthContextValue {
    *  success (so callers can navigate deterministically) or null if unauthed. */
   refresh: () => Promise<Me | null>
   signOut: () => Promise<void>
+  /** True after an expired login signed the user out (the sign-in screen says
+   *  so); cleared by the next successful sign-in. */
+  sessionExpired: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -63,7 +70,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subRole, setSubRole] = useState<HomeownerSubRole | null>(null)
   const [siteId, setSiteId] = useState<string | null>(null)
   const [onboarded, setOnboarded] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const statusRef = useRef<Status>('loading')
+  statusRef.current = status
+  const meRef = useRef<Me | null>(null)
+  meRef.current = me
+  // Set when the session is running on the cached profile (offline / server
+  // error at cold start) — re-checked when connectivity returns.
+  const needsRecheck = useRef(false)
+  const expiring = useRef(false)
+
+  const clearSessionState = useCallback(() => {
+    setMe(null)
+    setSubRole(null)
+    setSiteId(null)
+    setStatus('guest')
+  }, [])
+
+  // The login is no longer valid (any API call got a 401 for the stored
+  // token). Forget the session but keep the queued messages/captures for when
+  // the same person signs back in, then go to sign-in with a short note.
+  const expireSession = useCallback(async () => {
+    if (expiring.current) return
+    expiring.current = true
+    try {
+      const wasAuthed = statusRef.current === 'authed'
+      await resetSession({ queryClient, keepQueued: true })
+      setOnboarded(false)
+      setSessionExpired(true)
+      clearSessionState()
+      if (wasAuthed) router.replace('/(auth)')
+    } finally {
+      expiring.current = false
+    }
+  }, [queryClient, router, clearSessionState])
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => void expireSession())
+    return () => setUnauthorizedHandler(null)
+  }, [expireSession])
 
   const refresh = useCallback(async (): Promise<Me | null> => {
     const token = await getToken()
@@ -75,18 +122,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
 
-    // AUTH is decided SOLELY by /auth/me. This is the ONLY place that may set
-    // 'guest' after we have a token — a genuine auth failure (401) or a network
-    // error fetching the profile.
+    // AUTH is decided SOLELY by /auth/me. A 401 ends the session (via the
+    // client's unauthorized handler); a network / timeout / 5xx failure keeps
+    // it on the last known profile.
     let profile: Me
     try {
       profile = await authApi.me()
+      needsRecheck.current = false
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) await clearToken()
-      setMe(null)
-      setSubRole(null)
-      setSiteId(null)
-      setStatus('guest')
+      const kind = meFailureKind(err)
+      if (kind === 'unreachable') {
+        // Offline / timeout / 5xx says nothing about the login: keep the
+        // session on the last known profile and re-check once back online.
+        needsRecheck.current = true
+        if (statusRef.current === 'authed') return meRef.current
+        try {
+          const raw = await AsyncStorage.getItem(SESSION_ME_KEY)
+          const cached = raw ? (JSON.parse(raw) as Me) : null
+          if (cached) {
+            setMe(cached)
+            setStatus('authed')
+            return cached
+          }
+        } catch {
+          /* no usable cached profile */
+        }
+      }
+      // A 401 already ran expireSession() through the client's handler.
+      clearSessionState()
       return null
     }
 
@@ -96,13 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const previousUser = await AsyncStorage.getItem(SESSION_USER_KEY)
       if (previousUser && previousUser !== profile.id) await clearQueuedWork()
-      await AsyncStorage.setItem(SESSION_USER_KEY, profile.id)
+      await AsyncStorage.multiSet([
+        [SESSION_USER_KEY, profile.id],
+        [SESSION_ME_KEY, JSON.stringify(profile)],
+      ])
     } catch {
       /* best-effort */
     }
 
     setMe(profile)
     setStatus('authed')
+    setSessionExpired(false)
     // Register this device's push token. Fire-and-forget; fully insulated, never
     // affects the session. A homeowner also stashes the token in their member
     // notif_prefs (the path notify_site_homeowners reads); a contractor only has
@@ -154,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* best-effort context restore — never demotes the authed session */
     }
     return profile
-  }, [])
+  }, [clearSessionState])
 
   const setJoinData = useCallback(async (sr: HomeownerSubRole, sid: string) => {
     // In-memory first — the session works even if the device store is flaky.
@@ -181,20 +248,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await resetSession({ queryClient })
-    setMe(null)
-    setSubRole(null)
-    setSiteId(null)
     setOnboarded(false)
-    setStatus('guest')
-  }, [queryClient])
+    setSessionExpired(false)
+    clearSessionState()
+  }, [queryClient, clearSessionState])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
+  // Cold start ran on the cached profile → confirm it with the server as soon
+  // as the network is back (a 401 then signs out via the client handler).
+  useEffect(
+    () =>
+      NetInfo.addEventListener((s) => {
+        if (s.isConnected && needsRecheck.current) void refresh()
+      }),
+    [refresh],
+  )
+
   const value = useMemo<AuthContextValue>(
-    () => ({ status, me, role: me?.role ?? null, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut }),
-    [status, me, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut],
+    () => ({ status, me, role: me?.role ?? null, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, sessionExpired }),
+    [status, me, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, sessionExpired],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

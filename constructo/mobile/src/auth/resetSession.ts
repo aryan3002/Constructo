@@ -17,9 +17,12 @@ import { clearToken, getToken } from '../store/secure'
 
 /** The user the stored session (and any queued items) belongs to. */
 export const SESSION_USER_KEY = 'constructo.session.user'
+/** The last /auth/me profile — lets an offline cold start keep the session. */
+export const SESSION_ME_KEY = 'constructo.session.me'
 
 /** Per-user keys removed outright. */
 export const USER_KEYS = [
+  SESSION_ME_KEY,
   'constructo.onboarded',
   'constructo.site_id',
   'constructo.sub_role',

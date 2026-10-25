@@ -11,14 +11,17 @@ import { ApiError, request } from '../api/client'
 import { submitCapture } from '../api/capture'
 import { list, remove, type OutboxItem } from './outbox'
 
-/** A 4xx (except 408 timeout / 429 rate-limit) is a PERMANENT rejection — the
- *  item can never succeed as-is (too large / forbidden / invalid), so retrying
- *  it forever would wedge everything queued behind it. */
-function isPermanentFailure(e: unknown): boolean {
+/** A 4xx (except 401 expired login / 408 timeout / 429 rate-limit) is a
+ *  PERMANENT rejection — the item can never succeed as-is (too large /
+ *  forbidden / invalid), so retrying it forever would wedge everything queued
+ *  behind it. A 401 pauses the queue until the user signs back in: the capture
+ *  is theirs and must not be thrown away because a login expired. */
+export function isPermanentFailure(e: unknown): boolean {
   return (
     e instanceof ApiError &&
     e.status >= 400 &&
     e.status < 500 &&
+    e.status !== 401 &&
     e.status !== 408 &&
     e.status !== 429
   )
@@ -71,7 +74,8 @@ export function useOutbox(): OutboxStatus {
           await remove(item.id)
           continue
         }
-        // Transient (network / 5xx / timeout): stop and retry the whole tail next time.
+        // Transient (network / 5xx / timeout / expired login): stop and retry
+        // the whole tail next time.
         break
       }
     }

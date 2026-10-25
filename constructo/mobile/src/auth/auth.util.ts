@@ -126,3 +126,18 @@ export function homeFor(role: Role | null): string {
 export function welcomeKey(userId: string): string {
   return `neev.welcome.${userId}`
 }
+
+/**
+ * Why `/auth/me` failed, for the cold-start decision (T3):
+ *  - `expired`: 401 — the login is gone; sign out.
+ *  - `unreachable`: offline, timeout or 5xx — says nothing about the login, so
+ *    keep the cached session.
+ *  - `rejected`: any other 4xx.
+ */
+export function meFailureKind(err: unknown): 'expired' | 'unreachable' | 'rejected' {
+  const status = (err as { status?: unknown } | null)?.status
+  if (typeof status !== 'number') return 'unreachable'
+  if (status === 401) return 'expired'
+  if (status >= 500 || status === 408 || status === 429) return 'unreachable'
+  return 'rejected'
+}

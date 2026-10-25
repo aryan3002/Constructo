@@ -3,9 +3,10 @@
  * (Screens can't be mounted in this jest harness; all screen logic that can
  * be extracted lives here so it IS tested.)
  */
-import { ApiError } from '../api/client'
+import { ApiError, TimeoutError } from '../api/client'
 import {
   digitsOnly,
+  meFailureKind,
   formatIndianMobile,
   homeFor,
   isValidIndianMobile,
@@ -104,5 +105,20 @@ describe('welcomeKey', () => {
   it('is namespaced per user', () => {
     expect(welcomeKey('u1')).toBe('neev.welcome.u1')
     expect(welcomeKey('u1')).not.toBe(welcomeKey('u2'))
+  })
+})
+
+describe('meFailureKind (cold-start /auth/me failure)', () => {
+  test('401 is an expired login', () => {
+    expect(meFailureKind(new ApiError(401, 'x'))).toBe('expired')
+  })
+  test('offline, timeout and 5xx keep the cached session', () => {
+    expect(meFailureKind(new TypeError('Network request failed'))).toBe('unreachable')
+    expect(meFailureKind(new TimeoutError())).toBe('unreachable')
+    expect(meFailureKind(new ApiError(503, 'x'))).toBe('unreachable')
+    expect(meFailureKind(new ApiError(429, 'x'))).toBe('unreachable')
+  })
+  test('another 4xx is a rejection', () => {
+    expect(meFailureKind(new ApiError(403, 'x'))).toBe('rejected')
   })
 })

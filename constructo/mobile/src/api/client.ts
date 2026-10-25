@@ -48,6 +48,37 @@ export class ApiError extends Error {
   }
 }
 
+// One place that reacts to an expired login (T3): the AuthProvider registers a
+// handler that resets the session and sends the user to sign in.
+let unauthorizedHandler: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler
+}
+
+/** Call after a failed response. Fires the handler only for a 401 that rejected
+ *  the stored session token — not a wrong step-up OTP (also 401, code
+ *  `invalid_otp`), and not a late reply to a request sent before sign-out. */
+export async function notifyIfUnauthorized(err: ApiError, sentToken: string | null): Promise<void> {
+  if (err.status !== 401 || err.code === 'invalid_otp' || !sentToken) return
+  if ((await getToken()) !== sentToken) return
+  unauthorizedHandler?.()
+}
+
+/** Build an {@link ApiError} from a non-OK response's `{error:{code,message}}` envelope. */
+async function errorFrom(res: Response): Promise<ApiError> {
+  let message = res.statusText
+  let code = 'http_error'
+  try {
+    const body = await res.json()
+    message = body?.error?.message ?? body?.detail ?? body?.message ?? message
+    code = body?.error?.code ?? code
+  } catch {
+    /* non-JSON error body */
+  }
+  return new ApiError(res.status, message, code)
+}
+
 /** React Native's Android HTTP client never times out on its own, so one
  * stalled request would hang its caller (and every chat send queued behind it)
  * until the app restarts. Every API call gets an explicit deadline. */
@@ -100,16 +131,9 @@ export async function request<T>(
 
   const res = await fetchWithTimeout(`${API_BASE}${path}`, { ...init, headers }, timeoutMs)
   if (!res.ok) {
-    let message = res.statusText
-    let code = 'http_error'
-    try {
-      const body = await res.json()
-      message = body?.error?.message ?? body?.detail ?? body?.message ?? message
-      code = body?.error?.code ?? code
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new ApiError(res.status, message, code)
+    const err = await errorFrom(res)
+    await notifyIfUnauthorized(err, token)
+    throw err
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -137,16 +161,9 @@ export async function uploadMultipart<T>(path: string, form: FormData): Promise<
     UPLOAD_TIMEOUT_MS,
   )
   if (!res.ok) {
-    let message = res.statusText
-    let code = 'http_error'
-    try {
-      const body = await res.json()
-      message = body?.error?.message ?? body?.detail ?? body?.message ?? message
-      code = body?.error?.code ?? code
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new ApiError(res.status, message, code)
+    const err = await errorFrom(res)
+    await notifyIfUnauthorized(err, token)
+    throw err
   }
   return (await res.json()) as T
 }

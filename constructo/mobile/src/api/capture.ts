@@ -10,7 +10,13 @@
  * sets the multipart boundary).
  */
 import { API_BASE } from './config'
-import { ApiError, fetchWithTimeout, request, UPLOAD_TIMEOUT_MS } from './client'
+import {
+  ApiError,
+  fetchWithTimeout,
+  notifyIfUnauthorized,
+  request,
+  UPLOAD_TIMEOUT_MS,
+} from './client'
 import type { Paginated, Site } from './types'
 import { getToken } from '../store/secure'
 
@@ -70,7 +76,9 @@ export async function submitCapture(p: CapturePayload): Promise<CaptureResult> {
     } catch {
       /* non-JSON */
     }
-    throw new ApiError(res.status, message, code)
+    const err = new ApiError(res.status, message, code)
+    await notifyIfUnauthorized(err, token)
+    throw err
   }
   return (await res.json()) as CaptureResult
 }
