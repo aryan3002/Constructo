@@ -27,6 +27,8 @@ from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+# Placeholder name for a brand-new signup's company until the owner names it
+# in the web first-run (which keys off "no sites yet", not this name).
 DEFAULT_COMPANY_NAME = "Default Company"
 SUPPORTED_LANGUAGES = ("en", "hi")
 
@@ -45,6 +47,9 @@ class RequestOtpOut(BaseModel):
 class LoginIn(BaseModel):
     phone: str
     otp: str
+    # Only the web console (the builder signup surface) sends signup=true. An
+    # unknown number without it is refused rather than given an account.
+    signup: bool = False
 
 
 class TokenOut(BaseModel):
@@ -105,14 +110,12 @@ def _company_out(company: Company) -> CompanyOut:
     return out
 
 
-async def _get_or_create_default_company(session: AsyncSession) -> Company:
-    company = (
-        await session.execute(select(Company).where(Company.name == DEFAULT_COMPANY_NAME))
-    ).scalar_one_or_none()
-    if company is None:
-        company = Company(name=DEFAULT_COMPANY_NAME)
-        session.add(company)
-        await session.flush()
+async def _create_signup_company(session: AsyncSession) -> Company:
+    """A brand-new company for every signup — never shared, never looked up by
+    name (S3: a shared placeholder company pooled unrelated builders)."""
+    company = Company(name=DEFAULT_COMPANY_NAME)
+    session.add(company)
+    await session.flush()
     return company
 
 
@@ -139,7 +142,14 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
         )
     ).scalars().first()
     if user is None:
-        company = await _get_or_create_default_company(session)
+        if not body.signup:
+            raise AppError(
+                404,
+                "not_registered",
+                "This number isn't registered. Ask your company for an invite, "
+                "or sign up on the web.",
+            )
+        company = await _create_signup_company(session)
         user = User(
             company_id=company.id,
             phone=normalize_phone(body.phone),  # store canonical E.164 going forward

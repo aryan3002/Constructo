@@ -8,7 +8,10 @@ def _auth(user) -> dict[str, str]:
 
 
 async def _token_login(client, phone: str) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": phone, "otp": "000000", "signup": True},
+    )
     return resp.json()["token"]
 
 

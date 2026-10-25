@@ -248,9 +248,11 @@ export const authApi = {
       }
       return token
     }
+    // The web console is the builder signup surface: an unknown number gets a
+    // brand-new company of its own (the mobile app never sends signup).
     const resp = await call<{ token: string }>('/api/v1/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({ phone, otp, signup: true }),
     })
     setToken(resp.token)
     return resp.token

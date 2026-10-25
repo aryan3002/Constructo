@@ -9,7 +9,10 @@ async def test_login_wrong_otp_returns_401(client):
 
 
 async def test_login_creates_user_and_returns_token(client):
-    resp = await client.post("/api/v1/auth/login", json={"phone": "+15550000002", "otp": "000000"})
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": "+15550000002", "otp": "000000", "signup": True},
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert "token" in body and isinstance(body["token"], str) and body["token"]
@@ -17,7 +20,7 @@ async def test_login_creates_user_and_returns_token(client):
 
 async def test_login_then_me(client):
     login = await client.post(
-        "/api/v1/auth/login", json={"phone": "+15550000003", "otp": "000000"}
+        "/api/v1/auth/login", json={"phone": "+15550000003", "otp": "000000", "signup": True}
     )
     token = login.json()["token"]
 
@@ -35,9 +38,12 @@ async def test_me_without_token_is_401(client):
 
 
 async def test_login_is_idempotent_per_phone(client):
-    first = await client.post("/api/v1/auth/login", json={"phone": "+15550000004", "otp": "000000"})
+    first = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": "+15550000004", "otp": "000000", "signup": True},
+    )
     second = await client.post(
-        "/api/v1/auth/login", json={"phone": "+15550000004", "otp": "000000"}
+        "/api/v1/auth/login", json={"phone": "+15550000004", "otp": "000000", "signup": True}
     )
     me1 = await client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {first.json()['token']}"}
@@ -74,7 +80,10 @@ async def test_visible_site_ids_supervisor_empty_until_assignment(db_session, fa
 
 
 async def _login_token(client, phone: str) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": phone, "otp": "000000", "signup": True},
+    )
     return resp.json()["token"]
 
 
@@ -105,3 +114,68 @@ async def test_step_up_verify_returns_short_lived_token(client):
 async def test_step_up_requires_authentication(client):
     resp = await client.post("/api/v1/auth/step-up/verify", json={"otp": "000000"})
     assert resp.status_code == 401
+
+
+# ---- S3: no shared signup company ------------------------------------------
+
+
+async def test_login_unknown_phone_without_signup_is_not_registered(client, db_session):
+    from sqlalchemy import select
+
+    from app.models import User
+
+    resp = await client.post(
+        "/api/v1/auth/login", json={"phone": "+919870000001", "otp": "000000"}
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "not_registered"
+    # No account was created.
+    users = (
+        await db_session.execute(select(User).where(User.phone == "+919870000001"))
+    ).scalars().all()
+    assert users == []
+
+
+async def test_signup_creates_a_separate_company_each_time(client):
+    tokens = []
+    for phone in ("+919870000002", "+919870000003"):
+        resp = await client.post(
+            "/api/v1/auth/login", json={"phone": phone, "otp": "000000", "signup": True}
+        )
+        assert resp.status_code == 200, resp.text
+        tokens.append(resp.json()["token"])
+    mes = [
+        (await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {t}"})).json()
+        for t in tokens
+    ]
+    assert all(m["role"] == "owner" for m in mes)
+    assert mes[0]["company_id"] != mes[1]["company_id"]
+
+
+async def test_signup_never_joins_an_existing_default_company(client, factory, db_session):
+    existing = await factory.company(name="Default Company")
+    await factory.user(company=existing, role=UserRole.owner)
+    await db_session.commit()
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": "+919870000004", "otp": "000000", "signup": True},
+    )
+    me = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {resp.json()['token']}"}
+    )
+    assert me.json()["company_id"] != str(existing.id)
+
+
+async def test_existing_user_logs_in_without_signup(client, factory, db_session):
+    company = await factory.company()
+    user = await factory.user(company=company, role=UserRole.supervisor, phone="+919870000005")
+    await db_session.commit()
+    resp = await client.post(
+        "/api/v1/auth/login", json={"phone": "9870000005", "otp": "000000"}
+    )
+    assert resp.status_code == 200
+    me = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {resp.json()['token']}"}
+    )
+    assert me.json()["id"] == str(user.id)
+

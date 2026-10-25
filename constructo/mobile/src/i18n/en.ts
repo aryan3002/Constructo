@@ -32,7 +32,7 @@ export const en = {
     homeownerLoginSubtitle: "Enter your number — we'll text a one-time code.",
     phoneLabel: 'Phone number',
     phonePlaceholder: '98765 43210',
-    phoneHintStaff: 'Use the number your company invited. A new number starts a fresh builder workspace.',
+    phoneHintStaff: 'Use the number your company invited. New builders sign up on the Neev website.',
     phoneHintHomeowner: "The number you'll use to sign in from now on.",
     continue: 'Continue',
     sendCode: 'Send code',
@@ -69,6 +69,8 @@ export const en = {
       invalid_otp: "That code didn't match. Check the SMS and try again.",
       not_allowed: "This number isn't enabled for Neev yet.",
       deactivated: 'This account was deactivated. Ask your company owner to restore it.',
+      not_registered:
+        "This number isn't registered. Ask your company for an invite, or sign up on the web.",
       invalid_code: "We don't recognise that join code. Check it with your builder.",
       not_found: 'That home is no longer on Neev. Ask your builder for a new code.',
       already_claimed: 'This invite was already used. If that was you, sign in instead.',

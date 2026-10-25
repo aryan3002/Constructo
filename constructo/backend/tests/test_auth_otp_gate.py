@@ -7,7 +7,10 @@ from app.config import settings
 
 
 async def _login(client, phone: str, otp: str):
-    return await client.post("/api/v1/auth/login", json={"phone": phone, "otp": otp})
+    return await client.post(
+        "/api/v1/auth/login",
+        json={"phone": phone, "otp": otp, "signup": True},
+    )
 
 
 async def test_dev_otp_default_allows_login(client):

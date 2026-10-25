@@ -71,6 +71,7 @@ const CODE_MAP: Record<string, Omit<AuthErrorView, 'message'> & { key: string }>
   invalid_otp: { key: 'auth.err.invalid_otp', action: 'retry' },
   not_allowed: { key: 'auth.err.not_allowed', action: 'help', helpSection: 'notEnabled' },
   deactivated: { key: 'auth.err.deactivated', action: 'changeNumber' },
+  not_registered: { key: 'auth.err.not_registered', action: 'changeNumber' },
   invalid_code: { key: 'auth.err.invalid_code', action: 'backToCode' },
   not_found: { key: 'auth.err.not_found', action: 'backToCode' },
   already_claimed: { key: 'auth.err.already_claimed', action: 'signIn' },

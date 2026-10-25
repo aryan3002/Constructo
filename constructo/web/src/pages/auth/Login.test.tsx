@@ -100,6 +100,7 @@ describe('auth/Login', () => {
     expect(JSON.parse((loginCall![1] as RequestInit).body as string)).toEqual({
       phone: '+919876543210',
       otp: '000000',
+      signup: true,
     })
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/', { replace: true }))
   })

@@ -4,7 +4,10 @@ from app.models import HomeownerMember, HomeownerSubRole, MemberStatus, UserRole
 
 
 async def _login(client, phone: str) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": phone, "otp": "000000", "signup": True},
+    )
     assert resp.status_code == 200
     return resp.json()["token"]
 
@@ -316,6 +319,6 @@ async def test_deleted_account_locks_out_old_token_but_allows_fresh_signup(clien
     # deletion is a fresh start, not account recovery (see "Why anonymize,
     # not hard-delete" at the top of this plan).
     login2 = await client.post(
-        "/api/v1/auth/login", json={"phone": phone, "otp": "000000"}
+        "/api/v1/auth/login", json={"phone": phone, "otp": "000000", "signup": True}
     )
     assert login2.status_code == 200
