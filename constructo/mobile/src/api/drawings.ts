@@ -8,7 +8,7 @@
  * that client-side with {@link withSupersession} so the screen can warn "don't
  * build from this" and offer the latest revision.
  */
-import { request } from './client'
+import { fetchWithTimeout, request, UPLOAD_TIMEOUT_MS } from './client'
 
 export type DrawingKind =
   | 'plan'
@@ -138,11 +138,11 @@ export async function uploadDrawing(opts: {
     throw new Error('uploads_unavailable')
   }
   const blob = await (await fetch(opts.file.uri)).blob()
-  const putRes = await fetch(presign.put_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': opts.file.contentType },
-    body: blob,
-  })
+  const putRes = await fetchWithTimeout(
+    presign.put_url,
+    { method: 'PUT', headers: { 'Content-Type': opts.file.contentType }, body: blob },
+    UPLOAD_TIMEOUT_MS,
+  )
   if (!putRes.ok) throw new Error('upload_failed')
   return drawingsApi.create({
     site_id: opts.siteId,

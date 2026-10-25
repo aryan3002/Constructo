@@ -10,7 +10,7 @@
  * sets the multipart boundary).
  */
 import { API_BASE } from './config'
-import { ApiError, request } from './client'
+import { ApiError, fetchWithTimeout, request, UPLOAD_TIMEOUT_MS } from './client'
 import type { Paginated, Site } from './types'
 import { getToken } from '../store/secure'
 
@@ -51,11 +51,15 @@ export async function submitCapture(p: CapturePayload): Promise<CaptureResult> {
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}/api/v1/capture`, {
-    method: 'POST',
-    headers, // intentionally NO Content-Type — RN sets the multipart boundary
-    body: form,
-  })
+  const res = await fetchWithTimeout(
+    `${API_BASE}/api/v1/capture`,
+    {
+      method: 'POST',
+      headers, // intentionally NO Content-Type — RN sets the multipart boundary
+      body: form,
+    },
+    UPLOAD_TIMEOUT_MS,
+  )
   if (!res.ok) {
     let message = res.statusText
     let code = 'http_error'

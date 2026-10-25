@@ -25,6 +25,7 @@ export class ChatSocket {
   private connecting = false
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private pongTimeout: ReturnType<typeof setTimeout> | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private opts: ChatSocketOpts) {}
 
@@ -38,11 +39,17 @@ export class ChatSocket {
     // overwrite this.ws and orphan the first socket. The flag is released when
     // the socket opens or closes/fails (so the next reconnect can proceed).
     if (this.connecting) return
+    // close() is final: a reconnect that was already in flight must not revive
+    // the socket (sign-out would otherwise reopen it under the old ticket).
+    if (this.closedByUser) return
     this.connecting = true
-    this.closedByUser = false
     let ws: WebSocket
     try {
       const ticket = await this.opts.getTicket()
+      if (this.closedByUser) {
+        this.connecting = false
+        return
+      }
       const make = this.opts.makeWebSocket ?? ((url: string) => new WebSocket(url))
       ws = make(`${this.opts.baseWsUrl}?ticket=${encodeURIComponent(ticket)}`)
     } catch (err) {
@@ -126,8 +133,14 @@ export class ChatSocket {
     this.send({ v: 1, type: 'typing', conv: convId })
   }
 
+  /** Permanently shut this socket: cancels any pending reconnect. A closed
+   *  socket is not reused — make a new {@link ChatSocket} to connect again. */
   close(): void {
     this.closedByUser = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     if (this.pingTimer) {
       clearInterval(this.pingTimer)
       this.pingTimer = null
@@ -166,7 +179,9 @@ export class ChatSocket {
     const delay =
       Math.min(BACKOFF_BASE_MS * 2 ** (this.attempts - 1), BACKOFF_CAP_MS) +
       Math.floor(Math.random() * 250)
-    setTimeout(() => {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       void this.connect().catch(() => this.scheduleReconnect())
     }, delay)
   }

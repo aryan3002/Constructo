@@ -33,7 +33,12 @@ import {
   type CursorOut,
 } from '../api/chat'
 import { CHAT_WS_URL } from '../api/config'
-import { uploadMultipart, type UploadFile } from '../api/client'
+import {
+  fetchWithTimeout,
+  uploadMultipart,
+  UPLOAD_TIMEOUT_MS,
+  type UploadFile,
+} from '../api/client'
 import { loadThreadCache, maxCachedSeq, mergeMessages } from './cache'
 import { effectiveMediaKind, signedMediaContentType } from './media'
 import { drainPages } from './paging'
@@ -235,11 +240,11 @@ export async function performSend(item: ChatOutboxItem): Promise<SendResult> {
         if (presign.upload_mode === 'presigned' && presign.put_url) {
           try {
             const blob = await (await fetch(file.uri)).blob()
-            const putRes = await fetch(presign.put_url, {
-              method: 'PUT',
-              headers: { 'Content-Type': contentType },
-              body: blob,
-            })
+            const putRes = await fetchWithTimeout(
+              presign.put_url,
+              { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob },
+              UPLOAD_TIMEOUT_MS,
+            )
             if (putRes.ok) {
               attachmentKey = presign.key
               // The presign path returns no sha256; the server dedupes on key here.

@@ -48,7 +48,48 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** React Native's Android HTTP client never times out on its own, so one
+ * stalled request would hang its caller (and every chat send queued behind it)
+ * until the app restarts. Every API call gets an explicit deadline. */
+export const JSON_TIMEOUT_MS = 15_000
+/** Multipart uploads and presigned PUTs carry photo/voice bytes on slow links. */
+export const UPLOAD_TIMEOUT_MS = 90_000
+/** Endpoints that wait on a model (Ask, drafts, extraction) answer slower. */
+export const AI_TIMEOUT_MS = 60_000
+
+/** A request that hit its deadline. Carries no HTTP status, so every retry
+ *  classifier treats it like any other network failure (retryable). */
+export class TimeoutError extends Error {
+  code = 'timeout'
+  constructor() {
+    super('Request timed out')
+    this.name = 'TimeoutError'
+  }
+}
+
+/** `fetch` with an AbortController deadline; a timeout rejects with
+ *  {@link TimeoutError}. */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = JSON_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if (controller.signal.aborted) throw new TimeoutError()
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function request<T>(
+  path: string,
+  { timeoutMs, ...init }: RequestInit & { timeoutMs?: number } = {},
+): Promise<T> {
   const existingHeaders =
     init.headers instanceof Headers
       ? Object.fromEntries((init.headers as Headers).entries())
@@ -57,7 +98,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const token = await getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  const res = await fetchWithTimeout(`${API_BASE}${path}`, { ...init, headers }, timeoutMs)
   if (!res.ok) {
     let message = res.statusText
     let code = 'http_error'
@@ -90,7 +131,11 @@ export async function uploadMultipart<T>(path: string, form: FormData): Promise<
   const headers = new Headers()
   const token = await getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', body: form, headers })
+  const res = await fetchWithTimeout(
+    `${API_BASE}${path}`,
+    { method: 'POST', body: form, headers },
+    UPLOAD_TIMEOUT_MS,
+  )
   if (!res.ok) {
     let message = res.statusText
     let code = 'http_error'
@@ -259,6 +304,7 @@ export const homeowner = {
     request<DesignProfile>('/api/v1/homeowner/design/profile', {
       method: 'PUT',
       body: JSON.stringify(body),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
   /**
    * Add a design selection (room-scoped + status-aware). POST /design/selections,
@@ -296,6 +342,7 @@ export const homeowner = {
     request<HomeownerAskResult>('/api/v1/homeowner/ask', {
       method: 'POST',
       body: JSON.stringify({ question, site_id: siteId }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
   requests: (siteId?: string) =>
     request<HomeownerRequest[]>(`/api/v1/homeowner/requests${qs({ site_id: siteId })}`),
@@ -633,6 +680,7 @@ export const design = {
   retryExtraction: (referenceId: string) =>
     request<ProfilerReference>(`/api/v1/design/references/${referenceId}/extract`, {
       method: 'POST',
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   /** Contractor-side inbox counts: briefs awaiting sign-off, answered

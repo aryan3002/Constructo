@@ -12,7 +12,7 @@
  * to mirror the backend; the `{ error: { code, message } }` envelope is unwrapped
  * by the shared `request`.
  */
-import { request, ApiError } from './client'
+import { AI_TIMEOUT_MS, request, ApiError } from './client'
 import type { Paginated, Role, Site } from './types'
 
 export { ApiError }
@@ -555,6 +555,7 @@ export const owner = {
     request<PackAskResult>('/api/v1/dispute-pack/ask', {
       method: 'POST',
       body: JSON.stringify({ site_id: siteId, counterparty, question }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   /** Advance Guard: a counterparty's company-wide unadjusted advance (2.5 L2). */

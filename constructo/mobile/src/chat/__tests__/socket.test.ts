@@ -124,3 +124,32 @@ test('reconnects with backoff and resubscribes', async () => {
   const subs = second.sent.map((s) => JSON.parse(s)).filter((f) => f.type === 'sub')
   expect(subs.length).toBe(1) // resubscribed after reconnect
 })
+
+test('close() cancels a pending reconnect and is final', async () => {
+  const { socket } = makeSocket()
+  await socket.connect()
+  const first = FakeWS.instances[0]
+  first.open()
+  first.close() // server drop → a reconnect timer is armed
+  socket.close() // user signs out before it fires
+  await jest.advanceTimersByTimeAsync(60_000)
+  expect(FakeWS.instances).toHaveLength(1)
+  // A stray connect() after close() doesn't revive it either.
+  await socket.connect()
+  expect(FakeWS.instances).toHaveLength(1)
+})
+
+test('close() during an in-flight ticket fetch opens no socket', async () => {
+  let releaseTicket: (t: string) => void = () => undefined
+  const socket = new ChatSocket({
+    getTicket: () => new Promise<string>((r) => (releaseTicket = r)),
+    baseWsUrl: 'wss://api.test/api/v1/chat/ws',
+    makeWebSocket: (url) => new FakeWS(url) as unknown as WebSocket,
+    onFrame: () => undefined,
+  })
+  const p = socket.connect()
+  socket.close()
+  releaseTicket('ticket-1')
+  await p
+  expect(FakeWS.instances).toHaveLength(0)
+})

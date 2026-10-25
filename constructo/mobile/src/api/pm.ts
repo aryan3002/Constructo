@@ -11,7 +11,7 @@
  * Reuses the shared mobile client (`request` + `ApiError`) by IMPORT ONLY. All
  * wire shapes are snake_case to mirror the backend.
  */
-import { request, ApiError } from './client'
+import { AI_TIMEOUT_MS, request, ApiError } from './client'
 import type { Paginated, Site } from './types'
 
 export { ApiError }
@@ -91,6 +91,7 @@ export const pm = {
   draftDpr: (siteId: string, date?: string) =>
     request<Dpr>(`/api/v1/dpr/sites/${siteId}/draft${qs({ date })}`, {
       method: 'POST',
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   /** Fetch the stored DPR for a site+date (404 if none drafted yet). */

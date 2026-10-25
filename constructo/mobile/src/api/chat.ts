@@ -6,7 +6,7 @@
  * — a typed card rides `capture_type`/`fields`. `client_msg_id` makes a send
  * idempotent so the optimistic UI / offline retry never double-posts.
  */
-import { request, uploadMultipart, type UploadFile } from './client'
+import { AI_TIMEOUT_MS, request, uploadMultipart, type UploadFile } from './client'
 
 export type MessageSide = 'homeowner' | 'contractor'
 
@@ -283,6 +283,7 @@ export const chatApi = {
     return request<AskResult>('/api/v1/ask', {
       method: 'POST',
       body: JSON.stringify({ site_id: siteId, question }),
+      timeoutMs: AI_TIMEOUT_MS,
     })
   },
 
