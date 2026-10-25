@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -24,6 +25,7 @@ export function statusTone(s: ProfileStatus): Status {
 }
 
 export default function DesignHub() {
+  const insets = useSafeAreaInsets()
   const { theme } = useTheme()
   const router = useRouter()
 
@@ -52,7 +54,7 @@ export default function DesignHub() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.md, paddingBottom: SPACE.xxl, gap: SPACE.lg }}
     >
       <SubHeader title="Design briefs" sub="Per-site design direction" onBack={() => router.replace('/(contractor)/owner/brief')} />
 

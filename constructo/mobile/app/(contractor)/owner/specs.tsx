@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -43,6 +44,7 @@ const STATUS_HINT: Record<SpecApprovalStatus, string> = {
 type Filter = 'all' | 'pending' | 'approved' | 'rejected'
 
 export default function Specs() {
+  const insets = useSafeAreaInsets()
   const { theme } = useTheme()
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<{ spec: Spec; siteName: string } | null>(null)
@@ -83,7 +85,7 @@ export default function Specs() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.md, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       <View style={{ gap: 2 }}>
         <H1 style={{ fontSize: 24 }}>Material spec schedule</H1>

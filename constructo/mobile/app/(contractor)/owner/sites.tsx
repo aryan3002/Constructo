@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -59,6 +60,7 @@ const coerce = (s: string): Status =>
   s === 'ok' || s === 'warn' || s === 'risk' || s === 'info' || s === 'quiet' ? s : 'info'
 
 export default function Sites() {
+  const insets = useSafeAreaInsets()
   const { lang } = useT()
   const { theme } = useTheme()
   const router = useRouter()
@@ -127,7 +129,7 @@ export default function Sites() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
-      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xxl, gap: SPACE.md }}
+      contentContainerStyle={{ padding: SPACE.gutter, paddingTop: insets.top + SPACE.md, paddingBottom: SPACE.xxl, gap: SPACE.md }}
     >
       <View style={{ gap: 2 }}>
         <H1 style={{ fontSize: 26 }}>{t.title}</H1>

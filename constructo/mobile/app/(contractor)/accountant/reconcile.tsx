@@ -15,6 +15,7 @@
  * Dense desk rows — 44px rows, scannable, no big field targets.
  */
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -43,6 +44,7 @@ import {
 } from '../../../src/ui'
 
 export default function AccountantReconcile() {
+  const insets = useSafeAreaInsets()
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
@@ -60,7 +62,7 @@ export default function AccountantReconcile() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{
         padding: SPACE.lg,
-        paddingTop: SPACE.xl,
+        paddingTop: insets.top + SPACE.md,
         paddingBottom: SPACE.xxl,
         gap: SPACE.md,
       }}

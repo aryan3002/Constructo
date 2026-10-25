@@ -13,6 +13,7 @@
  */
 import { useState } from 'react'
 import { ActivityIndicator, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -63,6 +64,7 @@ function reasonLabel(t: (k: string) => string, reason: string): string {
 }
 
 export default function AccountantSite() {
+  const insets = useSafeAreaInsets()
   const { t } = useT()
   const { theme } = useTheme()
   const router = useRouter()
@@ -81,7 +83,7 @@ export default function AccountantSite() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{
         padding: SPACE.lg,
-        paddingTop: SPACE.xl,
+        paddingTop: insets.top + SPACE.md,
         paddingBottom: SPACE.xxl,
         gap: SPACE.md,
       }}

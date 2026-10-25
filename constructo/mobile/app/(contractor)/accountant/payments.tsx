@@ -12,6 +12,7 @@
  * Totals use MoneyCell with an explicit sign so direction reads at a glance.
  */
 import { ActivityIndicator, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
@@ -53,6 +54,7 @@ function formatDate(iso: string, lang: 'en' | 'hi'): string {
 }
 
 export default function AccountantPayments() {
+  const insets = useSafeAreaInsets()
   const { t, lang } = useT()
   const { theme } = useTheme()
 
@@ -74,7 +76,7 @@ export default function AccountantPayments() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       contentContainerStyle={{
         padding: SPACE.lg,
-        paddingTop: SPACE.xl,
+        paddingTop: insets.top + SPACE.md,
         paddingBottom: SPACE.xxl,
         gap: SPACE.md,
       }}
