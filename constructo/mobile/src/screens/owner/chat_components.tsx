@@ -9,16 +9,16 @@
  * curated homeowner channel so the owner can instantly tell it from the crew thread.
  *
  * Owner-branch-specific (NOT in src/ui) — built on the shared kit + tokens,
- * mirroring the surrounding `owner/_components.tsx` surfaces.
+ * mirroring the surrounding `owner/components.tsx` surfaces.
  */
 import { Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { useT } from '../../../src/i18n/I18nProvider'
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, TAP } from '../../../src/theme/tokens'
-import { BodyStrong, Micro, Mono, Small } from '../../../src/ui'
-import type { ConversationSummary } from '../../../src/api/chat'
+import { useT } from '../../i18n/I18nProvider'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE, TAP } from '../../theme/tokens'
+import { BodyStrong, Micro, Mono, Small } from '../../ui'
+import type { ConversationSummary } from '../../api/chat'
 
 const STR = {
   en: {

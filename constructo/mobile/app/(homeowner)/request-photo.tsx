@@ -21,7 +21,7 @@ import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../src/theme/tokens'
 import { BodyStrong, Button, Chip, Screen, Small, SubHeader, useToast } from '../../src/ui'
-import { ROOM_PRESETS } from '../_requests.util'
+import { ROOM_PRESETS } from '../../src/screens/requests.util'
 
 type Lang = 'en' | 'hi'
 

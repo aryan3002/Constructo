@@ -14,8 +14,8 @@ import { AP, SPACE, type Status } from '../../../src/theme/tokens'
 import { design, profileStatusLabel, type ProfileDetail, type ProfileStatus } from '../../../src/api/ownerDesign'
 import { owner } from '../../../src/api/owner'
 import { Body, Card, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel } from './_components'
-import { SubHeader } from './_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel } from '../../../src/screens/owner/components'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 
 export function statusTone(s: ProfileStatus): Status {
   if (s === 'approved' || s === 'locked' || s === 'materialized') return 'ok'

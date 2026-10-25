@@ -8,10 +8,10 @@
  */
 import { View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
-import { useTheme } from '../../src/theme/ThemeProvider'
-import { SPACE } from '../../src/theme/tokens'
-import { Body, Button, Eyebrow, Small, StatusPill } from '../../src/ui'
-import type { HeadsUp, HeadsUpAction } from '../../src/api/client'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE } from '../../theme/tokens'
+import { Body, Button, Eyebrow, Small, StatusPill } from '../../ui'
+import type { HeadsUp, HeadsUpAction } from '../../api/client'
 
 export function HeadsUpSection({
   data,

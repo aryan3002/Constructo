@@ -2,7 +2,7 @@
  * Local helpers for the Household screen (app/(homeowner)/household.tsx).
  * Owned by the household flow only — not a shared module.
  */
-import type { HomeownerSubRole } from '../../src/api/types'
+import type { HomeownerSubRole } from '../../api/types'
 
 export type Lang = 'en' | 'hi'
 

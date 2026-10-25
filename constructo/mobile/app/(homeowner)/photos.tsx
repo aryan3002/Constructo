@@ -55,8 +55,8 @@ import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../../src/theme/tokens'
-import { POLICY_KEY, DEFAULT_POLICY } from './_storage.util'
-import type { PhotoPolicy } from './_storage.util'
+import { POLICY_KEY, DEFAULT_POLICY } from '../../src/screens/homeowner/storage.util'
+import type { PhotoPolicy } from '../../src/screens/homeowner/storage.util'
 import {
   Body,
   BodyStrong,
@@ -79,7 +79,7 @@ import {
   useToast,
   FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
-import { ROOM_PRESETS } from '../_requests.util'
+import { ROOM_PRESETS } from '../../src/screens/requests.util'
 
 /** Either language's string table — union of both branches. */
 type Strings = typeof STR[keyof typeof STR]

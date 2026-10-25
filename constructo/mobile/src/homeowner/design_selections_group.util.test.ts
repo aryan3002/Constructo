@@ -1,9 +1,9 @@
-// Tests for groupSelections (app/(homeowner)/_design.util) — the room route
+// Tests for groupSelections (src/screens/homeowner/design.util) — the room route
 // must carry a real room NAME so the References chip's push into
 // design/references/[room] lands on a slug areaForRoom can actually match
 // (it matches human names like "kitchen", never a raw space UUID).
 // Lives under src/ (NOT app/) — Expo Router treats every app/ file as a route.
-import { groupSelections } from '../../app/(homeowner)/_design.util'
+import { groupSelections } from '../screens/homeowner/design.util'
 import type { DesignSelection } from '../api/types'
 
 const sel = (overrides: Partial<DesignSelection> = {}): DesignSelection => ({

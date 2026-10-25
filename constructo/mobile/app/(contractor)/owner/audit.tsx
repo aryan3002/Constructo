@@ -19,8 +19,8 @@ import { AP, SPACE } from '../../../src/theme/tokens'
 import { audit, type Audit, type Survey } from '../../../src/api/ownerAudit'
 import { owner, type Site } from '../../../src/api/owner'
 import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from './_components'
-import { ScoreDial, SubHeader, riskStatus, scoreStatus } from './_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from '../../../src/screens/owner/components'
+import { ScoreDial, SubHeader, riskStatus, scoreStatus } from '../../../src/screens/owner/audit.components'
 
 const SECTION_OPTIONS = [
   'Civil work', 'Plumbing & sanitary', 'Electrical', 'ELV', 'Flooring',

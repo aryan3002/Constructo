@@ -25,7 +25,7 @@ import { AP, SPACE, type Status } from '../../../src/theme/tokens'
 import { request } from '../../../src/api/client'
 import { owner, type Decision, type SiteCard } from '../../../src/api/owner'
 import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from './_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from '../../../src/screens/owner/components'
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

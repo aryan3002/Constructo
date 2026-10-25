@@ -32,7 +32,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { homeowner, type HeadsUp, type HeadsUpAction } from '../../src/api/client'
-import { HeadsUpSection } from './_heads_up'
+import { HeadsUpSection } from '../../src/screens/homeowner/heads_up'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -58,7 +58,7 @@ import {
   formatINR,
 } from '../../src/ui'
 import type { AttentionItem, Update } from '../../src/api/types'
-import { REQUEST_STATUS_META, slaPromise } from '../_requests.util'
+import { REQUEST_STATUS_META, slaPromise } from '../../src/screens/requests.util'
 
 // ─── i18n table (en / hi) ───────────────────────────────────────────────────
 

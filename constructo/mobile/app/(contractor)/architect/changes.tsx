@@ -13,7 +13,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { siteChangesApi } from '../../../src/api/siteChanges'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Card, Small } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SiteChangeCard, SubHeader } from './_components'
+import { ErrorBlock, LoadingBlock, SiteChangeCard, SubHeader } from '../../../src/screens/architect/components'
 
 export default function SiteChanges() {
   const { theme } = useTheme()

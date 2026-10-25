@@ -2,7 +2,7 @@
  * Pure helpers for the Account hub (more.tsx).
  * Exported here so they can be unit-tested without rendering React components.
  */
-import type { Language } from '../../../src/api/types'
+import type { Language } from '../../api/types'
 
 // ---------------------------------------------------------------------------
 // Role labels — en/hi — for every contractor role.

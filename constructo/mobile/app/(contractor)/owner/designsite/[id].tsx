@@ -15,8 +15,8 @@ import { SPACE, type Status } from '../../../../src/theme/tokens'
 import { design, profileStatusLabel, type Conflict } from '../../../../src/api/ownerDesign'
 import { owner } from '../../../../src/api/owner'
 import { Body, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
-import { SubHeader } from '../_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel } from '../../../../src/screens/owner/components'
+import { SubHeader } from '../../../../src/screens/owner/audit.components'
 import { statusTone } from '../design'
 
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())

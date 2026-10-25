@@ -14,8 +14,8 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import { audit, type AuditFinding, type AuditSection } from '../../../../src/api/ownerAudit'
 import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title, useToast } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
-import { ITEM_META, SEVERITY_META, ScoreDial, SubHeader, scoreStatus } from '../_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel } from '../../../../src/screens/owner/components'
+import { ITEM_META, SEVERITY_META, ScoreDial, SubHeader, scoreStatus } from '../../../../src/screens/owner/audit.components'
 
 export default function AuditSite() {
   const { id } = useLocalSearchParams<{ id: string }>()

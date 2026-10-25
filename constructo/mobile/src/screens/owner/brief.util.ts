@@ -3,8 +3,8 @@
  * evaluates files in app/ as routes — tests must live in src/ and import
  * from here, NOT from brief.tsx directly).
  */
-import { severityToStatus, type Status } from '../../../src/theme/tokens'
-import type { BriefSite, Risk } from '../../../src/api/owner'
+import { severityToStatus, type Status } from '../../theme/tokens'
+import type { BriefSite, Risk } from '../../api/owner'
 
 /** All ranked risks across all sites, sorted by severity (high → low). */
 export interface RankedRisk {

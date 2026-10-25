@@ -11,7 +11,7 @@ import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { Body, Button, Card, Display, H2, Screen } from '../../../src/ui'
-import { VoiceOutButton } from './_voice'
+import { VoiceOutButton } from '../../../src/screens/mukadam/voice'
 
 // TODO(config): wire the real site/office support number from the bound site.
 // Until a real number exists the call button stays hidden — dialling a placeholder

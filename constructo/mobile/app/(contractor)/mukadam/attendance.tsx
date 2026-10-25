@@ -38,7 +38,7 @@ import { useOutbox } from '../../../src/offline/useOutbox'
 import { captureSites, type CaptureMedia } from '../../../src/api/capture'
 import type { Site } from '../../../src/api/types'
 import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
-import { VoiceOutButton, MUKADAM_TAP, tapFeedback } from './_voice'
+import { VoiceOutButton, MUKADAM_TAP, tapFeedback } from '../../../src/screens/mukadam/voice'
 
 const STR = {
   en: {

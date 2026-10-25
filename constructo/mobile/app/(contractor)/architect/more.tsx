@@ -12,7 +12,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { siteChangesApi } from '../../../src/api/siteChanges'
 import { Card, ListRow, Small, StatusPill } from '../../../src/ui'
-import { SubHeader } from './_components'
+import { SubHeader } from '../../../src/screens/architect/components'
 
 export default function DesignerMore() {
   const { me } = useAuth()

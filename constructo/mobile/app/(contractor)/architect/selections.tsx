@@ -14,7 +14,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { specsApi, type RoutingStatus, type Spec } from '../../../src/api/specs'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Card, Chip, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, ROUTING_META, SubHeader } from './_components'
+import { ErrorBlock, LoadingBlock, ROUTING_META, SubHeader } from '../../../src/screens/architect/components'
 
 type Filter = 'all' | 'needs' | 'out' | 'released'
 

@@ -11,14 +11,14 @@ import { type ReactNode } from 'react'
 import { ActivityIndicator, Platform, Pressable, UIManager, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, STATUS, TAP } from '../../../src/theme/tokens'
-import { Body, BodyStrong, EmptyState, H2, MonoSm, Small, StatusDot, StatusPill } from '../../../src/ui'
-import type { CaptureKind } from '../../../src/api/supervisor'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE, STATUS, TAP } from '../../theme/tokens'
+import { Body, BodyStrong, EmptyState, H2, MonoSm, Small, StatusDot, StatusPill } from '../../ui'
+import type { CaptureKind } from '../../api/supervisor'
 
 // CaptureCard + MessageBubble live in the shared chat module so the owner Chat
 // screen can reuse them. supervisor chat.tsx still uses its own inline Pressable bubble.
-export { CaptureCard, MessageBubble } from '../../../src/chat/MessageView'
+export { CaptureCard, MessageBubble } from '../../chat/MessageView'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)

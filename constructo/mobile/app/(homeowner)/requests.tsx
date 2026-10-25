@@ -33,7 +33,7 @@ import {
   SubHeader,
   ListRow,
 } from '../../src/ui'
-import { REQUEST_STATUS_META, slaPromise } from '../_requests.util'
+import { REQUEST_STATUS_META, slaPromise } from '../../src/screens/requests.util'
 
 type Lang = 'en' | 'hi'
 

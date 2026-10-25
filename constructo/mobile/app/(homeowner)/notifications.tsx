@@ -50,7 +50,7 @@ import {
   withCadence,
   type Cadence,
   type Lang,
-} from './_settings.util'
+} from '../../src/screens/homeowner/settings.util'
 
 // ---- Delivery method helpers -----------------------------------------------
 

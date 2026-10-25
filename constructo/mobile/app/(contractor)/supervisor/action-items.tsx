@@ -27,7 +27,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { Body, BodyStrong, Button, EmptyState, EvidenceChip, Eyebrow, Mono, Small, StatusPill } from '../../../src/ui'
 import { actionItemsApi, type ActionItem } from '../../../src/api/actionItems'
-import { SPACE } from './_components'
+import { SPACE } from '../../../src/screens/supervisor/components'
 
 const STR = {
   en: {

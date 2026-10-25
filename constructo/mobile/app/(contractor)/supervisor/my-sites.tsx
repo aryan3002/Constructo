@@ -37,7 +37,7 @@ import {
   type SiteEvent,
   type SiteEventType,
 } from '../../../src/api/supervisor'
-import { ErrorState, Loading, SPACE } from './_components'
+import { ErrorState, Loading, SPACE } from '../../../src/screens/supervisor/components'
 import type { Paginated } from '../../../src/api/types'
 
 const STR = {

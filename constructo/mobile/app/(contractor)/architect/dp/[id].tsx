@@ -20,7 +20,7 @@ import { design as briefApi, type MaterializeOut, type ProfilerBriefApproval, ty
 import { designerActions, actionLabel, type DesignerActionType } from '../../../../src/architect/brief_actions.util'
 import { splitClarifications } from '../../../../src/architect/clarifications.util'
 import { Body, BodyStrong, Button, Card, Eyebrow, ListRow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader, timeAgo } from '../_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader, timeAgo } from '../../../../src/screens/architect/components'
 
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 

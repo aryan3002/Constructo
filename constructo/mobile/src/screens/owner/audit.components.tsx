@@ -6,9 +6,9 @@ import type { ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { AP, SPACE, type Status } from '../../../src/theme/tokens'
-import { H2, Mono, ProgressRing, Small } from '../../../src/ui'
+import { useTheme } from '../../theme/ThemeProvider'
+import { AP, SPACE, type Status } from '../../theme/tokens'
+import { H2, Mono, ProgressRing, Small } from '../../ui'
 
 /** Quality score → status tone (higher is better). */
 export function scoreStatus(score: number | null | undefined): Status {

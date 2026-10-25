@@ -12,8 +12,8 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../../src/theme/tokens'
 import { design, type Area, type Theme, type ThemeAction } from '../../../../src/api/ownerDesign'
 import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
-import { SubHeader } from '../_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel } from '../../../../src/screens/owner/components'
+import { SubHeader } from '../../../../src/screens/owner/audit.components'
 
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 

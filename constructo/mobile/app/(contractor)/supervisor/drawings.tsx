@@ -19,7 +19,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { drawingsApi, withSupersession, type DrawingKind, type DrawingView } from '../../../src/api/drawings'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Card, Chip, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from './_eng.components'
+import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from '../../../src/screens/supervisor/eng.components'
 
 const TRADE_LABEL: Record<DrawingKind, string> = {
   plan: 'Plan',

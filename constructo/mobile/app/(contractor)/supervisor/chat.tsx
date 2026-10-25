@@ -63,8 +63,8 @@ import {
 } from '../../../src/chat/MessageView'
 import { nivaanProposal, isNivaanAnswer } from '../../../src/chat/nivaanProposal'
 import { systemNotice } from '../../../src/chat/systemNotice'
-import { CalmEmpty, ErrorState, Loading } from './_components'
-import { DisputeSheet } from './_dispute'
+import { CalmEmpty, ErrorState, Loading } from '../../../src/screens/supervisor/components'
+import { DisputeSheet } from '../../../src/screens/supervisor/dispute'
 
 const STR = {
   en: {

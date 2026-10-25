@@ -13,7 +13,7 @@ import { SPACE, type Status } from '../../../src/theme/tokens'
 import { request } from '../../../src/api/client'
 import { owner } from '../../../src/api/owner'
 import { Body, Card, H1, Mono, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock } from './_components'
+import { ErrorBlock, LoadingBlock } from '../../../src/screens/owner/components'
 
 type SpecApprovalStatus = 'pending' | 'approved' | 'rejected'
 

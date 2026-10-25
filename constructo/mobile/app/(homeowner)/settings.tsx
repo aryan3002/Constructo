@@ -37,8 +37,8 @@ import {
   Small,
   StepUpModal,
 } from '../../src/ui'
-import { summaryCadence, type Lang } from './_settings.util'
-import { POLICY_KEY } from './_storage.util'
+import { summaryCadence, type Lang } from '../../src/screens/homeowner/settings.util'
+import { POLICY_KEY } from '../../src/screens/homeowner/storage.util'
 
 const STR = {
   en: {

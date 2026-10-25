@@ -13,7 +13,7 @@ import {
   scopeRanked,
   scopeSites,
   siteWorstStatus,
-} from '../../app/(contractor)/owner/_brief.util'
+} from '../screens/owner/brief.util'
 import type { BriefSite, Risk } from '../api/owner'
 
 // ---------------------------------------------------------------------------

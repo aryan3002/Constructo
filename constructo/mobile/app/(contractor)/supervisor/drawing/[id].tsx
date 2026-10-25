@@ -15,7 +15,7 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { drawingsApi, withSupersession, type DrawingKind } from '../../../../src/api/drawings'
 import { Body, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from '../_eng.components'
+import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from '../../../../src/screens/supervisor/eng.components'
 
 const TRADE_LABEL: Record<DrawingKind, string> = {
   plan: 'Plan',

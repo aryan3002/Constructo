@@ -46,7 +46,7 @@ import {
   drawingKindLabel,
   drawingSummary,
   DESIGN_STR,
-} from '../_design.util'
+} from '../../../src/screens/homeowner/design.util'
 import type { Drawing } from '../../../src/api/types'
 
 // ---- strings -----------------------------------------------------------------

@@ -9,12 +9,12 @@ import { Ionicons } from '@expo/vector-icons'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { useAndroidKeyboardVisible } from '../../../src/ui/useKeyboardVisible'
-import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
-import type { RoutingStatus } from '../../../src/api/specs'
-import type { SiteChange, SiteChangeStatus } from '../../../src/api/siteChanges'
-import { Body, Button, Card, H2, Micro, Small, StatusPill, Title } from '../../../src/ui'
+import { useTheme } from '../../theme/ThemeProvider'
+import { useAndroidKeyboardVisible } from '../../ui/useKeyboardVisible'
+import { SPACE, TAP, type Status } from '../../theme/tokens'
+import type { RoutingStatus } from '../../api/specs'
+import type { SiteChange, SiteChangeStatus } from '../../api/siteChanges'
+import { Body, Button, Card, H2, Micro, Small, StatusPill, Title } from '../../ui'
 
 // ---------------------------------------------------------------------------
 // Routing + change metadata (tone + label), shared across the designer screens.

@@ -11,7 +11,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Avatar, Button, Card, H2, ListRow, Small, StatusPill } from '../../../src/ui'
-import { LoadingBlock, SubHeader } from './_components'
+import { LoadingBlock, SubHeader } from '../../../src/screens/architect/components'
 
 export default function DesignerProfile() {
   const { me, signOut } = useAuth()

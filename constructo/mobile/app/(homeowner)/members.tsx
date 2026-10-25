@@ -48,7 +48,7 @@ import {
   designLine,
   subRoleLabel,
   type Lang,
-} from './_settings.util'
+} from '../../src/screens/homeowner/settings.util'
 
 const STR = {
   en: {

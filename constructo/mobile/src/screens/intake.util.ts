@@ -4,7 +4,7 @@
  */
 import type { ImageSourcePropType } from 'react-native'
 
-import type { DesignProfile } from '../src/api/types'
+import type { DesignProfile } from '../api/types'
 
 export type Lang = 'en' | 'hi'
 
@@ -31,42 +31,42 @@ export const STYLE_OPTIONS: StyleOption[] = [
   {
     key: 'minimal',
     label: { en: 'Minimal & calm', hi: 'सरल और शांत' },
-    image: require('../assets/styles/minimal.jpg'),
+    image: require('../../assets/styles/minimal.jpg'),
   },
   {
     key: 'modern',
     label: { en: 'Modern', hi: 'आधुनिक' },
-    image: require('../assets/styles/modern.jpg'),
+    image: require('../../assets/styles/modern.jpg'),
   },
   {
     key: 'traditional',
     label: { en: 'Traditional', hi: 'पारंपरिक' },
-    image: require('../assets/styles/traditional.jpg'),
+    image: require('../../assets/styles/traditional.jpg'),
   },
   {
     key: 'warm-wood',
     label: { en: 'Warm wood', hi: 'गर्म लकड़ी' },
-    image: require('../assets/styles/warm-wood.jpg'),
+    image: require('../../assets/styles/warm-wood.jpg'),
   },
   {
     key: 'luxe',
     label: { en: 'Luxe', hi: 'भव्य' },
-    image: require('../assets/styles/luxe.jpg'),
+    image: require('../../assets/styles/luxe.jpg'),
   },
   {
     key: 'indoor-plants',
     label: { en: 'Indoor plants', hi: 'इनडोर पौधे' },
-    image: require('../assets/styles/indoor-plants.jpg'),
+    image: require('../../assets/styles/indoor-plants.jpg'),
   },
   {
     key: 'earthy',
     label: { en: 'Earthy tones', hi: 'मिट्टी के रंग' },
-    image: require('../assets/styles/earthy.jpg'),
+    image: require('../../assets/styles/earthy.jpg'),
   },
   {
     key: 'bright',
     label: { en: 'Bright & airy', hi: 'उज्ज्वल और हवादार' },
-    image: require('../assets/styles/bright.jpg'),
+    image: require('../../assets/styles/bright.jpg'),
   },
 ]
 

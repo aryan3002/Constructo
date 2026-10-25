@@ -43,8 +43,8 @@ import {
   StatusPill,
 } from '../../../src/ui'
 import { useInputStyle } from '../../../src/ui/useInputStyle'
-import { SiteSwitcher } from './_components'
-import { formatDate } from './_components'
+import { SiteSwitcher } from '../../../src/screens/owner/components'
+import { formatDate } from '../../../src/screens/owner/components'
 import {
   permitPillConfig,
   isExpiringSoon,

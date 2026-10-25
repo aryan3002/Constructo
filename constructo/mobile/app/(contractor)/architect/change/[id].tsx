@@ -16,7 +16,7 @@ import { siteChangesApi, type SiteChangeStatus } from '../../../../src/api/siteC
 import { supervisorApi } from '../../../../src/api/supervisor'
 import { uploadDrawing } from '../../../../src/api/drawings'
 import { Body, Button, Card, Eyebrow, Small, StatusPill, Title } from '../../../../src/ui'
-import { CHANGE_META, ErrorBlock, isHttpUrl, LoadingBlock, SubHeader, timeAgo } from '../_components'
+import { CHANGE_META, ErrorBlock, isHttpUrl, LoadingBlock, SubHeader, timeAgo } from '../../../../src/screens/architect/components'
 
 export default function SiteChangeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()

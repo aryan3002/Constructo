@@ -15,7 +15,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { supervisorApi, type Approval } from '../../../src/api/supervisor'
 import { Body, BodyStrong, Card, EmptyState, SegmentedTabs, Small, StatusPill } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from './_eng.components'
+import { ErrorBlock, LoadingBlock, SubHeader, formatWhen } from '../../../src/screens/supervisor/eng.components'
 
 type Filter = 'open' | 'answered' | 'all'
 

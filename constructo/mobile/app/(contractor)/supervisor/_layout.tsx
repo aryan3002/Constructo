@@ -13,7 +13,7 @@ import { Tabs } from 'expo-router'
 
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { ToastProvider } from '../../../src/ui'
-import { EngTabBar } from './_eng.components'
+import { EngTabBar } from '../../../src/screens/supervisor/eng.components'
 
 function SupervisorTabs() {
   const { theme } = useTheme()

@@ -9,10 +9,10 @@
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { useT } from '../../src/i18n/I18nProvider'
-import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE } from '../../src/theme/tokens'
-import { Body, Mono, Small } from '../../src/ui'
+import { useT } from '../../i18n/I18nProvider'
+import { useTheme } from '../../theme/ThemeProvider'
+import { AP, SPACE } from '../../theme/tokens'
+import { Body, Mono, Small } from '../../ui'
 
 export type AskStatus = 'pending' | 'grounded' | 'abstain' | 'error'
 

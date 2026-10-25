@@ -3,7 +3,7 @@
 // at startup, so a test file there crashes the app with "Property 'describe'
 // doesn't exist". All mobile tests live under src/; the util it covers stays
 // colocated with its screen in app/(homeowner)/.
-import { elapsedDays, formatTypicalRange } from '../../app/(homeowner)/_updates.util'
+import { elapsedDays, formatTypicalRange } from '../screens/homeowner/updates.util'
 
 describe('elapsedDays', () => {
   const now = new Date('2026-06-08T10:00:00+05:30')

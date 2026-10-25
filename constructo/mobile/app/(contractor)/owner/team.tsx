@@ -58,7 +58,7 @@ import {
   StatusPill,
   StepUpModal,
 } from '../../../src/ui'
-import { ROLE_LABEL } from './_account.util'
+import { ROLE_LABEL } from '../../../src/screens/owner/account.util'
 
 // ---------------------------------------------------------------------------
 // Constants

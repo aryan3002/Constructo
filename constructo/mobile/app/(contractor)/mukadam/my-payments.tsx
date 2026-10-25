@@ -27,7 +27,7 @@ import {
   StatusPill,
 } from '../../../src/ui'
 import { mukadamApi, type MyPayment } from '../../../src/api/mukadam'
-import { VoiceOutButton } from './_voice'
+import { VoiceOutButton } from '../../../src/screens/mukadam/voice'
 
 const STR = {
   en: {

@@ -1,5 +1,5 @@
 /**
- * Tests for Account hub helpers (_account.util).
+ * Tests for Account hub helpers (src/screens/owner/account.util).
  *
  * Specifically verifies:
  *  - company_name renders, not company_id (UUID guard)
@@ -11,7 +11,7 @@ import {
   buildProfileSubtitle,
   ROLE_LABEL,
   ROUTES,
-} from '../../app/(contractor)/owner/_account.util'
+} from '../screens/owner/account.util'
 
 // ---------------------------------------------------------------------------
 // buildProfileSubtitle — UUID guard + company_name display

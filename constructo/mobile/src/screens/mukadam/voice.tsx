@@ -7,9 +7,9 @@ import { Pressable } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import * as Speech from 'expo-speech'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../src/theme/tokens'
-import { BodyStrong } from '../../../src/ui'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE } from '../../theme/tokens'
+import { BodyStrong } from '../../ui'
 
 /** Speak the given text aloud in the active language. */
 export function speak(text: string, lang: 'en' | 'hi'): void {

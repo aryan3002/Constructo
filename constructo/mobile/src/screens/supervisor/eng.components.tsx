@@ -10,9 +10,9 @@ import { Ionicons } from '@expo/vector-icons'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { useAndroidKeyboardVisible } from '../../../src/ui/useKeyboardVisible'
-import { AP, SPACE, TAP, type Status } from '../../../src/theme/tokens'
+import { useTheme } from '../../theme/ThemeProvider'
+import { useAndroidKeyboardVisible } from '../../ui/useKeyboardVisible'
+import { AP, SPACE, TAP, type Status } from '../../theme/tokens'
 import {
   Body,
   Button,
@@ -23,7 +23,7 @@ import {
   Small,
   StatusPill,
   Title,
-} from '../../../src/ui'
+} from '../../ui'
 
 // ---------------------------------------------------------------------------
 // Formatting + tone helpers

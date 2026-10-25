@@ -1,9 +1,9 @@
-// Tests for the Design write-back helpers (app/(homeowner)/_design_select.util).
+// Tests for the Design write-back helpers (src/screens/homeowner/design_select.util).
 // Lives under src/ (NOT app/) — Expo Router treats every app/ file as a route.
 import {
   buildProfilePayload,
   visibleSpaces,
-} from '../../app/(homeowner)/_design_select.util'
+} from '../screens/homeowner/design_select.util'
 import type { DesignProfile, Space } from '../api/types'
 
 const space = (id: string, name: string): Space =>

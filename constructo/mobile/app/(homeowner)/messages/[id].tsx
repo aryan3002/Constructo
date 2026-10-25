@@ -31,9 +31,9 @@ import { enqueueChatSend } from '../../../src/chat/outbox'
 import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
 import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../src/chat/systemNotice'
-import { HomeownerAskRow, type AskStatus } from '../_ask_row'
+import { HomeownerAskRow, type AskStatus } from '../../../src/screens/homeowner/ask_row'
 import { summarizeWaiting } from '../../../src/homeowner/waiting'
-import { ThreadSummaryStrip } from '../_thread_summary_strip'
+import { ThreadSummaryStrip } from '../../../src/screens/homeowner/thread_summary_strip'
 
 /** An ephemeral inline @ask exchange (Slice B) — not a persisted message.
  *  `createdAt` (epoch ms) lets us interleave it with real messages by time, so a

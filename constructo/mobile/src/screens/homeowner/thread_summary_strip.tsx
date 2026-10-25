@@ -7,9 +7,9 @@
 import { Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE } from '../../src/theme/tokens'
-import { Small } from '../../src/ui'
+import { useTheme } from '../../theme/ThemeProvider'
+import { AP, SPACE } from '../../theme/tokens'
+import { Small } from '../../ui'
 
 const STR = {
   en: {

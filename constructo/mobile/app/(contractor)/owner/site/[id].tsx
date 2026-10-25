@@ -15,9 +15,9 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { owner, type SiteEvent, type SiteEventType } from '../../../../src/api/owner'
 import { health } from '../../../../src/api/health'
-import { SiteHealthCard } from '../_SiteHealthCard'
+import { SiteHealthCard } from '../../../../src/screens/owner/SiteHealthCard'
 import { Body, Button, Card, EmptyState, H1, Screen, Small, StatusPill, TimelineItem } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, formatWhen } from '../_components'
+import { ErrorBlock, LoadingBlock, formatWhen } from '../../../../src/screens/owner/components'
 
 const STR = {
   en: {

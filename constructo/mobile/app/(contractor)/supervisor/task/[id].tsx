@@ -18,7 +18,7 @@ import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../../src/
 import { enqueue } from '../../../../src/offline/outbox'
 import { useOutbox } from '../../../../src/offline/useOutbox'
 import { Body, BodyStrong, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SubHeader } from '../_eng.components'
+import { ErrorBlock, LoadingBlock, SubHeader } from '../../../../src/screens/supervisor/eng.components'
 
 let respSeq = 0
 

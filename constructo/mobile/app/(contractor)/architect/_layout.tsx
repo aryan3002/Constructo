@@ -14,7 +14,7 @@ import { View } from 'react-native'
 import { Tabs } from 'expo-router'
 
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
-import { DesTabBar } from './_components'
+import { DesTabBar } from '../../../src/screens/architect/components'
 
 function ArchitectTabs() {
   const { theme } = useTheme()

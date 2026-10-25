@@ -38,7 +38,7 @@ import {
   SELECT_STR,
   visibleSpaces,
   type SelectionStatusChoice,
-} from '../_design_select.util'
+} from '../../../src/screens/homeowner/design_select.util'
 
 export default function AddSelection() {
   const { lang } = useT()

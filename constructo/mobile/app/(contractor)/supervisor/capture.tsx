@@ -42,7 +42,7 @@ import {
   SentRow,
   SiteChip,
   SPACE,
-} from './_components'
+} from '../../../src/screens/supervisor/components'
 
 const CAPTURE_PATH = '/api/v1/capture'
 

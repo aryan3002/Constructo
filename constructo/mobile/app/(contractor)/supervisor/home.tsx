@@ -24,7 +24,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { actionItemsApi, type ActionItem } from '../../../src/api/actionItems'
 import { supervisorApi, type Approval } from '../../../src/api/supervisor'
 import { Body, Button, Card, Display, Eyebrow, H2, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, StatTile } from './_eng.components'
+import { ErrorBlock, LoadingBlock, StatTile } from '../../../src/screens/supervisor/eng.components'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

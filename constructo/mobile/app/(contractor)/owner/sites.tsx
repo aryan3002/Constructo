@@ -21,7 +21,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type SiteCard as SiteCardData } from '../../../src/api/owner'
 import { Avatar, Card, H1, Micro, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock } from './_components'
+import { ErrorBlock, LoadingBlock } from '../../../src/screens/owner/components'
 
 const STR = {
   en: {

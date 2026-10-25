@@ -40,8 +40,8 @@ import {
   SubHeader,
   Toggle,
 } from '../../src/ui'
-import { POLICY_KEY, DEFAULT_POLICY } from './_storage.util'
-import type { PhotoPolicy, RetentionDays } from './_storage.util'
+import { POLICY_KEY, DEFAULT_POLICY } from '../../src/screens/homeowner/storage.util'
+import type { PhotoPolicy, RetentionDays } from '../../src/screens/homeowner/storage.util'
 
 // ── Strings ───────────────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { useQuery } from '@tanstack/react-query'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Avatar, Body, Button, Card, H2, ListRow, Small, StatusPill, SyncStatus, Title } from '../../../src/ui'
-import { LoadingBlock, SubHeader } from './_eng.components'
+import { LoadingBlock, SubHeader } from '../../../src/screens/supervisor/eng.components'
 
 export default function EngProfile() {
   const { me, signOut } = useAuth()

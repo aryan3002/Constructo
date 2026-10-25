@@ -19,7 +19,7 @@ import { design, profileStatusLabel, type ProfileDetail, type ProfileStatus } fr
 import { supervisorApi } from '../../../src/api/supervisor'
 import { stateLabel, stateTone } from '../../../src/architect/brief_actions.util'
 import { Body, Card, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from './_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from '../../../src/screens/architect/components'
 
 export function statusTone(s: ProfileStatus): Status {
   if (s === 'approved' || s === 'locked' || s === 'materialized') return 'ok'

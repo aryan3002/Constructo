@@ -38,7 +38,7 @@ import { useT } from '../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
 import { SPACE, STATUS, TAP, type Status } from '../src/theme/tokens'
 import { Body, BodyStrong, BreathingDots, Mono, ScreenLoader, Small } from '../src/ui'
-import { isMoneyOrStructural } from './_requests.util'
+import { isMoneyOrStructural } from '../src/screens/requests.util'
 
 const STR = {
   en: {

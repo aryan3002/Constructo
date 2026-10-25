@@ -18,9 +18,9 @@ import { useState } from 'react'
 import { Pressable, TextInput, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
-import { useT } from '../../src/i18n/I18nProvider'
-import { useTheme } from '../../src/theme/ThemeProvider'
-import { AP, SPACE, type Status } from '../../src/theme/tokens'
+import { useT } from '../../i18n/I18nProvider'
+import { useTheme } from '../../theme/ThemeProvider'
+import { AP, SPACE, type Status } from '../../theme/tokens'
 import {
   Body,
   Button,
@@ -30,11 +30,11 @@ import {
   StatusPill,
   Title,
   useInputStyle,
-} from '../../src/ui'
-import type { ConversationSummary } from '../../src/api/chat'
-import type { HomeownerDecision, Update } from '../../src/api/types'
-import { delayStory, formatDayDelta, formatRupeeDelta, shortDate, updateMeta } from './_updates.util'
-import type { DecisionAction, HomeRoomStrings } from './_home_room.util'
+} from '../../ui'
+import type { ConversationSummary } from '../../api/chat'
+import type { HomeownerDecision, Update } from '../../api/types'
+import { delayStory, formatDayDelta, formatRupeeDelta, shortDate, updateMeta } from './updates.util'
+import type { DecisionAction, HomeRoomStrings } from './home_room.util'
 
 /** Amber-tint surface shared with the kit `DecisionCard` (a choice, never red). */
 const AMBER_TINT = 'rgba(169,122,30,0.14)'

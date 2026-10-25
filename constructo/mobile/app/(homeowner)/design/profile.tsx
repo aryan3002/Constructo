@@ -21,8 +21,8 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../src/theme/tokens'
 import { Body, BodyStrong, Button, Display, Screen, Small, useInputStyle } from '../../../src/ui'
-import { isProfileEmpty, profileText, profileTone } from '../_design.util'
-import { buildProfilePayload, PROFILE_STR } from '../_design_select.util'
+import { isProfileEmpty, profileText, profileTone } from '../../../src/screens/homeowner/design.util'
+import { buildProfilePayload, PROFILE_STR } from '../../../src/screens/homeowner/design_select.util'
 
 export default function StyleProfileLoop() {
   const { lang } = useT()

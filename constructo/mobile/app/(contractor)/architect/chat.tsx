@@ -5,7 +5,7 @@
  * group" button self-gates to owner; the conversation list is access-scoped
  * server-side (architect is an all-sites role).
  */
-import { ChatInbox } from '../owner/_chat_inbox'
+import { ChatInbox } from '../../../src/screens/owner/chat_inbox'
 
 export default function ArchitectChatInbox() {
   return <ChatInbox detailHref="/(contractor)/architect/chat/[id]" />

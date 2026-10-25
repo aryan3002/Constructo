@@ -63,7 +63,7 @@ import {
   updateMeta,
   weekRange,
   type SubTab,
-} from './_updates.util'
+} from '../../src/screens/homeowner/updates.util'
 
 // ---- localised copy ----
 const STR = {

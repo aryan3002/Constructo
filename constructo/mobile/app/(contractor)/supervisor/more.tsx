@@ -13,7 +13,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { audit } from '../../../src/api/ownerAudit'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Card, ListRow, Small } from '../../../src/ui'
-import { FeatureCard, SubHeader } from './_eng.components'
+import { FeatureCard, SubHeader } from '../../../src/screens/supervisor/eng.components'
 
 export default function EngMore() {
   const { me } = useAuth()

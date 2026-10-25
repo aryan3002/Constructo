@@ -16,7 +16,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { owner, type SettlementResult, type SiteRollup } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, Card, EmptyState, H1, Mono, MoneyCell, Screen, Small, StatusPill, formatINR } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock } from './_components'
+import { ErrorBlock, LoadingBlock } from '../../../src/screens/owner/components'
 
 const STR = {
   en: {

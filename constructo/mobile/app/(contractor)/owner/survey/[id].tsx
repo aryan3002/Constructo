@@ -13,8 +13,8 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { AP, SPACE } from '../../../../src/theme/tokens'
 import { audit, type Survey } from '../../../../src/api/ownerAudit'
 import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel } from '../_components'
-import { ScoreDial, SubHeader, riskStatus } from '../_audit.components'
+import { ErrorBlock, LoadingBlock, SectionLabel } from '../../../../src/screens/owner/components'
+import { ScoreDial, SubHeader, riskStatus } from '../../../../src/screens/owner/audit.components'
 
 export default function SurveyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()

@@ -29,7 +29,7 @@ import {
 import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../src/api/supervisor'
-import { ErrorState, Loading, SPACE } from './_components'
+import { ErrorState, Loading, SPACE } from '../../../src/screens/supervisor/components'
 
 const STR = {
   en: {

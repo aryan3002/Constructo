@@ -20,7 +20,7 @@ import { specsApi, type Spec } from '../../../src/api/specs'
 import { siteChangesApi } from '../../../src/api/siteChanges'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Body, Button, Card, Display, Eyebrow, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, SiteChangeCard, StatTile } from './_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, SiteChangeCard, StatTile } from '../../../src/screens/architect/components'
 
 export default function DesignerHome() {
   const { me } = useAuth()

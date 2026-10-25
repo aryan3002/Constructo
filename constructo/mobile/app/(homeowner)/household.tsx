@@ -56,7 +56,7 @@ import {
   type InvitableSubRole,
   type Lang,
   type MemberDraft,
-} from './_household.util'
+} from '../../src/screens/homeowner/household.util'
 
 // ---- copy ----------------------------------------------------------------
 const STR = {

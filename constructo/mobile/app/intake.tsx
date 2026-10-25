@@ -48,7 +48,7 @@ import {
   profileTone,
   STYLE_OPTIONS,
   type Lang,
-} from './_intake.util'
+} from '../src/screens/intake.util'
 
 // ---- copy ----------------------------------------------------------------
 const STR = {

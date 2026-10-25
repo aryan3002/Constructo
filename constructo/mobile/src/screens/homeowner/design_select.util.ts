@@ -9,7 +9,7 @@
  * caller (only a `can_design` member may write; a room-narrowed member may write
  * only her own space).
  */
-import type { DesignProfile, Language, Space } from '../../src/api/types'
+import type { DesignProfile, Language, Space } from '../../api/types'
 
 /** The two status values the homeowner can set on a selection. */
 export const SELECTION_STATUSES = ['proposed', 'final'] as const

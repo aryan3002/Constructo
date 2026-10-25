@@ -14,7 +14,7 @@ import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, EmptyState, H1, Small, useToast } from '../../../src/ui'
-import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from './_components'
+import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from '../../../src/screens/owner/components'
 
 const STR = {
   en: {

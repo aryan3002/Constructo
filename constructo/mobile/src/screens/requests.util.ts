@@ -6,8 +6,8 @@
  * "raise an issue" payload builder (detail + room + urgency folded into one
  * string since the API only takes title/detail), and a friendly date format.
  */
-import type { Status } from '../src/theme/tokens'
-import type { RequestStatus } from '../src/api/types'
+import type { Status } from '../theme/tokens'
+import type { RequestStatus } from '../api/types'
 
 /** Lifecycle (sent→seen→in_progress→done) → status spine + bilingual label. */
 export const REQUEST_STATUS_META: Record<

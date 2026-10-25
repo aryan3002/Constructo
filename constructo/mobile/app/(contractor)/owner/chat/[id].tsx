@@ -40,8 +40,8 @@ import { systemNotice } from '../../../../src/chat/systemNotice'
 import { newClientMsgId, type ChatMessage } from '../../../../src/api/chat'
 import { groupsApi } from '../../../../src/api/groups'
 import { useAuth } from '../../../../src/auth/AuthContext'
-import { LoadingBlock, ErrorBlock } from '../_components'
-import { ManageGroupSheet } from '../_group_sheets'
+import { LoadingBlock, ErrorBlock } from '../../../../src/screens/owner/components'
+import { ManageGroupSheet } from '../../../../src/screens/owner/group_sheets'
 
 const STR = {
   en: {

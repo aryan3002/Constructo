@@ -14,8 +14,8 @@ import React from 'react'
 import type { ReactNode } from 'react'
 import { ActivityIndicator, Modal, Pressable, View } from 'react-native'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE, TAP, type Status } from '../../theme/tokens'
 import {
   Body,
   BodyStrong,
@@ -29,7 +29,7 @@ import {
   StatusPill,
   type EvidenceChipProps,
   type EvidenceItem,
-} from '../../../src/ui'
+} from '../../ui'
 
 // ---------------------------------------------------------------------------
 // Formatting helpers

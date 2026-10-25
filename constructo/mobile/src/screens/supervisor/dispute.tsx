@@ -18,11 +18,11 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, TextInput, View } from
 import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE } from '../../../src/theme/tokens'
-import { Body, Button, Mono, Small, StatusPill } from '../../../src/ui'
-import { disputesApi, type Dispute } from '../../../src/api/disputes'
-import type { ChatEvent } from '../../../src/api/chat'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE } from '../../theme/tokens'
+import { Body, Button, Mono, Small, StatusPill } from '../../ui'
+import { disputesApi, type Dispute } from '../../api/disputes'
+import type { ChatEvent } from '../../api/chat'
 
 type Lang = 'en' | 'hi'
 

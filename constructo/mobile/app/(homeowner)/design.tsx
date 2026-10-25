@@ -67,7 +67,7 @@ import {
   profileText,
   profileTone,
   selectionStatus,
-} from './_design.util'
+} from '../../src/screens/homeowner/design.util'
 
 // ---------------------------------------------------------------------------
 // Colour helpers (Calm Cockpit, Daylight palette)

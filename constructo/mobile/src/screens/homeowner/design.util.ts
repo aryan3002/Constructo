@@ -10,8 +10,8 @@ import type {
   Drawing,
   DrawingKind,
   Language,
-} from '../../src/api/types'
-import type { Status } from '../../src/theme/tokens'
+} from '../../api/types'
+import type { Status } from '../../theme/tokens'
 
 /** Localised string bundle shape used by the Design screen. */
 export interface DesignStrings {

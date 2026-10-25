@@ -7,10 +7,10 @@
  */
 import { View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
-import { Body, Button, Card, Small, StatusPill } from '../../../src/ui'
-import { useTheme } from '../../../src/theme/ThemeProvider'
-import { SPACE, type Status } from '../../../src/theme/tokens'
-import type { Finding, FindingSeverity, HealthBand, SiteHealth } from '../../../src/api/health'
+import { Body, Button, Card, Small, StatusPill } from '../../ui'
+import { useTheme } from '../../theme/ThemeProvider'
+import { SPACE, type Status } from '../../theme/tokens'
+import type { Finding, FindingSeverity, HealthBand, SiteHealth } from '../../api/health'
 
 const SEVERITY_TO_STATUS: Record<FindingSeverity, Status> = {
   critical: 'risk',

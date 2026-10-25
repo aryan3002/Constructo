@@ -1,6 +1,6 @@
-// Tests for the Home Room weave (app/(homeowner)/_home_room.util). Lives under
+// Tests for the Home Room weave (src/screens/homeowner/home_room.util). Lives under
 // src/ (NOT app/) — Expo Router treats every app/ file as a route.
-import { weaveHomeRoom, type WovenRow } from '../../app/(homeowner)/_home_room.util'
+import { weaveHomeRoom, type WovenRow } from '../screens/homeowner/home_room.util'
 import type { ChatMessage } from '../api/chat'
 import type { HomeownerDecision, Update } from '../api/types'
 

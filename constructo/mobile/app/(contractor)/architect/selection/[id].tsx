@@ -19,7 +19,7 @@ import { SPACE } from '../../../../src/theme/tokens'
 import { specsApi, type RoutingStatus } from '../../../../src/api/specs'
 import { supervisorApi } from '../../../../src/api/supervisor'
 import { Body, Button, Card, Eyebrow, Mono, Small, StatusPill, Title } from '../../../../src/ui'
-import { ApprovalRoute, ErrorBlock, LoadingBlock, ROUTING_META, SubHeader } from '../_components'
+import { ApprovalRoute, ErrorBlock, LoadingBlock, ROUTING_META, SubHeader } from '../../../../src/screens/architect/components'
 
 const PRIMARY: Record<RoutingStatus, { label: string; action: 'route' | 'release' | null }> = {
   draft: { label: 'Send for approval', action: 'route' },

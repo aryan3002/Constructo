@@ -21,7 +21,7 @@ import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { audit, type AuditSectionItem, type ItemStatus } from '../../../../src/api/ownerAudit'
 import { Body, Button, Card, Small, Title } from '../../../../src/ui'
-import { ErrorBlock, ITEM_META, LoadingBlock, SubHeader } from '../_eng.components'
+import { ErrorBlock, ITEM_META, LoadingBlock, SubHeader } from '../../../../src/screens/supervisor/eng.components'
 
 /** Inspection checklists per section (CivilArch sheets). Unknown → generic. */
 const CHECKLISTS: Record<string, string[]> = {

@@ -18,7 +18,7 @@ import { SPACE } from '../../../src/theme/tokens'
 import { audit, type Audit } from '../../../src/api/ownerAudit'
 import { supervisorApi } from '../../../src/api/supervisor'
 import { Body, Card, Eyebrow, Small, StatusPill, Title } from '../../../src/ui'
-import { ErrorBlock, LoadingBlock, ScoreDial, SectionLabel, SubHeader, formatWhen, scoreStatus } from './_eng.components'
+import { ErrorBlock, LoadingBlock, ScoreDial, SectionLabel, SubHeader, formatWhen, scoreStatus } from '../../../src/screens/supervisor/eng.components'
 
 export default function EngAuditHub() {
   const { theme } = useTheme()

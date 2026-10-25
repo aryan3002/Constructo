@@ -60,7 +60,7 @@ import {
   isRequestResolved,
   slaPromise,
   type Urgency,
-} from './_requests.util'
+} from '../src/screens/requests.util'
 
 type Tab = 'requests' | 'decisions'
 type Lang = 'en' | 'hi'

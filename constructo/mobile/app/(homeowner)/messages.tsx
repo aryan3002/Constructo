@@ -32,7 +32,7 @@ import { Body, Display, Eyebrow, FLOATING_NAV_CLEARANCE, QuietState, Small, Stat
 import { useAuth } from '../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../src/api/chat'
 import { getSharedSocket, frameHandlers, type FrameHandler } from '../../src/chat/useChatThread'
-import { ChannelRow } from './_messages_components'
+import { ChannelRow } from '../../src/screens/homeowner/messages_components'
 
 const STR = {
   en: {

@@ -2,9 +2,9 @@
  * Helpers local to the Project Updates screen (app/(homeowner)/updates.tsx).
  * Pure functions only — no React, no shared-file edits.
  */
-import type { Language, Update } from '../../src/api/types'
-import type { Status } from '../../src/theme/tokens'
-import type { UpdateType, MilestoneStatus } from '../../src/api/types'
+import type { Language, Update } from '../../api/types'
+import type { Status } from '../../theme/tokens'
+import type { UpdateType, MilestoneStatus } from '../../api/types'
 
 /** Sub-tabs of the Updates screen (an in-screen segmented control). */
 export type SubTab = 'timeline' | 'milestones' | 'changes' | 'property'

@@ -10,9 +10,9 @@
  * builder channel (kind=homeowner) — a group thread has no single site to source
  * updates/decisions from, so it stays plain bubbles.
  */
-import type { ChatMessage } from '../../src/api/chat'
-import type { HomeownerDecision, Update } from '../../src/api/types'
-import { messagesToFeed, type ChatFeedItem } from '../../src/chat/feed'
+import type { ChatMessage } from '../../api/chat'
+import type { HomeownerDecision, Update } from '../../api/types'
+import { messagesToFeed, type ChatFeedItem } from '../../chat/feed'
 
 /** One row in the woven Home Room feed: a message (rendered via the unified kit —
  *  a bubble OR a capture card), a curated update card, or an actionable decision

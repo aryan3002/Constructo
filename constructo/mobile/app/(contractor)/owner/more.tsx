@@ -33,7 +33,7 @@ import {
   Small,
   StepUpModal,
 } from '../../../src/ui'
-import { buildProfileSubtitle, ROUTES } from './_account.util'
+import { buildProfileSubtitle, ROUTES } from '../../../src/screens/owner/account.util'
 
 // ---------------------------------------------------------------------------
 // Web deep-link helpers

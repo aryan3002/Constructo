@@ -3,7 +3,7 @@
  * Owned by the settings flow only — not a shared module. Strings live here in
  * the per-screen en/hi pattern (NOT the i18n catalog — founder's WIP).
  */
-import type { Capabilities, HomeownerMember, HomeownerSubRole } from '../../src/api/types'
+import type { Capabilities, HomeownerMember, HomeownerSubRole } from '../../api/types'
 
 export type Lang = 'en' | 'hi'
 

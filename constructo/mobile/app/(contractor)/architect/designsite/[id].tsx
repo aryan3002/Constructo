@@ -16,7 +16,7 @@ import { design, profileStatusLabel, type Conflict, type ConflictResolution } fr
 import { chatApi } from '../../../../src/api/chat'
 import { supervisorApi } from '../../../../src/api/supervisor'
 import { Body, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
-import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from '../_components'
+import { ErrorBlock, LoadingBlock, SectionLabel, SubHeader } from '../../../../src/screens/architect/components'
 import { statusTone } from '../brief'
 
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())

@@ -23,7 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner, ApiError } from '../../../src/api/client'
 import type { Capabilities, DesignProfile, HomeownerDecision } from '../../../src/api/types'
-import { shortDate } from '../_updates.util'
+import { shortDate } from '../../../src/screens/homeowner/updates.util'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../src/theme/tokens'
