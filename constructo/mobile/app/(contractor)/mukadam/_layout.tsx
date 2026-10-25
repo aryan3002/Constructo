@@ -9,6 +9,7 @@
  */
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -27,6 +28,7 @@ const tabIcon =
 export default function MukadamLayout() {
   const { lang } = useT()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
   const str = STR[lang]
   return (
     <Tabs
@@ -39,8 +41,10 @@ export default function MukadamLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.line,
-          height: 78,
-          paddingBottom: 12,
+          // Explicit height/padding override bottom-tabs' own safe-area
+          // handling, so add the bottom inset back (home indicator / Android nav).
+          height: 78 + insets.bottom,
+          paddingBottom: 12 + insets.bottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 14 },

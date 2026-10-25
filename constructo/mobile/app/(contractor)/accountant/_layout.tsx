@@ -9,6 +9,7 @@
  */
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
@@ -21,6 +22,7 @@ const tabIcon =
 export default function AccountantLayout() {
   const { t } = useT()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
 
   return (
     <Tabs
@@ -33,8 +35,10 @@ export default function AccountantLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.line,
-          height: 64,
-          paddingBottom: 8,
+          // Explicit height/padding override bottom-tabs' own safe-area
+          // handling, so add the bottom inset back (home indicator / Android nav).
+          height: 64 + insets.bottom,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontFamily: theme.name === 'neev' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
