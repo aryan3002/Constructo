@@ -23,7 +23,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import HomeownerMember, HomeownerNotification, MemberStatus, PushToken
+from app.models import HomeownerMember, HomeownerNotification, MemberStatus, PushToken, User
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +98,14 @@ async def _push_tokens_for_site(
     """
     rows = (
         await session.execute(
-            select(HomeownerMember).where(
+            select(HomeownerMember)
+            # Never push to a deactivated or deleted account (S6).
+            .join(User, User.id == HomeownerMember.user_id)
+            .where(
                 HomeownerMember.site_id == site_id,
                 HomeownerMember.status == MemberStatus.active,
+                User.is_active.is_(True),
+                User.deleted_at.is_(None),
             )
         )
     ).scalars().all()
@@ -127,7 +132,14 @@ async def push_tokens_for_user(session: AsyncSession, user_id: UUID) -> list[str
     """
     rows = (
         await session.execute(
-            select(PushToken.token).where(PushToken.user_id == user_id)
+            select(PushToken.token)
+            .join(User, User.id == PushToken.user_id)
+            # Never push to a deactivated or deleted account (S6).
+            .where(
+                PushToken.user_id == user_id,
+                User.is_active.is_(True),
+                User.deleted_at.is_(None),
+            )
         )
     ).scalars().all()
     seen: set[str] = set()

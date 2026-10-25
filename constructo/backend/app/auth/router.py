@@ -23,7 +23,15 @@ from app.common import ratelimit
 from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
-from app.models import Company, HomeownerMember, PushToken, User, UserRole
+from app.models import (
+    Company,
+    HomeownerMember,
+    PhotoComment,
+    PushToken,
+    RawMessageModel,
+    User,
+    UserRole,
+)
 from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -375,6 +383,7 @@ async def delete_own_account(
     unconditionally sensitive, so — unlike `update_me` — this always
     requires a fresh step-up token; there is no non-sensitive path.
     """
+    original_phone = user.phone
     user.name = "Deleted user"
     user.phone = f"deleted:{user.id}"
     user.is_active = False
@@ -393,6 +402,27 @@ async def delete_own_account(
         update(HomeownerMember)
         .where(HomeownerMember.user_id == user.id)
         .values(phone=None, display_name=None)
+    )
+    # S6: stop every push to this person's devices (the contractor token table
+    # and the homeowner notif_prefs path)...
+    await _forget_push_tokens(session, user.id)
+    # ...and scrub the name/phone snapshotted onto what they authored. Chat
+    # messages resolve the sender from the users row (already scrubbed); the
+    # raw capture/WhatsApp rows and photo comments keep their own copy. A
+    # WhatsApp row's sender_id is the phone's JID, so that goes too.
+    sender_ids = {str(user.id)} | {
+        f"{c}@s.whatsapp.net" for c in phone_candidates(original_phone) if c.isdigit()
+    }
+    await session.execute(
+        update(RawMessageModel)
+        .where(RawMessageModel.sender_id.in_(sender_ids))
+        .values(sender_name="Deleted user", sender_id=str(user.id))
+    )
+    member_ids = select(HomeownerMember.id).where(HomeownerMember.user_id == user.id)
+    await session.execute(
+        update(PhotoComment)
+        .where(PhotoComment.member_id.in_(member_ids))
+        .values(author_name="Deleted user")
     )
     await session.commit()
 
@@ -451,20 +481,28 @@ async def unregister_push_token(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PushTokenOut:
-    await session.execute(
-        delete(PushToken).where(
-            PushToken.user_id == user.id, PushToken.token == body.token
-        )
-    )
+    await _forget_push_tokens(session, user.id, body.token)
+    await session.commit()
+    return PushTokenOut()
+
+
+async def _forget_push_tokens(
+    session: AsyncSession, user_id: UUID, token: str | None = None
+) -> None:
+    """Remove ``token`` (or, with None, every token) of ``user_id`` from both
+    push paths: the push_tokens rows and their homeowner memberships'
+    notif_prefs. The caller commits."""
+    stmt = delete(PushToken).where(PushToken.user_id == user_id)
+    if token is not None:
+        stmt = stmt.where(PushToken.token == token)
+    await session.execute(stmt)
     members = (
         await session.execute(
-            select(HomeownerMember).where(HomeownerMember.user_id == user.id)
+            select(HomeownerMember).where(HomeownerMember.user_id == user_id)
         )
     ).scalars().all()
     for m in members:
         prefs = m.notif_prefs or {}
-        if prefs.get("push_token") == body.token:
+        if "push_token" in prefs and (token is None or prefs.get("push_token") == token):
             # Reassign (not mutate in place) so the JSONB change is tracked.
             m.notif_prefs = {k: v for k, v in prefs.items() if k != "push_token"}
-    await session.commit()
-    return PushTokenOut()
