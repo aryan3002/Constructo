@@ -70,13 +70,17 @@ Store secrets, then set env. **Env var names are UPPERCASE of the settings field
 az containerapp secret set -n $APP -g $RG --secrets \
   database-url="postgresql+asyncpg://...neon...?ssl=require" \
   jwt-secret="$(openssl rand -hex 32)" \
+  ingest-key="$(openssl rand -hex 24)" \
   aoai-key="<AZURE_OPENAI_API_KEY>"
 
 az containerapp update -n $APP -g $RG \
   --min-replicas 1 --max-replicas 1 \
   --set-env-vars \
+    APP_ENV=prod \
     DATABASE_URL=secretref:database-url \
     JWT_SECRET=secretref:jwt-secret \
+    INGEST_API_KEY=secretref:ingest-key \
+    TRUSTED_PROXY_HOPS=1 \
     AZURE_OPENAI_API_KEY=secretref:aoai-key \
     LLM_PROVIDER=azure \
     STT_PROVIDER=azure \
@@ -110,6 +114,20 @@ any internet-reachable deploy you MUST close it:
   your pilot users — known people get in with the dev code, everyone else is
   refused (`403`). For **public**, set `DEV_OTP_ENABLED=false` and wire a real SMS
   provider in `app/auth/otp.py`.
+- **`INGEST_API_KEY=<random ≥24 chars>`** — the shared key the WhatsApp bridge
+  sends to `/api/v1/ingest`; give the bridge the same value. With `APP_ENV=prod`
+  the app refuses to boot on the in-repo default or a short key. If the bot
+  sends through the bridge (`BOT_SEND_VIA=bridge` or `WHATSAPP_SEND_MODE=url`),
+  `BRIDGE_KEY` gets the same check.
+- **`TRUSTED_PROXY_HOPS=1`** — the OTP, login and join-code limits count per
+  caller IP. Container Apps' ingress appends the caller's IP to
+  `X-Forwarded-For`; without this setting every request looks like it comes
+  from the ingress, and the per-IP caps become one cap shared by all users. Use
+  the number of proxies in front of the app (add one for a CDN or Front Door).
+
+`APP_ENV=prod` also turns off `/docs` and `/openapi.json`, drops the dev-only
+private-network CORS origins (list the web console's origin in `CORS_ORIGINS`),
+and never echoes the dev OTP in `request-otp` responses.
 
 Get the public URL:
 ```sh
