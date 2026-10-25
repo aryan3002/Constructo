@@ -177,7 +177,7 @@ export default function Finishes() {
 
   return (
     <Screen style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}>
-      <SubHeader title={str.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
+      <SubHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       {/* Header */}
       <View>
         <Display>{str.title}</Display>

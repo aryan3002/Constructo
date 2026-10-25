@@ -44,11 +44,12 @@ function MukadamLayoutTabs() {
           borderTopColor: theme.colors.line,
           // Explicit height/padding override bottom-tabs' own safe-area
           // handling, so add the bottom inset back (home indicator / Android nav).
-          height: 78 + insets.bottom,
+          // Tall enough for the icon plus a full label line (it was clipped).
+          height: 82 + insets.bottom,
           paddingBottom: 12 + insets.bottom,
           paddingTop: 8,
         },
-        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 14 },
+        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 14, lineHeight: 20 },
         tabBarIconStyle: { marginTop: 2 },
       }}
     >

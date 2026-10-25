@@ -225,9 +225,8 @@ export default function Notifications() {
 
   return (
     <Screen floatingNav>
-      <SubHeader title={tx.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
+      <SubHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       <View style={{ gap: SPACE.xs }}>
-        <Eyebrow>{tx.title}</Eyebrow>
         <Display>{tx.title}</Display>
         <Small muted>{tx.subtitle}</Small>
       </View>

@@ -38,11 +38,12 @@ function AccountantLayoutTabs() {
           borderTopColor: theme.colors.line,
           // Explicit height/padding override bottom-tabs' own safe-area
           // handling, so add the bottom inset back (home indicator / Android nav).
-          height: 64 + insets.bottom,
+          // Tall enough for the icon plus a full label line (it was clipped).
+          height: 70 + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: theme.name === 'neev' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: theme.name === 'neev' ? 'Mukta-SemiBold' : 'Hind-SemiBold', fontSize: 12, lineHeight: 16 },
       }}
     >
       <Tabs.Screen

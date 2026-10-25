@@ -14,12 +14,14 @@
 import { Pressable, View, type ViewStyle } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 
+import { useT } from '../i18n/I18nProvider'
 import { useTheme } from '../theme/ThemeProvider'
 import { SPACE, TAP } from '../theme/tokens'
 import { Body, Small } from './Typography'
 
 export interface SubHeaderProps {
-  title: string
+  /** Omit when the screen shows its own large title below (no duplicate). */
+  title?: string
   subtitle?: string
   onBack: () => void
   /** Optional trailing slot (e.g. an action button or icon). */
@@ -29,6 +31,7 @@ export interface SubHeaderProps {
 
 export function SubHeader({ title, subtitle, onBack, right, style }: SubHeaderProps) {
   const { theme } = useTheme()
+  const { t } = useT()
   const c = theme.colors
 
   return (
@@ -51,7 +54,7 @@ export function SubHeader({ title, subtitle, onBack, right, style }: SubHeaderPr
       {/* Back chevron — ≥48px tap target */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t('common.back')}
         onPress={onBack}
         style={({ pressed }) => ({
           width: TAP,
@@ -65,14 +68,16 @@ export function SubHeader({ title, subtitle, onBack, right, style }: SubHeaderPr
         <Feather name="chevron-left" size={22} color={c.text} />
       </Pressable>
 
-      {/* Title block */}
+      {/* Title block (an empty flex spacer when untitled keeps `right` right) */}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Body
-          numberOfLines={1}
-          style={{ fontWeight: '600' }}
-        >
-          {title}
-        </Body>
+        {title ? (
+          <Body
+            numberOfLines={1}
+            style={{ fontWeight: '600' }}
+          >
+            {title}
+          </Body>
+        ) : null}
         {subtitle ? (
           <Small muted numberOfLines={1}>
             {subtitle}

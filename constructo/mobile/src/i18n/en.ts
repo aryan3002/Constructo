@@ -4,6 +4,7 @@ export const en = {
     loading: 'Loading…',
     retry: 'Try again',
     delete: 'Delete',
+    back: 'Back',
     somethingWrong: 'Something went wrong',
     offline: 'Offline',
     online: 'Online',

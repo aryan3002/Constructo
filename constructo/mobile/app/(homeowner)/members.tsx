@@ -103,7 +103,7 @@ export default function Members() {
 
   return (
     <Screen floatingNav>
-      <SubHeader title={tx.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
+      <SubHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       {/* ---- Calm header: clay kicker + serif title + reassuring line. ---- */}
       <FadeInUp style={{ gap: SPACE.xs }}>
         <Eyebrow>{tx.eyebrow}</Eyebrow>

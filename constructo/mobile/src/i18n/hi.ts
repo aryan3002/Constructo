@@ -6,6 +6,7 @@ export const hi: Dict = {
     loading: 'लोड हो रहा है…',
     retry: 'फिर से कोशिश करें',
     delete: 'हटाएँ',
+    back: 'वापस',
     somethingWrong: 'कुछ गड़बड़ हो गई',
     offline: 'ऑफ़लाइन',
     online: 'ऑनलाइन',

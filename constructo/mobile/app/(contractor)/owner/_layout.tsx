@@ -53,11 +53,12 @@ function OwnerTabs() {
           borderTopColor: theme.colors.line,
           // Explicit height/padding override bottom-tabs' own safe-area
           // handling, so add the bottom inset back (home indicator / Android nav).
-          height: 64 + insets.bottom,
+          // Tall enough for the icon plus a full label line (it was clipped).
+          height: 70 + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: FACES[theme.name].bodyStrong, fontSize: 12, lineHeight: 16 },
         // Pushed detail (href:null) screens settle in; real tabs stay instant.
         ...(reduce ? {} : TAB_DETAIL_TRANSITION),
       }}
