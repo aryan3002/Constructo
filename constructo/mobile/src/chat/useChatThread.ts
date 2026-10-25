@@ -42,6 +42,7 @@ import {
   drainChatOutbox,
   listChatOutbox,
   newOutboxItem,
+  removeChatOutbox,
   resetBackoff,
   retryPermanent,
   type ChatAddressBody,
@@ -89,6 +90,8 @@ export interface UseChatThread {
   flush: () => Promise<void>
   /** Re-queue a permanently-failed send (a "tap to retry" on its bubble), then drain. */
   retry: (clientMsgId: string) => Promise<void>
+  /** Drop a failed send from the outbox (the "Delete" on its bubble). */
+  discard: (clientMsgId: string) => Promise<void>
   /** Commit a Nivaan proposal: a human tap that books the capture via the
    *  deterministic fast-path (capture_type+fields). The agent never calls this. */
   sendProposal: (captureType: string, fields: Record<string, unknown>) => Promise<void>
@@ -295,11 +298,23 @@ export async function performSend(item: ChatOutboxItem): Promise<SendResult> {
       : msg
     return { ok: true, seq: msg.seq, msg: withLocal }
   } catch (err) {
-    // A 4xx (validation / forbidden) is permanent — parking beats infinite retry.
-    const status = (err as { status?: number })?.status
-    const permanent = typeof status === 'number' && status >= 400 && status < 500
-    return { ok: false, permanent }
+    return classifySendError(err)
   }
+}
+
+/** Statuses that are worth retrying even though they are 4xx: an expired login
+ *  (401 — paused until the user signs in again), a request timeout (408) and
+ *  rate limiting (429). */
+const TEMPORARY_4XX = new Set([401, 408, 429])
+
+/** A 4xx (validation / forbidden) is permanent — parking beats infinite retry.
+ *  Everything else (network, timeout, 5xx, {@link TEMPORARY_4XX}) backs off. */
+export function classifySendError(err: unknown): SendResult {
+  const status = (err as { status?: number })?.status
+  if (status === 401) return { ok: false, permanent: false, authExpired: true }
+  const permanent =
+    typeof status === 'number' && status >= 400 && status < 500 && !TEMPORARY_4XX.has(status)
+  return { ok: false, permanent }
 }
 
 export function useChatThread(
@@ -368,6 +383,15 @@ export function useChatThread(
       await flush()
     },
     [refreshOutbox, flush],
+  )
+
+  const discard = useCallback(
+    async (clientMsgId: string) => {
+      setOutbox((prev) => prev.filter((i) => i.clientMsgId !== clientMsgId))
+      await removeChatOutbox(clientMsgId)
+      await refreshOutbox()
+    },
+    [refreshOutbox],
   )
 
   // The FIRST sync after a thread opens fetches from seq 0 (a full refresh) so
@@ -761,6 +785,7 @@ export function useChatThread(
       deliveryState,
       flush,
       retry,
+      discard,
       online,
       sendTyping,
       isTyping,
@@ -780,6 +805,7 @@ export function useChatThread(
       deliveryState,
       flush,
       retry,
+      discard,
       online,
       sendTyping,
       isTyping,

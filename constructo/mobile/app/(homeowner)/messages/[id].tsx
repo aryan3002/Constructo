@@ -29,6 +29,7 @@ import { useAuth } from '../../../src/auth/AuthContext'
 import { newClientMsgId, type ChatMessage } from '../../../src/api/chat'
 import { enqueueChatSend } from '../../../src/chat/outbox'
 import { ChatComposer, MessageBubble, MessageFeed, SystemNotice, useChatThread, messagesToFeed, type FeedRow } from '../../../src/chat'
+import { FailedSendDelete } from '../../../src/chat/FailedSendDelete'
 import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../../../src/screens/homeowner/ask_row'
@@ -347,21 +348,26 @@ export default function HomeownerThread() {
       kind: 'custom',
       key: `pending:${p.clientMsgId}`,
       node: (
-        <Pressable
-          onPress={() =>
-            p.state === 'failed_permanent'
-              ? void thread.retry(p.clientMsgId)
-              : void thread.flush()
-          }
-          style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
-        >
-          <MessageBubble
-            body={p.body}
-            attachmentUrl={p.mediaUri}
-            mine
-            timestamp={p.state === 'failed_permanent' ? t.tapRetry : t.send + '…'}
-          />
-        </Pressable>
+        <View>
+          <Pressable
+            onPress={() =>
+              p.state === 'failed_permanent'
+                ? void thread.retry(p.clientMsgId)
+                : void thread.flush()
+            }
+            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+          >
+            <MessageBubble
+              body={p.body}
+              attachmentUrl={p.mediaUri}
+              mine
+              timestamp={p.state === 'failed_permanent' ? t.tapRetry : t.send + '…'}
+            />
+          </Pressable>
+          {p.state === 'failed_permanent' ? (
+            <FailedSendDelete onPress={() => void thread.discard(p.clientMsgId)} />
+          ) : null}
+        </View>
       ),
     }))
     // Pending are the very latest (in-flight) — they belong at the bottom.

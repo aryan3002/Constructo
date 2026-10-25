@@ -3,6 +3,7 @@ export const en = {
   common: {
     loading: 'Loading…',
     retry: 'Try again',
+    delete: 'Delete',
     somethingWrong: 'Something went wrong',
     offline: 'Offline',
     online: 'Online',

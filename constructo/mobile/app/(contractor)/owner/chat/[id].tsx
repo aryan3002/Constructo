@@ -34,6 +34,7 @@ import { MessageBubble, NivaanProposalCard, SystemNotice } from '../../../../src
 import { SendToFeedSheet } from '../../../../src/contractor/SendToFeedSheet'
 import { nivaanProposal, isNivaanAnswer } from '../../../../src/chat/nivaanProposal'
 import { MessageFeed, useChatThread, type FeedRow } from '../../../../src/chat'
+import { FailedSendDelete } from '../../../../src/chat/FailedSendDelete'
 import { enqueueChatSend } from '../../../../src/chat/outbox'
 import { takePhotoSend } from '../../../../src/chat/markupHandoff'
 import { systemNotice } from '../../../../src/chat/systemNotice'
@@ -312,12 +313,15 @@ export default function OwnerConversation() {
       key: `pending:${p.clientMsgId}`,
       node:
         p.state === 'failed_permanent' ? (
-          <Pressable
-            onPress={() => void thread.retry(p.clientMsgId)}
-            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
-          >
-            <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={str.tapRetry} />
-          </Pressable>
+          <View>
+            <Pressable
+              onPress={() => void thread.retry(p.clientMsgId)}
+              style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+            >
+              <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={str.tapRetry} />
+            </Pressable>
+            <FailedSendDelete onPress={() => void thread.discard(p.clientMsgId)} />
+          </View>
         ) : (
           <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
             <MessageBubble body={p.body} attachmentUrl={p.mediaUri} mine timestamp={str.sendingHint} />

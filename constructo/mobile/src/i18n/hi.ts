@@ -5,6 +5,7 @@ export const hi: Dict = {
   common: {
     loading: 'लोड हो रहा है…',
     retry: 'फिर से कोशिश करें',
+    delete: 'हटाएँ',
     somethingWrong: 'कुछ गड़बड़ हो गई',
     offline: 'ऑफ़लाइन',
     online: 'ऑनलाइन',

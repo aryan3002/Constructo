@@ -54,6 +54,7 @@ import { HoldToTalk, type RecordedAudio } from '../../../src/audio'
 import { isSlash, parseSlash, SLASH_USAGE, type SlashCommand } from '../../../src/capture/slash'
 import { suggestCapture } from '../../../src/capture/suggest'
 import { MessageFeed, useChatThread, type FeedRow } from '../../../src/chat'
+import { FailedSendDelete } from '../../../src/chat/FailedSendDelete'
 import { takePhotoSend } from '../../../src/chat/markupHandoff'
 import {
   CaptureCard,
@@ -344,12 +345,15 @@ export default function CrewChat() {
       key: `pending:${p.clientMsgId}`,
       node:
         p.state === 'failed_permanent' ? (
-          <Pressable
-            onPress={() => void thread.retry(p.clientMsgId)}
-            style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
-          >
-            <MessageBubble body={p.body || (p.mediaUri ? '' : str.photo)} attachmentUrl={p.mediaUri} mine timestamp={str.failed} />
-          </Pressable>
+          <View>
+            <Pressable
+              onPress={() => void thread.retry(p.clientMsgId)}
+              style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}
+            >
+              <MessageBubble body={p.body || (p.mediaUri ? '' : str.photo)} attachmentUrl={p.mediaUri} mine timestamp={str.failed} />
+            </Pressable>
+            <FailedSendDelete onPress={() => void thread.discard(p.clientMsgId)} />
+          </View>
         ) : (
           <View style={{ paddingHorizontal: SPACE.gutter, marginBottom: SPACE.md }}>
             <MessageBubble body={p.body || (p.mediaUri ? '' : str.photo)} attachmentUrl={p.mediaUri} mine timestamp={p.captured ? str.booked : str.sending} />
