@@ -33,3 +33,6 @@ tmp/
 # Vercel build output (generated)
 .vercel/
 **/.vercel/
+
+# Redis snapshots from local test runs
+dump.rdb
