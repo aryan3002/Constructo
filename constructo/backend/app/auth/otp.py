@@ -48,6 +48,8 @@ def assert_otp_valid(phone: str, otp: str) -> None:
 
 
 def dev_otp_hint() -> str | None:
-    """The dev OTP to surface in request-otp responses — only while enabled, so
-    the stub is never leaked once the bypass is closed in prod."""
+    """The dev OTP to surface in request-otp responses — only while enabled, and
+    never in a prod posture (where the dev code may stay on behind an allowlist)."""
+    if settings.is_prod:
+        return None
     return settings.dev_otp if settings.dev_otp_enabled else None

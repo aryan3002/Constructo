@@ -179,3 +179,22 @@ async def test_existing_user_logs_in_without_signup(client, factory, db_session)
     )
     assert me.json()["id"] == str(user.id)
 
+
+async def test_step_up_token_is_not_a_bearer_token(client):
+    token = await _login_token(client, "+15550009031")
+    verify = await client.post(
+        "/api/v1/auth/step-up/verify",
+        json={"otp": "000000"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    step_up = verify.json()["step_up_token"]
+    # As a bearer it's refused...
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {step_up}"})
+    assert me.status_code == 401
+    assert me.json()["error"]["code"] == "invalid_token"
+    # ...but it still unlocks require_step_up alongside the access token.
+    delete = await client.delete(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}", "X-Step-Up-Token": step_up},
+    )
+    assert delete.status_code == 204

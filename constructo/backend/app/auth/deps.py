@@ -25,6 +25,10 @@ async def get_current_user(
         user_id = UUID(payload["sub"])
     except Exception as exc:
         raise AppError(401, "invalid_token", "Invalid or expired token") from exc
+    if payload.get("scope") == STEP_UP_SCOPE:
+        # A step-up token only unlocks one sensitive action via X-Step-Up-Token
+        # (require_step_up); it is never a bearer login token.
+        raise AppError(401, "invalid_token", "Invalid or expired token")
 
     user = await session.get(User, user_id)
     if user is None:

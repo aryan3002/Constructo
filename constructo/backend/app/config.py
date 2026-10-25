@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # The public, in-repo dev JWT secret. Convenient for local/CI, but a deploy that
 # ships it lets anyone forge tokens — the prod guard below refuses to boot on it.
 _DEV_JWT_SECRET = "dev-secret-change-me-to-a-real-32byte-key"
+# Same for the in-repo service keys (ingest/bot and the WhatsApp bridge).
+_DEV_INGEST_KEY = "dev-ingest-key"
+_DEV_BRIDGE_KEY = "dev-bridge-key"
+_MIN_SERVICE_KEY_LEN = 24
 
 
 class Settings(BaseSettings):
@@ -26,7 +30,7 @@ class Settings(BaseSettings):
     # (multi-worker / multi-replica prod).
     chat_realtime: str = "memory"
     jwt_secret: str = _DEV_JWT_SECRET
-    ingest_api_key: str = "dev-ingest-key"
+    ingest_api_key: str = _DEV_INGEST_KEY
 
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
@@ -139,6 +143,10 @@ class Settings(BaseSettings):
     #   BRIDGE_URL   = http://localhost:8088         (the W1 Node bridge)
     #   BRIDGE_KEY   = shared secret (must match the bridge's BRIDGE_KEY)
     bot_enabled: bool = True
+    # Mirrors of the env vars app.bot.sender reads, declared here only so the
+    # prod guard below can check the bridge key when the bot sends via bridge.
+    bot_send_via: str | None = None
+    bridge_key: str = ""
 
     # Design Profiler: Pinterest BOARD-link import (paste a board URL, not just a
     # single pin). Off by default — the parser depends on Pinterest's embedded
@@ -147,12 +155,23 @@ class Settings(BaseSettings):
     # per-deploy once verified against live Pinterest markup.
     pinterest_board_import: bool = False
 
+    @property
+    def is_prod(self) -> bool:
+        return self.app_env.lower() in ("prod", "production")
+
+    @property
+    def bot_sends_via_bridge(self) -> bool:
+        """The same transport resolution as ``app.bot.sender._mode``."""
+        if self.bot_send_via:
+            return self.bot_send_via.strip().lower() == "bridge"
+        return self.whatsapp_send_mode.strip().lower() == "url"
+
     @model_validator(mode="after")
     def _enforce_prod_security(self) -> "Settings":
         """Fail-CLOSED in a prod posture: refuse to boot with world-open auth or
         the public dev JWT secret. No-op for dev/test/CI (the default), so local
         runs and the suite keep working untouched."""
-        if self.app_env.lower() not in ("prod", "production"):
+        if not self.is_prod:
             return self
         problems: list[str] = []
         if self.dev_otp_enabled and not self.auth_phone_allowlist:
@@ -164,6 +183,20 @@ class Settings(BaseSettings):
             problems.append(
                 "JWT_SECRET is the public dev default or shorter than 32 chars — set a "
                 "real secret."
+            )
+        if self.ingest_api_key == _DEV_INGEST_KEY or (
+            len(self.ingest_api_key) < _MIN_SERVICE_KEY_LEN
+        ):
+            problems.append(
+                "INGEST_API_KEY is the public dev default or shorter than "
+                f"{_MIN_SERVICE_KEY_LEN} chars — set a real key."
+            )
+        if self.bot_sends_via_bridge and (
+            self.bridge_key == _DEV_BRIDGE_KEY or len(self.bridge_key) < _MIN_SERVICE_KEY_LEN
+        ):
+            problems.append(
+                "The bot sends via the WhatsApp bridge but BRIDGE_KEY is the dev default "
+                f"or shorter than {_MIN_SERVICE_KEY_LEN} chars — set a real key."
             )
         if problems:
             raise ValueError(

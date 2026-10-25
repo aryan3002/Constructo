@@ -77,9 +77,31 @@ async def lifespan(app: FastAPI):
         await shutdown_broadcaster()
 
 
-app = FastAPI(
-    title="Neev API", version="0.1.0", openapi_url="/openapi.json", lifespan=lifespan
+# Localhost + private-LAN origins on any port, so `expo start --web` works when
+# the phone/dev machine hits the backend over its LAN IP. Dev only.
+_PRIVATE_NETWORK_ORIGIN_REGEX = (
+    r"https?://("
+    r"localhost|127\.0\.0\.1|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?"
 )
+
+
+def api_docs_urls(s) -> dict[str, str | None]:
+    """Interactive docs and the schema are dev conveniences; off in prod."""
+    if s.is_prod:
+        return {"openapi_url": None, "docs_url": None, "redoc_url": None}
+    return {"openapi_url": "/openapi.json", "docs_url": "/docs", "redoc_url": "/redoc"}
+
+
+def cors_origin_regex(s) -> str | None:
+    """Prod allows only the configured origins (no private-network wildcard)."""
+    return None if s.is_prod else _PRIVATE_NETWORK_ORIGIN_REGEX
+
+
+app = FastAPI(title="Neev API", version="0.1.0", lifespan=lifespan, **api_docs_urls(settings))
 install_error_handlers(app)
 
 # CORS: allow the web dashboard (and other configured origins) to call the API
@@ -88,17 +110,8 @@ install_error_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    # Also allow localhost + private-LAN origins on any port so `expo start --web`
-    # works when the phone/dev machine hits the backend over its LAN IP. (Native
-    # Expo Go / emulator fetches are not subject to CORS at all.)
-    allow_origin_regex=(
-        r"https?://("
-        r"localhost|127\.0\.0\.1|"
-        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
-        r"192\.168\.\d{1,3}\.\d{1,3}|"
-        r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
-        r")(:\d+)?"
-    ),
+    # Plus localhost + private-LAN origins in dev only (see cors_origin_regex).
+    allow_origin_regex=cors_origin_regex(settings),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
