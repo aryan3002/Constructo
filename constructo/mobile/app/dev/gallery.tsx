@@ -2,9 +2,10 @@
  * Dev component gallery — renders the Constructo RN kit in BOTH themes
  * (Neev + Daylight) so the design system can be reviewed at a glance.
  * Reachable from the homeowner Home; not part of the shipping nav.
+ * Development builds only — release builds redirect `neev://dev/gallery` to /.
  */
 import { ScrollView, View } from 'react-native'
-import { Link } from 'expo-router'
+import { Link, Redirect } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ThemeProvider, useTheme } from '../../src/theme/ThemeProvider'
@@ -227,6 +228,11 @@ function KitShowcase({ label }: { label: string }) {
 }
 
 export default function Gallery() {
+  if (!__DEV__) return <Redirect href="/" />
+  return <GalleryScreen />
+}
+
+function GalleryScreen() {
   const insets = useSafeAreaInsets()
   const themes: { name: ThemeName; label: string }[] = [
     { name: 'neev', label: 'Neev — contractor' },
