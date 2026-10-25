@@ -11,13 +11,14 @@ import { contractor, type ContractorPhoto } from '../../../src/api/contractor'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP } from '../../../src/theme/tokens'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 
 type AlbumView = 'all' | 'room' | 'milestone'
 
 export default function ContractorAlbum() {
   const { theme } = useTheme()
   const c = theme.colors
-  const { lang } = useT()
+  const { lang, t: tr } = useT()
   const { siteId } = useLocalSearchParams<{ siteId: string }>()
   const [view, setView] = useState<AlbumView>('all')
   const qc = useQueryClient()
@@ -68,6 +69,7 @@ export default function ContractorAlbum() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: SPACE.md, paddingTop: insets.top + SPACE.sm }}>
+      <SubHeader title={tr('nav.photos')} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
       <View style={{ flexDirection: 'row', marginBottom: SPACE.md }}>
         {tabs.map((t) => (
           <Pressable key={t.k} onPress={() => setView(t.k)} style={{ paddingHorizontal: 12, paddingVertical: 8, marginRight: 6, borderRadius: 999, backgroundColor: view === t.k ? c.accent : c.paper }}>

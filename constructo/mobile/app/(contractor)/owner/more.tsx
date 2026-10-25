@@ -25,7 +25,6 @@ import {
   Avatar,
   Body,
   BodyStrong,
-  H1,
   Mono,
   Screen,
   SettingsGroup,
@@ -34,6 +33,7 @@ import {
   StepUpModal,
 } from '../../../src/ui'
 import { buildProfileSubtitle, ROUTES } from '../../../src/screens/owner/account.util'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 
 // ---------------------------------------------------------------------------
 // Web deep-link helpers
@@ -78,7 +78,7 @@ export default function AccountHub() {
 
   return (
     <Screen>
-      <H1>{t('account.title')}</H1>
+      <SubHeader title={t('account.title')} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
 
       {/* ── Profile card ── */}
       <View

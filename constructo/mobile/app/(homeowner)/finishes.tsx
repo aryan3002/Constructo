@@ -12,6 +12,7 @@
  * String table follows the en/hi pattern used across every homeowner screen.
  */
 import { View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -32,6 +33,7 @@ import {
   ScreenLoader,
   Small,
   StatusPill,
+  SubHeader,
   FLOATING_NAV_CLEARANCE,
 } from '../../src/ui'
 
@@ -163,6 +165,7 @@ function RoomCard({ room, lang }: { room: RoomFinishes; lang: Lang }) {
 export default function Finishes() {
   const { lang } = useT()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const { theme } = useTheme()
   const c = theme.colors
   const str = STR[lang]
@@ -174,6 +177,7 @@ export default function Finishes() {
 
   return (
     <Screen style={{ paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }}>
+      <SubHeader title={str.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       {/* Header */}
       <View>
         <Display>{str.title}</Display>

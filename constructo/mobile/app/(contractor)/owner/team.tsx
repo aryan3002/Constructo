@@ -32,7 +32,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { Feather } from '@expo/vector-icons'
-import { Stack } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -49,7 +49,6 @@ import {
   BodyStrong,
   Button,
   EmptyState,
-  H1,
   H2,
   Micro,
   Mono,
@@ -58,6 +57,7 @@ import {
   StatusPill,
   StepUpModal,
 } from '../../../src/ui'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 import { ROLE_LABEL } from '../../../src/screens/owner/account.util'
 
 // ---------------------------------------------------------------------------
@@ -827,6 +827,7 @@ function useInputStyle(theme: ReturnType<typeof useTheme>['theme']) {
 
 export default function Team() {
   const { t } = useT()
+  const router = useRouter()
   const { theme } = useTheme()
   const { me } = useAuth()
 
@@ -845,10 +846,10 @@ export default function Team() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
+      <SubHeader title={t('team.title')} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <H1>{t('team.title')}</H1>
-          <Body muted style={{ marginTop: 2 }}>{t('team.subtitle')}</Body>
+          <Body muted>{t('team.subtitle')}</Body>
         </View>
         <Button
           title={t('team.inviteButton')}

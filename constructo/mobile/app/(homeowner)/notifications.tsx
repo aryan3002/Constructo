@@ -23,6 +23,7 @@
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Feather } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { homeowner } from '../../src/api/client'
@@ -40,6 +41,7 @@ import {
   SettingsGroup,
   Small,
   StatusPill,
+  SubHeader,
   Toggle,
 } from '../../src/ui'
 import {
@@ -177,6 +179,7 @@ export default function Notifications() {
   const { lang } = useT()
   const { theme } = useTheme()
   const qc = useQueryClient()
+  const router = useRouter()
   const L: Lang = lang === 'hi' ? 'hi' : 'en'
   const tx = STR[L]
 
@@ -222,6 +225,7 @@ export default function Notifications() {
 
   return (
     <Screen floatingNav>
+      <SubHeader title={tx.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       <View style={{ gap: SPACE.xs }}>
         <Eyebrow>{tx.title}</Eyebrow>
         <Display>{tx.title}</Display>

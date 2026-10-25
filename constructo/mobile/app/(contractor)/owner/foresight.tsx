@@ -15,7 +15,8 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { owner, type SettlementResult, type SiteRollup } from '../../../src/api/owner'
-import { Body, BodyStrong, Button, Card, EmptyState, H1, Mono, MoneyCell, Screen, Small, StatusPill, formatINR } from '../../../src/ui'
+import { Body, BodyStrong, Button, Card, EmptyState, Mono, MoneyCell, Screen, Small, StatusPill, formatINR } from '../../../src/ui'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 import { ErrorBlock, LoadingBlock } from '../../../src/screens/owner/components'
 
 const STR = {
@@ -96,7 +97,7 @@ export default function Foresight() {
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
-      <H1>{t.title}</H1>
+      <SubHeader title={t.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
       <Small muted style={{ marginTop: -SPACE.xs, marginBottom: SPACE.sm }}>{t.sub}</Small>
 
       {q.isLoading ? (

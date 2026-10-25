@@ -19,7 +19,7 @@ import { useState } from 'react'
 import { Modal, Pressable, ScrollView, TextInput, View, type ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Feather } from '@expo/vector-icons'
-import { Stack } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -35,13 +35,13 @@ import {
   Button,
   Card,
   EmptyState,
-  H1,
   H2,
   Micro,
   Screen,
   Small,
   StatusPill,
 } from '../../../src/ui'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 import { useInputStyle } from '../../../src/ui/useInputStyle'
 import { SiteSwitcher } from '../../../src/screens/owner/components'
 import { formatDate } from '../../../src/screens/owner/components'
@@ -639,6 +639,7 @@ function EditSheet({
 
 export default function Permits() {
   const { t } = useT()
+  const router = useRouter()
   const { theme } = useTheme()
 
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
@@ -686,10 +687,10 @@ export default function Permits() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
+      <SubHeader title={t('permits.title')} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <H1>{t('permits.title')}</H1>
-          <Body muted style={{ marginTop: 2 }}>{t('permits.subtitle')}</Body>
+          <Body muted>{t('permits.subtitle')}</Body>
         </View>
         <Button
           title={t('permits.addButton')}

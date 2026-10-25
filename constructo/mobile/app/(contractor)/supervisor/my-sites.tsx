@@ -22,7 +22,6 @@ import {
   BodyStrong,
   Button,
   Card,
-  Display,
   EmptyState,
   Eyebrow,
   H2,
@@ -38,6 +37,7 @@ import {
   type SiteEventType,
 } from '../../../src/api/supervisor'
 import { ErrorState, Loading, SPACE } from '../../../src/screens/supervisor/components'
+import { SubHeader } from '../../../src/screens/supervisor/eng.components'
 import type { Paginated } from '../../../src/api/types'
 
 const STR = {
@@ -121,7 +121,7 @@ export default function MySites() {
 
   return (
     <Screen>
-      <Display>{str.title}</Display>
+      <SubHeader title={str.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/supervisor/home'))} />
 
       {sitesQ.isLoading ? <Loading /> : null}
       {sitesQ.isError ? (

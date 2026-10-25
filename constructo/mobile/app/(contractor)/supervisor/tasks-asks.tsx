@@ -11,6 +11,7 @@
  */
 import { useCallback, useState } from 'react'
 import { Alert, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
@@ -19,7 +20,6 @@ import {
   BodyStrong,
   Button,
   Card,
-  Display,
   EmptyState,
   Mono,
   Screen,
@@ -30,6 +30,7 @@ import { enqueue } from '../../../src/offline/outbox'
 import { useOutbox } from '../../../src/offline/useOutbox'
 import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../src/api/supervisor'
 import { ErrorState, Loading, SPACE } from '../../../src/screens/supervisor/components'
+import { SubHeader } from '../../../src/screens/supervisor/eng.components'
 
 const STR = {
   en: {
@@ -59,6 +60,7 @@ let respSeq = 0
 export default function TasksAsks() {
   const { lang } = useT()
   const str = STR[lang]
+  const router = useRouter()
   const { online, flush } = useOutbox()
   const [responded, setResponded] = useState<Set<string>>(new Set())
 
@@ -97,7 +99,7 @@ export default function TasksAsks() {
         <SyncStatus />
       </View>
 
-      <Display>{str.title}</Display>
+      <SubHeader title={str.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/supervisor/home'))} />
 
       {q.isLoading ? <Loading /> : null}
       {q.isError ? (

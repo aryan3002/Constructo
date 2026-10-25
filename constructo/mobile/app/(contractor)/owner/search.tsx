@@ -6,13 +6,15 @@
  */
 import { useState } from 'react'
 import { TextInput, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { useMutation } from '@tanstack/react-query'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, type Status } from '../../../src/theme/tokens'
 import { owner, type SearchHit, type SearchResponse } from '../../../src/api/owner'
-import { Button, EmptyState, EvidenceCard, H1, Screen, Small } from '../../../src/ui'
+import { Button, EmptyState, EvidenceCard, Screen, Small } from '../../../src/ui'
+import { SubHeader } from '../../../src/screens/owner/audit.components'
 
 const STR = {
   en: {
@@ -51,6 +53,7 @@ export default function Search() {
   const { lang } = useT()
   const { theme } = useTheme()
   const t = STR[lang]
+  const router = useRouter()
   const [q, setQ] = useState('')
 
   const search = useMutation<SearchResponse, Error, string>({
@@ -67,7 +70,7 @@ export default function Search() {
 
   return (
     <Screen>
-      <H1>{t.title}</H1>
+      <SubHeader title={t.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(contractor)/owner/brief'))} />
 
       <View style={{ flexDirection: 'row', gap: SPACE.sm, alignItems: 'center' }}>
         <TextInput

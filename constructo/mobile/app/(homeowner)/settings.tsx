@@ -36,6 +36,7 @@ import {
   SettingsRow,
   Small,
   StepUpModal,
+  SubHeader,
 } from '../../src/ui'
 import { summaryCadence, type Lang } from '../../src/screens/homeowner/settings.util'
 import { POLICY_KEY } from '../../src/screens/homeowner/storage.util'
@@ -170,6 +171,7 @@ export default function Settings() {
 
   return (
     <Screen floatingNav>
+      <SubHeader title={tx.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(homeowner)/home'))} />
       {/* Profile card — avatar + name + role badge + language toggle.
           Mirrors the prototype header: a warm card with the person's
           identity at a glance and a quick language-switch badge. */}
