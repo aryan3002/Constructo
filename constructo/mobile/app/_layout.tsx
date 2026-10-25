@@ -3,10 +3,10 @@
  * (homeowner → Daylight, contractor → Neev) so the surface matches the
  * role; here we only set up Query, i18n, auth, safe-area, and load fonts.
  */
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { AppState, View } from 'react-native'
 import { QueryClient, QueryClientProvider, focusManager, useQueryClient } from '@tanstack/react-query'
-import { Stack, useRouter } from 'expo-router'
+import { Stack, usePathname, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthContext'
 import { chatApi } from '../src/api/chat'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { I18nProvider } from '../src/i18n/I18nProvider'
+import { chatPushRoute } from '../src/push/chat_route.util'
 import { designPushRoute } from '../src/push/design_route.util'
 import { useAppFonts } from '../src/theme/fonts'
 
@@ -58,8 +59,9 @@ export default function RootLayout() {
  *   - chat (`{conversation_id}` — see backend `_push_offline_members`) → the thread
  *   - homeowner content (`{type: photo|request|update|weekly_summary}` — see
  *     `app.push.sender` callers) → the matching tab/screen
- * Routes by role. Best-effort: a malformed/unknown payload is ignored. Mounted
- * inside AuthProvider so `role` + router are ready.
+ * Routes by role (each role to its own screens — see chatPushRoute). Best-
+ * effort: a malformed/unknown payload is ignored. Mounted inside AuthProvider
+ * so `role` + router are ready.
  */
 /**
  * Messages queued in a prior session (composed in a dead zone, app killed) send
@@ -112,69 +114,74 @@ function ChatPushForeground() {
 
 function ChatPushDeepLink() {
   const router = useRouter()
-  const { role } = useAuth()
+  const pathname = usePathname()
+  const { status, role } = useAuth()
   const qc = useQueryClient()
+  // Covers both a tap while running AND the tap that launched the app from
+  // closed (a listener registered after launch would miss that one).
+  const response = Notifications.useLastNotificationResponse()
+  const handled = useRef<string | null>(null)
 
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as
-        | { conversation_id?: string; type?: string; url?: string; audience?: string }
-        | undefined
-      if (!data) return
+    if (!response) return
+    const key = `${response.notification.request.identifier}:${response.notification.date}`
+    if (handled.current === key) return
+    // Wait until auth has resolved and the entry gate has handed off to the
+    // role's home ('/' is the splash + redirect) — routing earlier would be
+    // overridden by that redirect, or route a guest into a signed-in screen.
+    if (status === 'loading' || pathname === '/') return
+    handled.current = key
+    Notifications.clearLastNotificationResponse()
+    if (status !== 'authed') return
 
-      // Chat notification → open the thread. Invalidate the inbox + the thread
-      // we're about to land on FIRST, so a tap while foregrounded doesn't open
-      // onto stale data the poll/socket hasn't caught up to yet.
-      const convId = data.conversation_id
-      if (convId) {
-        void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
-        void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
-        void qc.invalidateQueries({ queryKey: ['chat', 'thread', convId] })
-        if (role === 'homeowner') {
-          router.push({
-            pathname: '/(homeowner)/messages/[id]',
-            params: { id: convId, kind: 'homeowner' },
-          })
-        } else {
-          // Contractor threads address by conversation id; an undefined `kind`
-          // falls back to addressing by conv id in the screen.
-          router.push({ pathname: '/(contractor)/owner/chat/[id]', params: { id: convId } })
-        }
-        return
-      }
+    const data = response.notification.request.content.data as
+      | { conversation_id?: string; type?: string; url?: string; audience?: string }
+      | undefined
+    if (!data) return
 
-      // Design-event notification (see `app.push.sender` design callers) → the
-      // brief/profile screen. Can target either a homeowner or (via
-      // `audience: 'designer'`) the contractor-side architect, so this check
-      // runs before the homeowner-only gate below.
-      const designRoute = designPushRoute(data)
-      if (designRoute) {
-        router.push(designRoute as never)
-        return
-      }
+    // Chat notification → open the thread. Invalidate the inbox + the thread
+    // we're about to land on FIRST, so a tap while foregrounded doesn't open
+    // onto stale data the poll/socket hasn't caught up to yet.
+    const convId = data.conversation_id
+    if (convId) {
+      void qc.invalidateQueries({ queryKey: ['homeowner', 'conversations'] })
+      void qc.invalidateQueries({ queryKey: ['owner', 'conversations'] })
+      void qc.invalidateQueries({ queryKey: ['chat', 'thread', convId] })
+      const route = chatPushRoute(role, convId)
+      if (route) router.push(route as never)
+      return
+    }
 
-      // Homeowner content notification → the matching surface. Invalidate its
-      // query first so the screen renders fresh, not the last cached grid/list.
-      if (role !== 'homeowner') return
-      switch (data.type) {
-        case 'photo':
-          void qc.invalidateQueries({ queryKey: ['photos'] })
-          router.push('/(homeowner)/photos')
-          break
-        case 'request':
-          void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
-          router.push('/(homeowner)/requests')
-          break
-        case 'update':
-        case 'weekly_summary':
-          void qc.invalidateQueries({ queryKey: ['homeowner', 'updates'] })
-          void qc.invalidateQueries({ queryKey: ['homeowner', 'weeklySummary'] })
-          router.push('/(homeowner)/updates')
-          break
-      }
-    })
-    return () => sub.remove()
-  }, [role, router, qc])
+    // Design-event notification (see `app.push.sender` design callers) → the
+    // brief/profile screen. Can target either a homeowner or (via
+    // `audience: 'designer'`) the contractor-side architect, so this check
+    // runs before the homeowner-only gate below.
+    const designRoute = designPushRoute(data)
+    if (designRoute) {
+      router.push(designRoute as never)
+      return
+    }
+
+    // Homeowner content notification → the matching surface. Invalidate its
+    // query first so the screen renders fresh, not the last cached grid/list.
+    if (role !== 'homeowner') return
+    switch (data.type) {
+      case 'photo':
+        void qc.invalidateQueries({ queryKey: ['photos'] })
+        router.push('/(homeowner)/photos')
+        break
+      case 'request':
+        void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
+        router.push('/(homeowner)/requests')
+        break
+      case 'update':
+      case 'weekly_summary':
+        void qc.invalidateQueries({ queryKey: ['homeowner', 'updates'] })
+        void qc.invalidateQueries({ queryKey: ['homeowner', 'weeklySummary'] })
+        router.push('/(homeowner)/updates')
+        break
+    }
+  }, [response, status, role, pathname, router, qc])
 
   return null
 }
