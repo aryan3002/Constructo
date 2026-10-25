@@ -470,6 +470,10 @@ async def create_user(
     user: User = Depends(require_role(UserRole.owner, UserRole.pm)),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
+    # Same guard as invites: a PM may not mint an owner (no privilege
+    # escalation past their own level).
+    if user.role is UserRole.pm and body.role is UserRole.owner:
+        raise AppError(403, "forbidden", "A PM cannot create an owner")
     new_user = User(
         company_id=user.company_id,
         name=body.name,

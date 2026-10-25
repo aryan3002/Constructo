@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, require_role
 from app.common.errors import AppError
 from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor, encode_cursor
 from app.db import get_session
@@ -51,6 +51,9 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 # they aren't individually assigned to. Mirrors the owner/accountant "sees all
 # payments" rule in the founder spec.
 _ALL_PAYMENTS_ROLES = {UserRole.owner, UserRole.pm, UserRole.accountant}
+# Who may write payment records (create / edit / delete). Everyone else reads
+# what their sites allow.
+_payment_writer = require_role(UserRole.owner, UserRole.pm, UserRole.accountant)
 
 
 def _safe_amount(value) -> Decimal:
@@ -313,7 +316,7 @@ async def _base_scoped_stmt(session: AsyncSession, user: User):
 @router.post("", response_model=PaymentOut, status_code=201)
 async def create_payment(
     body: PaymentCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_payment_writer),
     session: AsyncSession = Depends(get_session),
 ) -> PaymentOut:
     await _assert_site_in_company(session, user, body.site_id)
@@ -540,7 +543,7 @@ async def get_payment(
 async def update_payment(
     payment_id: UUID,
     body: PaymentUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_payment_writer),
     session: AsyncSession = Depends(get_session),
 ) -> PaymentOut:
     payment = await _scoped_payment_or_error(session, user, payment_id)
@@ -558,7 +561,7 @@ async def update_payment(
 @router.delete("/{payment_id}", status_code=204)
 async def delete_payment(
     payment_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(_payment_writer),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     payment = await _scoped_payment_or_error(session, user, payment_id)

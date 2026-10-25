@@ -239,3 +239,35 @@ async def test_reactivation_needs_no_step_up(client, factory, db_session):
     )
     assert resp.status_code == 200
     assert resp.json()["is_active"] is True
+
+
+async def test_pm_cannot_create_an_owner(client, factory, db_session):
+    company = await factory.company()
+    pm = await factory.user(company=company, role=UserRole.pm)
+    await db_session.commit()
+    resp = await client.post(
+        "/api/v1/users",
+        json={"name": "Sneaky", "phone": "+919870001111", "role": "owner"},
+        headers=auth(pm),
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "forbidden"
+    # A PM can still add the field roles.
+    ok = await client.post(
+        "/api/v1/users",
+        json={"name": "Crew", "phone": "+919870001112", "role": "supervisor"},
+        headers=auth(pm),
+    )
+    assert ok.status_code == 201, ok.text
+
+
+async def test_owner_can_create_an_owner(client, factory, db_session):
+    company = await factory.company()
+    owner = await factory.user(company=company, role=UserRole.owner)
+    await db_session.commit()
+    resp = await client.post(
+        "/api/v1/users",
+        json={"name": "Partner", "phone": "+919870001113", "role": "owner"},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 201, resp.text

@@ -312,3 +312,58 @@ async def test_financials_read_blocked_for_unassigned_site(
         f"/api/v1/payments/financials/{site_a.id}", headers=auth(supervisor)
     )
     assert allowed.status_code == 200
+
+
+# ---- write roles: owner / pm / accountant only -----------------------------
+
+_WRITERS = (UserRole.owner, UserRole.pm, UserRole.accountant)
+_READ_ONLY = (
+    UserRole.supervisor,
+    UserRole.architect,
+    UserRole.labor_contractor,
+    UserRole.procurement,
+)
+
+
+async def test_only_money_roles_create_payments(client, factory, db_session):
+    company = await factory.company()
+    site = await factory.site(company=company)
+    for role in _WRITERS + _READ_ONLY:
+        user = await factory.user(company=company, role=role)
+        db_session.add(SiteAssignment(site_id=site.id, user_id=user.id))
+        await db_session.flush()
+        resp = await client.post(
+            "/api/v1/payments", json=_payload(site_id=site.id), headers=auth(user)
+        )
+        if role in _WRITERS:
+            assert resp.status_code == 201, (role, resp.text)
+        else:
+            assert resp.status_code == 403, role
+            assert resp.json()["error"]["code"] == "forbidden"
+
+
+async def test_only_money_roles_edit_or_delete_payments(client, factory, db_session):
+    company = await factory.company()
+    site = await factory.site(company=company)
+    owner = await factory.user(company=company, role=UserRole.owner)
+    created = await client.post(
+        "/api/v1/payments", json=_payload(site_id=site.id), headers=auth(owner)
+    )
+    pid = created.json()["id"]
+    for role in _READ_ONLY:
+        user = await factory.user(company=company, role=role)
+        db_session.add(SiteAssignment(site_id=site.id, user_id=user.id))
+        await db_session.flush()
+        patch = await client.patch(
+            f"/api/v1/payments/{pid}", json={"amount": "1.00"}, headers=auth(user)
+        )
+        assert patch.status_code == 403, role
+        delete = await client.delete(f"/api/v1/payments/{pid}", headers=auth(user))
+        assert delete.status_code == 403, role
+    accountant = await factory.user(company=company, role=UserRole.accountant)
+    patch = await client.patch(
+        f"/api/v1/payments/{pid}", json={"amount": "99.00"}, headers=auth(accountant)
+    )
+    assert patch.status_code == 200, patch.text
+    delete = await client.delete(f"/api/v1/payments/{pid}", headers=auth(accountant))
+    assert delete.status_code == 204
