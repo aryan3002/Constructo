@@ -141,3 +141,18 @@ export function meFailureKind(err: unknown): 'expired' | 'unreachable' | 'reject
   if (status >= 500 || status === 408 || status === 429) return 'unreachable'
   return 'rejected'
 }
+
+/**
+ * Role guard for a role's own navigator: a signed-in user of a DIFFERENT role
+ * is sent to their own home (a stale deep link or notification must never
+ * open another role's screens). Returns the redirect target, or null to stay.
+ * Guests / loading are the parent (contractor) layout's job.
+ */
+export function roleGuardRedirect(
+  status: 'loading' | 'authed' | 'guest',
+  role: Role | null,
+  allowed: Role,
+): string | null {
+  if (status !== 'authed' || role === allowed) return null
+  return homeFor(role)
+}

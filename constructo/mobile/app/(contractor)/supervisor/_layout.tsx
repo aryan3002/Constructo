@@ -14,6 +14,7 @@ import { Tabs } from 'expo-router'
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { ToastProvider } from '../../../src/ui'
 import { EngTabBar } from '../../../src/screens/supervisor/eng.components'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 function SupervisorTabs() {
   const { theme } = useTheme()
@@ -54,10 +55,12 @@ function SupervisorTabs() {
 
 export default function SupervisorLayout() {
   return (
-    <ThemeProvider initial="daylight">
-      <ToastProvider>
-        <SupervisorTabs />
-      </ToastProvider>
-    </ThemeProvider>
+    <RoleGuard role="supervisor">
+      <ThemeProvider initial="daylight">
+        <ToastProvider>
+          <SupervisorTabs />
+        </ToastProvider>
+      </ThemeProvider>
+    </RoleGuard>
   )
 }

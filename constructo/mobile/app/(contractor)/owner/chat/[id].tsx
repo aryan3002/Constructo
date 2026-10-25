@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter, useSegments } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
@@ -117,6 +117,10 @@ export default function OwnerConversation() {
   const c = theme.colors
   const insets = useSafeAreaInsets()
   const router = useRouter()
+  // PM and architect re-export this screen inside their own navigators: keep
+  // back + the photo viewer in whichever one we're mounted in.
+  const segments = useSegments() as string[]
+  const base = (['pm', 'architect'] as const).find((r) => segments[1] === r) ?? 'owner'
   const { me } = useAuth()
   const str = STR[lang]
 
@@ -366,7 +370,7 @@ export default function OwnerConversation() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={str.back}
-          onPress={() => router.replace('/(contractor)/owner/chat')}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace(`/(contractor)/${base}/chat` as never))}
           hitSlop={10}
           style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
         >
@@ -451,7 +455,7 @@ export default function OwnerConversation() {
             deliveryStateFor={thread.deliveryState}
             replySnippetFor={replySnippetFor}
             photoActionFor={photoActionFor}
-            onPressAttachment={(uri) => router.push({ pathname: '/(contractor)/owner/chat-viewer', params: { uri } })}
+            onPressAttachment={(uri) => router.push({ pathname: `/(contractor)/${base}/chat-viewer` as never, params: { uri } })}
             emptyState={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Small muted>{str.empty}</Small>

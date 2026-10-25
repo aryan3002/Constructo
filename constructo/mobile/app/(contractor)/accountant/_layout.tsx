@@ -13,13 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 const tabIcon =
   (name: keyof typeof Ionicons.glyphMap) =>
   ({ color }: { color: string; size: number }) =>
     <Ionicons name={name} size={22} color={color} />
 
-export default function AccountantLayout() {
+function AccountantLayoutTabs() {
   const { t } = useT()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -59,5 +60,13 @@ export default function AccountantLayout() {
       {/* Site detail is a pushed route, not a tab. */}
       <Tabs.Screen name="site/[id]" options={{ href: null }} />
     </Tabs>
+  )
+}
+
+export default function AccountantLayout() {
+  return (
+    <RoleGuard role="accountant">
+      <AccountantLayoutTabs />
+    </RoleGuard>
   )
 }

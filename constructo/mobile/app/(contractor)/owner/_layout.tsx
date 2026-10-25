@@ -20,6 +20,7 @@ import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
 import { TAB_DETAIL_TRANSITION } from '../../../src/theme/motionTokens'
 import { ToastProvider, useReducedMotion } from '../../../src/ui'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 const LABELS = {
   en: { brief: 'Brief', sites: 'Sites', chat: 'Chat', specs: 'Specs', approvals: 'Approvals', more: 'More', search: 'Search' },
@@ -103,10 +104,12 @@ function OwnerTabs() {
 export default function OwnerLayout() {
   // Override the parent (contractor) neev theme with daylight for the owner subtree.
   return (
-    <ThemeProvider initial="daylight">
-      <ToastProvider>
-        <OwnerTabs />
-      </ToastProvider>
-    </ThemeProvider>
+    <RoleGuard role="owner">
+      <ThemeProvider initial="daylight">
+        <ToastProvider>
+          <OwnerTabs />
+        </ToastProvider>
+      </ThemeProvider>
+    </RoleGuard>
   )
 }

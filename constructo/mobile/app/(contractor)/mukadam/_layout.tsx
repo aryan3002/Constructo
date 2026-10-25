@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 const STR = {
   en: { attendance: 'Attendance', payments: 'My Pay', help: 'Help' },
@@ -25,7 +26,7 @@ const tabIcon =
   ({ color }: { color: string; size: number }) =>
     <Ionicons name={name} size={22} color={color} />
 
-export default function MukadamLayout() {
+function MukadamLayoutTabs() {
   const { lang } = useT()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -61,5 +62,13 @@ export default function MukadamLayout() {
       />
       <Tabs.Screen name="help" options={{ title: str.help, tabBarIcon: tabIcon('help-circle-outline') }} />
     </Tabs>
+  )
+}
+
+export default function MukadamLayout() {
+  return (
+    <RoleGuard role="labor_contractor">
+      <MukadamLayoutTabs />
+    </RoleGuard>
   )
 }

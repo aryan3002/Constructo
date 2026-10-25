@@ -14,13 +14,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { FACES } from '../../../src/theme/fonts'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 const tabIcon =
   (name: keyof typeof Ionicons.glyphMap) =>
   ({ color }: { color: string; size: number }) =>
     <Ionicons name={name} size={22} color={color} />
 
-export default function PmLayout() {
+function PmLayoutTabs() {
   const { t } = useT()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -59,6 +60,15 @@ export default function PmLayout() {
       />
       {/* Conversation detail, off-tab (pushed from the Chat inbox). */}
       <Tabs.Screen name="chat/[id]" options={{ href: null }} />
+      <Tabs.Screen name="chat-viewer" options={{ href: null }} />
     </Tabs>
+  )
+}
+
+export default function PmLayout() {
+  return (
+    <RoleGuard role="pm">
+      <PmLayoutTabs />
+    </RoleGuard>
   )
 }

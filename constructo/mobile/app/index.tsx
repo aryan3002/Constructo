@@ -1,5 +1,6 @@
 /**
- * Entry gate / role→route map. Branches on auth status + role:
+ * Entry gate. Branches on auth status + role (the role → home map is
+ * `homeFor` in src/auth/auth.util.ts):
  *   cold start       → the splash plays ONCE (the mark builds itself), then we
  *                      fall through to the role redirects below
  *   loading          → a calm static benchmark mark (never a spinner)
@@ -20,6 +21,7 @@ import { View } from 'react-native'
 import { Redirect } from 'expo-router'
 
 import { useAuth } from '../src/auth/AuthContext'
+import { homeFor } from '../src/auth/auth.util'
 import { BenchmarkMark, Splash } from '../src/ui'
 
 // Module-level: the splash plays ONCE per cold start (this flag lives for the
@@ -56,25 +58,8 @@ export default function Index() {
   }
 
   if (status === 'guest') return <Redirect href="/(auth)" />
-  // Homeowners always land on home for returning sessions. New joins are routed
-  // to (homeowner)/welcome directly from join.tsx (not through this gate).
-  if (role === 'homeowner') return <Redirect href="/(homeowner)/home" />
-  // H4 Tier-1 contractor branches (Owner / Supervisor / Mukadam).
-  if (role === 'owner') return <Redirect href="/(contractor)/owner/brief" />
-  if (role === 'supervisor') return <Redirect href="/(contractor)/supervisor/home" />
-  if (role === 'labor_contractor') {
-    return <Redirect href="/(contractor)/mukadam/attendance" />
-  }
-  // Architect (Designer) — daylight Calm Cockpit: Home · Brief · Selections ·
-  // Chat · More, wired to the design profiler + specs.
-  if (role === 'architect') return <Redirect href="/(contractor)/architect/home" />
-  // PM (C4) — native Auto-DPR review surface.
-  if (role === 'pm') return <Redirect href="/(contractor)/pm/dpr" />
-  // Accountant (C4) — native Reconcile cockpit (read-mostly, tracking-only).
-  if (role === 'accountant') {
-    return <Redirect href="/(contractor)/accountant/reconcile" />
-  }
-  // Procurement is a HAT, not a seat (correction #3) — no dedicated home; the
-  // PM/supervisor wears it. Falls through to the Tier-2 placeholder for now.
-  return <Redirect href="/(contractor)" />
+  // Role → home is one shared map (also used by login, the tour and the role
+  // layouts' guards). Homeowners land on home for returning sessions; new joins
+  // are routed to (homeowner)/welcome directly from join.tsx.
+  return <Redirect href={homeFor(role) as never} />
 }

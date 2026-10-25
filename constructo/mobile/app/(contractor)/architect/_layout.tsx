@@ -15,6 +15,7 @@ import { Tabs } from 'expo-router'
 
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { DesTabBar } from '../../../src/screens/architect/components'
+import { RoleGuard } from '../../../src/auth/RoleGuard'
 
 function ArchitectTabs() {
   const { theme } = useTheme()
@@ -33,6 +34,7 @@ function ArchitectTabs() {
         <Tabs.Screen name="more" options={{ title: 'More' }} />
         {/* Pushed, off-tab. */}
         <Tabs.Screen name="chat/[id]" options={{ href: null }} />
+        <Tabs.Screen name="chat-viewer" options={{ href: null }} />
         <Tabs.Screen name="designsite/[id]" options={{ href: null }} />
         <Tabs.Screen name="dp/[id]" options={{ href: null }} />
         <Tabs.Screen name="selection/[id]" options={{ href: null }} />
@@ -46,8 +48,10 @@ function ArchitectTabs() {
 
 export default function ArchitectLayout() {
   return (
-    <ThemeProvider initial="daylight">
-      <ArchitectTabs />
-    </ThemeProvider>
+    <RoleGuard role="architect">
+      <ThemeProvider initial="daylight">
+        <ArchitectTabs />
+      </ThemeProvider>
+    </RoleGuard>
   )
 }

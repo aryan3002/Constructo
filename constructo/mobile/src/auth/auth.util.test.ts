@@ -7,6 +7,7 @@ import { ApiError, TimeoutError } from '../api/client'
 import {
   digitsOnly,
   meFailureKind,
+  roleGuardRedirect,
   formatIndianMobile,
   homeFor,
   isValidIndianMobile,
@@ -120,5 +121,21 @@ describe('meFailureKind (cold-start /auth/me failure)', () => {
   })
   test('another 4xx is a rejection', () => {
     expect(meFailureKind(new ApiError(403, 'x'))).toBe('rejected')
+  })
+})
+
+describe('roleGuardRedirect (per-role layouts)', () => {
+  it('lets the layout\'s own role through', () => {
+    expect(roleGuardRedirect('authed', 'pm', 'pm')).toBeNull()
+  })
+  it('sends any other signed-in role to its own home', () => {
+    expect(roleGuardRedirect('authed', 'labor_contractor', 'owner')).toBe('/(contractor)/mukadam/attendance')
+    expect(roleGuardRedirect('authed', 'accountant', 'owner')).toBe('/(contractor)/accountant/reconcile')
+    expect(roleGuardRedirect('authed', 'owner', 'supervisor')).toBe('/(contractor)/owner/brief')
+    expect(roleGuardRedirect('authed', 'homeowner', 'architect')).toBe('/(homeowner)/home')
+  })
+  it('leaves loading / guest to the parent layout', () => {
+    expect(roleGuardRedirect('loading', null, 'owner')).toBeNull()
+    expect(roleGuardRedirect('guest', null, 'owner')).toBeNull()
   })
 })
