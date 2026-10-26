@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Neev app icon">
+  <rect width="1024" height="1024" rx="229" fill="#1B1916"></rect>
+  <g transform="translate(204.8,204.8) scale(6.144)">
+    <circle cx="50" cy="28" r="5.5" fill="#F0A21F"></circle>
+    <path d="M29 67 L50 45 L71 67" fill="none" stroke="#F0A21F" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <rect x="24" y="74" width="52" height="8" rx="4" fill="#F0A21F"></rect>
+  </g>
+</svg>

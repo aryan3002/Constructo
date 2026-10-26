@@ -1,0 +1,26 @@
+{
+  "name": "neev-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Neev launch films and the reusable motion components they are built from (Remotion).",
+  "scripts": {
+    "studio": "remotion studio",
+    "typecheck": "tsc --noEmit",
+    "render": "node scripts/render.mjs",
+    "still": "remotion still",
+    "audio": "uv run --with numpy --with scipy python scripts/audio/sfx.py && uv run --with numpy --with scipy python scripts/audio/score.py"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.535",
+    "@remotion/fonts": "4.0.535",
+    "@remotion/paths": "4.0.535",
+    "@remotion/transitions": "4.0.535",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.535"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.10",
+    "typescript": "5.9.2"
+  }
+}

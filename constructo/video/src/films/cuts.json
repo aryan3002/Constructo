@@ -1,0 +1,48 @@
+{
+  "a": {
+    "title": "All good, sir?",
+    "bpm": 90,
+    "youtube": [
+      ["hook", 2],
+      ["noise", 3],
+      ["reveal", 2],
+      ["site", 5],
+      ["builder", 6],
+      ["family", 5],
+      ["truths", 3],
+      ["end", 3]
+    ],
+    "reel": [
+      ["hook", 1.5],
+      ["noise", 1],
+      ["reveal", 1],
+      ["site", 2.5],
+      ["builder", 2.5],
+      ["family", 2.5],
+      ["end", 2]
+    ]
+  },
+  "b": {
+    "title": "Build on the truth",
+    "bpm": 120,
+    "youtube": [
+      ["hook", 4],
+      ["noise", 4],
+      ["turn", 4],
+      ["site", 5],
+      ["builder", 6],
+      ["family", 5],
+      ["truths", 3],
+      ["end", 4]
+    ],
+    "reel": [
+      ["hook", 3],
+      ["noise", 2],
+      ["turn", 2],
+      ["site", 2.5],
+      ["builder", 3],
+      ["family", 2.5],
+      ["end", 2]
+    ]
+  }
+}
