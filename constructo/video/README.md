@@ -31,8 +31,12 @@ Names are fictional; the supplier is made up on purpose.
 ```sh
 cd constructo/video
 npm install
+npm run audio             # generate the score and sound effects (needs uv, or pip install numpy scipy)
 npm run studio            # preview, scrub and tweak every film and component
 ```
+
+The music WAVs aren't committed (they're ~40 MB and regenerate identically),
+so run `npm run audio` once after cloning.
 
 Render the films, stills and the logo sting:
 
