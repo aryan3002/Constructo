@@ -361,11 +361,12 @@ export function BuilderA({dur, fmt}: SceneProps) {
         focus={
           reel
             ? [
+                // Reels: lift the proof clear of Instagram's caption area.
                 {f: 0, z: 1},
-                {f: 54, z: 1},
-                {f: 78, z: 1.16, fy: 470},
-                {f: 112, z: 1.16, fy: 470},
-                {f: 132, z: 1.04, fy: 560},
+                {f: 56, z: 1},
+                {f: 80, z: 1.12, fy: 560, dy: -400},
+                {f: 112, z: 1.12, fy: 560, dy: -400},
+                {f: 132, z: 1.06, fy: 600, dy: -360},
               ]
             : [
                 {f: 0, z: 1},
@@ -385,7 +386,7 @@ export function BuilderA({dur, fmt}: SceneProps) {
           title={reel ? 'What doesn’t add up\ncomes first.' : 'Exceptions first.\nProof on tap.'}
           body={reel ? undefined : 'The invoice says 120 bags. The site logged 100. Neev puts that on top, with both pieces of proof.'}
           start={6}
-          exitAt={out}
+          exitAt={reel ? 62 : out}
           titleSize={rig.titleSize}
           bodySize={rig.bodySize}
           colors={COLORS}

@@ -17,7 +17,8 @@ mkdirSync(outDir, {recursive: true});
 
 const serveUrl = await bundle({entryPoint: path.join(root, 'src', 'index.ts')});
 const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE ?? null;
-const inputProps = {};
+// e.g. INPUT_PROPS='{"safeGuide":true}' to draw the Reels safe zone.
+const inputProps = process.env.INPUT_PROPS ? JSON.parse(process.env.INPUT_PROPS) : {};
 const composition = await selectComposition({serveUrl, id, inputProps, browserExecutable});
 
 let frames = rest.map(Number);
@@ -27,7 +28,8 @@ if (rest[0] === '--every') {
   for (let f = Math.floor(n / 2); f < composition.durationInFrames; f += n) frames.push(f);
 }
 for (const frame of frames) {
-  const output = path.join(outDir, `${id}-${String(frame).padStart(5, '0')}.png`);
+  const suffix = process.env.INPUT_PROPS ? '-props' : '';
+  const output = path.join(outDir, `${id}-${String(frame).padStart(5, '0')}${suffix}.png`);
   await renderStill({composition, serveUrl, output, frame, inputProps, browserExecutable, overwrite: true});
   console.log(output);
 }

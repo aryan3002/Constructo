@@ -321,11 +321,14 @@ function CourseScene({
   children,
   focus,
   time,
+  captionOutAt,
 }: SceneProps & {
   copy: CourseCopy;
   children: React.ReactNode;
-  focus: Array<{f: number; z: number; fy?: number}>;
+  focus: Array<{f: number; z: number; fy?: number; dy?: number}>;
   time: string;
+  /** Fade the words early (Reels: before the phone rises over them). */
+  captionOutAt?: number;
 }) {
   const frame = useCurrentFrame();
   const L = useLayout() === 'landscape';
@@ -335,7 +338,7 @@ function CourseScene({
   const wordsAt = reel ? 6 : BEAT * 2;
   const subAt = wordsAt + copy.words.length * wordGap + (reel ? 4 : BEAT);
   const sub = prog(frame, subAt, 14, EASE);
-  const out = prog(frame, dur - 10, 10, EXIT);
+  const out = Math.max(prog(frame, dur - 10, 10, EXIT), captionOutAt === undefined ? 0 : prog(frame, captionOutAt, 10, EXIT));
   const wordSize = L ? 150 : 132;
   return (
     <InkStage grid={0.3}>
@@ -456,14 +459,16 @@ export function BuilderB({dur, fmt}: SceneProps) {
         accent: 1,
         sub: reel ? 'Neev never moves money. It shows the proof.' : 'The invoice says 120 bags; the site logged 100. Neev never moves money. It shows you what doesn’t add up.',
       }}
+      captionOutAt={reel ? 56 : undefined}
       focus={
         reel
           ? [
+              // Reels: lift the proof clear of Instagram's caption area.
               {f: 0, z: 1},
-              {f: 44, z: 1},
-              {f: 66, z: 1.14, fy: 470},
-              {f: 110, z: 1.14, fy: 470},
-              {f: 128, z: 1.04, fy: 560},
+              {f: 50, z: 1},
+              {f: 70, z: 1.12, fy: 560, dy: -480},
+              {f: 110, z: 1.12, fy: 560, dy: -480},
+              {f: 128, z: 1.06, fy: 600, dy: -440},
             ]
           : [
               {f: 0, z: 1},
