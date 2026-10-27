@@ -28,9 +28,10 @@ export const MONEY_RISK_KINDS = new Set(['unverified_invoice', 'pending_approval
 
 const OPEN_STATES = new Set<Decision['state']>(['pending', 'acknowledged', 'escalated'])
 
-/** An open approval the builder decides (never a held payment or a question). */
+/** An open approval the builder decides (never a held payment, nor a
+ *  question or sign-off the homeowner answers). */
 export function isOwnerDecision(d: Decision): boolean {
-  return d.kind === 'approval' && OPEN_STATES.has(d.state)
+  return d.kind === 'approval' && d.audience !== 'homeowner' && OPEN_STATES.has(d.state)
 }
 
 /** The chips a row offers for this viewer. */

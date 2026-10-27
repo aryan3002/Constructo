@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models import DecisionKind, DecisionState
+from app.models import DecisionAudience, DecisionKind, DecisionState
 
 # ---- decisions -------------------------------------------------------------
 
@@ -60,6 +60,9 @@ class DecisionOut(BaseModel):
     site_id: UUID | None
     spec_id: UUID | None = None
     kind: DecisionKind
+    # Who answers it: ``internal`` (the builder's call) or ``homeowner`` (a
+    # question the homeowner decides, which the team only waits on).
+    audience: DecisionAudience = DecisionAudience.internal
     title: str
     detail: str | None
     raised_by: UUID | None

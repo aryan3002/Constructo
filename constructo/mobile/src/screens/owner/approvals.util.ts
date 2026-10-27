@@ -152,3 +152,29 @@ export function undoCopy(action: DecideAction, lang: Lang, count = 1): UndoCopy 
     failMessage: action === 'approve' ? 'Not approved.' : 'Not held.',
   }
 }
+
+// ---- Questions the homeowner answers (T4 audience) -------------------------
+
+/** A homeowner's question or sign-off: the owner waits on it, never approves
+ *  or holds it, so its card shows how long it has waited instead. */
+export function waitsOnHomeowner(d: { audience?: string | null }): boolean {
+  return d.audience === 'homeowner'
+}
+
+/** "Waiting for the homeowner for 3 hours". */
+export function homeownerWaitText(createdAt: string, lang: Lang, now = Date.now()): string {
+  const mins = Math.max(1, Math.floor((now - new Date(createdAt).getTime()) / 60_000))
+  const hrs = Math.floor(mins / 60)
+  const days = Math.floor(hrs / 24)
+  if (lang === 'hi') {
+    const span = days >= 1 ? `${days} दिन` : hrs >= 1 ? `${hrs} घंटे` : `${mins} मिनट`
+    return `${span} से गृहस्वामी के जवाब का इंतज़ार`
+  }
+  const span =
+    days >= 1
+      ? `${days} day${days === 1 ? '' : 's'}`
+      : hrs >= 1
+        ? `${hrs} hour${hrs === 1 ? '' : 's'}`
+        : `${mins} min`
+  return `Waiting for the homeowner for ${span}`
+}

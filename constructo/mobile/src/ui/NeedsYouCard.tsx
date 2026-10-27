@@ -46,6 +46,9 @@ export interface NeedsYouCardProps {
   proposedBy?: string
   /** The lock message; `{by}` is replaced with `proposedBy`. */
   proposeNote?: string
+  /** Replaces the actions with a plain line, e.g. a question that waits on
+   *  the homeowner (nothing for the owner to approve or hold). */
+  footNote?: string
   onPrimary?: () => void
   onSecondary?: () => void
   onEvidence?: (e: EvidenceChipProps, index: number) => void
@@ -72,6 +75,7 @@ export function NeedsYouCard({
   canApprove = true,
   proposedBy,
   proposeNote = '{by} proposed this — only the owner can approve.',
+  footNote,
   onPrimary,
   onSecondary,
   onEvidence,
@@ -143,21 +147,27 @@ export function NeedsYouCard({
         ) : (
           <View />
         )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-          {secondaryLabel ? (
-            <Button title={secondaryLabel} variant="ghost" size="md" onPress={onSecondary} />
-          ) : null}
-          {canApprove ? (
-            <Button
-              title={primaryLabel}
-              variant={tone === 'cautionary' ? 'primary' : 'accent'}
-              size="md"
-              onPress={onPrimary}
-            />
-          ) : (
-            <Button title={reviewLabel} variant="secondary" size="md" onPress={onPrimary} />
-          )}
-        </View>
+        {footNote ? (
+          <Small muted style={{ flex: 1 }}>
+            {footNote}
+          </Small>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+            {secondaryLabel ? (
+              <Button title={secondaryLabel} variant="ghost" size="md" onPress={onSecondary} />
+            ) : null}
+            {canApprove ? (
+              <Button
+                title={primaryLabel}
+                variant={tone === 'cautionary' ? 'primary' : 'accent'}
+                size="md"
+                onPress={onPrimary}
+              />
+            ) : (
+              <Button title={reviewLabel} variant="secondary" size="md" onPress={onPrimary} />
+            )}
+          </View>
+        )}
       </View>
     </Card>
   )

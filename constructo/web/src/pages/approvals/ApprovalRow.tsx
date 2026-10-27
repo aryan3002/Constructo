@@ -34,6 +34,31 @@ const STATE_KEY: Record<DecisionState, TranslationKey> = {
  *  `_OWNER_ONLY_KINDS`); everyone else gets 403 `owner_only`. */
 export const MONEY_KINDS = new Set<DecisionKind>(['approval', 'hold_payment'])
 
+/** A homeowner's question: the team waits on their answer, never decides it. */
+export function waitsOnHomeowner(d: Pick<Decision, 'audience'>): boolean {
+  return d.audience === 'homeowner'
+}
+
+/** "for 3 hours" — how long a homeowner question has been waiting. */
+export function waitingText(
+  createdAt: string,
+  t: (k: TranslationKey, v?: Record<string, number>) => string,
+  now = Date.now(),
+): string {
+  const mins = Math.max(0, Math.floor((now - new Date(createdAt).getTime()) / 60_000))
+  if (mins < 60) return t('approvals.waiting_homeowner.minutes', { n: Math.max(1, mins) })
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) {
+    return t(hrs === 1 ? 'approvals.waiting_homeowner.hour' : 'approvals.waiting_homeowner.hours', {
+      n: hrs,
+    })
+  }
+  const days = Math.floor(hrs / 24)
+  return t(days === 1 ? 'approvals.waiting_homeowner.day' : 'approvals.waiting_homeowner.days', {
+    n: days,
+  })
+}
+
 export interface ApprovalRowProps {
   decision: Decision
   selected: boolean
@@ -63,6 +88,9 @@ export function ApprovalRow({
   const t = useT()
   const status = STATE_STATUS[d.state]
   const isOpen = d.state === 'pending' || d.state === 'escalated'
+  // The homeowner answers these (a tile choice, a sign-off): no Approve/Reject
+  // and no batch select, just how long it has been waiting.
+  const homeowners = waitsOnHomeowner(d)
   // WC4 (abort condition): a non-owner NEVER sees Approve/Release on a money
   // decision — only a note that it waits on the owner (it is already in their
   // inbox; there is nothing to send). The server is the authz source too.
@@ -110,7 +138,7 @@ export function ApprovalRow({
 
   return (
     <li className="flex items-start gap-3">
-      {isOpen ? (
+      {isOpen && !homeowners ? (
         <input
           type="checkbox"
           checked={selected}
@@ -131,7 +159,9 @@ export function ApprovalRow({
         />
         {isOpen ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {ownerOnly ? (
+            {homeowners ? (
+              <Small data-testid="homeowner-wait">{waitingText(d.created_at, t)}</Small>
+            ) : ownerOnly ? (
               <Small data-testid="owner-only-note">{t('approvals.owner_only')}</Small>
             ) : (
               <>

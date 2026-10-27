@@ -112,11 +112,17 @@ export type DecisionState =
   | 'rejected'
   | 'escalated'
 
+/** Who answers a decision: the builder's team, or the homeowner. */
+export type DecisionAudience = 'internal' | 'homeowner'
+
 export interface Decision {
   id: string
   company_id: string
   site_id: string | null
   kind: DecisionKind
+  /** `homeowner` decisions are the homeowner's to answer (a tile choice, a
+   *  sign-off); the team only waits. Absent on older payloads = internal. */
+  audience?: DecisionAudience
   title: string
   detail: string | null
   raised_by: string | null

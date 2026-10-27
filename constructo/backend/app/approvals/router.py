@@ -84,6 +84,7 @@ def _out(d: Decision) -> DecisionOut:
         site_id=d.site_id,
         spec_id=d.spec_id,
         kind=d.kind,
+        audience=d.audience,
         title=_strip_tag(d.title),
         detail=d.detail,
         raised_by=d.raised_by,

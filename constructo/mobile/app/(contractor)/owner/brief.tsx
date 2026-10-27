@@ -26,7 +26,13 @@ import { request } from '../../../src/api/client'
 import { owner, type Decision, type SiteCard } from '../../../src/api/owner'
 import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from '../../../src/screens/owner/components'
-import { decisionConfirm, undoCopy, type ConfirmCopy } from '../../../src/screens/owner/approvals.util'
+import {
+  decisionConfirm,
+  homeownerWaitText,
+  undoCopy,
+  waitsOnHomeowner,
+  type ConfirmCopy,
+} from '../../../src/screens/owner/approvals.util'
 import { schedulePending, usePendingHiddenIds } from '../../../src/owner/pendingDecisions'
 import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
 
@@ -202,6 +208,7 @@ export default function Brief() {
               d={d}
               overdue={isOverdue(d)}
               t={t}
+              waitNote={waitsOnHomeowner(d) ? homeownerWaitText(d.created_at, lang) : undefined}
               pending={decide.isPending}
               onApprove={() => approve(d)}
               onReview={() => router.push('/(contractor)/owner/approvals')}
@@ -274,11 +281,13 @@ export default function Brief() {
 }
 
 function OwnerDecisionCard({
-  d, overdue, t, pending, onApprove, onReview,
+  d, overdue, t, waitNote, pending, onApprove, onReview,
 }: {
   d: Decision
   overdue: boolean
   t: Txt
+  /** A question the homeowner answers: shown instead of Approve / Review. */
+  waitNote?: string
   pending: boolean
   onApprove: () => void
   onReview: () => void
@@ -328,10 +337,14 @@ function OwnerDecisionCard({
           <Micro muted>{t.proof(proofN)}</Micro>
         </View>
       ) : null}
-      <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md }}>
-        <Button title={t.approve} size="md" disabled={pending} onPress={onApprove} style={{ flex: 1 }} />
-        <Button title={t.review} variant="secondary" size="md" onPress={onReview} style={{ flex: 1 }} />
-      </View>
+      {waitNote ? (
+        <Small muted style={{ marginTop: SPACE.md }}>{waitNote}</Small>
+      ) : (
+        <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md }}>
+          <Button title={t.approve} size="md" disabled={pending} onPress={onApprove} style={{ flex: 1 }} />
+          <Button title={t.review} variant="secondary" size="md" onPress={onReview} style={{ flex: 1 }} />
+        </View>
+      )}
     </Card>
   )
 }

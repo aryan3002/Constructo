@@ -176,3 +176,26 @@ async def test_batch_reject_and_acknowledge_reach_the_batch_route(client, owner)
     )
     assert rej.status_code == 200, rej.text
     assert set(rej.json()["updated"]) == set(ids)
+
+
+async def test_decisions_say_who_answers_them(client, owner):
+    """The inbox tells the builder's own calls from the homeowner's questions,
+    so a client offers Approve/Reject only on the first."""
+    internal = await client.post(
+        "/api/v1/approvals",
+        json={"title": "Approve ACC invoice", "kind": "approval"},
+        headers=auth(owner),
+    )
+    question = await client.post(
+        "/api/v1/approvals",
+        json={"title": "Select bathroom tile option", "kind": "homeowner_question"},
+        headers=auth(owner),
+    )
+    assert internal.json()["audience"] == "internal"
+    assert question.json()["audience"] == "homeowner"
+
+    listed = {
+        d["title"]: d["audience"]
+        for d in (await client.get("/api/v1/approvals", headers=auth(owner))).json()["items"]
+    }
+    assert listed == {"Approve ACC invoice": "internal", "Select bathroom tile option": "homeowner"}

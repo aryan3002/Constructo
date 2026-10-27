@@ -105,6 +105,7 @@ describe('<NeedsYou>', () => {
       dec({ id: 'b', kind: 'homeowner_question', state: 'pending', title: 'Homeowner Q' }),
       dec({ id: 'c', kind: 'approval', state: 'resolved', title: 'Old approval' }),
       dec({ id: 'd', kind: 'hold_payment', state: 'pending', title: 'Hold payment to Jindal' }),
+      dec({ id: 'e', kind: 'approval', audience: 'homeowner', title: 'Kitchen layout sign-off' }),
     ], 'owner', { withHome: true })
     expect(await screen.findByText(/Approve extra 50 bags/)).toBeInTheDocument()
     expect(screen.getByText('Invoice received with no matching delivery')).toBeInTheDocument()
@@ -112,6 +113,7 @@ describe('<NeedsYou>', () => {
     expect(screen.queryByText('Homeowner Q')).not.toBeInTheDocument()
     expect(screen.queryByText('Old approval')).not.toBeInTheDocument()
     expect(screen.queryByText(/Hold payment to Jindal/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Kitchen layout sign-off')).not.toBeInTheDocument()
   })
 
   it('honest empty state when nothing is pending', async () => {

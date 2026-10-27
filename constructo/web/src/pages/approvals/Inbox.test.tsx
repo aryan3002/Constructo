@@ -228,4 +228,48 @@ describe('ApprovalInbox', () => {
     expect(screen.queryByText('Selection')).not.toBeInTheDocument()
     expect(screen.queryByTestId('view-selection-link')).not.toBeInTheDocument()
   })
+
+  it("a homeowner's question waits on them: no Approve, Reject or select", async () => {
+    const created = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    list.mockResolvedValue({
+      items: [
+        makeDecision({
+          id: 'hq',
+          kind: 'homeowner_question',
+          audience: 'homeowner',
+          title: 'Select bathroom tile option',
+          created_at: created,
+        }),
+        makeDecision({ id: 'inv', audience: 'internal', title: 'Approve ACC invoice' }),
+      ],
+      next_cursor: null,
+    })
+    wrap(<ApprovalInbox />)
+    const row = (await screen.findByText('Select bathroom tile option')).closest('li')!
+    expect(within(row).getByTestId('homeowner-wait')).toHaveTextContent(
+      'Waiting for the homeowner for 3 hours',
+    )
+    expect(within(row).queryByRole('button', { name: /approve|reject/i })).toBeNull()
+    expect(within(row).queryByRole('checkbox')).toBeNull()
+    // The builder's own call keeps Approve / Reject.
+    const inv = screen.getByText('Approve ACC invoice').closest('li')!
+    expect(within(inv).getByRole('button', { name: /^approve$/i })).toBeInTheDocument()
+  })
+})
+
+describe('waitingText', () => {
+  it('says how long, in words', async () => {
+    const { waitingText } = await import('./ApprovalRow')
+    const { en } = await import('../../i18n/en')
+    const t = (k: keyof typeof en, v?: Record<string, number>) =>
+      en[k].replace('{n}', String(v?.n ?? ''))
+    const now = Date.parse('2026-07-03T12:00:00Z')
+    const ago = (ms: number) => new Date(now - ms).toISOString()
+    expect(waitingText(ago(20 * 1000), t, now)).toBe('Waiting for the homeowner for 1 min')
+    expect(waitingText(ago(61 * 60 * 1000), t, now)).toBe('Waiting for the homeowner for 1 hour')
+    expect(waitingText(ago(26 * 60 * 60 * 1000), t, now)).toBe('Waiting for the homeowner for 1 day')
+    expect(waitingText(ago(5 * 24 * 60 * 60 * 1000), t, now)).toBe(
+      'Waiting for the homeowner for 5 days',
+    )
+  })
 })

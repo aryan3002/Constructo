@@ -331,6 +331,7 @@ export function ApprovalRow({
   onToggleSelect,
   chips,
   onChip,
+  waitNote,
 }: {
   title: string
   detail?: string | null
@@ -343,6 +344,9 @@ export function ApprovalRow({
   onToggleSelect: () => void
   chips: { approve: string; hold: string; assign: string }
   onChip: (action: 'approve' | 'hold' | 'assign') => void
+  /** Set for a question the homeowner answers: no select, Approve, Hold or
+   *  Assign — just this line (how long it has waited). */
+  waitNote?: string
 }) {
   const { theme } = useTheme()
   const c = theme.colors
@@ -359,25 +363,29 @@ export function ApprovalRow({
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm }}>
       {/* Batch-select checkbox — outside the card, preserves NeedsYouCard layout */}
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected }}
-        onPress={onToggleSelect}
-        hitSlop={8}
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 6,
-          borderWidth: 2,
-          borderColor: selected ? c.accent : c.line,
-          backgroundColor: selected ? c.accent : 'transparent',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginTop: SPACE.lg,
-        }}
-      >
-        {selected ? <Micro color={c.onAccent} style={{ fontSize: 14, lineHeight: 16 }}>✓</Micro> : null}
-      </Pressable>
+      {waitNote ? (
+        <View style={{ width: 24 }} />
+      ) : (
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+          onPress={onToggleSelect}
+          hitSlop={8}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            borderWidth: 2,
+            borderColor: selected ? c.accent : c.line,
+            backgroundColor: selected ? c.accent : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: SPACE.lg,
+          }}
+        >
+          {selected ? <Micro color={c.onAccent} style={{ fontSize: 14, lineHeight: 16 }}>✓</Micro> : null}
+        </Pressable>
+      )}
 
       <View style={{ flex: 1, gap: SPACE.xs }}>
         <NeedsYouCard
@@ -392,17 +400,20 @@ export function ApprovalRow({
           secondaryLabel={chips.hold}
           tone={status === 'risk' ? 'cautionary' : 'affirmative'}
           canApprove={true}
+          footNote={waitNote}
           onPrimary={pending ? undefined : () => onChip('approve')}
           onSecondary={pending ? undefined : () => onChip('hold')}
         />
         {/* Assign — tertiary action below the card */}
-        <Button
-          title={chips.assign}
-          variant="secondary"
-          size="md"
-          disabled={pending}
-          onPress={() => onChip('assign')}
-        />
+        {waitNote ? null : (
+          <Button
+            title={chips.assign}
+            variant="secondary"
+            size="md"
+            disabled={pending}
+            onPress={() => onChip('assign')}
+          />
+        )}
       </View>
     </View>
   )

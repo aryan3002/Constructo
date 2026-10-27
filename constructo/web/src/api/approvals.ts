@@ -23,11 +23,17 @@ export type DecisionState =
   | 'rejected'
   | 'escalated'
 
+/** Who answers a decision: the builder's team, or the homeowner. */
+export type DecisionAudience = 'internal' | 'homeowner'
+
 export interface Decision {
   id: string
   company_id: string
   site_id: string | null
   kind: DecisionKind
+  /** `homeowner` decisions are the homeowner's to answer; the team waits.
+   *  Absent from older payloads (treated as internal). */
+  audience?: DecisionAudience
   title: string
   detail: string | null
   raised_by: string | null
@@ -110,6 +116,7 @@ const mockDecisions: Decision[] = [
     company_id: 'co-1',
     site_id: 'site-1',
     kind: 'homeowner_question',
+    audience: 'homeowner',
     title: 'Homeowner asks: when will the slab be poured?',
     detail: 'Asked via WhatsApp at 09:14. SLA: respond within 24h.',
     raised_by: null,

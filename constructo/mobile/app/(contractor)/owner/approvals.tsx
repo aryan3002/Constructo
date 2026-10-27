@@ -22,6 +22,8 @@ import {
   decisionConfirm,
   undoCopy,
   type ConfirmCopy,
+  homeownerWaitText,
+  waitsOnHomeowner,
 } from '../../../src/screens/owner/approvals.util'
 import { schedulePending, usePendingHiddenIds } from '../../../src/owner/pendingDecisions'
 import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
@@ -244,7 +246,9 @@ export default function Approvals() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
             <Small
               color={theme.colors.accentDeep}
-              onPress={() => setSelected(new Set(items.map((d) => d.id)))}
+              onPress={() =>
+                setSelected(new Set(items.filter((d) => !waitsOnHomeowner(d)).map((d) => d.id)))
+              }
             >
               {t.selectAll}
             </Small>
@@ -280,6 +284,9 @@ export default function Approvals() {
                 selected={selected.has(d.id)}
                 onToggleSelect={() => toggle(d.id)}
                 chips={{ approve: t.approve, hold: t.hold, assign: t.assign }}
+                waitNote={
+                  waitsOnHomeowner(d) ? homeownerWaitText(d.created_at, lang) : undefined
+                }
                 onChip={(action) =>
                   action === 'assign'
                     ? setAssigningId(d.id)

@@ -5,8 +5,10 @@ import {
   batchConfirm,
   batchSummary,
   decisionConfirm,
+  homeownerWaitText,
   isMoneyDecision,
   undoCopy,
+  waitsOnHomeowner,
 } from '../screens/owner/approvals.util'
 
 describe('batchSummary (Approve all toast)', () => {
@@ -86,5 +88,30 @@ describe('undoCopy', () => {
     expect(undoCopy('reject', 'en').message).toBe('Held')
     expect(undoCopy('approve', 'en', 3).message).toBe('3 approved')
     expect(undoCopy('approve', 'hi')).toEqual({ message: 'मंज़ूर', undoLabel: 'वापस लें', failMessage: 'मंज़ूर नहीं हुआ।' })
+  })
+})
+
+describe('questions the homeowner answers', () => {
+  const now = Date.parse('2026-07-03T12:00:00Z')
+  const ago = (ms: number) => new Date(now - ms).toISOString()
+
+  it('only homeowner-audience decisions wait on the homeowner', () => {
+    expect(waitsOnHomeowner({ audience: 'homeowner' })).toBe(true)
+    expect(waitsOnHomeowner({ audience: 'internal' })).toBe(false)
+    // Older payloads without the field are the builder's own calls.
+    expect(waitsOnHomeowner({})).toBe(false)
+  })
+
+  it('says how long it has waited, in English and Hindi', () => {
+    expect(homeownerWaitText(ago(30 * 1000), 'en', now)).toBe('Waiting for the homeowner for 1 min')
+    expect(homeownerWaitText(ago(3 * 3600 * 1000), 'en', now)).toBe(
+      'Waiting for the homeowner for 3 hours',
+    )
+    expect(homeownerWaitText(ago(25 * 3600 * 1000), 'en', now)).toBe(
+      'Waiting for the homeowner for 1 day',
+    )
+    expect(homeownerWaitText(ago(3 * 3600 * 1000), 'hi', now)).toBe(
+      '3 घंटे से गृहस्वामी के जवाब का इंतज़ार',
+    )
   })
 })
