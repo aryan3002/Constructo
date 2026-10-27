@@ -24,4 +24,12 @@ describe('eas.json', () => {
       expect(easJson.build[name].autoIncrement).toBe(true)
     }
   })
+
+  it('points invite and vendor-confirm links at the web console', () => {
+    // Unset, WEB_BASE falls back to the API host, where /join and
+    // /vendor-confirm 404.
+    for (const name of ['preview', 'production', 'production-apk']) {
+      expect(easJson.build[name].env.EXPO_PUBLIC_WEB_BASE).toBe('https://constructo-topaz.vercel.app')
+    }
+  })
 })
