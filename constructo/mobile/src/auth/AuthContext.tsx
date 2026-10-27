@@ -28,6 +28,7 @@ import {
 } from '../push/register'
 import type { Capabilities, HomeownerSubRole, Me, Role } from '../api/types'
 import { getToken } from '../store/secure'
+import { syncLanguageWithServer } from '../i18n/activeLang'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQueryClient } from '@tanstack/react-query'
 import { meFailureKind } from './auth.util'
@@ -180,6 +181,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(profile)
     setStatus('authed')
     setSessionExpired(false)
+    // The language saved on the server wins (a reinstall keeps Hindi), unless
+    // this phone has a choice the server hasn't heard yet. Best-effort.
+    void syncLanguageWithServer(profile.language).catch(() => undefined)
     // Register this device's push token. Fire-and-forget; fully insulated, never
     // affects the session. A homeowner also stashes the token in their member
     // notif_prefs (the path notify_site_homeowners reads); a contractor only has

@@ -1,5 +1,6 @@
 /**
- * Profile — the engineer's identity, sync state, assigned sites, sign-out.
+ * Profile — the engineer's identity, sync state, assigned sites, and the
+ * shared Account section (language, privacy, terms, sign out, delete).
  * Sync is automatic (NetInfo + the offline outbox) so we SHOW the live sync
  * status rather than a fake toggle. Assigned sites are read server-side scoped.
  */
@@ -7,27 +8,23 @@ import { ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { useQuery } from '@tanstack/react-query'
 import { supervisorApi } from '../../../src/api/supervisor'
-import { Avatar, Body, Button, Card, H2, ListRow, Small, StatusPill, SyncStatus, Title } from '../../../src/ui'
+import { Avatar, Body, Card, H2, ListRow, Small, StatusPill, SyncStatus, Title } from '../../../src/ui'
 import { LoadingBlock, SubHeader } from '../../../src/screens/supervisor/eng.components'
 
 export default function EngProfile() {
-  const { me, signOut } = useAuth()
+  const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['eng', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = sitesQ.data?.items ?? []
-
-  const onSignOut = async () => {
-    await signOut()
-    router.replace('/(auth)/login')
-  }
 
   return (
     <ScrollView
@@ -92,7 +89,7 @@ export default function EngProfile() {
         </Card>
       )}
 
-      <Button title="Sign out" variant="secondary" block onPress={() => void onSignOut()} />
+      <AccountSection />
     </ScrollView>
   )
 }

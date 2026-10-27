@@ -90,7 +90,7 @@ export function SettingsRow({
           width: 36,
           height: 36,
           borderRadius: theme.radii.chip,
-          backgroundColor: tone === 'risk' ? '#fbe9e9' : AP.chip,
+          backgroundColor: tone === 'risk' ? '#fbe9e9' : theme.colors.accentWarm,
           alignItems: 'center',
           justifyContent: 'center',
         }}

@@ -1,13 +1,13 @@
 /**
  * Help — a dead-simple, voice-first escape hatch (no FAQ wall). Leads with
  * LISTEN (🔊 read the basics aloud) and CALL a human (📞), since this is the
- * only "reading" screen for a low-literacy role. Plus Sign out. Icon + WORD,
- * big text, ≥56px targets.
+ * only "reading" screen for a low-literacy role. Icon + WORD,
+ * big text, ≥56px targets. Ends with the shared Account section (language,
+ * privacy, terms, sign out, delete account).
  */
 import { Alert, Linking, View } from 'react-native'
-import { useRouter } from 'expo-router'
 
-import { useAuth } from '../../../src/auth/AuthContext'
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { Body, Button, Card, Display, H2, Screen } from '../../../src/ui'
@@ -30,7 +30,6 @@ const STR = {
     pay: 'A clear count is your proof. Clear proof = faster payment. See it any time under “My Pay”.',
     call: '📞 Call the office',
     callErr: 'Could not start the call.',
-    signOut: 'Sign out',
     ok: 'OK',
   },
   hi: {
@@ -44,7 +43,6 @@ const STR = {
     pay: 'साफ़ गिनती आपका proof है। साफ़ proof = जल्दी payment। “मेरी पेमेंट” में कभी भी देखो।',
     call: '📞 ऑफ़िस से बात करो',
     callErr: 'कॉल शुरू नहीं हो सकी।',
-    signOut: 'साइन आउट',
     ok: 'ठीक है',
   },
 } as const
@@ -52,8 +50,6 @@ const STR = {
 export default function Help() {
   const { lang } = useT()
   const str = STR[lang]
-  const { signOut } = useAuth()
-  const router = useRouter()
 
   const readAloud = `${str.howTitle}. ${str.how1} ${str.how2} ${str.how3} ${str.payTitle}. ${str.pay}`
 
@@ -63,11 +59,6 @@ export default function Help() {
     } catch {
       Alert.alert(str.callErr, undefined, [{ text: str.ok }])
     }
-  }
-
-  async function onSignOut() {
-    await signOut()
-    router.replace('/(auth)/login')
   }
 
   return (
@@ -103,13 +94,7 @@ export default function Help() {
         />
       ) : null}
 
-      <Button
-        title={str.signOut}
-        variant="secondary"
-        size="md"
-        block
-        onPress={onSignOut}
-      />
+      <AccountSection />
     </Screen>
   )
 }

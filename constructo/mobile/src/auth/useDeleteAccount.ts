@@ -1,17 +1,18 @@
 /**
- * Shared "delete my account" flow: native confirm (caller's responsibility,
+ * Shared "delete my account" flow: confirm (caller's responsibility,
  * see `beginDelete`) -> step-up OTP -> DELETE /users/me -> sign out ->
  * redirect. Every role's settings/account screen that offers account
  * deletion should use this hook so the destructive path behaves identically
  * everywhere.
  */
 import { useState } from 'react'
-import { Alert } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useMutation } from '@tanstack/react-query'
 
 import { authApi } from '../api/auth'
-import { ApiError } from '../api/client'
+import { errorText } from '../api/errorText'
+import { getActiveLang } from '../i18n/activeLang'
+import { showToast } from '../ui/toastBus'
 import { clearOutboxFor } from '../offline/outbox'
 import { unregisterDevicePushToken } from '../push/register'
 import { getToken } from '../store/secure'
@@ -20,8 +21,6 @@ import { useAuth } from './AuthContext'
 export function useDeleteAccount(opts: {
   /** Where to send the user after their account is gone, e.g. '/' or '/(auth)/login'. */
   afterDeleteHref: string
-  /** Localized fallback message shown if the delete call fails for a non-ApiError reason. */
-  genericErrorMessage: string
 }) {
   const { signOut, me } = useAuth()
   const router = useRouter()
@@ -45,11 +44,10 @@ export function useDeleteAccount(opts: {
     },
     onError: (err: unknown) => {
       setStepUpVisible(false)
-      Alert.alert(
-        '',
-        err instanceof ApiError ? err.message : opts.genericErrorMessage,
-      )
+      // Plain en/hi text, never the raw server message (T8).
+      showToast(errorText(err, getActiveLang()), { tone: 'error' })
     },
+    meta: { errorHandled: true },
   })
 
   return {

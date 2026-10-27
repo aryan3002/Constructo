@@ -211,6 +211,10 @@ export const hi: Dict = {
     couldNotOpen: 'पेज नहीं खुल सका। कृपया फिर कोशिश करें।',
   },
   account: {
+    accountSection: 'खाता',
+    language: 'भाषा',
+    deleteAccountConfirmMsgHome:
+      'इससे आपका नाम और फ़ोन नंबर हट जाएगा। आप जिन रिकॉर्ड का हिस्सा हैं, वे आपके परिवार के पास रहेंगे।',
     title: 'खाता',
     groupWorkspace: 'वर्कस्पेस',
     groupSite: 'साइट',

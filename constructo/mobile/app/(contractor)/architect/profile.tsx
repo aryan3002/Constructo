@@ -1,31 +1,28 @@
 /**
- * Profile — the designer's identity + projects + sign-out.
+ * Profile — the designer's identity + projects + the shared Account section
+ * (language, privacy, terms, sign out, delete).
  */
 import { ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import { supervisorApi } from '../../../src/api/supervisor'
-import { Avatar, Button, Card, H2, ListRow, Small, StatusPill } from '../../../src/ui'
+import { Avatar, Card, H2, ListRow, Small, StatusPill } from '../../../src/ui'
 import { LoadingBlock, SubHeader } from '../../../src/screens/architect/components'
 
 export default function DesignerProfile() {
-  const { me, signOut } = useAuth()
+  const { me } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
 
   const sitesQ = useQuery({ queryKey: ['architect', 'sites'], queryFn: () => supervisorApi.sites() })
   const sites = sitesQ.data?.items ?? []
-
-  const onSignOut = async () => {
-    await signOut()
-    router.replace('/(auth)/login')
-  }
 
   return (
     <ScrollView
@@ -76,7 +73,7 @@ export default function DesignerProfile() {
         </Card>
       )}
 
-      <Button title="Sign out" variant="secondary" block onPress={() => void onSignOut()} />
+      <AccountSection />
     </ScrollView>
   )
 }

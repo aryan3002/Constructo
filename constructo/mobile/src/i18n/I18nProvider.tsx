@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -17,18 +18,26 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { authApi } from '../api/auth'
 import type { Language } from '../api/types'
-import { setActiveLang } from './activeLang'
+import { getToken } from '../store/secure'
+import { setActiveLang, setServerLangSync } from './activeLang'
+import { isLanguage, resolveSignInLanguage } from './lang.util'
 import { en, type Dict } from './en'
 import { hi } from './hi'
 
 const BUNDLES: Record<Language, Dict> = { en, hi }
 const STORAGE_KEY = 'constructo.lang'
+// Set while this phone's choice hasn't reached the server (picked signed out,
+// or the save failed); the next sign-in sends it up.
+const UNSYNCED_KEY = 'constructo.lang.unsynced'
 
 type TParams = Record<string, string | number>
 
 interface I18nContextValue {
   lang: Language
   setLang: (lang: Language) => void
+  /** After sign-in: adopt the language saved on the server (`me.language`),
+   *  or save this phone's unsent choice to it. */
+  syncWithServer: (serverLang: Language | null | undefined) => Promise<void>
   t: (path: string, params?: TParams) => string
 }
 
@@ -50,25 +59,72 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>('en')
   setActiveLang(lang)
 
+  // The stored choice is read once; sign-in sync waits for it so it compares
+  // against what the person last picked, not the 'en' default.
+  const loaded = useRef<Promise<Language> | null>(null)
+  if (!loaded.current) {
+    loaded.current = AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved): Language => (isLanguage(saved) ? saved : 'en'))
+      .catch((): Language => 'en')
+  }
+
   useEffect(() => {
-    void AsyncStorage.getItem(STORAGE_KEY).then((saved) => {
-      if (saved === 'en' || saved === 'hi') setLangState(saved)
-    })
+    void loaded.current?.then((saved) => setLangState(saved))
   }, [])
 
-  const setLang = useCallback((next: Language) => {
-    setLangState(next)
-    void AsyncStorage.setItem(STORAGE_KEY, next)
-    // Fire-and-forget: sync the preference if signed in (ignore when guest).
-    void authApi.updateLanguage(next).catch(() => undefined)
+  const saveToServer = useCallback(async (next: Language) => {
+    try {
+      await authApi.updateLanguage(next)
+      await AsyncStorage.removeItem(UNSYNCED_KEY)
+    } catch {
+      await AsyncStorage.setItem(UNSYNCED_KEY, '1').catch(() => undefined)
+    }
   }, [])
+
+  const setLang = useCallback(
+    (next: Language) => {
+      setLangState(next)
+      loaded.current = Promise.resolve(next)
+      void AsyncStorage.setItem(STORAGE_KEY, next)
+      // Signed in: save it to the profile now. Signed out: remember to save
+      // it at the next sign-in.
+      void getToken().then((token) =>
+        token ? saveToServer(next) : AsyncStorage.setItem(UNSYNCED_KEY, '1'),
+      )
+    },
+    [saveToServer],
+  )
+
+  const syncWithServer = useCallback(
+    async (serverLang: Language | null | undefined) => {
+      const local = (await loaded.current) ?? 'en'
+      const unsynced = (await AsyncStorage.getItem(UNSYNCED_KEY).catch(() => null)) === '1'
+      const { apply, push } = resolveSignInLanguage({ local, server: serverLang, unsynced })
+      if (apply) {
+        setLangState(apply)
+        loaded.current = Promise.resolve(apply)
+        await AsyncStorage.setItem(STORAGE_KEY, apply).catch(() => undefined)
+      }
+      if (push) await saveToServer(push)
+      else if (unsynced) await AsyncStorage.removeItem(UNSYNCED_KEY).catch(() => undefined)
+    },
+    [saveToServer],
+  )
 
   const t = useCallback(
     (path: string, params?: TParams) => interpolate(lookup(BUNDLES[lang], path), params),
     [lang],
   )
 
-  const value = useMemo<I18nContextValue>(() => ({ lang, setLang, t }), [lang, setLang, t])
+  useEffect(() => {
+    setServerLangSync(syncWithServer)
+    return () => setServerLangSync(null)
+  }, [syncWithServer])
+
+  const value = useMemo<I18nContextValue>(
+    () => ({ lang, setLang, syncWithServer, t }),
+    [lang, setLang, syncWithServer, t],
+  )
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 

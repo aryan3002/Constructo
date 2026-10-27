@@ -1,5 +1,6 @@
 /**
- * Accountant · More — identity + sign out. Heavy reconciliation across dozens of
+ * Accountant · More — identity + the shared Account section (language,
+ * privacy, terms, sign out, delete account). Heavy reconciliation across dozens of
  * invoices is a desktop dual-pane task; mobile is the exceptions + flag-on-the-go
  * skin. This MVP ships identity + the sign-out path.
  *
@@ -8,13 +9,12 @@
  * it's not an affirmative action, and no two marigold fills compete).
  */
 import { View } from 'react-native'
-import { useRouter } from 'expo-router'
 
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { SPACE } from '../../../src/theme/tokens'
 import {
-  Button,
   H1,
   Screen,
   SettingsGroup,
@@ -31,7 +31,6 @@ const STR = {
     phone: 'Phone',
     company: 'COMPANY',
     companyId: 'Company ID',
-    signOut: 'Sign out',
     noValue: '—',
   },
   hi: {
@@ -42,7 +41,6 @@ const STR = {
     phone: 'फ़ोन',
     company: 'कंपनी',
     companyId: 'कंपनी ID',
-    signOut: 'साइन आउट',
     noValue: '—',
   },
 } as const
@@ -57,14 +55,8 @@ const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
 
 export default function AccountantMore() {
   const { t, lang } = useT()
-  const { me, signOut } = useAuth()
-  const router = useRouter()
+  const { me } = useAuth()
   const str = STR[lang]
-
-  async function onSignOut() {
-    await signOut()
-    router.replace('/(auth)/login')
-  }
 
   const roleLabel = me?.role ? (ROLE_LABEL[me.role]?.[lang] ?? me.role) : str.noValue
 
@@ -140,12 +132,7 @@ export default function AccountantMore() {
         </View>
       ) : null}
 
-      <Button
-        title={t('auth.signOut')}
-        variant="secondary"
-        block
-        onPress={onSignOut}
-      />
+      <AccountSection />
     </Screen>
   )
 }

@@ -12,15 +12,15 @@
  * mechanism still comes from the shared provider).
  */
 import { useEffect, useState } from 'react'
-import { Alert, Pressable, View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { homeowner } from '../../src/api/client'
+import { AccountSection } from '../../src/account/AccountSection'
 import { useAuth } from '../../src/auth/AuthContext'
-import { useDeleteAccount } from '../../src/auth/useDeleteAccount'
 import { useT } from '../../src/i18n/I18nProvider'
 import type { Language } from '../../src/api/types'
 import { AP, SPACE } from '../../src/theme/tokens'
@@ -35,7 +35,6 @@ import {
   SettingsGroup,
   SettingsRow,
   Small,
-  StepUpModal,
   SubHeader,
 } from '../../src/ui'
 import { summaryCadence, type Lang } from '../../src/screens/homeowner/settings.util'
@@ -45,7 +44,6 @@ const STR = {
   en: {
     title: 'Settings',
     intro: 'A calm place to tune how the home keeps in touch.',
-    account: 'ACCOUNT',
     household: 'HOUSEHOLD',
     app: 'APP',
     language: 'Language',
@@ -62,22 +60,11 @@ const STR = {
     profile: 'Account',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'Phone & profile',
-    signOut: 'Sign out',
-    deleteAccount: 'Delete my account',
-    deleteAccountConfirmTitle: 'Delete your account?',
-    deleteAccountConfirmMsg:
-      "This removes your name and phone number. Records you're part of stay with your household.",
-    deleteAccountConfirmOk: 'Delete',
-    deleteAccountConfirmCancel: 'Cancel',
-    deleteAccountError: 'Could not delete your account. Please try again.',
-    english: 'English',
-    hindi: 'हिन्दी',
     footer: 'Neev · your calm view of the build',
   },
   hi: {
     title: 'सेटिंग्स',
     intro: 'घर आपसे कैसे जुड़ा रहे, यह शांति से तय करने की जगह।',
-    account: 'खाता',
     household: 'परिवार',
     app: 'ऐप',
     language: 'भाषा',
@@ -93,23 +80,13 @@ const STR = {
     profile: 'खाता',
     profileSub: (phone: string) => phone,
     profileSubUnknown: 'फ़ोन और प्रोफ़ाइल',
-    signOut: 'साइन आउट',
-    deleteAccount: 'मेरा खाता हटाएँ',
-    deleteAccountConfirmTitle: 'अपना खाता हटाएँ?',
-    deleteAccountConfirmMsg:
-      'इससे आपका नाम और फ़ोन नंबर हट जाएगा। आप जिन रिकॉर्ड का हिस्सा हैं, वे आपके परिवार के पास रहेंगे।',
-    deleteAccountConfirmOk: 'हटाएँ',
-    deleteAccountConfirmCancel: 'रद्द करें',
-    deleteAccountError: 'खाता हटाया नहीं जा सका। कृपया फिर कोशिश करें।',
-    english: 'English',
-    hindi: 'हिन्दी',
     footer: 'नींव · आपका शांत निर्माण दृष्टिकोण',
   },
 } as const
 
 export default function Settings() {
   const { lang, setLang } = useT()
-  const { signOut, siteId, me } = useAuth()
+  const { siteId, me } = useAuth()
   const router = useRouter()
   const { theme } = useTheme()
   const c = theme.colors
@@ -143,23 +120,6 @@ export default function Settings() {
       }
     })
   }, [])
-
-  async function onSignOut() {
-    await signOut()
-    router.replace('/')
-  }
-
-  const { stepUpVisible, beginDelete, cancelStepUp, onStepUpVerified } = useDeleteAccount({
-    afterDeleteHref: '/',
-    genericErrorMessage: tx.deleteAccountError,
-  })
-
-  function confirmDeleteAccount() {
-    Alert.alert(tx.deleteAccountConfirmTitle, tx.deleteAccountConfirmMsg, [
-      { text: tx.deleteAccountConfirmCancel, style: 'cancel' },
-      { text: tx.deleteAccountConfirmOk, style: 'destructive', onPress: beginDelete },
-    ])
-  }
 
   function toggleLanguage() {
     const next: Language = lang === 'en' ? 'hi' : 'en'
@@ -242,38 +202,16 @@ export default function Settings() {
             icon="heart"
             title={tx.designTaste}
             subtitle={tx.designTasteSub}
-            onPress={() => router.push('/(homeowner)/design/profile')}
-          />
-          <SettingsRow
-            icon="globe"
-            title={tx.language}
-            subtitle={lang === 'hi' ? tx.hindi : tx.english}
             last
-            onPress={toggleLanguage}
+            onPress={() => router.push('/(homeowner)/design/profile')}
           />
         </SettingsGroup>
       </FadeInUp>
 
-      {/* ACCOUNT — sign out + delete account. */}
-      <FadeInUp delay={120} style={{ gap: SPACE.sm }}>
-        <Eyebrow>{tx.account}</Eyebrow>
-        <SettingsGroup>
-          <SettingsRow
-            icon="log-out"
-            title={tx.signOut}
-            tone="risk"
-            hideChevron
-            onPress={() => void onSignOut()}
-          />
-          <SettingsRow
-            icon="trash-2"
-            title={tx.deleteAccount}
-            tone="risk"
-            hideChevron
-            last
-            onPress={confirmDeleteAccount}
-          />
-        </SettingsGroup>
+      {/* ACCOUNT — the shared section: language, privacy, terms, sign out,
+          delete account. */}
+      <FadeInUp delay={120}>
+        <AccountSection />
       </FadeInUp>
 
       {/* Footer — shield icon + calm brand line, matching the prototype. */}
@@ -290,12 +228,6 @@ export default function Settings() {
           {tx.footer}
         </Small>
       </View>
-
-      <StepUpModal
-        visible={stepUpVisible}
-        onVerified={onStepUpVerified}
-        onCancel={cancelStepUp}
-      />
     </Screen>
   )
 }

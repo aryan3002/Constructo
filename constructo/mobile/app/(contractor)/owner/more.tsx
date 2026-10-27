@@ -10,14 +10,14 @@
  *   • Workspace      — Team, Spec desk (web), Search, Foresight
  *   • Site           — Permits
  *   • Money          — Reconcile (web), Tally export (web)
- *   • Settings       — Language toggle
- *   • Sign out
+ *   • Account        — shared AccountSection (language, privacy, terms,
+ *                      sign out, delete account)
  */
-import { Alert, Linking, View } from 'react-native'
+import { Linking, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useAuth } from '../../../src/auth/AuthContext'
-import { useDeleteAccount } from '../../../src/auth/useDeleteAccount'
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { WEB_BASE } from '../../../src/api/config'
 import { SPACE } from '../../../src/theme/tokens'
@@ -30,7 +30,6 @@ import {
   SettingsGroup,
   SettingsRow,
   Small,
-  StepUpModal,
 } from '../../../src/ui'
 import { buildProfileSubtitle, ROUTES } from '../../../src/screens/owner/account.util'
 import { SubHeader } from '../../../src/screens/owner/audit.components'
@@ -47,34 +46,15 @@ function openWebLink(path: string) {
 // Screen
 // ---------------------------------------------------------------------------
 export default function AccountHub() {
-  const { lang, setLang, t } = useT()
-  const { me, signOut } = useAuth()
+  const { lang, t } = useT()
+  const { me } = useAuth()
   const router = useRouter()
-
-  async function onSignOut() {
-    await signOut()
-    router.replace('/(auth)/login')
-  }
-
-  const { stepUpVisible, beginDelete, cancelStepUp, onStepUpVerified } = useDeleteAccount({
-    afterDeleteHref: '/(auth)/login',
-    genericErrorMessage: t('account.deleteAccountError'),
-  })
-
-  function confirmDeleteAccount() {
-    Alert.alert(t('account.deleteAccountConfirmTitle'), t('account.deleteAccountConfirmMsg'), [
-      { text: t('account.deleteAccountConfirmCancel'), style: 'cancel' },
-      { text: t('account.deleteAccountConfirmOk'), style: 'destructive', onPress: beginDelete },
-    ])
-  }
 
   const companyLine = buildProfileSubtitle({
     role: me?.role,
     companyName: me?.company_name,
     lang,
   })
-  const nextLang = lang === 'en' ? 'hi' : 'en'
-  const langLabel = lang === 'en' ? t('account.languageCurrent') : t('account.languageCurrent')
 
   return (
     <Screen>
@@ -179,44 +159,10 @@ export default function AccountHub() {
         />
       </SettingsGroup>
 
-      {/* ── Settings ── */}
-      <Small muted style={{ letterSpacing: 1, marginTop: SPACE.md }}>
-        {t('account.groupSettings').toUpperCase()}
-      </Small>
-      <SettingsGroup style={{ marginTop: SPACE.xs }}>
-        <SettingsRow
-          icon="globe"
-          title={t('settings.language')}
-          subtitle={langLabel}
-          last
-          onPress={() => setLang(nextLang)}
-        />
-      </SettingsGroup>
-
-      {/* ── Sign out / delete account ── */}
-      <SettingsGroup style={{ marginTop: SPACE.md }}>
-        <SettingsRow
-          icon="log-out"
-          title={t('account.signOut')}
-          tone="risk"
-          hideChevron
-          onPress={onSignOut}
-        />
-        <SettingsRow
-          icon="trash-2"
-          title={t('account.deleteAccount')}
-          tone="risk"
-          hideChevron
-          last
-          onPress={confirmDeleteAccount}
-        />
-      </SettingsGroup>
-
-      <StepUpModal
-        visible={stepUpVisible}
-        onVerified={onStepUpVerified}
-        onCancel={cancelStepUp}
-      />
+      {/* ── Account: language, privacy, terms, sign out, delete ── */}
+      <View style={{ marginTop: SPACE.md }}>
+        <AccountSection />
+      </View>
     </Screen>
   )
 }

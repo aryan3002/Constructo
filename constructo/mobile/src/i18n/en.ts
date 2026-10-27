@@ -209,6 +209,10 @@ export const en = {
     couldNotOpen: "Couldn't open the page. Please try again.",
   },
   account: {
+    accountSection: 'Account',
+    language: 'Language',
+    deleteAccountConfirmMsgHome:
+      "This removes your name and phone number. Records you're part of stay with your household.",
     title: 'Account',
     groupWorkspace: 'Workspace',
     groupSite: 'Site',

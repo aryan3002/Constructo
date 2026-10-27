@@ -1,12 +1,14 @@
 /**
- * PM · More — identity + sign out. Heavy desk work (full schedule, reports,
+ * PM · More — identity + the shared Account section (language, privacy,
+ * terms, sign out, delete account). Heavy desk work (full schedule, reports,
  * exports) stays web-primary; this MVP ships identity + the sign-out path.
  *
  * Neev re-skin: SettingsGroup + SettingsRow (no raw Card/Button), theme fonts,
  * no hardcoded colours.
  */
-import { useRouter } from 'expo-router'
+import { View } from 'react-native'
 
+import { AccountSection } from '../../../src/account/AccountSection'
 import { useAuth } from '../../../src/auth/AuthContext'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { SPACE } from '../../../src/theme/tokens'
@@ -38,14 +40,8 @@ const ROLE_LABEL: Record<string, { en: string; hi: string }> = {
 
 export default function PmMore() {
   const { t, lang } = useT()
-  const { me, signOut } = useAuth()
-  const router = useRouter()
+  const { me } = useAuth()
   const str = STR[lang]
-
-  async function onSignOut() {
-    await signOut()
-    router.replace('/(auth)/login')
-  }
 
   const roleLabel = me?.role ? (ROLE_LABEL[me.role]?.[lang] ?? me.role) : '—'
 
@@ -84,18 +80,10 @@ export default function PmMore() {
         ) : null}
       </SettingsGroup>
 
-      {/* Account actions */}
-      <SettingsGroup style={{ marginTop: SPACE.sm }}>
-        <SettingsRow
-          icon="log-out"
-          title={t('auth.signOut')}
-          tone="risk"
-          hideChevron
-          last
-          onPress={onSignOut}
-          accessibilityLabel={t('auth.signOut')}
-        />
-      </SettingsGroup>
+      {/* Account: language, privacy, terms, sign out, delete account */}
+      <View style={{ marginTop: SPACE.sm }}>
+        <AccountSection />
+      </View>
     </Screen>
   )
 }
