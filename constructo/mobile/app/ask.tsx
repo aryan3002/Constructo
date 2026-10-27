@@ -47,7 +47,6 @@ const STR = {
     placeholder: 'Ask anything about your build…',
     footer: 'Answers come from your published updates. Anything I can’t answer goes straight to your site team — I never guess on money or safety.',
     empty: 'Ask about your build — progress, a milestone, a recent change. I answer from your updates, and pass anything I can’t to your site team.',
-    micSoon: 'Voice — coming soon',
     moneyNote: 'This touches cost or structure, so your builder will weigh in directly — I won’t guess on money or safety.',
     thinking: 'Looking through your updates…',
     groundedEyebrow: 'FROM YOUR UPDATES',
@@ -71,7 +70,6 @@ const STR = {
     placeholder: 'अपने निर्माण के बारे में कुछ भी पूछें…',
     footer: 'जवाब आपके प्रकाशित अपडेट्स से आते हैं। जो मैं न बता सकूँ वह सीधे आपकी साइट टीम को जाता है — पैसे या सुरक्षा पर मैं अंदाज़ा नहीं लगाता।',
     empty: 'अपने निर्माण के बारे में पूछें — प्रगति, कोई पड़ाव, हाल का बदलाव। मैं आपके अपडेट्स से जवाब देता हूँ, और जो न बता सकूँ वह आपकी साइट टीम को भेज देता हूँ।',
-    micSoon: 'आवाज़ — जल्द आ रहा है',
     moneyNote: 'यह लागत या ढाँचे से जुड़ा है, इसलिए आपका बिल्डर सीधे राय देगा — मैं पैसे या सुरक्षा पर अंदाज़ा नहीं लगाता।',
     thinking: 'आपके अपडेट्स देख रहा हूँ…',
     groundedEyebrow: 'आपके अपडेट्स से',
@@ -576,21 +574,6 @@ function AskInner() {
                 fontSize: 16,
               }}
             />
-            {/* Honest "coming soon" mic — non-interactive, no false affordance */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.micSoon}
-              disabled
-              style={{
-                width: 32,
-                height: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: 0.4,
-              }}
-            >
-              <Feather name="mic" size={18} color={c.textMute} />
-            </Pressable>
           </View>
           <Pressable
             accessibilityRole="button"

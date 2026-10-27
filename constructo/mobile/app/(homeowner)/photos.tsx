@@ -52,6 +52,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { homeowner } from '../../src/api/client'
 import { canOpenPhotoPicker, photoSaveAccess } from '../../src/media/photoAccess'
+import { photoQuestionDraft } from '../../src/homeowner/builderDrafts'
+import { useBuilderChat } from '../../src/homeowner/useBuilderChat'
 import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
@@ -95,9 +97,6 @@ const STR = {
     title: 'Media',
     subtitle: 'Photos from your site',
     searchPlaceholder: 'Ask about a room, stage, or date…',
-    mic: 'Search by voice',
-    voiceTitle: 'Voice search',
-    voiceBody: 'Voice search is coming soon — type a room, stage, or date for now.',
     latest: 'Latest from site',
     feed: 'Feed',
     all: 'All',
@@ -120,9 +119,7 @@ const STR = {
     caption: 'No caption yet',
     starred: 'Kept',
     video: 'Video',
-    translate: 'What does this mean?',
-    translateBody:
-      'A plain-language explanation is coming soon. For now you can ask your builder.',
+    translate: 'Ask your builder about this photo',
     save: 'Save',
     share: 'Share',
     hide: 'Hide',
@@ -164,8 +161,6 @@ const STR = {
     requestPhotoSub: 'Ask your site team for a specific room',
     sharedBy: 'Shared by builder',
     // Stubs
-    markUpSoon: 'Mark up is coming soon.',
-    commentSoon: 'Comments are coming soon.',
     pinnedMsg: 'Pinned locally.',
     unpinnedMsg: 'Unpinned.',
   },
@@ -173,9 +168,6 @@ const STR = {
     title: 'मीडिया',
     subtitle: 'आपकी साइट की तस्वीरें',
     searchPlaceholder: 'कमरा, चरण या तारीख़ पूछें…',
-    mic: 'आवाज़ से खोजें',
-    voiceTitle: 'आवाज़ से खोज',
-    voiceBody: 'आवाज़ से खोज जल्द आ रही है — अभी कमरा, चरण या तारीख़ टाइप करें।',
     latest: 'साइट से नवीनतम',
     feed: 'फ़ीड',
     all: 'सभी',
@@ -198,8 +190,7 @@ const STR = {
     caption: 'अभी कोई कैप्शन नहीं',
     starred: 'सहेजी',
     video: 'वीडियो',
-    translate: 'इसका क्या मतलब है?',
-    translateBody: 'आसान भाषा में समझ जल्द आ रही है। अभी आप अपने बिल्डर से पूछ सकते हैं।',
+    translate: 'इस फ़ोटो के बारे में बिल्डर से पूछें',
     save: 'सहेजें',
     share: 'साझा करें',
     hide: 'छिपाएँ',
@@ -240,8 +231,6 @@ const STR = {
     requestPhotoCta: 'फ़ोटो का अनुरोध करें',
     requestPhotoSub: 'किसी ख़ास कमरे की फ़ोटो टीम से माँगें',
     sharedBy: 'बिल्डर द्वारा साझा',
-    markUpSoon: 'मार्क अप जल्द आ रहा है।',
-    commentSoon: 'टिप्पणियाँ जल्द आ रही हैं।',
     pinnedMsg: 'स्थानीय रूप से पिन किया।',
     unpinnedMsg: 'अनपिन किया।',
   },
@@ -462,7 +451,7 @@ interface StandardCardProps {
   onTogglePin: (id: string) => void
   onDismiss: (id: string) => void
   onPress: (p: Photo) => void
-  onTranslate: () => void
+  onTranslate: (caption?: string | null) => void
   s: Strings
   lang: 'en' | 'hi'
   tileLabels: PhotoTileProps['labels']
@@ -581,7 +570,7 @@ function StandardCard({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={tileLabels.translate}
-                    onPress={() => onTranslate()}
+                    onPress={() => onTranslate(photo.caption)}
                     hitSlop={8}
                     style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 1 })}
                   >
@@ -891,10 +880,12 @@ export default function Photos() {
     [s],
   )
 
-  const onTranslate = useCallback(() => {
-    // ⓘ jargon-translate — honest "coming soon + ask your builder" (§0 rule 5).
-    Alert.alert(s.translate, s.translateBody)
-  }, [s])
+  // ⓘ → the builder chat, with a question about this photo already typed.
+  const openBuilderChat = useBuilderChat()
+  const onTranslate = useCallback(
+    (caption?: string | null) => void openBuilderChat(photoQuestionDraft(caption, lang)),
+    [openBuilderChat, lang],
+  )
 
   // 2-column square grid sizing (Screen pads SPACE.lg each side).
   const gridGap = SPACE.sm
@@ -1023,15 +1014,6 @@ export default function Photos() {
               <Feather name="x" size={18} color={c.textMute} />
             </Pressable>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={s.mic}
-            onPress={() => Alert.alert(s.voiceTitle, s.voiceBody)}
-            hitSlop={8}
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-          >
-            <Feather name="mic" size={18} color={c.accent} />
-          </Pressable>
         </View>
       ) : null}
 
@@ -1267,7 +1249,11 @@ export default function Photos() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={s.translate}
-                    onPress={onTranslate}
+                    onPress={() => {
+                      const caption = active.caption
+                      setActive(null)
+                      onTranslate(caption)
+                    }}
                     hitSlop={8}
                     style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 2 })}
                   >
@@ -1536,7 +1522,7 @@ export default function Photos() {
                 variant="hero"
                 labels={tileLabels}
                 onPress={() => setActive(latest)}
-                onTranslate={onTranslate}
+                onTranslate={(p) => onTranslate(p.caption)}
               />
             </FadeInUp>
           ) : null}
@@ -1560,7 +1546,7 @@ export default function Photos() {
                     size={cellSize}
                     labels={tileLabels}
                     onPress={() => setActive(photo)}
-                    onTranslate={onTranslate}
+                    onTranslate={(p) => onTranslate(p.caption)}
                   />
                 ))}
               </View>

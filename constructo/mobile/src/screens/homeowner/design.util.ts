@@ -38,7 +38,6 @@ export interface DesignStrings {
   approveDrawing: string
   /** Full-width green CTA on a pending plan's DecisionCard. */
   reviewAndApprove: string
-  approveDrawingComingSoon: string
   /** Eyebrow above the Plans section. */
   plansEyebrow: string
   /** Eyebrow above the coherence section. */
@@ -60,7 +59,6 @@ export interface DesignStrings {
   provenanceUpload: string
   provenancePinterest: string
   digestTitle: string
-  digestComingSoon: string
   selectionsTitle: string
   selectionsEmpty: string
   checkFit: string
@@ -112,8 +110,6 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     openFile: 'Open drawing',
     approveDrawing: 'Approve',
     reviewAndApprove: 'Review & approve',
-    approveDrawingComingSoon:
-      'Approving plans in the app is coming soon. For now, please confirm with your builder.',
     plansEyebrow: 'YOUR PLANS',
     coherenceEyebrow: 'COHERENCE',
     inspirationEyebrow: 'THE LOOK YOU LOVE',
@@ -130,8 +126,6 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     provenanceUpload: 'You added this',
     provenancePinterest: 'From Pinterest',
     digestTitle: 'Monthly design digest',
-    digestComingSoon:
-      'A warm monthly recap of how your home is taking shape is coming soon.',
     selectionsTitle: 'Selections',
     selectionsEmpty: 'No selections yet. Add your first one below.',
     checkFit: 'Check fit',
@@ -186,8 +180,6 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     openFile: 'नक्शा खोलें',
     approveDrawing: 'स्वीकृत करें',
     reviewAndApprove: 'देखें और स्वीकृत करें',
-    approveDrawingComingSoon:
-      'ऐप में नक्शे स्वीकृत करना जल्द आ रहा है। फ़िलहाल, कृपया अपने बिल्डर से पुष्टि करें।',
     plansEyebrow: 'आपके नक्शे',
     coherenceEyebrow: 'तालमेल',
     inspirationEyebrow: 'आपकी पसंद का रूप',
@@ -204,8 +196,6 @@ export const DESIGN_STR: Record<'en' | 'hi', DesignStrings> = {
     provenanceUpload: 'आपने जोड़ा',
     provenancePinterest: 'Pinterest से',
     digestTitle: 'मासिक डिज़ाइन सारांश',
-    digestComingSoon:
-      'आपका घर कैसे आकार ले रहा है, इसका एक गर्मजोशी भरा मासिक सारांश जल्द आ रहा है।',
     selectionsTitle: 'चयन',
     selectionsEmpty: 'अभी तक कोई चयन नहीं। नीचे अपना पहला चयन जोड़ें।',
     checkFit: 'उपयुक्तता जांचें',

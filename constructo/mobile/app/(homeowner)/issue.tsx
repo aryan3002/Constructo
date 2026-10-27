@@ -3,7 +3,7 @@
  *
  * Two-step wizard:
  *   Step 1: Photos (up to 5 via expo-image-picker, real upload via
- *           `homeowner.uploadVisitPhoto`) + honest "Voice note — coming soon" stub.
+ *           `homeowner.uploadVisitPhoto`) + a recorded voice note.
  *   Step 2: Description text + room chips + urgency chips → submit via
  *           `homeowner.createRequest()`. On success: Toast + navigate back.
  *

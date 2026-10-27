@@ -71,8 +71,6 @@ const STR = {
     caption: 'Add a caption…',
     markup: 'Markup',
     tapRetry: 'Tap to retry',
-    mic: 'Hold to record — coming soon',
-    micLabel: 'Voice message (coming soon)',
     members: 'Participants',
   },
   hi: {
@@ -93,8 +91,6 @@ const STR = {
     caption: 'कैप्शन जोड़ें…',
     markup: 'मार्कअप',
     tapRetry: 'फिर भेजने के लिए टैप करें',
-    mic: 'दबाकर रिकॉर्ड करें — जल्द आएगा',
-    micLabel: 'वॉयस संदेश (जल्द आएगा)',
     members: 'प्रतिभागी',
   },
 } as const
@@ -661,28 +657,6 @@ export default function HomeownerThread() {
               <Feather name="camera" size={20} color={c.accentDeep} />
             </Pressable>
 
-            {/* D4: Mic — honest coming-soon stub. Labeled in the UI; no
-                fake recording. The `belowComposer` slot (voice recorder)
-                will replace this once the audio slice ships. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.micLabel}
-              onLongPress={() => Alert.alert('', t.mic)}
-              onPress={() => Alert.alert('', t.mic)}
-              style={{
-                width: TAP,
-                height: TAP,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: theme.radii.card,
-                borderWidth: 1,
-                borderColor: c.line,
-                backgroundColor: c.paper,
-                opacity: 0.5,
-              }}
-            >
-              <Feather name="mic" size={20} color={c.textMute} />
-            </Pressable>
           </View>
         }
       />

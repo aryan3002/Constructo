@@ -3,12 +3,11 @@
  *
  * Assigned-site chips (GET /api/v1/sites — scope is server-enforced, returns
  * only assigned sites; no "All Sites" switcher). Tap a site → its recent events
- * (GET /api/v1/sites/{id}/events) as a TimelineItem feed, plus a read-only
- * Drawings section.
+ * (GET /api/v1/sites/{id}/events) as a TimelineItem feed.
  *
- * DRAWINGS GAP: there is no drawings endpoint on the backend yet. We show a
- * calm read-only placeholder (the role only ever READS drawings — no markup)
- * and NOTE the gap; it slots in at GET /api/v1/sites/{id}/drawings later.
+ * No Drawings section: there is no site-drawings endpoint for this role yet,
+ * and a placeholder card would be "coming soon" content in a store build
+ * (Apple 2.1). Add it back once GET /api/v1/sites/{id}/drawings exists.
  */
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
@@ -24,7 +23,6 @@ import {
   Card,
   EmptyState,
   Eyebrow,
-  H2,
   Screen,
   StatusDot,
   TimelineItem,
@@ -50,9 +48,6 @@ const STR = {
     emptySitesBody: 'Ask your PM — assigned sites show up here.',
     recent: 'RECENT ACTIVITY',
     emptyEvents: 'Nothing logged here yet.',
-    drawings: 'DRAWINGS',
-    drawingsPlaceholder: 'Drawing lookup is coming.',
-    drawingsBody: 'Ask your PM to share a drawing — it’ll be findable here, read-only.',
     signOut: 'Sign out',
   },
   hi: {
@@ -64,9 +59,6 @@ const STR = {
     emptySitesBody: 'PM से पूछो — असाइन साइट यहाँ दिखेंगी।',
     recent: 'हाल की गतिविधि',
     emptyEvents: 'यहाँ अभी कुछ दर्ज नहीं।',
-    drawings: 'ड्रॉइंग',
-    drawingsPlaceholder: 'ड्रॉइंग खोज जल्द आ रही है।',
-    drawingsBody: 'PM से ड्रॉइंग शेयर करने को कहो — यहाँ सिर्फ़ देखने को मिलेगी।',
     signOut: 'साइन आउट',
   },
 } as const
@@ -230,14 +222,6 @@ function SiteDetail({ siteId }: { siteId: string }) {
         </Card>
       ) : null}
 
-      {/* Drawings — read-only. No endpoint yet → calm placeholder (NOTE). */}
-      <Eyebrow style={{ marginTop: SPACE.sm }}>{str.drawings}</Eyebrow>
-      <Card>
-        <View style={{ gap: SPACE.xs }}>
-          <H2>📐 {str.drawingsPlaceholder}</H2>
-          <BodyStrong muted>{str.drawingsBody}</BodyStrong>
-        </View>
-      </Card>
     </View>
   )
 }

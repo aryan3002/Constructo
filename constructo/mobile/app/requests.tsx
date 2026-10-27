@@ -5,7 +5,7 @@
  *
  * Calm Cockpit (§5 "My Requests" + "Decision detail"):
  *   • Requests — a calm "Flag an issue" form (title, detail, room chips,
- *     urgency chips, an add-photo button + an honest voice "coming soon" stub),
+ *     urgency chips, an add-photo button),
  *     then the thread split into OPEN and RESOLVED sections. Open items carry a
  *     StatusPill + an SLA promise line ("reply expected by…").
  *   • Decisions — pending items as DecisionCards (pre-brief: why-now, the
@@ -13,8 +13,8 @@
  *     capabilities-gated approve/comment logic is PRESERVED verbatim (owners
  *     approve; family/advisor get a comment box, never a grey lock).
  *
- * Photo + voice are captured in the UI only — there is no attachment endpoint
- * yet, so they are noted honestly rather than invented. Backend calls and the
+ * The photo is captured in the UI only — there is no attachment endpoint on
+ * this screen yet, so it is noted honestly rather than invented. Backend calls and the
  * authority/change-story logic are unchanged; this is a visual pass only.
  */
 import type * as React from 'react'
@@ -81,7 +81,6 @@ interface Strings {
   urgency: string
   addPhoto: string
   photoAdded: string
-  voiceSoon: string
   submit: string
   submitting: string
   titleRequired: string
@@ -121,7 +120,6 @@ const STR: Record<Lang, Strings> = {
     urgency: 'Urgency',
     addPhoto: 'Add photo',
     photoAdded: 'Photo added',
-    voiceSoon: 'Voice note — coming soon',
     submit: 'Send to your team',
     submitting: 'Sending…',
     titleRequired: 'Please add a short title first.',
@@ -159,7 +157,6 @@ const STR: Record<Lang, Strings> = {
     urgency: 'अत्यावश्यकता',
     addPhoto: 'फ़ोटो जोड़ें',
     photoAdded: 'फ़ोटो जोड़ी गई',
-    voiceSoon: 'आवाज़ नोट — जल्द आ रहा है',
     submit: 'अपनी टीम को भेजें',
     submitting: 'भेजा जा रहा है…',
     titleRequired: 'कृपया पहले एक छोटा शीर्षक जोड़ें।',
@@ -529,23 +526,6 @@ function RequestsTab({ t, lang }: { t: Strings; lang: Lang }) {
                 />
               }
             />
-            {/* Voice note — coming soon; non-interactive chip (no false affordance). */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: SPACE.xs,
-                paddingHorizontal: SPACE.md,
-                paddingVertical: SPACE.sm,
-                borderRadius: theme.radii.pill,
-                borderWidth: 1,
-                borderColor: theme.colors.line,
-                opacity: 0.5,
-              }}
-            >
-              <Feather name="mic" size={14} color={theme.colors.textMute} />
-              <Small muted>{t.voiceSoon}</Small>
-            </View>
           </View>
           {photoUri ? (
             <Image

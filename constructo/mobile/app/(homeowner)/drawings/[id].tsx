@@ -11,12 +11,11 @@
  *   - "What changed from vN-1" section when supersedes_id is present (looks up
  *     the older drawing in the same list; if not found, shows the summary only).
  *
- * Actions:
- *   Approve  → HONEST stub: "confirm with your builder" alert. Backend not built.
- *   Comment  → toast stub (no comment endpoint exists for drawings).
- *   Request changes → toast stub.
+ * Actions — Approve, Leave a comment, Request changes — open the builder chat
+ * with a message about this drawing already typed (src/homeowner/builderDrafts).
+ * There is no drawing approval/comment endpoint; the chat keeps it on record.
  *
- * Philosophy: real data, honest stubs clearly labeled, advisory tone, no blocking.
+ * Philosophy: real data, advisory tone, no blocking.
  */
 import { useState } from 'react'
 import { Alert, Image, Linking, View } from 'react-native'
@@ -25,6 +24,8 @@ import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
 import { homeowner } from '../../../src/api/client'
+import { drawingDraft, type DrawingAsk } from '../../../src/homeowner/builderDrafts'
+import { useBuilderChat } from '../../../src/homeowner/useBuilderChat'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../src/theme/tokens'
@@ -38,7 +39,6 @@ import {
   Small,
   SubHeader,
   Title,
-  useToast,
 } from '../../../src/ui'
 import {
   drawingDate,
@@ -60,15 +60,11 @@ const STR = {
     fromPrev: 'CHANGES FROM PREVIOUS VERSION',
     prevNotFound: 'Previous version not available.',
     actionsTitle: 'YOUR RESPONSE',
-    approveTitle: 'Approve',
     approveBody:
-      'Approving plans in the app is coming soon. For now, please confirm with your builder directly.',
-    approveCta: 'Confirm with builder',
+      'Your answer goes to your builder as a chat message about this drawing, typed for you — check it and send.',
+    approveCta: 'Approve',
     commentCta: 'Leave a comment',
-    commentToast: 'Comments on drawings are coming soon. Please message your builder directly.',
     requestChangeCta: 'Request changes',
-    requestChangeToast:
-      'Change requests on drawings are coming soon. Please message your builder directly.',
     versionLabel: 'Version',
     kindLabel: 'Type',
     publishedLabel: 'Shared',
@@ -86,15 +82,11 @@ const STR = {
     fromPrev: 'पिछले संस्करण से बदलाव',
     prevNotFound: 'पिछला संस्करण उपलब्ध नहीं।',
     actionsTitle: 'आपका जवाब',
-    approveTitle: 'स्वीकृत करें',
     approveBody:
-      'ऐप में नक्शे स्वीकृत करना जल्द आ रहा है। फ़िलहाल, अपने बिल्डर से सीधे पुष्टि करें।',
-    approveCta: 'बिल्डर से पुष्टि करें',
+      'आपका जवाब इस नक्शे के बारे में चैट संदेश बनकर आपके बिल्डर को जाता है, आपके लिए लिखा हुआ — देखें और भेजें।',
+    approveCta: 'स्वीकृत करें',
     commentCta: 'टिप्पणी करें',
-    commentToast: 'नक्शों पर टिप्पणी जल्द आ रही है। कृपया अपने बिल्डर को सीधे संदेश करें।',
     requestChangeCta: 'बदलाव का अनुरोध करें',
-    requestChangeToast:
-      'नक्शों पर बदलाव का अनुरोध जल्द आ रहा है। कृपया अपने बिल्डर को सीधे संदेश करें।',
     versionLabel: 'संस्करण',
     kindLabel: 'प्रकार',
     publishedLabel: 'साझा किया',
@@ -114,8 +106,8 @@ export default function DrawingDetail() {
   const { theme } = useTheme()
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const showToast = useToast()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
+  const openBuilderChat = useBuilderChat()
   const DSTR = DESIGN_STR[lang as 'en' | 'hi'] ?? DESIGN_STR.en
   const c = theme.colors
 
@@ -142,6 +134,12 @@ export default function DrawingDetail() {
     } catch {
       Alert.alert(t.errorTitle, t.openError)
     }
+  }
+
+  function askBuilder(kind: DrawingAsk) {
+    if (!drawing) return
+    const name = drawing.version ? `${drawing.title} (v${drawing.version})` : drawing.title
+    return openBuilderChat(drawingDraft(kind, name, lang === 'hi' ? 'hi' : 'en'))
   }
 
   const surface = (children: React.ReactNode, extraStyle?: object) => (
@@ -372,7 +370,9 @@ export default function DrawingDetail() {
         <View style={{ gap: SPACE.md }}>
           {eyebrow(t.actionsTitle)}
 
-          {/* Approve — HONEST stub: backend approve not built */}
+          {/* Approve / comment / request changes open the builder chat with a
+              message about this drawing already typed (there is no drawing
+              approval endpoint; the chat keeps it on record). */}
           <View
             style={[
               {
@@ -393,24 +393,22 @@ export default function DrawingDetail() {
             <Button
               title={t.approveCta}
               leading={<Feather name="check" size={16} color={c.onAccent} />}
-              onPress={() => Alert.alert(t.approveTitle, t.approveBody)}
+              onPress={() => void askBuilder('approve')}
             />
           </View>
 
-          {/* Comment — stub (no drawings comment endpoint) */}
           <Button
             title={t.commentCta}
             variant="secondary"
             leading={<Feather name="message-circle" size={16} color={c.accentDeep} />}
-            onPress={() => showToast(t.commentToast)}
+            onPress={() => void askBuilder('comment')}
           />
 
-          {/* Request changes — stub */}
           <Button
             title={t.requestChangeCta}
             variant="ghost"
             leading={<Feather name="edit" size={16} color={c.accentDeep} />}
-            onPress={() => showToast(t.requestChangeToast)}
+            onPress={() => void askBuilder('changes')}
           />
         </View>
       </View>

@@ -27,7 +27,7 @@ export interface NotifCategory {
   key: string
   label: Record<Lang, string>
   desc: Record<Lang, string>
-  /** false → no backend delivery hook yet; show an honest "coming soon" note. */
+  /** false → no backend delivery hook yet; the screen leaves it out. */
   wired: boolean
 }
 

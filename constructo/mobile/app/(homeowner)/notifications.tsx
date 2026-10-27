@@ -12,9 +12,8 @@
  *
  * A calm, always-visible reassurance — anchored by an `ok` StatusPill — explains
  * that **urgent spikes always punch through** any cadence below (a genuine delay
- * or money risk still reaches you, even on Pause or Weekly). A category with no
- * real delivery hook yet is honestly labelled "Coming soon" (handoff §6 — honest
- * placeholders, never a fabricated promise).
+ * or money risk still reaches you, even on Pause or Weekly). Only channels and
+ * categories with a real sender are shown — never a placeholder promise.
  *
  * Pushed screen (`href:null` in _layout), `Screen floatingNav` for bottom
  * clearance. Eyebrow kickers, Feather icons (no emoji, no %), warm-paper tokens.
@@ -35,7 +34,6 @@ import {
   Body,
   Display,
   Eyebrow,
-  Micro,
   QuietState,
   Screen,
   SettingsGroup,
@@ -87,6 +85,12 @@ const DELIVERY_CHANNELS: {
     wired: false,
   },
 ]
+
+// Only what actually delivers is offered (Apple 2.1: no "coming soon"
+// placeholders in a store build). WhatsApp/email delivery and the design
+// category come back here once their senders exist.
+const SHOWN_CHANNELS = DELIVERY_CHANNELS.filter((ch) => ch.wired)
+const SHOWN_CATEGORIES = NOTIF_CATEGORIES.filter((cat) => cat.wired)
 
 function readDelivery(prefs: Record<string, unknown> | undefined, key: DeliveryKey): boolean {
   const map = (prefs?.delivery ?? {}) as Record<string, unknown>
@@ -148,14 +152,11 @@ const STR = {
     spikeBody:
       'A genuine delay or money risk punches through any setting below — even on Pause or Weekly, you are never left in the dark on the things that matter.',
     alwaysOn: 'Always on',
-    comingSoon: 'Coming soon',
-    comingSoonNote: 'Your choice is saved, but this kind of alert isn’t sending yet.',
     saveError: 'Couldn’t save that. Please try again.',
     noMemberTitle: 'Settings unavailable',
     noMember: 'We couldn’t load your notification settings just now.',
     delivery: 'Delivery channels',
     deliverySub: 'Where Neev reaches you.',
-    deliveryNote: "Your choice is saved, but WhatsApp/Email delivery isn't sending yet.",
   },
   hi: {
     title: 'सूचनाएँ',
@@ -164,14 +165,11 @@ const STR = {
     spikeBody:
       'सच्ची देरी या पैसे का जोखिम नीचे किसी भी सेटिंग को पार कर पहुँचेगा — रोका हुआ या साप्ताहिक होने पर भी, ज़रूरी बातों में आप कभी अंधेरे में नहीं रहेंगे।',
     alwaysOn: 'हमेशा चालू',
-    comingSoon: 'जल्द आ रहा है',
-    comingSoonNote: 'आपकी पसंद सहेज ली जाती है, पर इस तरह की सूचना अभी नहीं भेजी जा रही।',
     saveError: 'सहेज नहीं पाए। कृपया फिर कोशिश करें।',
     noMemberTitle: 'सेटिंग उपलब्ध नहीं',
     noMember: 'अभी आपकी सूचना सेटिंग लोड नहीं हो सकीं।',
     delivery: 'डिलीवरी चैनल',
     deliverySub: 'नींव आपसे कहाँ संपर्क करे।',
-    deliveryNote: 'आपकी पसंद सहेज ली जाती है, पर व्हाट्सएप/ईमेल डिलीवरी अभी नहीं भेजी जा रही।',
   },
 } as const
 
@@ -277,7 +275,7 @@ export default function Notifications() {
               <Small muted>{tx.deliverySub}</Small>
             </View>
             <SettingsGroup>
-              {DELIVERY_CHANNELS.map((ch, i) => {
+              {SHOWN_CHANNELS.map((ch, i) => {
                 const enabled = readDelivery(prefs, ch.key)
                 return (
                   <View
@@ -288,7 +286,7 @@ export default function Notifications() {
                       gap: SPACE.md,
                       paddingHorizontal: SPACE.lg,
                       paddingVertical: SPACE.md,
-                      borderBottomWidth: i < DELIVERY_CHANNELS.length - 1 ? 1 : 0,
+                      borderBottomWidth: i < SHOWN_CHANNELS.length - 1 ? 1 : 0,
                       borderBottomColor: theme.colors.line,
                       minHeight: TAP + 8,
                     }}
@@ -311,24 +309,12 @@ export default function Notifications() {
                       />
                     </View>
 
-                    {/* Label + desc + coming-soon badge */}
+                    {/* Label + desc */}
                     <View style={{ flex: 1, gap: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
                         <Body numberOfLines={1} style={{ flexShrink: 1 }}>
                           {ch.label[L]}
                         </Body>
-                        {!ch.wired ? (
-                          <View
-                            style={{
-                              backgroundColor: AP.surfaceLow,
-                              borderRadius: theme.radii.pill,
-                              paddingHorizontal: SPACE.sm,
-                              paddingVertical: 2,
-                            }}
-                          >
-                            <Micro muted>{tx.comingSoon}</Micro>
-                          </View>
-                        ) : null}
                       </View>
                       <Small muted numberOfLines={1}>{ch.desc[L]}</Small>
                     </View>
@@ -342,16 +328,10 @@ export default function Notifications() {
                 )
               })}
             </SettingsGroup>
-            {/* Honest footnote — shown when at least one unwired channel exists. */}
-            {DELIVERY_CHANNELS.some((ch) => !ch.wired) ? (
-              <Small muted style={{ fontStyle: 'italic', paddingHorizontal: SPACE.xs }}>
-                {tx.deliveryNote}
-              </Small>
-            ) : null}
           </View>
 
           {/* ---- Cadence chooser per category. ---- */}
-          {NOTIF_CATEGORIES.map((cat) => {
+          {SHOWN_CATEGORIES.map((cat) => {
           const current = readCadence(prefs, cat.key)
           return (
             <View key={cat.key} style={{ gap: SPACE.sm }}>
@@ -361,18 +341,6 @@ export default function Notifications() {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}
                 >
                   <Eyebrow style={{ flexShrink: 1 }}>{cat.label[L]}</Eyebrow>
-                  {!cat.wired ? (
-                    <View
-                      style={{
-                        backgroundColor: AP.surfaceLow,
-                        borderRadius: theme.radii.pill,
-                        paddingHorizontal: SPACE.sm,
-                        paddingVertical: 2,
-                      }}
-                    >
-                      <Micro muted>{tx.comingSoon}</Micro>
-                    </View>
-                  ) : null}
                 </View>
                 <Small muted>{cat.desc[L]}</Small>
               </View>
@@ -392,11 +360,6 @@ export default function Notifications() {
                 ))}
               </SettingsGroup>
 
-              {!cat.wired ? (
-                <Small muted style={{ fontStyle: 'italic', paddingHorizontal: SPACE.xs }}>
-                  {tx.comingSoonNote}
-                </Small>
-              ) : null}
             </View>
           )
         })}
