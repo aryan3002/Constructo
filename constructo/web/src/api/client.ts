@@ -145,7 +145,8 @@ export const api = {
     })
   },
 
-  // Events endpoint MAY not exist on the backend yet. Fall back to mocks on 404.
+  // A site's events for one day. Mock events only with VITE_USE_MOCKS=true;
+  // against a real server any failure (404 included) is an honest error.
   async listSiteEvents(
     siteId: string,
     date: string,
@@ -154,17 +155,10 @@ export const api = {
       await delay()
       return { events: mockEventsBySite[siteId] ?? [], usedMock: true }
     }
-    try {
-      const page = await request<Paginated<SiteEvent>>(
-        `/api/v1/sites/${siteId}/events?date=${encodeURIComponent(date)}`,
-      )
-      return { events: page.items, usedMock: false }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return { events: mockEventsBySite[siteId] ?? [], usedMock: true }
-      }
-      throw err
-    }
+    const page = await request<Paginated<SiteEvent>>(
+      `/api/v1/sites/${siteId}/events?date=${encodeURIComponent(date)}`,
+    )
+    return { events: page.items, usedMock: false }
   },
 
   async listGroups(): Promise<Paginated<WhatsappGroup>> {
