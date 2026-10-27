@@ -32,6 +32,18 @@ export interface CapturePayload {
   type?: string | null
   text?: string | null
   media?: CaptureMedia | null
+  /** Generated once when the capture is made; the server files a repeat of
+   *  the same id once (a retry after a lost response, T9). */
+  client_capture_id?: string | null
+}
+
+let captureSeq = 0
+
+/** A fresh id for one capture. Unique per device; the server scopes it per user. */
+export function newClientCaptureId(): string {
+  captureSeq += 1
+  const rand = Math.random().toString(36).slice(2, 10)
+  return `cap_${Date.now().toString(36)}_${captureSeq}_${rand}`
 }
 
 export interface CaptureResult {
@@ -44,6 +56,7 @@ export async function submitCapture(p: CapturePayload): Promise<CaptureResult> {
   form.append('site_id', p.site_id)
   if (p.type) form.append('type', p.type)
   if (p.text) form.append('text', p.text)
+  if (p.client_capture_id) form.append('client_capture_id', p.client_capture_id)
   if (p.media) {
     // React Native FormData file part: { uri, name, type }.
     form.append('media', {

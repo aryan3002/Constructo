@@ -12,7 +12,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import type { CapturePayload } from '../api/capture'
+import { newClientCaptureId, type CapturePayload } from '../api/capture'
 
 const STORAGE_KEY = 'constructo.outbox'
 
@@ -88,6 +88,10 @@ export async function enqueue(
   item: Omit<OutboxItem, 'id' | 'createdAt'>,
 ): Promise<OutboxItem> {
   const full: OutboxItem = { ...item, id: newId(), createdAt: Date.now() }
+  // Every queued capture carries its id (kept when the screen already made one).
+  if (full.capture && !full.capture.client_capture_id) {
+    full.capture = { ...full.capture, client_capture_id: newClientCaptureId() }
+  }
   await mutate((items) => {
     items.push(full)
   })
@@ -108,6 +112,24 @@ export async function remove(id: string): Promise<void> {
     if (i < 0) return false
     items.splice(i, 1)
   })
+}
+
+/** A capture queued before captures carried an id gets one (persisted) before
+ *  its next send, so every later retry repeats the same id. */
+export async function ensureCaptureId(item: OutboxItem): Promise<OutboxItem> {
+  if (!item.capture || item.capture.client_capture_id) return item
+  const id = newClientCaptureId()
+  let updated: OutboxItem = { ...item, capture: { ...item.capture, client_capture_id: id } }
+  await mutate((items) => {
+    const stored = items.find((x) => x.id === item.id)
+    if (!stored?.capture) return false
+    if (stored.capture.client_capture_id) {
+      updated = stored // another writer got there first; use its id
+      return false
+    }
+    stored.capture = { ...stored.capture, client_capture_id: id }
+  })
+  return updated
 }
 
 export async function clear(): Promise<void> {

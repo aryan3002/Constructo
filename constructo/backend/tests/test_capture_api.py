@@ -210,3 +210,127 @@ async def test_capture_media_stores_file(client, db_session, world, tmp_path, mo
     assert row.media_url is not None and row.media_url.startswith("captures/app_")
     saved = tmp_path / row.media_url
     assert saved.exists() and saved.read_bytes().startswith(b"\xff\xd8\xff")
+
+
+# ---- client_capture_id: a retried capture lands once (T9) ---------------------
+
+
+async def _app_rows(db_session):
+    return (
+        await db_session.execute(select(RawMessageModel).where(RawMessageModel.source == "app"))
+    ).scalars().all()
+
+
+async def test_capture_same_client_id_twice_files_once(
+    client, db_session, world, tmp_path, monkeypatch
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "media_dir", str(tmp_path))
+    queued: list = []
+
+    async def _record(raw_id):
+        queued.append(raw_id)
+
+    monkeypatch.setattr("app.capture.router.enqueue_extraction", _record)
+    _, owner, site = world
+    form = {"site_id": str(site.id), "type": "progress", "client_capture_id": "cap_1"}
+    photo = {"media": ("slab.jpg", b"\xff\xd8\xff\xe0fakejpeg", "image/jpeg")}
+
+    first = await client.post("/api/v1/capture", data=form, files=photo, headers=auth(owner))
+    second = await client.post("/api/v1/capture", data=form, files=photo, headers=auth(owner))
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert second.json()["raw_message_id"] == first.json()["raw_message_id"]
+    rows = await _app_rows(db_session)
+    assert len(rows) == 1
+    assert rows[0].provider_message_id == f"{owner.id}:cap_1"
+    # The repeat stored no media and queued no second extraction.
+    assert len(list((tmp_path / "captures").iterdir())) == 1
+    assert len(queued) == 1
+
+
+async def test_capture_same_client_id_different_users_files_twice(
+    client, db_session, factory, world
+):
+    company, owner, site = world
+    pm = await factory.user(company=company, role=UserRole.owner, name="Second owner")
+    form = {"site_id": str(site.id), "text": "Plaster done", "client_capture_id": "cap_1"}
+
+    a = await client.post("/api/v1/capture", data=form, headers=auth(owner))
+    b = await client.post("/api/v1/capture", data=form, headers=auth(pm))
+
+    assert a.status_code == 201 and b.status_code == 201
+    assert a.json()["raw_message_id"] != b.json()["raw_message_id"]
+    assert len(await _app_rows(db_session)) == 2
+
+
+async def test_capture_without_client_id_is_unchanged(client, db_session, world):
+    _, owner, site = world
+    form = {"site_id": str(site.id), "text": "Plaster done"}
+
+    a = await client.post("/api/v1/capture", data=form, headers=auth(owner))
+    b = await client.post("/api/v1/capture", data=form, headers=auth(owner))
+
+    assert a.json()["status"] == "queued" and b.json()["status"] == "queued"
+    assert a.json()["raw_message_id"] != b.json()["raw_message_id"]
+    rows = await _app_rows(db_session)
+    assert len(rows) == 2
+    assert all(r.provider_message_id is None for r in rows)
+
+
+async def test_capture_client_id_race_returns_existing_and_drops_media(
+    client, db_session, world, tmp_path, monkeypatch
+):
+    """Two sends raced past the lookup: the insert hits the unique index, and
+    the loser answers with the winner's row and deletes the media it stored."""
+    from app.capture import router as capture_router
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "media_dir", str(tmp_path))
+    _, owner, site = world
+    winner = RawMessageModel(
+        source="app",
+        external_group_id=f"app:{site.id}",
+        sender_id=str(owner.id),
+        media_type="text",
+        text="first send",
+        sent_at=datetime.now(UTC),
+        provider_message_id=f"{owner.id}:cap_race",
+    )
+    db_session.add(winner)
+    await db_session.commit()
+    winner_id = str(winner.id)  # the endpoint's rollback expires `winner`
+
+    real_lookup = capture_router._existing_capture
+    calls = {"n": 0}
+
+    async def _miss_first(session, pmid):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else await real_lookup(session, pmid)
+
+    monkeypatch.setattr(capture_router, "_existing_capture", _miss_first)
+    resp = await client.post(
+        "/api/v1/capture",
+        data={"site_id": str(site.id), "client_capture_id": "cap_race"},
+        files={"media": ("slab.jpg", b"\xff\xd8\xff\xe0fakejpeg", "image/jpeg")},
+        headers=auth(owner),
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["raw_message_id"] == winner_id
+    assert len(await _app_rows(db_session)) == 1
+    assert list((tmp_path / "captures").iterdir()) == []
+
+
+async def test_capture_client_id_too_long_is_422(client, world):
+    _, owner, site = world
+    resp = await client.post(
+        "/api/v1/capture",
+        data={"site_id": str(site.id), "text": "x", "client_capture_id": "c" * 101},
+        headers=auth(owner),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "invalid_client_capture_id"
+

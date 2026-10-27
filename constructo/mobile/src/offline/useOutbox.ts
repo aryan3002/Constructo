@@ -13,7 +13,7 @@ import NetInfo from '@react-native-community/netinfo'
 
 import { ApiError, request } from '../api/client'
 import { submitCapture } from '../api/capture'
-import { list, remove, subscribeOutboxChanges, type OutboxItem } from './outbox'
+import { ensureCaptureId, list, remove, subscribeOutboxChanges, type OutboxItem } from './outbox'
 
 /** A 4xx (except 401 expired login / 408 timeout / 429 rate-limit) is a
  *  PERMANENT rejection — the item can never succeed as-is (too large /
@@ -57,9 +57,11 @@ export async function refreshOutbox(): Promise<void> {
   setSnapshot({ pending: (await list()).length })
 }
 
-async function send(item: OutboxItem): Promise<void> {
+async function send(queued: OutboxItem): Promise<void> {
+  const item = await ensureCaptureId(queued)
   if (item.capture) {
-    // Multipart field capture → the real /capture extraction loop.
+    // Multipart field capture → the real /capture extraction loop. Its
+    // client_capture_id makes a repeat send land once on the server.
     await submitCapture(item.capture)
   } else {
     await request(item.path, {

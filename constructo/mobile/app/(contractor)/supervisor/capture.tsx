@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics'
 import {
   captureSites,
   fetchCaptureExtraction,
+  newClientCaptureId,
   submitCapture,
   type CaptureExtraction,
   type CaptureMedia,
@@ -159,7 +160,7 @@ export default function Capture() {
   }, [pending, refresh])
 
   const enqueueCapture = useCallback(
-    async (media: CaptureMedia | null, text?: string) => {
+    async (media: CaptureMedia | null, text?: string, clientCaptureId?: string) => {
       if (!site) {
         Alert.alert('•', str.noSite)
         return
@@ -169,7 +170,13 @@ export default function Capture() {
         label,
         path: CAPTURE_PATH,
         method: 'POST',
-        capture: { site_id: site.id, type: kind, text: text ?? null, media },
+        capture: {
+          site_id: site.id,
+          type: kind,
+          text: text ?? null,
+          media,
+          client_capture_id: clientCaptureId ?? newClientCaptureId(),
+        },
       })
       await refresh()
       if (online) void flush() // optimistic: nudge a drain immediately
@@ -214,11 +221,14 @@ export default function Capture() {
         return
       }
       const media: CaptureMedia = { uri: audio.uri, name: audio.name, mime: audio.mime }
-      const payload = { site_id: site.id, type: kind, text: null, media }
+      // One id for this capture, used by the immediate try AND any queued
+      // retry: a send whose response was lost must not be filed twice (T9).
+      const clientCaptureId = newClientCaptureId()
+      const payload = { site_id: site.id, type: kind, text: null, media, client_capture_id: clientCaptureId }
 
       if (!online) {
         // Offline: queue the audio; the outbox replays it via submitCapture.
-        await enqueueCapture(media)
+        await enqueueCapture(media, undefined, clientCaptureId)
         return
       }
 
@@ -232,9 +242,10 @@ export default function Capture() {
         if (heard) setExtraction(heard)
         else setVoicePending(false) // transcript not back in budget — drop the chip
       } catch {
-        // Network/server hiccup mid-send → don't lose the audio: queue it.
+        // Network/server hiccup mid-send → don't lose the audio: queue it
+        // under the same id, so if the first send did land it isn't doubled.
         setVoicePending(false)
-        await enqueueCapture(media)
+        await enqueueCapture(media, undefined, clientCaptureId)
       }
     },
     [site, kind, str, online, enqueueCapture, refresh],

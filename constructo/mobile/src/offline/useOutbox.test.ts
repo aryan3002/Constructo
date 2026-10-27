@@ -10,7 +10,10 @@ jest.mock('../api/client', () => {
   return { ...actual, request: (...a: unknown[]) => mockRequest(...a) }
 })
 const mockSubmit = jest.fn()
-jest.mock('../api/capture', () => ({ submitCapture: (...a: unknown[]) => mockSubmit(...a) }))
+jest.mock('../api/capture', () => ({
+  ...jest.requireActual('../api/capture'),
+  submitCapture: (...a: unknown[]) => mockSubmit(...a),
+}))
 
 import { ApiError, TimeoutError } from '../api/client'
 import { clear, enqueue, list } from './outbox'
@@ -59,6 +62,21 @@ describe('the one drainer', () => {
     expect(mockSubmit).toHaveBeenCalledTimes(2)
     expect(mockRequest).toHaveBeenCalledTimes(1)
     expect(await list()).toEqual([])
+  })
+
+  it('a legacy capture without an id is sent with one, and retried with the same one', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage')
+    await AsyncStorage.setItem(
+      'constructo.outbox',
+      JSON.stringify([{ id: 'ob_old', createdAt: 1, label: 'old', path: '/api/v1/capture', method: 'POST', capture: { site_id: 's1', text: 'x' } }]),
+    )
+    mockSubmit.mockRejectedValueOnce(new TimeoutError()).mockResolvedValue({ raw_message_id: 'r' })
+    await flushOutbox()
+    await flushOutbox()
+    const ids = mockSubmit.mock.calls.map((c) => (c[0] as { client_capture_id: string }).client_capture_id)
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).toMatch(/^cap_/)
+    expect(ids[1]).toBe(ids[0])
   })
 
   it('an enqueue during a drain is not lost or overwritten', async () => {
