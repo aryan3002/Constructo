@@ -63,6 +63,20 @@ describe('auth/Join', () => {
     expect(navigateMock).toHaveBeenCalledWith('/login?next=%2Fjoin%2Ftok123')
   })
 
+  it('a role the screen does not describe skips the role card instead of crashing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/invites/tok123')) return jsonOk({ ...PREVIEW, role: 'homeowner' })
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    renderJoin()
+
+    expect(await screen.findByRole('button', { name: /^sign in$/i })).toBeInTheDocument()
+    expect(screen.queryByText(/you'll…$/)).not.toBeInTheDocument()
+  })
+
   it('accepts when signed in, then shows the coachmark and routes home', async () => {
     setToken('jwt-existing')
     vi.stubGlobal(

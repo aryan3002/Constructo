@@ -57,6 +57,9 @@ const ROLE_ICON: Record<Role, (p: React.SVGProps<SVGSVGElement>) => JSX.Element>
 function RoleCard({ role }: { role: Role }) {
   const t = useT()
   const Icon = ROLE_ICON[role]
+  // A role this screen doesn't describe (or a malformed preview) skips the
+  // card instead of crashing the whole join page.
+  if (!Icon) return null
   return (
     <div className="flex items-start gap-3 rounded-card border border-line bg-paper-2 p-4">
       <span
