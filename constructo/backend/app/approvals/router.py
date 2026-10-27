@@ -229,6 +229,48 @@ async def create_decision(
     return _out(decision)
 
 
+# ---- batch actions ---------------------------------------------------------
+
+
+# Registered before the /{decision_id}/... routes: otherwise POST
+# /batch/reject (and /batch/acknowledge) matches /{decision_id}/reject with
+# decision_id="batch" and fails UUID validation with 422.
+@router.post("/batch/{action}", response_model=BatchResultOut)
+async def batch_action(
+    action: DecisionAction,
+    body: BatchActionIn,
+    user: User = Depends(_team_user),
+    session: AsyncSession = Depends(get_session),
+) -> BatchResultOut:
+    """Apply one action to many decisions (inbox multi-select).
+
+    Each item is validated/scoped independently; out-of-scope, not-yours-to-
+    decide (S9: money kinds are owner-only) or illegally transitioning ids are
+    reported under ``skipped`` rather than failing the whole batch.
+    """
+    updated: list[UUID] = []
+    skipped: list[UUID] = []
+    for decision_id in body.ids:
+        decision = await session.get(Decision, decision_id)
+        if decision is None or decision.company_id != user.company_id:
+            skipped.append(decision_id)
+            continue
+        if decision.site_id is not None:
+            visible = await effective_visible_site_ids(session, user)
+            if decision.site_id not in visible:
+                skipped.append(decision_id)
+                continue
+        try:
+            # A decision this role may not settle is skipped like any other
+            # out-of-reach id (the batch never fails as a whole).
+            _assert_can_decide(user, decision)
+            await apply_action(session, decision, action, note=body.note)
+            updated.append(decision_id)
+        except AppError:
+            skipped.append(decision_id)
+    return BatchResultOut(updated=updated, skipped=skipped)
+
+
 @router.get("/{decision_id}", response_model=DecisionOut)
 async def get_decision(
     decision_id: UUID,
@@ -345,45 +387,6 @@ async def assign_decision(
     if target is None or target.company_id != user.company_id:
         raise AppError(404, "not_found", "Assignee not found")
     return _out(await assign(session, decision, body.assigned_to))
-
-
-# ---- batch actions ---------------------------------------------------------
-
-
-@router.post("/batch/{action}", response_model=BatchResultOut)
-async def batch_action(
-    action: DecisionAction,
-    body: BatchActionIn,
-    user: User = Depends(_team_user),
-    session: AsyncSession = Depends(get_session),
-) -> BatchResultOut:
-    """Apply one action to many decisions (inbox multi-select).
-
-    Each item is validated/scoped independently; out-of-scope, not-yours-to-
-    decide (S9: money kinds are owner-only) or illegally transitioning ids are
-    reported under ``skipped`` rather than failing the whole batch.
-    """
-    updated: list[UUID] = []
-    skipped: list[UUID] = []
-    for decision_id in body.ids:
-        decision = await session.get(Decision, decision_id)
-        if decision is None or decision.company_id != user.company_id:
-            skipped.append(decision_id)
-            continue
-        if decision.site_id is not None:
-            visible = await effective_visible_site_ids(session, user)
-            if decision.site_id not in visible:
-                skipped.append(decision_id)
-                continue
-        try:
-            # A decision this role may not settle is skipped like any other
-            # out-of-reach id (the batch never fails as a whole).
-            _assert_can_decide(user, decision)
-            await apply_action(session, decision, action, note=body.note)
-            updated.append(decision_id)
-        except AppError:
-            skipped.append(decision_id)
-    return BatchResultOut(updated=updated, skipped=skipped)
 
 
 # ---- SLA sweep trigger -----------------------------------------------------

@@ -151,3 +151,28 @@ async def test_sla_sweep_endpoint(client, db_session, factory, owner):
     resp = await client.post("/api/v1/approvals/sla/sweep", headers=auth(owner))
     assert resp.status_code == 200, resp.text
     assert str(d.id) in resp.json()["escalated"]
+
+
+async def test_batch_reject_and_acknowledge_reach_the_batch_route(client, owner):
+    """/batch/reject and /batch/acknowledge used to match /{decision_id}/reject
+    (decision_id="batch") and fail with 422 — the web "Reject selected"."""
+    ids = []
+    for i in range(2):
+        d = (
+            await client.post(
+                "/api/v1/approvals", json={"title": f"PO {i}"}, headers=auth(owner)
+            )
+        ).json()
+        ids.append(d["id"])
+
+    ack = await client.post(
+        "/api/v1/approvals/batch/acknowledge", json={"ids": ids[:1]}, headers=auth(owner)
+    )
+    assert ack.status_code == 200, ack.text
+    assert ack.json()["updated"] == ids[:1]
+
+    rej = await client.post(
+        "/api/v1/approvals/batch/reject", json={"ids": ids, "note": "no"}, headers=auth(owner)
+    )
+    assert rej.status_code == 200, rej.text
+    assert set(rej.json()["updated"]) == set(ids)
