@@ -132,7 +132,7 @@ function CashPulse({
     >
       <div className="flex items-center justify-between">
         <H2>{t('payments.cash_pulse')}</H2>
-        <Small>{t('payments.count', { count })}</Small>
+        <Small>{t(count === 1 ? 'payments.count_one' : 'payments.count', { count })}</Small>
       </div>
       <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <PulseStat label={t('payments.inflow')} amount={inflow} tone="ok" />

@@ -6,6 +6,7 @@
 // tap targets or by voice (hold-to-talk), never a fiddly form. Optimistic +
 // offline-tolerant via the shared capture queue.
 
+import { useRoleBadge } from '../../ui/useRoleBadge'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { todayIso } from '../../api/config'
@@ -68,6 +69,8 @@ function PaymentRow({ p, t }: { p: MyPayment; t: ReturnType<typeof useT> }) {
 }
 
 export function MukadamAttendance() {
+  // The signed-in person's name and real initials on the avatar.
+  const roleBadge = useRoleBadge()
   const t = useT()
   const date = todayIso()
   const [tab, setTab] = useState<Tab>('capture')
@@ -110,7 +113,7 @@ export function MukadamAttendance() {
       sites={siteSummaries}
       selectedSiteId={activeSiteId}
       onSelectSite={setSiteId}
-      roleBadge={{ name: 'Mukadam', initials: 'MK' }}
+      roleBadge={roleBadge}
     >
       <header className="mb-4">
         <H2>{t('attendance.title')}</H2>

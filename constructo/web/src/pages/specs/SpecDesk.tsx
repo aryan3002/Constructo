@@ -1,3 +1,4 @@
+import { formatQuantity } from '../../lib/format'
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -204,7 +205,7 @@ export function SpecDesk() {
                                   </td>
                                   <td className="px-4 py-2.5 text-right align-top">
                                     <Mono className="text-small text-text">
-                                      {l.qty ? `${l.qty}${l.unit ? ' ' + l.unit : ''}` : '—'}
+                                      {formatQuantity(l.qty, l.unit)}
                                     </Mono>
                                   </td>
                                   <td className="px-4 py-2.5 text-right align-top">

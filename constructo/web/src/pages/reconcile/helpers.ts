@@ -1,4 +1,5 @@
 // Presentation helpers for the reconcile screens. Pure + unit-testable.
+import { formatQuantity } from '../../lib/format'
 import type { Status } from '../../ui'
 import type { ReconcileStatus } from '../../api/reconcile'
 import type { TranslationKey } from '../../i18n'
@@ -43,7 +44,5 @@ export function compareStatus(a: ReconcileStatus, b: ReconcileStatus): number {
 
 /** Compact quantity + unit, e.g. "100 bag" / "—" when absent. */
 export function formatQty(qty: number | null, unit?: string | null): string {
-  if (qty == null) return '—'
-  const n = Number.isInteger(qty) ? String(qty) : String(qty)
-  return unit ? `${n} ${unit}` : n
+  return formatQuantity(qty, unit)
 }

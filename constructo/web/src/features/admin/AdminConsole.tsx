@@ -4,8 +4,8 @@
 // section's panel, with the section in the URL (`?section=`) so it's deep-
 // linkable and survives refresh (the URL-as-state DoD, same as the cockpit).
 // W4.1 ships the Company Profile section (RHF + Zod); the rest are listed so the
-// control-plane map is visible, each rendering an honest "coming in W4" panel
-// (Groups links to the existing mapping screen). Owner-only (`manage_settings`).
+// control-plane map is visible. A section another screen already covers
+// (WhatsApp groups) links there. Owner-only (`manage_settings`).
 import { Link, useSearchParams } from 'react-router-dom'
 import { useT, type TranslationKey } from '../../i18n'
 import { useCan, useMeRole } from '../../auth/useCan'
@@ -30,7 +30,7 @@ interface SectionDef {
   key: string
   labelKey: TranslationKey
   group: TranslationKey
-  /** Built sections render a real panel; the rest show the roadmap placeholder. */
+  /** Built sections render a real panel; a `link` section points elsewhere. */
   built?: boolean
   /** Optional deep-link to an existing screen that already covers this. */
   link?: string
@@ -113,11 +113,6 @@ export function AdminConsole() {
                             }`}
                           >
                             {t(s.labelKey)}
-                            {!s.built ? (
-                              <span className="rounded-pill bg-surface-sunken px-1.5 py-0.5 font-body text-micro font-semibold text-text-mute">
-                                {t('admin.soon')}
-                              </span>
-                            ) : null}
                           </button>
                         </li>
                       )
@@ -145,7 +140,7 @@ export function AdminConsole() {
             ) : active.key === 'billing' ? (
               <Billing />
             ) : (
-              <ComingSoon labelKey={active.labelKey} link={active.link} />
+              <ElsewhereSection labelKey={active.labelKey} link={active.link} />
             )}
           </div>
         </div>
@@ -154,12 +149,13 @@ export function AdminConsole() {
   )
 }
 
-function ComingSoon({ labelKey, link }: { labelKey: TranslationKey; link?: string }) {
+/** A section managed on its own screen (WhatsApp groups → /groups). */
+function ElsewhereSection({ labelKey, link }: { labelKey: TranslationKey; link?: string }) {
   const t = useT()
   return (
     <section className="flex flex-col items-start gap-3">
       <H2 as="h2">{t(labelKey)}</H2>
-      <p className="font-body text-small text-text-mute">{t('admin.coming_soon')}</p>
+      <p className="font-body text-small text-text-mute">{t('admin.elsewhere')}</p>
       {link ? (
         <Link
           to={link}

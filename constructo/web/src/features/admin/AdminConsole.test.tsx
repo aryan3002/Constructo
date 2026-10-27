@@ -76,13 +76,25 @@ describe('AdminConsole', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('switches to an unbuilt section showing the coming-soon panel', async () => {
+  it('a section managed elsewhere links there, with no "coming soon"', async () => {
     renderConsole('owner')
     await screen.findByRole('heading', { name: /company profile/i })
     await userEvent.click(screen.getByRole('button', { name: /whatsapp groups/i }))
     await waitFor(() =>
-      expect(screen.getByText(/coming soon/i)).toBeInTheDocument(),
+      expect(screen.getByRole('link', { name: /open the existing screen/i })).toHaveAttribute(
+        'href',
+        '/groups',
+      ),
     )
+    expect(screen.queryByText(/coming soon|^soon$/i)).toBeNull()
+  })
+
+  it('says what the page is in plain words and shows no raw company ID', async () => {
+    renderConsole('owner')
+    await screen.findByDisplayValue('Verma Builders')
+    expect(screen.queryByText(/control plane/i)).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Company settings' })).toBeInTheDocument()
+    expect(screen.queryByText('co-1')).toBeNull()
   })
 
   it('deep-links to a section via the ?section= param', async () => {

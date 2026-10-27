@@ -6,6 +6,7 @@
  *
  * Shows: element / material identity / qty·unit / rate / line_total / lifecycle pill.
  */
+import { formatQuantity } from '../../lib/format'
 import type { Ref } from 'react'
 import { Mono, Small, StatusPill } from '../../ui'
 import type { DeskLine, RoutingStatus } from '../../api/specs'
@@ -94,9 +95,7 @@ export function SpecRow({ line, selected, onClick, rowRef }: SpecRowProps) {
       {/* Qty · unit */}
       <td className="px-4 py-2.5 text-right align-top">
         <Mono className="text-small text-text">
-          {line.qty
-            ? `${line.qty}${line.unit ? ' ' + line.unit : ''}`
-            : '—'}
+          {formatQuantity(line.qty, line.unit)}
         </Mono>
       </td>
 

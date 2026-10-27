@@ -4,7 +4,6 @@ import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { RequireAuth } from './components/RequireAuth'
 import { SessionGuard } from './components/SessionGuard'
 import { Spinner } from './components/states'
-import { Components } from './pages/Components'
 import { Groups } from './pages/Groups'
 import { More } from './pages/More'
 // === payments/permits ===
@@ -27,6 +26,11 @@ import { Settings } from './pages/settings/Settings'
 const AdminConsole = lazy(() =>
   import('./features/admin/AdminConsole').then((m) => ({ default: m.AdminConsole })),
 )
+// Design-system gallery: development builds only (lazy, so production never
+// ships it).
+const Components = import.meta.env.DEV
+  ? lazy(() => import('./pages/Components').then((m) => ({ default: m.Components })))
+  : null
 // === brief/owner ===
 import { OwnerHome } from './pages/owner/OwnerHome'
 // === pm "today" (W3.4) ===
@@ -92,7 +96,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
  * each role lands on its correct home and can reach every screen it owns.
  *
  * Route map:
- *   /login, /join/:token, /welcome, /invite, /components  — auth + gallery
+ *   /login, /join/:token, /welcome, /invite  — auth (+ /components, dev only)
  *   /delete-account         -> Public account deletion (no login gate)
  *   /                       -> RoleLanding (redirects by role)
  *   /owner                  -> Owner/PM brief
@@ -127,8 +131,8 @@ export function App() {
       <Route path="/settings/admin" element={<Guarded><AdminConsole /></Guarded>} />
       <Route path="/invite" element={<Guarded><InvitePage /></Guarded>} />
 
-      {/* Public design-system gallery — view the full kit in both themes. */}
-      <Route path="/components" element={<Components />} />
+      {/* Design-system gallery (dev only) — the full kit in both themes. */}
+      {Components ? <Route path="/components" element={<Components />} /> : null}
 
       {/* Role-aware landing redirect (the "where do I land" map). */}
       <Route path="/" element={<Guarded><RoleLanding /></Guarded>} />

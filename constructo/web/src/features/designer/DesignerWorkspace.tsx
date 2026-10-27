@@ -76,10 +76,28 @@ export function DesignerWorkspace() {
   const effectiveSiteId: string | undefined =
     (selectedSiteId ?? siteOptions[0]?.id) || undefined
 
+  // Intake (the design profiler) is a Labs feature: with Labs off the server
+  // answers 404 and the tab would only ever be empty, so it shows only once
+  // the inbox summary loads — and then carries the count waiting on the
+  // designer.
+  const inboxQuery = useQuery({
+    queryKey: ['design', 'inbox-summary'],
+    queryFn: () => designApi.inboxSummary(),
+    retry: false,
+  })
+  const inboxCount = inboxQuery.isSuccess
+    ? inboxQuery.data.briefs_awaiting_signoff +
+      inboxQuery.data.answered_clarifications +
+      inboxQuery.data.deferred_conflicts
+    : 0
+
+  const intakeAvailable = inboxQuery.isSuccess
+
   // Tab state in URL
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab: TabId = isValidTab(tabParam) ? tabParam : TAB_SELECTIONS
+  const activeTab: TabId =
+    isValidTab(tabParam) && (tabParam !== TAB_INTAKE || intakeAvailable) ? tabParam : TAB_SELECTIONS
 
   function setActiveTab(id: string) {
     setSearchParams(
@@ -96,31 +114,21 @@ export function DesignerWorkspace() {
     setActiveTab(TAB_SELECTIONS)
   }
 
-  // Inbox badge — suffix the Intake tab with the count of things waiting on
-  // the designer. Best-effort: any fetch failure (incl. a backend without the
-  // endpoint yet → 404) leaves the plain label.
-  const inboxQuery = useQuery({
-    queryKey: ['design', 'inbox-summary'],
-    queryFn: () => designApi.inboxSummary(),
-    retry: false,
-  })
-  const inboxCount = inboxQuery.isSuccess
-    ? inboxQuery.data.briefs_awaiting_signoff +
-      inboxQuery.data.answered_clarifications +
-      inboxQuery.data.deferred_conflicts
-    : 0
-
   // Tab definitions for the TabBar (not the AppShell nav)
   const internalTabs = [
     { id: TAB_SELECTIONS, label: t('designer.tab.selections') },
     { id: TAB_SITE_CHANGES, label: t('designer.tab.site_changes') },
-    {
-      id: TAB_INTAKE,
-      label:
-        inboxCount > 0
-          ? `${t('designer.tab.intake')} (${inboxCount})`
-          : t('designer.tab.intake'),
-    },
+    ...(intakeAvailable
+      ? [
+          {
+            id: TAB_INTAKE,
+            label:
+              inboxCount > 0
+                ? `${t('designer.tab.intake')} (${inboxCount})`
+                : t('designer.tab.intake'),
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -180,20 +188,22 @@ export function DesignerWorkspace() {
           )}
         </div>
 
-        <div
-          id={`panel-${TAB_INTAKE}`}
-          role="tabpanel"
-          aria-labelledby={`tab-${TAB_INTAKE}`}
-          tabIndex={0}
-          hidden={activeTab !== TAB_INTAKE}
-          className="focus-visible:outline-none"
-        >
-          {activeTab === TAB_INTAKE && (
-            <div className="max-w-3xl mx-auto">
-              <Intake siteId={effectiveSiteId} onViewSelections={handleViewSelections} />
-            </div>
-          )}
-        </div>
+        {intakeAvailable ? (
+          <div
+            id={`panel-${TAB_INTAKE}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${TAB_INTAKE}`}
+            tabIndex={0}
+            hidden={activeTab !== TAB_INTAKE}
+            className="focus-visible:outline-none"
+          >
+            {activeTab === TAB_INTAKE && (
+              <div className="max-w-3xl mx-auto">
+                <Intake siteId={effectiveSiteId} onViewSelections={handleViewSelections} />
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </AppShell>
   )

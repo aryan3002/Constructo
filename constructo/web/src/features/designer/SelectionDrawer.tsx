@@ -22,6 +22,7 @@
  *   approved + canPropose          → "Release to site" (ConfirmDialog)
  *   released                       → Done state ("Released to site on {date}")
  */
+import { formatQuantity } from '../../lib/format'
 import { useState, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Drawer, ConfirmDialog, Button, Mono, Small, Body } from '../../ui'
@@ -644,9 +645,7 @@ export function SelectionDrawer({
                 <dt><Small className="font-semibold !text-text-mute">{t('selections.drawer.qty')}</Small></dt>
                 <dd>
                   <Mono className="text-body font-semibold text-text">
-                    {line.qty
-                      ? `${line.qty}${line.unit ? ' ' + line.unit : ''}`
-                      : '—'}
+                    {formatQuantity(line.qty, line.unit)}
                   </Mono>
                 </dd>
               </div>

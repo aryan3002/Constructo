@@ -31,6 +31,7 @@ export interface NavZones {
 const DASHBOARD: NavItem = { to: '/owner', labelKey: 'nav.brief', labelKeyByRole: { owner: 'nav.latest' }, iconName: 'grid', end: true }
 // The PM's own home: the multi-site Today glance, not the owner's Home.
 const TODAY: NavItem = { to: '/pm', labelKey: 'nav.today', iconName: 'grid', end: true }
+const DPR: NavItem = { to: '/dpr', labelKey: 'nav.dpr', iconName: 'doc', end: true }
 const APPROVALS: NavItem = { to: '/approvals', labelKey: 'nav.approvals', iconName: 'check' }
 const REQUESTS: NavItem = { to: '/requests', labelKey: 'nav.requests', iconName: 'inbox' }
 // Reconcile + Finance are HIDDEN from the owner nav for the pilot — they read
@@ -60,7 +61,7 @@ const SETTINGS: NavItem = { to: '/settings', labelKey: 'nav.settings', iconName:
 // not see "Capture"). SHARED/ADMIN are universal, cap-filtered.
 const PRIMARY_BY_ROLE: Partial<Record<Role, NavItem[]>> = {
   owner: [DASHBOARD, APPROVALS, REQUESTS],
-  pm: [TODAY, APPROVALS],
+  pm: [TODAY, APPROVALS, DPR],
   architect: [DESIGNER],
   supervisor: [CAPTURE],
 }

@@ -172,7 +172,7 @@ export function ReconcilePage() {
                     {formatInr(summary.total_amount_at_risk)}
                   </Mono>
                   <Small>
-                    {t('reconcile.summary_at_risk', {
+                    {t(exceptionCount === 1 ? 'reconcile.summary_at_risk_one' : 'reconcile.summary_at_risk', {
                       amount: formatInr(summary.total_amount_at_risk),
                       count: exceptionCount,
                     })}

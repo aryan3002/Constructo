@@ -1,3 +1,4 @@
+import { useRoleBadge } from '../../ui/useRoleBadge'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { todayIso } from '../../api/config'
@@ -31,6 +32,8 @@ import { AppShell, siteStatusToStatus, type SiteSummary } from '../../ui'
  * AppShell chrome; each panel owns its own data.
  */
 export function OwnerHome() {
+  // The signed-in person's name and real initials on the avatar.
+  const roleBadge = useRoleBadge()
   const t = useT()
   const date = todayIso()
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
@@ -79,7 +82,7 @@ export function OwnerHome() {
       sites={siteSummaries}
       selectedSiteId={selectedSiteId}
       onSelectSite={setSelectedSiteId}
-      roleBadge={{ name: 'Owner', initials: 'OW' }}
+      roleBadge={roleBadge}
     >
       <HonestHero summary={summaryQ.data?.summary} lastActivityAt={lastActivityAt} date={date} />
 

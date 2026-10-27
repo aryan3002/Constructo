@@ -14,7 +14,7 @@ import { authApi, type CompanyUpdate } from '../../api/auth'
 import { qk } from '../../api/queryKeys'
 import { useCan } from '../../auth/useCan'
 import { useT } from '../../i18n'
-import { Body, Button, H2, Mono, Small, StatusPill, type Status } from '../../ui'
+import { Body, Button, H2, Small, StatusPill, type Status } from '../../ui'
 import { ErrorState, Spinner } from '../../components/states'
 import { SelectField, TextField } from '../../pages/auth/fields'
 
@@ -324,14 +324,6 @@ export function CompanyProfile() {
           <Small className="!text-text-mute">{t('admin.company.read_only')}</Small>
         </dl>
       )}
-
-      {/* Metadata. */}
-      <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 border-t border-line pt-4">
-        <dt className="font-body text-small text-text-mute">{t('admin.company.id_label')}</dt>
-        <dd>
-          <Mono className="text-small text-text-mute">{company.data.id}</Mono>
-        </dd>
-      </dl>
     </section>
   )
 }

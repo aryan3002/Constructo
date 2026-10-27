@@ -37,7 +37,7 @@ export function TallyExportButton({ siteId }: { siteId: string }) {
       downloadCsv(csv, siteId)
       const n = Math.max(0, csv.trim().split('\n').length - 1) // minus header
       setPhase('done')
-      setToast({ status: 'ok', msg: t('reconcile.export_done', { n }) })
+      setToast({ status: 'ok', msg: t(n === 1 ? 'reconcile.export_done_one' : 'reconcile.export_done', { n }) })
     } catch (e) {
       if (e instanceof StepUpRequiredError) {
         setStepUp(null)

@@ -12,6 +12,7 @@
 // owner's Home (DecisionChips), so a recorded decision clears the risk.
 // DPR-due weighting (vault 11/03 §5) is deferred until `getHome` exposes a
 // per-site DPR signal — we don't invent one.
+import { useRoleBadge } from '../../ui/useRoleBadge'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { todayIso } from '../../api/config'
@@ -67,6 +68,8 @@ function usePmHome(date: string) {
 }
 
 export function Today() {
+  // The signed-in person's name and real initials on the avatar.
+  const roleBadge = useRoleBadge()
   const t = useT()
   const date = todayIso()
   const { data: home, isLoading, isError, error, refetch } = usePmHome(date)
@@ -93,7 +96,7 @@ export function Today() {
       sites={siteSummaries}
       selectedSiteId={selectedSiteId}
       onSelectSite={setSelectedSiteId}
-      roleBadge={{ name: 'PM', initials: 'PM' }}
+      roleBadge={roleBadge}
     >
       <header>
         <Small className="!text-text-mute">{t('pm.today.title')}</Small>

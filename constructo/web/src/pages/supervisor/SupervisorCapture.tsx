@@ -5,6 +5,7 @@
 // state. Optimistic UI: a capture appears instantly and syncs in the
 // background via useCaptureQueue (offline-tolerant — queued, never lost).
 
+import { useRoleBadge } from '../../ui/useRoleBadge'
 import { useMemo, useState } from 'react'
 import { todayIso } from '../../api/config'
 import { useSites } from '../../api/hooks'
@@ -38,6 +39,8 @@ function queueLabelKey(item: QueuedCapture): string {
 }
 
 export function SupervisorCapture() {
+  // The signed-in person's name and real initials on the avatar.
+  const roleBadge = useRoleBadge()
   const t = useT()
   const date = todayIso()
   const { data: sitesPage } = useSites()
@@ -75,7 +78,7 @@ export function SupervisorCapture() {
     const n = Number.parseInt(headcount, 10)
     if (!activeSiteId || Number.isNaN(n) || n < 0) return
     queue.enqueue({ siteId: activeSiteId, headcount: n, occurredOn: date, note: note.trim() || undefined })
-    setFlash(t('capture.logged', { count: n }))
+    setFlash(t(n === 1 ? 'capture.logged_one' : 'capture.logged', { count: n }))
     setHeadcount('')
     setNote('')
     setTyping(false)
@@ -101,7 +104,7 @@ export function SupervisorCapture() {
       sites={siteSummaries}
       selectedSiteId={activeSiteId}
       onSelectSite={setSiteId}
-      roleBadge={{ name: 'Supervisor', initials: 'SV' }}
+      roleBadge={roleBadge}
     >
       <header className="mb-4">
         <H2>{t('capture.title')}</H2>

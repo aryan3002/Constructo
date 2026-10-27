@@ -79,6 +79,8 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     // there), so link the real route and the tab highlights.
     { to: '/designer?tab=selections', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
+    // The PM's daily progress report: review the AI draft, then share it.
+    { to: '/dpr', labelKey: 'nav.dpr', label: 'Daily report', icon: <DocIcon /> },
     { to: '/settings/documents', labelKey: 'nav.documents', label: 'Drawings', icon: <DocIcon /> },
     { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },

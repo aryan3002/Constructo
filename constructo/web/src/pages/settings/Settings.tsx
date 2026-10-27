@@ -11,7 +11,7 @@ import { useThemeMode, type ThemeMode } from '../../ui/ThemeModeProvider'
 import { useMe } from '../auth/useMe'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { Toggle } from './Toggle'
-import { useHighContrast, useNotifPrefs } from './useDisplayPrefs'
+import { useHighContrast } from './useDisplayPrefs'
 
 const ROLE_KEY: Record<string, TranslationKey> = {
   owner: 'invite.role.owner',
@@ -43,8 +43,9 @@ function Section({
 /**
  * Settings / profile. Profile (name, read-only phone+role), a real LANGUAGE
  * switcher (en/hi, persisted via i18n -> localStorage + user.language), the
- * sunlight/high-contrast toggle, notification prefs (stub, saved locally), and
- * a Team -> invite shortcut. Owner-on-brand "site" theme.
+ * sunlight/high-contrast toggle, the owner's way to the company notification
+ * settings (server-side, in Setup & administration), and a Team -> invite
+ * shortcut. Owner-on-brand "site" theme.
  */
 export function Settings() {
   const t = useT()
@@ -55,7 +56,6 @@ export function Settings() {
   const [savingName, setSavingName] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
   const [highContrast, setHighContrast] = useHighContrast()
-  const [notifs, setNotifs] = useNotifPrefs()
   const { mode, setMode } = useThemeMode()
 
   useEffect(() => {
@@ -207,26 +207,19 @@ export function Settings() {
               />
             </Section>
 
-            <Section title={t('settings.notifications.title')}>
-              <div className="divide-y divide-line">
-                <Toggle
-                  checked={notifs.dailyBrief}
-                  onChange={(v) => setNotifs({ ...notifs, dailyBrief: v })}
-                  label={t('settings.notifications.daily_brief')}
-                />
-                <Toggle
-                  checked={notifs.riskAlerts}
-                  onChange={(v) => setNotifs({ ...notifs, riskAlerts: v })}
-                  label={t('settings.notifications.risk_alerts')}
-                />
-                <Toggle
-                  checked={notifs.mentions}
-                  onChange={(v) => setNotifs({ ...notifs, mentions: v })}
-                  label={t('settings.notifications.mentions')}
-                />
-              </div>
-              <Small className="mt-3 block">{t('settings.notifications.hint')}</Small>
-            </Section>
+            {/* Notifications are the company's (SLA, escalation, daily digest),
+                saved on the server; only the owner changes them. */}
+            {me?.role === 'owner' ? (
+              <Section title={t('settings.notifications.title')}>
+                <Small className="block">{t('settings.notifications.company')}</Small>
+                <Link
+                  to="/settings/admin?section=notifications"
+                  className="mt-3 inline-flex min-h-tap items-center gap-1.5 font-body text-small font-semibold text-primary-deep hover:underline"
+                >
+                  {t('settings.notifications.open')} <span aria-hidden>→</span>
+                </Link>
+              </Section>
+            ) : null}
 
             {canInvite && (
               <Section title={t('settings.team.title')}>

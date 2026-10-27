@@ -19,7 +19,7 @@ describe('navForRole', () => {
 
   it("pm: their own Today cockpit, never the owner's Home", () => {
     const z = navForRole('pm')
-    expect(routes(z.primary)).toEqual(['/pm', '/approvals'])
+    expect(routes(z.primary)).toEqual(['/pm', '/approvals', '/dpr'])
     expect(labelKeyFor(z.primary[0], 'pm')).toBe('nav.today')
   })
 

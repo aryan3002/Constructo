@@ -82,12 +82,13 @@ vi.mock('../../../features/notifications/useUnreadCount', () => ({
 }))
 
 // ---------------------------------------------------------------------------
-// Mock designApi.inboxSummary — default: reject (endpoint unavailable → no
-// badge, so the exact-name 'Intake' assertions above stay valid). The badge
-// test overrides with a resolved summary before rendering.
+// Mock designApi.inboxSummary — default: the profiler is on with nothing
+// waiting (plain 'Intake' label). The badge test overrides with counts; the
+// Labs-off test rejects it (404), which hides the Intake tab.
 // ---------------------------------------------------------------------------
 
-const inboxSummaryMock = vi.fn().mockRejectedValue(new Error('unavailable'))
+const EMPTY_INBOX = { briefs_awaiting_signoff: 0, answered_clarifications: 0, deferred_conflicts: 0 }
+const inboxSummaryMock = vi.fn().mockResolvedValue(EMPTY_INBOX)
 vi.mock('../../../api/design', () => ({
   designApi: { inboxSummary: (...a: unknown[]) => inboxSummaryMock(...a) },
 }))
@@ -129,8 +130,9 @@ describe('DesignerWorkspace (D4)', () => {
   // 1. Renders three workspace tabs
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('renders the three workspace tabs', () => {
+  it('renders the three workspace tabs', async () => {
     renderWorkspace()
+    await screen.findByRole('tab', { name: 'Intake' })
     const tablist = screen.getByRole('tablist', { name: 'Designer' })
     expect(tablist).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Selections' })).toBeInTheDocument()
@@ -187,7 +189,7 @@ describe('DesignerWorkspace (D4)', () => {
   it('clicking "Intake" shows the Intake surface', async () => {
     renderWorkspace()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Intake' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Intake' }))
 
     expect(screen.getByRole('tab', { name: 'Intake' })).toHaveAttribute(
       'aria-selected',
@@ -202,8 +204,9 @@ describe('DesignerWorkspace (D4)', () => {
   // 5. Tab a11y: role="tablist", aria-selected, role="tabpanel"
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('has correct WAI-ARIA structure (tablist, tabs, tabpanels)', () => {
+  it('has correct WAI-ARIA structure (tablist, tabs, tabpanels)', async () => {
     renderWorkspace()
+    await screen.findByRole('tab', { name: 'Intake' })
 
     // tablist
     expect(screen.getByRole('tablist')).toBeInTheDocument()
@@ -297,11 +300,14 @@ describe('DesignerWorkspace (D4)', () => {
     expect(await screen.findByRole('tab', { name: 'Intake (3)' })).toBeInTheDocument()
   })
 
-  it('keeps the plain Intake label when the inbox fetch fails', async () => {
-    // default mock rejects — the label must stay un-suffixed
-    renderWorkspace()
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Intake' })).toBeInTheDocument(),
-    )
+  it('hides Intake when the design profiler is off (its endpoint 404s)', async () => {
+    inboxSummaryMock.mockRejectedValueOnce(new Error('Not Found'))
+    renderWorkspace('?tab=intake')
+    await waitFor(() => expect(inboxSummaryMock).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2))
+    expect(screen.queryByRole('tab', { name: /intake/i })).toBeNull()
+    // A link to the hidden tab lands on Selections instead of an empty panel.
+    expect(screen.getByRole('tab', { name: 'Selections' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByTestId('intake-surface')).toBeNull()
   })
 })

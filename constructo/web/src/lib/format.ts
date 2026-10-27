@@ -63,3 +63,25 @@ export function formatDateTime(iso: string): string {
 export function formatConfidence(c: number): string {
   return `${Math.round(c * 100)}%`
 }
+
+/** Unit spellings shown as a friendlier word ("nos" = numbers, i.e. pieces). */
+const UNIT_LABEL: Record<string, string> = { nos: 'pcs', 'nos.': 'pcs', no: 'pcs', 'no.': 'pcs' }
+
+/**
+ * A quantity as people write it: "24 pcs", not "24.00 nos". Decimal strings
+ * from the API lose trailing zeros ("12.50" → "12.5"), large numbers get
+ * Indian grouping, and an absent quantity is "—".
+ */
+export function formatQuantity(
+  qty: string | number | null | undefined,
+  unit?: string | null,
+): string {
+  if (qty === null || qty === undefined || qty === '') return '—'
+  const n = Number(qty)
+  const shown = Number.isFinite(n)
+    ? n.toLocaleString('en-IN', { maximumFractionDigits: 3 })
+    : String(qty)
+  const u = unit?.trim()
+  if (!u) return shown
+  return `${shown} ${UNIT_LABEL[u.toLowerCase()] ?? u}`
+}

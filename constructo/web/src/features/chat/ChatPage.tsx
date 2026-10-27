@@ -17,6 +17,7 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../ui/AppShell'
 import { useMeRole, useMe } from '../../auth/useCan'
 import { Spinner } from '../../components/states'
+import { personInitials } from '../../ui/useRoleBadge'
 import { ChatInbox } from './ChatInbox'
 import { ChatThread } from './ChatThread'
 import { GroupManageDrawer } from './groups/GroupManageDrawer'
@@ -189,11 +190,11 @@ export function ChatPage() {
     ? selectedConv.has_homeowner && selectedConv.kind !== 'homeowner'
     : false
 
-  // Role badge — prefer the user's display name if available.
+  // Role badge — the user's name and real initials (role until a name is set).
   const roleLabel = ROLE_LABELS[role] ?? role
   const roleBadge = {
     name: me?.name ?? roleLabel,
-    initials: ROLE_INITIALS[role] ?? roleLabel.slice(0, 2).toUpperCase(),
+    initials: personInitials(me?.name) ?? ROLE_INITIALS[role] ?? roleLabel.slice(0, 2).toUpperCase(),
   }
 
   function handleSelect(conv: ConversationSummary) {
