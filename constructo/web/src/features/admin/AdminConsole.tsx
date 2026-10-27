@@ -88,7 +88,9 @@ export function AdminConsole() {
           <Body className="mt-2 !text-text-mute">{t('admin.denied.hint')}</Body>
         </section>
       ) : (
-        <div className="grid gap-6 md:grid-cols-[14rem,1fr]">
+        // minmax(0,1fr): on a phone the column is the screen, and the section
+        // rail scrolls inside it instead of widening the page.
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-[14rem,minmax(0,1fr)]">
           {/* Section rail. */}
           <nav aria-label={t('admin.nav_label')} className="md:sticky md:top-20 md:self-start">
             <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">

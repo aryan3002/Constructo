@@ -91,4 +91,12 @@ describe('AdminConsole', () => {
       await screen.findByRole('heading', { name: /site baselines/i }),
     ).toBeInTheDocument()
   })
+
+  it('fits a phone: the layout column is the screen and the section rail scrolls inside it', async () => {
+    renderConsole('owner')
+    const rail = await screen.findByRole('navigation', { name: /admin sections|sections/i })
+    const grid = rail.parentElement!
+    expect(grid.className).toContain('grid-cols-[minmax(0,1fr)]')
+    expect(rail.querySelector('ul')!.className).toContain('overflow-x-auto')
+  })
 })

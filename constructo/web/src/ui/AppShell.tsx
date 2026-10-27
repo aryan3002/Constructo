@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { NavLink, matchPath, useLocation } from 'react-router-dom'
 import { useT, type TranslationKey } from '../i18n'
 import { useUiStore } from '../store/ui'
 import { navForRole } from './navModel'
@@ -47,6 +47,8 @@ export interface TabDef {
   icon: ReactNode
   /** Match the route exactly (for the index tab). */
   end?: boolean
+  /** Keep on a phone's short bar (when a role has more tabs than fit). */
+  phone?: boolean
 }
 
 // De-emojied: SVG icons (a11y — never an emoji for a critical control). The
@@ -60,11 +62,11 @@ const CashIcon = <span className="cstk-mono text-[1.05em] font-semibold">₹</sp
  */
 export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
-    { to: '/owner', labelKey: 'nav.latest', label: 'Latest', icon: <GridIcon />, end: true },
-    { to: '/sites', labelKey: 'nav.projects', label: 'Projects', icon: <ListIcon /> },
+    { to: '/owner', labelKey: 'nav.latest', label: 'Latest', icon: <GridIcon />, end: true, phone: true },
+    { to: '/sites', labelKey: 'nav.projects', label: 'Projects', icon: <ListIcon />, phone: true },
     { to: '/requests', labelKey: 'nav.requests', label: 'Requests', icon: <BellIcon /> },
-    { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
-    { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
+    { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon />, phone: true },
+    { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon />, phone: true },
     { to: '/settings/documents', labelKey: 'nav.documents', label: 'Drawings', icon: <DocIcon /> },
     { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },
     { to: '/search', labelKey: 'nav.search', label: 'Search', icon: <SearchIcon /> },
@@ -133,6 +135,92 @@ export function useRoleTabs(role: Role): TabDef[] {
   return ROLE_TABS[role].map((tab) => ({ ...tab, label: t(tab.labelKey) }))
 }
 
+/** Phone bars show at most this many tabs; the rest fold into "More". */
+const PHONE_TABS = 4
+
+/**
+ * Split a role's tabs for a phone: up to {@link PHONE_TABS} in the bar (the
+ * ones marked `phone`, else the first), the rest and the More hub in the
+ * "More" menu. Five or fewer fit as they are.
+ */
+export function phoneTabSplit(tabs: TabDef[]): { bar: TabDef[]; overflow: TabDef[] } {
+  if (tabs.length <= PHONE_TABS + 1) return { bar: tabs, overflow: [] }
+  const candidates = tabs.filter((tab) => tab.to !== '/more')
+  const marked = candidates.filter((tab) => tab.phone)
+  const bar = (marked.length > 0 ? marked : candidates).slice(0, PHONE_TABS)
+  return { bar, overflow: tabs.filter((tab) => !bar.includes(tab)) }
+}
+
+/** The phone-only "More" button and its menu of the tabs that didn't fit. */
+function PhoneMore({ tabs, label }: { tabs: TabDef[]; label: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const { pathname } = useLocation()
+  const active = tabs.some((tab) => matchPath({ path: tab.to.split('?')[0], end: !!tab.end }, pathname))
+
+  // Close on navigation, Escape or a tap outside.
+  useEffect(() => setOpen(false), [pathname])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative h-full">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex min-h-tap w-full flex-col items-center justify-center gap-0.5 py-2 font-body text-micro font-semibold cstk-animate transition ${
+          active || open ? 'text-primary-deep' : 'text-text-mute hover:text-text'
+        }`}
+      >
+        <span className="text-xl leading-none" aria-hidden>
+          <DotsIcon />
+        </span>
+        <span>{label}</span>
+      </button>
+      {open ? (
+        <ul
+          role="menu"
+          aria-label={label}
+          className="absolute bottom-full right-1 mb-2 w-56 overflow-hidden rounded-sheet border border-line bg-card p-1.5 shadow-pop"
+        >
+          {tabs.map((tab) => (
+            <li key={tab.to} role="none">
+              <NavLink
+                role="menuitem"
+                to={tab.to}
+                end={tab.end}
+                className={({ isActive }) =>
+                  `flex min-h-tap items-center gap-3 rounded-control px-3 font-body text-small font-semibold ${
+                    isActive ? 'bg-surface-selected text-text' : 'text-text-mute hover:bg-surface-hover hover:text-text'
+                  }`
+                }
+              >
+                <span className="text-[1.1em] leading-none" aria-hidden>
+                  {tab.icon}
+                </span>
+                {tab.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 export interface AppShellProps {
   role?: Role
   /** Header context props (sites + selection). Header is hidden if omitted. */
@@ -166,6 +254,9 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const tabSet = tabs ?? ROLE_TABS[role]
+  // A phone shows a short bar; the other tabs live behind "More".
+  const phone = phoneTabSplit(tabSet)
+  const moreLabel = tabSet.find((tab) => tab.to === '/more')?.label ?? 'More'
   // Owner "Neev" skin swaps the desktop chrome (sidebar + topbar). Safe outside
   // a provider (returns 'blueprint'), so the many bare-AppShell tests are unaffected.
   const neev = useSkin() === 'neev'
@@ -228,7 +319,10 @@ export function AppShell({
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           {tabSet.map((tab) => (
-            <li key={tab.to} className="flex-1 md:flex-none">
+            <li
+              key={tab.to}
+              className={phone.bar.includes(tab) ? 'flex-1 md:flex-none' : 'hidden md:block md:flex-none'}
+            >
               <NavLink
                 to={tab.to}
                 end={tab.end}
@@ -256,6 +350,11 @@ export function AppShell({
               </NavLink>
             </li>
           ))}
+          {phone.overflow.length > 0 ? (
+            <li className="flex-1 md:hidden">
+              <PhoneMore tabs={phone.overflow} label={moreLabel} />
+            </li>
+          ) : null}
         </ul>
       </nav>
 
