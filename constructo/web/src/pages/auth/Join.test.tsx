@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -101,6 +101,28 @@ describe('auth/Join', () => {
     expect(alert).toHaveTextContent('This invite was already used. If that was you, sign in instead.')
     await userEvent.click(screen.getByRole('button', { name: /sign in →/i }))
     expect(navigateMock).toHaveBeenCalledWith('/login?next=%2Fjoin%2Ftok123')
+  })
+
+  it('403 invite_wrong_phone explains and offers signing in with the invited number', async () => {
+    setToken('jwt-other-number')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/invites/tok123') && !init?.method) return jsonOk(PREVIEW)
+        if (url.endsWith('/invites/tok123/accept'))
+          return jsonErr(403, 'invite_wrong_phone', 'This invite was sent to a different phone number')
+        if (url.endsWith('/auth/logout')) return jsonOk({})
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    renderJoin()
+    await userEvent.click(await screen.findByRole('button', { name: /accept & join/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('This invite was sent to a different number.')
+    await userEvent.click(within(alert).getByRole('button'))
+    expect(navigateMock).toHaveBeenCalledWith('/login?next=%2Fjoin%2Ftok123')
+    await waitFor(() => expect(getToken()).toBeNull())
   })
 
   it('an invalid token shows the invalid-link error as an alert', async () => {

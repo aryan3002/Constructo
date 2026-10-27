@@ -227,8 +227,14 @@ export const authApi = {
     })
   },
 
-  /** Phone+OTP login. Stores and returns the JWT. */
-  async login(phone: string, otp: string): Promise<string> {
+  /**
+   * Phone+OTP login. Stores and returns the JWT. `signup` is for the builder
+   * signup page only: an unknown number then gets a brand-new company of its
+   * own. Without it an unknown number is refused (404 not_registered) — unless
+   * it has a pending invite, which the server accepts into the inviting
+   * company at sign-in.
+   */
+  async login(phone: string, otp: string, opts: { signup?: boolean } = {}): Promise<string> {
     if (USE_MOCKS) {
       if (otp !== '000000') throw new ApiError(401, 'invalid_otp')
       const token = `mock-token-${phone}`
@@ -248,11 +254,9 @@ export const authApi = {
       }
       return token
     }
-    // The web console is the builder signup surface: an unknown number gets a
-    // brand-new company of its own (the mobile app never sends signup).
     const resp = await call<{ token: string }>('/api/v1/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp, signup: true }),
+      body: JSON.stringify({ phone, otp, ...(opts.signup ? { signup: true } : {}) }),
     })
     setToken(resp.token)
     return resp.token

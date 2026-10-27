@@ -48,6 +48,11 @@ async function ownerIsSetUp(userId: string): Promise<boolean> {
   return false
 }
 
+/** True when sign-in was opened from an invite link (`/join/<token>`). */
+export function isInviteReturn(next: string | null | undefined): boolean {
+  return !!next && next.startsWith('/join/')
+}
+
 /**
  * Builder / site-team sign-in (spec §7). Two steps that read like the SMS flow
  * users expect: phone (fixed +91, 10 digits) -> "Continue" -> 6-digit one-time
@@ -114,7 +119,10 @@ function LoginForm() {
     setError(null)
     setBusy('checking')
     try {
-      await authApi.login(phone, code)
+      // This page is the builder signup surface, except when an invite link
+      // sent the person here: their number is matched to the invite instead,
+      // so no empty company is made for them.
+      await authApi.login(phone, code, { signup: !isInviteReturn(next) })
       setBusy('verified')
       // If we came from an invite link, return there to accept it.
       if (next) {

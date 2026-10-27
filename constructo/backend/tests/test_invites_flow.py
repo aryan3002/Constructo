@@ -179,14 +179,14 @@ async def test_accepted_invite_rejected_for_a_different_user(client, factory, db
         headers={"Authorization": f"Bearer {jwt_a}"},
     )
 
-    # A different person tries to reuse the link.
+    # A different person tries to reuse the link: it isn't their number.
     jwt_b = await _token_login(client, "+15552229999")
     resp = await client.post(
         f"/api/v1/invites/{invite_token}/accept",
         headers={"Authorization": f"Bearer {jwt_b}"},
     )
-    assert resp.status_code == 409
-    assert resp.json()["error"]["code"] == "invite_used"
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "invite_wrong_phone"
 
 
 async def test_revoke_invite_blocks_accept(client, factory, db_session):

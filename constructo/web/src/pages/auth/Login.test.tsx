@@ -145,6 +145,28 @@ describe('auth/Login', () => {
     )
     // No /auth/me round-trip needed on the invite path.
     expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/auth/me'))).toBe(false)
+    // An invitee is matched to their invite, not given an empty company.
+    const loginCall = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/auth/login'))
+    expect(JSON.parse((loginCall![1] as RequestInit).body as string)).toEqual({
+      phone: '+919876543210',
+      otp: '000000',
+    })
+  })
+
+  it('says a number without an invite is not registered', async () => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/auth/request-otp')) return jsonOk({ sent: true, dev_otp: '000000' })
+      return jsonErr(404, 'not_registered', "This number isn't registered.")
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderLogin('/login?next=%2Fjoin%2Ftok123')
+    const otp = await goToOtpStep()
+    await userEvent.type(otp, '000000')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("This number isn't registered. Ask your company for an invite")
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it('shows the friendly wrong-code message and clears the field on 401 invalid_otp', async () => {

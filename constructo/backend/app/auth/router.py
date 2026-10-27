@@ -26,6 +26,8 @@ from app.common import ratelimit
 from app.common.errors import AppError
 from app.config import settings
 from app.db import get_session
+from app.invites.models import InviteStatus
+from app.invites.service import pending_invite_for_phone
 from app.models import (
     Company,
     HomeownerMember,
@@ -179,21 +181,37 @@ async def login(
         )
     ).scalars().first()
     if user is None:
-        if not body.signup:
+        invite = await pending_invite_for_phone(session, body.phone)
+        if invite is not None:
+            # An invited number signs straight in to the inviting company with
+            # the invited role — no empty company first, no link needed.
+            user = User(
+                company_id=invite.company_id,
+                phone=normalize_phone(body.phone),
+                role=invite.role,
+                name=invite.name,
+            )
+            session.add(user)
+            await session.flush()
+            invite.status = InviteStatus.accepted
+            invite.accepted_user_id = user.id
+            invite.accepted_at = datetime.now(UTC)
+        elif not body.signup:
             raise AppError(
                 404,
                 "not_registered",
                 "This number isn't registered. Ask your company for an invite, "
                 "or sign up on the web.",
             )
-        company = await _create_signup_company(session)
-        user = User(
-            company_id=company.id,
-            phone=normalize_phone(body.phone),  # store canonical E.164 going forward
-            role=UserRole.owner,
-        )
-        session.add(user)
-        await session.flush()
+        else:
+            company = await _create_signup_company(session)
+            user = User(
+                company_id=company.id,
+                phone=normalize_phone(body.phone),  # store canonical E.164 going forward
+                role=UserRole.owner,
+            )
+            session.add(user)
+            await session.flush()
     elif not user.is_active:
         # A deactivated member can't get a fresh token (W4.3).
         raise AppError(403, "deactivated", "This account has been deactivated")

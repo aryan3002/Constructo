@@ -23,6 +23,8 @@ type KnownCode =
   | 'phone_mismatch'
   | 'invite_used'
   | 'invite_revoked'
+  | 'invite_wrong_phone'
+  | 'not_registered'
   | 'rate_limited'
 
 const VIEWS: Record<KnownCode, AuthErrorView> = {
@@ -35,6 +37,8 @@ const VIEWS: Record<KnownCode, AuthErrorView> = {
   phone_mismatch: { messageKey: 'auth.err.phone_mismatch', action: 'changeNumber' },
   invite_used: { messageKey: 'auth.err.invite_used', action: 'signIn' },
   invite_revoked: { messageKey: 'auth.err.invite_revoked' },
+  invite_wrong_phone: { messageKey: 'auth.err.invite_wrong_phone', action: 'changeNumber' },
+  not_registered: { messageKey: 'auth.err.not_registered', action: 'changeNumber' },
   rate_limited: { messageKey: 'auth.err.rate_limited' },
 }
 

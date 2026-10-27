@@ -31,6 +31,7 @@ from app.invites.schemas import (
     InviteOut,
     InvitePreview,
 )
+from app.invites.service import same_phone
 from app.models import Company, User, UserRole
 
 router = APIRouter(prefix="/api/v1/invites", tags=["invites"])
@@ -106,15 +107,22 @@ async def accept_invite(
 ) -> InviteAcceptOut:
     """The logged-in invitee joins the inviting company with the assigned role.
 
-    The caller has already authenticated (phone+OTP -> JWT). Accepting moves
-    their User into the inviting company and stamps the invited role, so a
-    brand-new login (which defaults to a fresh 'owner' in a default company) is
-    re-homed correctly. Idempotent: re-accepting returns the same landing.
+    The caller has already authenticated (phone+OTP -> JWT) with the invited
+    phone; any other caller gets 403 ``invite_wrong_phone``. An invited number
+    that is new to Neev is usually accepted at login already (see
+    ``auth.login``), so this mostly serves an existing user changing company.
+    Idempotent: re-accepting returns the same landing.
     """
     invite = await _get_pending_invite(session, token)
 
     if invite.status is InviteStatus.revoked:
         raise AppError(409, "invite_revoked", "This invite has been revoked")
+    # An invite is for one phone: a link forwarded to someone else must not
+    # move that person into the company.
+    if not same_phone(invite.phone, user.phone):
+        raise AppError(
+            403, "invite_wrong_phone", "This invite was sent to a different phone number"
+        )
     if invite.status is InviteStatus.accepted and invite.accepted_user_id != user.id:
         raise AppError(409, "invite_used", "This invite was already used")
 

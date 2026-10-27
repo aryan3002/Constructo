@@ -220,6 +220,8 @@ export const en = {
     'This code was sent to a different number. Use the number your builder invited, or ask them for a new code.',
   'auth.err.invite_used': 'This invite was already used. If that was you, sign in instead.',
   'auth.err.invite_revoked': 'This invite was cancelled. Ask your company owner for a new one.',
+  'auth.err.invite_wrong_phone': 'This invite was sent to a different number. Sign in with the number it was sent to, or ask for a new invite.',
+  'auth.err.not_registered': "This number isn't registered. Ask your company for an invite, or sign up as a builder.",
 
   // Owner first-run
   'auth.onboard.welcome': 'Welcome to Neev',
