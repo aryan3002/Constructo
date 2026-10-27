@@ -16,7 +16,13 @@ import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, EmptyState, H1, Small, useToast } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from '../../../src/screens/owner/components'
-import { batchSummary } from '../../../src/screens/owner/approvals.util'
+import {
+  batchConfirm,
+  batchSummary,
+  decisionConfirm,
+  type ConfirmCopy,
+} from '../../../src/screens/owner/approvals.util'
+import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
 
 const STR = {
   en: {
@@ -100,7 +106,14 @@ export default function Approvals() {
   // hard-coded `owner.assign(id, 'pm')` is gone — the user picks a real member.
   const [assigningId, setAssigningId] = useState<string | null>(null)
 
+  // A money decision asks once before it is approved or held (T8).
+  const [confirm, setConfirm] = useState<{ copy: ConfirmCopy; run: () => void } | null>(null)
+
   const q = useQuery({ queryKey: ['owner', 'approvals'], queryFn: () => owner.approvals('pending') })
+  // Site names for the confirm (shared with the Brief's cache).
+  const homeQ = useQuery({ queryKey: ['owner', 'home'], queryFn: () => owner.home() })
+  const siteName = (siteId: string | null) =>
+    (siteId && homeQ.data?.sites.find((s) => s.site_id === siteId)?.name) || null
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['owner', 'approvals'] })
 
@@ -142,6 +155,22 @@ export default function Approvals() {
     })
 
   const selectedIds = useMemo(() => items.filter((d) => selected.has(d.id)).map((d) => d.id), [items, selected])
+
+  // Approve / Hold one row: money kinds confirm first; the rest go straight out.
+  const decide = (d: Decision, action: 'approve' | 'hold') => {
+    const run = () => act.mutate({ id: d.id, action })
+    const copy = decisionConfirm(d, action === 'approve' ? 'approve' : 'reject', siteName(d.site_id), lang)
+    if (copy) setConfirm({ copy, run })
+    else run()
+  }
+
+  const approveSelected = () => {
+    const ids = selectedIds
+    const run = () => batch.mutate(ids)
+    const copy = batchConfirm(items.filter((d) => selected.has(d.id)), lang)
+    if (copy) setConfirm({ copy, run })
+    else run()
+  }
 
   if (q.isLoading) return <Wrap><H1>{t.title}</H1><LoadingBlock /></Wrap>
   if (q.error) {
@@ -186,7 +215,7 @@ export default function Approvals() {
                 size="md"
                 loading={batch.isPending}
                 disabled={pending}
-                onPress={() => batch.mutate(selectedIds)}
+                onPress={approveSelected}
                 style={{ marginLeft: 'auto' }}
               />
             ) : null}
@@ -209,13 +238,23 @@ export default function Approvals() {
                 onChip={(action) =>
                   action === 'assign'
                     ? setAssigningId(d.id)
-                    : act.mutate({ id: d.id, action })
+                    : decide(d, action)
                 }
               />
             ))}
           </View>
         </>
       )}
+
+      <MoneyConfirmSheet
+        copy={confirm?.copy ?? null}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          const run = confirm?.run
+          setConfirm(null)
+          run?.()
+        }}
+      />
 
       <MemberPicker
         visible={assigningId !== null}

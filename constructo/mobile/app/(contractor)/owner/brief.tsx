@@ -11,7 +11,7 @@
  * Everything is real: decisions = /approvals, sites = /dashboard/home,
  * specs = /specs across sites, log = recently-resolved approvals.
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -26,6 +26,8 @@ import { request } from '../../../src/api/client'
 import { owner, type Decision, type SiteCard } from '../../../src/api/owner'
 import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from '../../../src/screens/owner/components'
+import { decisionConfirm, type ConfirmCopy } from '../../../src/screens/owner/approvals.util'
+import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -107,6 +109,16 @@ export default function Brief() {
     },
   })
 
+  // Approving a money decision asks once first (T8); other kinds go straight out.
+  const [confirm, setConfirm] = useState<{ copy: ConfirmCopy; run: () => void } | null>(null)
+  const approve = (d: Decision) => {
+    const run = () => decide.mutate({ id: d.id, action: 'approve' })
+    const siteName = homeQ.data?.sites.find((s) => s.site_id === d.site_id)?.name ?? null
+    const copy = decisionConfirm(d, 'approve', siteName, lang)
+    if (copy) setConfirm({ copy, run })
+    else run()
+  }
+
   const now = Date.now()
   const decisions = pendingQ.data?.items ?? []
   const isOverdue = (d: Decision) => !!d.sla_due_at && new Date(d.sla_due_at).getTime() < now
@@ -173,7 +185,7 @@ export default function Brief() {
               overdue={isOverdue(d)}
               t={t}
               pending={decide.isPending}
-              onApprove={() => decide.mutate({ id: d.id, action: 'approve' })}
+              onApprove={() => approve(d)}
               onReview={() => router.push('/(contractor)/owner/approvals')}
             />
           ))}
@@ -229,6 +241,16 @@ export default function Brief() {
           <View style={{ padding: SPACE.lg }}><Small muted>No decisions logged yet.</Small></View>
         ) : null}
       </Card>
+
+      <MoneyConfirmSheet
+        copy={confirm?.copy ?? null}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          const run = confirm?.run
+          setConfirm(null)
+          run?.()
+        }}
+      />
     </Wrap>
   )
 }
