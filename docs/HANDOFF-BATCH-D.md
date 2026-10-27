@@ -1,7 +1,7 @@
 # Handoff: Neev launch fixes, from Batch D onward
 
 Written 2026-10-27 for a fresh chat that picks up the pre-launch fix work, and
-updated the same day as Batches D and E were verified (Batch F is next).
+updated the same day as Batches D, E and F were verified (Batch G is next).
 Everything here is on branch `claude/bold-goodall-11ksuo` (pushed). There is no
 PR; don't open one unless the founder asks.
 
@@ -42,8 +42,8 @@ PR; don't open one unless the founder asks.
 | C | Backend security: S3 signup, S4 prod guard, S9 approvals, payment roles, T4 audience, rate limits, S6 deletion cleanup, server logout | Done, verified (details below) |
 | D | Homeowner wrong facts (T5) and lost captures (T6) | Done, verified (details below) |
 | E | Money guard rails (T8 client) and capture queue (T9) | Done, verified (details below) |
-| F | Account deletion for all roles (S6 client) and store config | **Next.** Presented to the founder; waiting for "go" and the inputs listed under Batch F |
-| G | Web console trust bugs | Pending |
+| F | Account deletion for all roles (S6 client) and store config | Done, verified (details below). Privacy and terms URLs still to come from the founder |
+| G | Web console trust bugs | **Next.** Presented to the founder; waiting for "go" |
 
 Outside the batches: the real SMS/WhatsApp OTP provider and the launch roles
 are still the founder's decisions.
@@ -150,32 +150,58 @@ Run in session `session_01UneWbgAurSR8ZgfTK4kVhy` (12 commits, `7838703`..`1c035
 - If the server is down the first time someone opens Capture (no cached sites), it says "You're offline" rather than "can't reach the server".
 - The web Approvals page hides "Approve selected" from PMs even for non-money items.
 
-## Batch F: what was presented (awaiting "go")
+### Batch F: what changed (needed for G)
 
-**The app meets the App Store and Google Play rules for accounts, privacy and release.**
+Run in session `session_01UneWbkF5W5niZs1evb1GMz` (14 commits, `f9fe690`..`9dc7de7`), plus 1 fix from verification (`54df86b`: deletion also scrubs the `raw_messages.text` column).
 
-**Account and deletion (S6 client)**
-1. One Account section in every role (owner, homeowner, site engineer, architect, accountant, PM, mukadam): language, privacy policy and terms, delete account, sign out. Today only `owner/more.tsx` and `(homeowner)/settings.tsx` can delete (`src/auth/useDeleteAccount.ts`).
-2. A public web page to delete your account (Google Play needs its URL): sign in with phone and code, then delete, using the same server deletion as the app.
-3. Deletion also scrubs the person's name from `raw_messages.raw` JSON and from extracted event text (C did sender names, photo comments and push tokens).
+- **Account section (S6).** One shared Account section in all seven roles: language (saved to the server and re-applied after sign-in), privacy policy, terms, delete account, sign out.
+- **Public deletion page.** `/delete-account` on the web console (public): phone and OTP, then step-up, then `DELETE /api/v1/users/me`. It's also linked from the web account menu.
+- **Scrub (S6).** Deletion replaces the person's full name and phone with "Deleted user" in their raw messages (`text` and `raw` JSON) and in events extracted from them (`app/auth/scrub.py`).
+- **AI consent (S7).** `users.ai_consent_at` (migration `e8f9a0b1c2d3`) and `POST /api/v1/users/me/ai-consent`. A full-screen gate in the app (`src/consent/`) and the web console. Declining blocks use and offers sign-out or deletion.
+- **Links (S7).** Privacy and terms come from `EXPO_PUBLIC_PRIVACY_URL`/`EXPO_PUBLIC_TERMS_URL` (mobile) and `VITE_PRIVACY_URL`/`VITE_TERMS_URL` (web). **Not set yet: the founder must send them.** Until then every preview and production app build stops on a "This build of Neev isn't set up" screen, which also catches a missing `EXPO_PUBLIC_API_BASE`.
+- **Android (S8).** Seven media and storage permissions are in `blockedPermissions`, and `isAccessMediaLocationEnabled` is false.
+  - The Android photo pickers use the system picker without asking for permission.
+  - Save photo is write-only on Android 13+. On Android 12 and below it uses the share sheet; keeping `WRITE_EXTERNAL_STORAGE` for old versions is a one-line change if wanted.
+- **Invites.** An invited number signs in directly: `auth.login` uses the newest pending invite for that phone. `POST /invites/{token}/accept` refuses another number with 403 `invite_wrong_phone`. The web join no longer sends `signup: true`.
+- **Release settings.** `autoIncrement` on production profiles. `supportsTablet: false`. `EXPO_PUBLIC_WEB_BASE=https://constructo-topaz.vercel.app`. A white Neev-mark notification icon (`assets/notification-icon.png`). No "coming soon" text except the procurement landing (`(contractor)/index.tsx`), which waits on the launch-roles decision; a test guards this.
+- **Verified:**
+  - Test totals: backend 1808 passed plus the known Pinterest failure (the deletion tests re-run green after the scrub fix); mobile 87 suites / 660 tests; web 140 files / 900 tests. Ruff, typecheck, web lint and build are clean. Migration up/down/up is clean.
+  - On screen and via the API:
+    - The invite sign-in, with the company count unchanged, and the wrong-phone refusal.
+    - The consent gate: decline, then agree, then the screen doesn't come back.
+    - The Account section in four roles, with the privacy link opening the configured URL.
+    - The web deletion page end to end, with the scrub checked in the database.
+    - The release build's blocking screen.
+    - The resolved Android permissions.
 
-**Privacy and consent (S7, S8)**
-4. Privacy policy and terms links at sign-in, in every Account section and on the web console. Only help text exists today (`src/auth/ui/GuideSheet.tsx`).
-5. A one-time AI consent screen saying what is sent to OpenAI/Azure, recorded on the server.
-6. Android: block `READ_MEDIA_IMAGES/VIDEO/AUDIO`, `ACCESS_MEDIA_LOCATION` and the old storage permissions; set `isAccessMediaLocationEnabled` to false (`mobile/app.json`). Save photos with write-only access.
+### Follow-ups found while verifying F (not yet assigned)
 
-**Invited crew (C follow-up)**
-7. An invited staff number signs in directly, in the app or on the web, into the inviting company with the invited role. Web invite acceptance no longer sends `signup: true` and creates an empty company.
+- Queued chat messages or captures made before this update can send on launch before an existing user has consented. This is an edge case for users upgrading.
+- The notification settings hide the WhatsApp and email delivery options until they actually send.
+- Publish OTA updates with a cleared bundler cache (`eas update --clear-cache`). An export reused a stale `EXPO_PUBLIC_API_BASE` without it.
 
-**Release settings**
-8. `eas.json`: `autoIncrement` for production.
-9. `supportsTablet: false`.
-10. Release builds refuse to start without `EXPO_PUBLIC_API_BASE`: no `10.0.2.2` fallback (`src/api/config.ts`).
-11. `EXPO_PUBLIC_WEB_BASE` set for builds, so invite and vendor-confirm links open the web app.
-12. A one-colour Android notification icon (today `./assets/icon.png`).
-13. "Coming soon" placeholders (8 screens, including the drawing Approve/Comment stubs) are hidden from store builds, or turned into something that works today, e.g. "Message your builder".
+## Batch G: what was presented (awaiting "go")
 
-**Founder inputs:** the privacy-policy and terms URLs (and a check that the policy names OpenAI/Azure); what happens when someone declines AI consent; the web address for links (today `constructo-topaz.vercel.app`). Not blocking: store submission IDs, Sentry, the API's own domain, and a reviewer login, which depends on the OTP decision.
+**The web console's main loop does what it says, every page sits in the frame, and nothing pretends.**
+
+**Trust bugs**
+1. Home's Approve, Hold and Assign create a new decision (`dashboardApi.createDecision` in `features/owner/useDecide.ts` ~125) instead of acting on the one shown, so the item comes back on reload alongside a duplicate. Act on the real decision, with the same confirm and undo for money as the app.
+2. The decision log labels rows by kind (`features/owner/DecisionLog.tsx`: `approval` reads "Approved"), so pending items say "Approved". Show the real state.
+3. Sign-out (`ui/AvatarMenu.tsx`) clears the token but not the query cache, so the next person can see the last company's data. An expired token shows "All quiet" forever. Clear everything on sign-out, and send an expired session to sign-in.
+4. Mock data in production: a 404 on the events endpoint falls back to mock events with a "Mock events" badge (`api/client.ts` ~150). Show an honest error instead.
+5. Every decision type gets Approve and Reject, even "choose tile A or B". Only yes/no decisions get them; others get their options or a reply.
+6. PMs land on the right screen. `/approvals` hides "Approve selected" from PMs even for non-money items (an E follow-up), and the nav tab highlights are wrong (`RoleLanding.tsx`, `ReconcilePage.tsx`).
+
+**Frame and readability**
+7. Approvals, Payments, Permits, Search, Settings, Site Health and Invite render without the app frame (`App.tsx`). Payments and Permits scroll sideways.
+8. Status pills are hollow: Tailwind colours are bare `var(--x)`, so `bg-ok/10`-style opacity variants never generate (38 files). Fix it in the colour config. Status and action text gets at least 4.5:1 contrast.
+9. On a phone, owners get a 9-tab bar and the admin console is 664px wide. Make both usable.
+
+**Leftovers**
+10. "Coming soon — preferences are saved locally" in settings, the empty Intake tab, the unlinked `/dpr` page and the public `/components` page. Also the raw company ID, "across 1 items" and "24.00 nos".
+11. The skin sync and `/auth/me` run on the public pages and fail; add a skip-to-content link.
+
+Not included: the reskin onto the mobile tokens (post-launch, per the review) and translating chat into Hindi.
 
 ## Local environment recipe
 
