@@ -113,7 +113,6 @@ const STR = {
     activityEmpty: 'No recent activity',
     // Payments card
     paymentsTitle: 'Payments',
-    paymentsPreApproved: 'Pre-approved',
     // Error
     errorLine: "Couldn't load your home.",
     tryAgain: 'Try again',
@@ -174,7 +173,6 @@ const STR = {
     activitySeeAll: 'सब अपडेट देखें',
     activityEmpty: 'कोई हालिया गतिविधि नहीं',
     paymentsTitle: 'भुगतान',
-    paymentsPreApproved: 'पूर्व-अनुमोदित',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
@@ -994,7 +992,7 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════
           CARD 6: PaymentsCard — hidden when there's nothing real to show.
           "Paid so far" is the builder's recorded "received"; "Changes so far"
-          is the net change-log cost.
+          is the net change-log cost. No status pill: nothing backs one.
       ══════════════════════════════════════════════════════════════════ */}
       {payments ? (
         <FadeInUp delay={70}>
@@ -1012,7 +1010,6 @@ export default function Home() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginBottom: SPACE.md }}>
               <Feather name="credit-card" size={18} color={c.textMute} />
               <Body style={{ fontWeight: '600', color: c.text, flex: 1 }}>{t.paymentsTitle}</Body>
-              <StatusPill status="ok" label={t.paymentsPreApproved} size="sm" />
             </View>
 
             {/* Stat tiles — only the ones backed by data */}
