@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { useLanguage, useT, type Language, type TranslationKey } from '../../i18n'
 import { Modal, ThemeProvider } from '../../ui'
+import { LegalLinks } from '../../ui/LegalLinks'
 import { ChevronDownIcon } from '../../ui/icons'
 import { guideSectionDomId, guideSections, type GuideSectionId } from './guide.content'
 
@@ -231,6 +232,7 @@ export function AuthLayout({
                 </div>
                 <div className="mt-4">{children}</div>
               </div>
+              <LegalLinks className="mt-4 justify-center" />
 
               {/* < md: the brand-panel content folds into a disclosure under the card. */}
               <details className="mt-4 rounded-card border border-line bg-card px-4 md:hidden">

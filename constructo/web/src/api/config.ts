@@ -11,6 +11,34 @@ export const USE_MOCKS: boolean =
 export const NEEV_OWNER_ENABLED: boolean =
   String(import.meta.env.VITE_NEEV_OWNER).toLowerCase() === 'true'
 
+/** Privacy policy and terms pages (store requirement, S7). */
+export interface LegalUrls {
+  privacy: string | null
+  terms: string | null
+}
+
+let warnedLegal = false
+
+/**
+ * The policy pages from `VITE_PRIVACY_URL` / `VITE_TERMS_URL`. An unset one is
+ * null — the link is hidden rather than pointing nowhere — and a warning is
+ * logged once so a deploy without them is noticed.
+ */
+export function legalUrls(): LegalUrls {
+  const read = (v: string | undefined) => (v ?? '').trim() || null
+  const urls = {
+    privacy: read(import.meta.env.VITE_PRIVACY_URL as string | undefined),
+    terms: read(import.meta.env.VITE_TERMS_URL as string | undefined),
+  }
+  if ((!urls.privacy || !urls.terms) && !warnedLegal) {
+    warnedLegal = true
+    console.warn(
+      'Neev: VITE_PRIVACY_URL and/or VITE_TERMS_URL is not set; the privacy and terms links are hidden.',
+    )
+  }
+  return urls
+}
+
 export function todayIso(): string {
   // Local calendar date (NOT UTC). Using toISOString() here would return the
   // UTC date, which is a day ahead for users behind UTC in the evening, so the

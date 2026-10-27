@@ -203,6 +203,11 @@ export const en = {
     english: 'English',
     hindi: 'हिन्दी',
   },
+  legal: {
+    privacy: 'Privacy policy',
+    terms: 'Terms of use',
+    couldNotOpen: "Couldn't open the page. Please try again.",
+  },
   account: {
     title: 'Account',
     groupWorkspace: 'Workspace',

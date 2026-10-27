@@ -5,6 +5,7 @@ import { clearToken } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, Display, H2, Small, ThemeProvider } from '../../ui'
+import { LegalLinks } from '../../ui/LegalLinks'
 import { useThemeMode, type ThemeMode } from '../../ui/ThemeModeProvider'
 import { useMe } from '../auth/useMe'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -238,6 +239,7 @@ export function Settings() {
             <Button variant="ghost" block onClick={signOut}>
               {t('settings.signout')}
             </Button>
+            <LegalLinks className="justify-center" />
           </>
         )}
       </div>

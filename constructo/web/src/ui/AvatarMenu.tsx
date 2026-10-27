@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { authApi, clearToken } from '../api/auth'
+import { legalUrls } from '../api/config'
 import { useT } from '../i18n'
 import { SettingsIcon, SignOutIcon } from './icons'
 
@@ -26,6 +27,8 @@ export function AvatarMenu({ roleBadge }: { roleBadge: { name: string; initials:
       window.removeEventListener('mousedown', onDown)
     }
   }, [open])
+
+  const legal = legalUrls()
 
   function signOut() {
     void authApi.logout()
@@ -65,6 +68,26 @@ export function AvatarMenu({ roleBadge }: { roleBadge: { name: string; initials:
             <SettingsIcon className="text-text-muted" aria-hidden />
             <span>{t('shell.profile_settings')}</span>
           </NavLink>
+          {(
+            [
+              [legal.privacy, 'legal.privacy'],
+              [legal.terms, 'legal.terms'],
+            ] as const
+          ).map(([href, key]) =>
+            href ? (
+              <a
+                key={key}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex min-h-tap items-center gap-3 rounded-control px-3 font-body text-small font-semibold text-text-primary cstk-animate transition hover:bg-surface-hover"
+              >
+                <span>{t(key)}</span>
+              </a>
+            ) : null,
+          )}
           <button
             type="button"
             role="menuitem"

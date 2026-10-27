@@ -25,6 +25,7 @@ import { useTheme } from '../../theme/ThemeProvider'
 import { SPACE, TAP } from '../../theme/tokens'
 import { Display, FadeInUp, Logo, Screen, Small } from '../../ui'
 import type { GuideSectionId } from '../guide.content'
+import { LegalLinks } from '../../legal/LegalLinks'
 import { GuideSheet } from './GuideSheet'
 import { LangToggle } from './LangToggle'
 import { StepDots } from './StepDots'
@@ -168,6 +169,10 @@ export function AuthFrame({
             {footer}
           </View>
         ) : null}
+
+        <View style={{ marginTop: footer ? SPACE.sm : SPACE.xl }}>
+          <LegalLinks />
+        </View>
 
         <GuideSheet
           open={guide.open}

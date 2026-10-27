@@ -205,6 +205,11 @@ export const hi: Dict = {
     english: 'English',
     hindi: 'हिन्दी',
   },
+  legal: {
+    privacy: 'गोपनीयता नीति',
+    terms: 'उपयोग की शर्तें',
+    couldNotOpen: 'पेज नहीं खुल सका। कृपया फिर कोशिश करें।',
+  },
   account: {
     title: 'खाता',
     groupWorkspace: 'वर्कस्पेस',
