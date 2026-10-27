@@ -35,6 +35,7 @@ import type { ConversationSummary } from '../../api/chat'
 import type { HomeownerDecision, Update } from '../../api/types'
 import { delayStory, formatDayDelta, formatRupeeDelta, shortDate, updateMeta } from './updates.util'
 import type { DecisionAction, HomeRoomStrings } from './home_room.util'
+import type { Participant } from './participants.util'
 
 /** Amber-tint surface shared with the kit `DecisionCard` (a choice, never red). */
 const AMBER_TINT = 'rgba(169,122,30,0.14)'
@@ -60,17 +61,20 @@ const STR = {
  *  builder channel (stacked team initials, like the prototype), Mono recency,
  *  an unread pill (sage dot + count — shape + colour, never colour alone).
  *
- *  The builder channel gets a warm stacked-avatar cluster (S + R + P) to visually
- *  signal "the whole team is in here" at a glance — matches the prototype feel.
- *  Group threads keep the simpler people-chip icon. */
+ *  The builder channel gets a warm stacked-avatar cluster (site team, you, then
+ *  the other household members from the roster) to signal who is in there at
+ *  a glance. Group threads keep the simpler people-chip icon. */
 export function ChannelRow({
   conversation,
   siteName,
+  others = [],
   onPress,
 }: {
   conversation: ConversationSummary
   /** Override subtitle (the builder channel shows her site as subtitle). */
   siteName?: string | null
+  /** The builder channel's other household members (max two are drawn). */
+  others?: Participant[]
   onPress: () => void
 }) {
   const { lang } = useT()
@@ -107,22 +111,32 @@ export function ChannelRow({
       ]}
     >
       {isBuilder ? (
-        /* Builder channel: stacked initials cluster — site team visual shorthand.
-           Three overlapping circles (S = site, R = co-owner, P = you), matching
-           the prototype's multi-participant avatar treatment. */
-        <View style={{ width: 54, height: 44, position: 'relative' }}>
-          {/* S — site team (blue tint) */}
+        /* Builder channel: overlapping circles — site team, you, then one per
+           other household member (max two), from the roster; never a fixed
+           co-owner. */
+        <View style={{ width: 30 + 14 * (1 + Math.min(others.length, 2)), height: 44, position: 'relative' }}>
+          {/* Site team */}
           <View style={[stackedAvatarStyle(0, theme.radii.pill), { backgroundColor: AP.surfaceContainer }]}>
             <Feather name="tool" size={13} color={c.textMute} />
           </View>
-          {/* R — co-owner (clay tint) */}
-          <View style={[stackedAvatarStyle(14, theme.radii.pill), { backgroundColor: c.secondaryContainer, borderColor: c.card }]}>
-            <Feather name="user" size={13} color={c.secondary} />
-          </View>
-          {/* P — you (sage chip, the primary accent) */}
-          <View style={[stackedAvatarStyle(28, theme.radii.pill), { backgroundColor: AP.chip, borderColor: c.card }]}>
+          {/* You (sage chip, the primary accent) */}
+          <View style={[stackedAvatarStyle(14, theme.radii.pill), { backgroundColor: AP.chip, borderColor: c.card }]}>
             <Feather name="home" size={13} color={AP.onChip} />
           </View>
+          {/* Other household members — their initial */}
+          {others.slice(0, 2).map((p, i) => (
+            <View
+              key={p.id}
+              style={[
+                stackedAvatarStyle(28 + 14 * i, theme.radii.pill),
+                { backgroundColor: c.secondaryContainer, borderColor: c.card },
+              ]}
+            >
+              <Small style={{ color: c.secondary, fontWeight: '700' }}>
+                {p.name.charAt(0).toUpperCase()}
+              </Small>
+            </View>
+          ))}
         </View>
       ) : (
         /* Group thread: simpler people-chip icon. */

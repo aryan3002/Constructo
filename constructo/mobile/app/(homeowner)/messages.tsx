@@ -34,7 +34,11 @@ import { chatApi, type ConversationSummary } from '../../src/api/chat'
 import { getSharedSocket, frameHandlers, type FrameHandler } from '../../src/chat/useChatThread'
 import { ChannelRow } from '../../src/screens/homeowner/messages_components'
 import { homeowner } from '../../src/api/client'
-import { participantsLabel } from '../../src/screens/homeowner/participants.util'
+import {
+  MAX_NAMED,
+  otherParticipants,
+  participantsLabel,
+} from '../../src/screens/homeowner/participants.util'
 
 const STR = {
   en: {
@@ -80,7 +84,9 @@ export default function HomeownerMessagesInbox() {
     queryKey: ['household-roster', siteId],
     queryFn: () => homeowner.roster(siteId ?? undefined),
   })
-  const participants = participantsLabel(rosterQ.data, me?.id, lang === 'hi' ? 'hi' : 'en')
+  const participantLang = lang === 'hi' ? 'hi' : 'en'
+  const participants = participantsLabel(rosterQ.data, me?.id, participantLang)
+  const otherMembers = otherParticipants(rosterQ.data, me?.id, participantLang).slice(0, MAX_NAMED)
 
   // Get-or-create her builder channel so the row is live from first open.
   const channelQ = useQuery({
@@ -185,6 +191,7 @@ export default function HomeownerMessagesInbox() {
       key={conv.id}
       conversation={conv}
       siteName={conv.kind === 'homeowner' ? conv.site_name : undefined}
+      others={conv.kind === 'homeowner' ? otherMembers : undefined}
       onPress={() => open(conv, rowTitle(conv))}
     />
   )
