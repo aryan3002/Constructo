@@ -355,6 +355,7 @@ export default function Capture() {
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
         <Pressable
+          style={{ flexShrink: 1 }}
           onPress={sites.length > 1 ? () => setSiteIdx((i) => (i + 1) % sites.length) : undefined}
         >
           <SiteChip name={site?.name ?? noSiteText} online={online} />

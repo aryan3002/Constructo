@@ -100,6 +100,7 @@ export function SiteChip({ name, online }: { name: string; online: boolean }) {
         alignItems: 'center',
         gap: SPACE.sm,
         alignSelf: 'flex-start',
+        maxWidth: '100%',
         borderRadius: 9999,
         borderWidth: 1,
         borderColor: theme.colors.line,
@@ -109,7 +110,8 @@ export function SiteChip({ name, online }: { name: string; online: boolean }) {
       }}
     >
       <StatusDot status={online ? 'ok' : 'warn'} size={10} />
-      <BodyStrong>{name}</BodyStrong>
+      {/* A long note ("You're offline…") wraps inside the chip, never off-screen. */}
+      <BodyStrong style={{ flexShrink: 1 }}>{name}</BodyStrong>
     </View>
   )
 }
