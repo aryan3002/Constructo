@@ -1,6 +1,7 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { Body, Display, ThemeProvider } from '../../ui'
+import { Body, Display } from '../../ui'
 import { InviteTeam } from './InviteTeam'
 
 /** Standalone "invite a teammate" screen (owner/PM). */
@@ -8,8 +9,8 @@ export function InvitePage() {
   const t = useT()
 
   return (
-    <ThemeProvider defaultTheme="site">
-      <div className="mx-auto w-full max-w-lg px-4 py-8">
+    <RoleShell>
+      <div className="mx-auto w-full max-w-lg">
         <Link
           to="/settings"
           className="font-body text-small font-semibold text-text-mute hover:text-text"
@@ -26,6 +27,6 @@ export function InvitePage() {
           <InviteTeam />
         </div>
       </div>
-    </ThemeProvider>
+    </RoleShell>
   )
 }

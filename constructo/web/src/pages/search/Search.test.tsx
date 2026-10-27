@@ -8,15 +8,21 @@ vi.stubEnv('VITE_API_BASE', 'http://test-api')
 const { Search } = await import('./Search')
 const { LanguageProvider } = await import('../../i18n')
 const { setToken, clearToken } = await import('../../api/auth')
-const { ThemeProvider } = await import('../../ui')
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+const { MemoryRouter } = await import('react-router-dom')
 
 function renderSearch() {
+  // Search sits in the app frame, which reads the signed-in role.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  qc.setQueryData(['me'], { id: 'u1', role: 'owner' })
   return render(
-    <ThemeProvider defaultTheme="site">
+    <QueryClientProvider client={qc}>
       <LanguageProvider defaultLanguage="en">
-        <Search />
+        <MemoryRouter initialEntries={['/search']}>
+          <Search />
+        </MemoryRouter>
       </LanguageProvider>
-    </ThemeProvider>,
+    </QueryClientProvider>,
   )
 }
 

@@ -1,6 +1,7 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Body, Button, Display, Micro, Small, StatusPill, ThemeProvider, type Status } from '../../ui'
+import { Body, Button, Display, Micro, Small, StatusPill, type Status } from '../../ui'
 import { ApiError } from '../../api/client'
 import {
   acknowledgeFinding,
@@ -128,8 +129,8 @@ export function SiteHealth() {
   )
 
   return (
-    <ThemeProvider defaultTheme="site">
-      <div className="mx-auto w-full max-w-2xl px-4 py-8">
+    <RoleShell>
+      <div className="mx-auto w-full max-w-2xl">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
@@ -222,6 +223,6 @@ export function SiteHealth() {
           ) : null}
         </section>
       </div>
-    </ThemeProvider>
+    </RoleShell>
   )
 }

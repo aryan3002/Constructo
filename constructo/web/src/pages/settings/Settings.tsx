@@ -1,10 +1,11 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/auth'
 import { signOut as endSession } from '../../auth/session'
 import { ApiError } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
-import { Body, Button, Display, H2, Small, ThemeProvider } from '../../ui'
+import { Body, Button, Display, H2, Small } from '../../ui'
 import { LegalLinks } from '../../ui/LegalLinks'
 import { useThemeMode, type ThemeMode } from '../../ui/ThemeModeProvider'
 import { useMe } from '../auth/useMe'
@@ -91,8 +92,8 @@ export function Settings() {
   const canInvite = me?.role === 'owner' || me?.role === 'pm'
 
   return (
-    <ThemeProvider defaultTheme="site">
-      <div className="mx-auto w-full max-w-lg space-y-5 px-4 py-8">
+    <RoleShell>
+      <div className="mx-auto w-full max-w-lg space-y-5">
         <header>
           <Display as="h1" className="!text-h1">
             {t('settings.title')}
@@ -250,6 +251,6 @@ export function Settings() {
           </>
         )}
       </div>
-    </ThemeProvider>
+    </RoleShell>
   )
 }

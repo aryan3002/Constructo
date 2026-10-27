@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Button, Display, Small, StatusPill, ThemeSurface } from '../../ui'
+import { Button, Display, Small, StatusPill } from '../../ui'
+import { RoleShell } from '../../ui/RoleShell'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
 import { useCan, useMeRole } from '../../auth/useCan'
 import { useT } from '../../i18n'
@@ -106,8 +107,8 @@ export function ApprovalInbox() {
   const tabs: Tab[] = ['open', 'escalated', 'resolved']
 
   return (
-    <ThemeSurface theme="site" className="min-h-screen bg-bg">
-      <div className="mx-auto max-w-2xl px-4 py-6">
+    <RoleShell>
+      <div className="mx-auto max-w-2xl">
         <header className="mb-4">
           <Display as="h1">{t('approvals.title')}</Display>
           <Small className="mt-1">{t('approvals.subtitle')}</Small>
@@ -217,6 +218,6 @@ export function ApprovalInbox() {
           </ul>
         ) : null}
       </div>
-    </ThemeSurface>
+    </RoleShell>
   )
 }

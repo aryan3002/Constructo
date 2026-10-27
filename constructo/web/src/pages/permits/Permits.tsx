@@ -1,3 +1,4 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { permitsApi, type Permit, type PermitStatus } from '../../api/permits'
@@ -9,7 +10,6 @@ import {
   Mono,
   Small,
   StatusPill,
-  ThemeSurface,
   type EvidenceItem,
   type Status,
 } from '../../ui'
@@ -51,7 +51,7 @@ export function Permits() {
   })
 
   return (
-    <ThemeSurface theme="site" className="-mx-4 -my-6 min-h-[60vh] bg-bg px-4 py-6">
+    <RoleShell>
       <header className="mb-5">
         <H1>{siteId ? t('permits.checklist') : t('permits.title')}</H1>
         <Small className="mt-1">{t('permits.subtitle')}</Small>
@@ -71,13 +71,13 @@ export function Permits() {
         ) : (
           <ul className="grid gap-3">
             {query.data.items.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="min-w-0">
                 <PermitRow permit={p} today={new Date()} />
               </li>
             ))}
           </ul>
         ))}
-    </ThemeSurface>
+    </RoleShell>
   )
 }
 

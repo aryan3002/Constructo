@@ -1,3 +1,4 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { useState, type FormEvent } from 'react'
 import {
   Body,
@@ -7,7 +8,6 @@ import {
   Micro,
   Small,
   StatusPill,
-  ThemeProvider,
   Icons,
   type EvidenceItem,
 } from '../../ui'
@@ -121,8 +121,8 @@ export function Search() {
       : t('search.results.count', { count: hits.length })
 
   return (
-    <ThemeProvider defaultTheme="site">
-      <div className="mx-auto w-full max-w-2xl px-4 py-8">
+    <RoleShell>
+      <div className="mx-auto w-full max-w-2xl">
         <header>
           <Micro className="font-semibold uppercase tracking-widest text-primary-deep">
             {t('app.name')}
@@ -206,7 +206,7 @@ export function Search() {
           ) : null}
         </section>
       </div>
-    </ThemeProvider>
+    </RoleShell>
   )
 }
 

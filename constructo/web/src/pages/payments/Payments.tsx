@@ -1,3 +1,4 @@
+import { RoleShell } from '../../ui/RoleShell'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { paymentsApi, type Payment, type PaymentStatus } from '../../api/payments'
@@ -11,7 +12,6 @@ import {
   Mono,
   Small,
   StatusPill,
-  ThemeSurface,
   type EvidenceItem,
   type Status,
 } from '../../ui'
@@ -48,7 +48,7 @@ export function Payments() {
   })
 
   return (
-    <ThemeSurface theme="site" className="-mx-4 -my-6 min-h-[60vh] bg-bg px-4 py-6">
+    <RoleShell>
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <H1>{t('payments.title')}</H1>
@@ -99,7 +99,7 @@ export function Payments() {
           ) : (
             <ul className="grid gap-3">
               {ledger.data.items.map((p) => (
-                <li key={p.id}>
+                <li key={p.id} className="min-w-0">
                   <PaymentRow payment={p} />
                 </li>
               ))}
@@ -107,7 +107,7 @@ export function Payments() {
           )}
         </>
       )}
-    </ThemeSurface>
+    </RoleShell>
   )
 }
 
