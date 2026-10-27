@@ -12,6 +12,7 @@ import { useMutation } from '@tanstack/react-query'
 
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
+import { clearOutboxFor } from '../offline/outbox'
 import { unregisterDevicePushToken } from '../push/register'
 import { getToken } from '../store/secure'
 import { useAuth } from './AuthContext'
@@ -22,7 +23,7 @@ export function useDeleteAccount(opts: {
   /** Localized fallback message shown if the delete call fails for a non-ApiError reason. */
   genericErrorMessage: string
 }) {
-  const { signOut } = useAuth()
+  const { signOut, me } = useAuth()
   const router = useRouter()
   const [stepUpVisible, setStepUpVisible] = useState(false)
 
@@ -35,8 +36,11 @@ export function useDeleteAccount(opts: {
     },
     onSuccess: async () => {
       setStepUpVisible(false)
+      const userId = me?.id
       // signOut() runs resetSession(): query cache, user storage, queues, socket.
       await signOut()
+      // Sign-out keeps a person's unsent captures; a deleted account doesn't.
+      if (userId) await clearOutboxFor(userId).catch(() => undefined)
       router.replace(opts.afterDeleteHref)
     },
     onError: (err: unknown) => {

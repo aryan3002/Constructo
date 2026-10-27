@@ -32,6 +32,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQueryClient } from '@tanstack/react-query'
 import { meFailureKind } from './auth.util'
 import { clearQueuedWork, resetSession, SESSION_ME_KEY, SESSION_USER_KEY } from './resetSession'
+import { migrateLegacyOutbox } from '../offline/outbox'
+import { activateOutboxFor } from '../offline/useOutbox'
 
 type Status = 'loading' | 'authed' | 'guest'
 
@@ -140,6 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const raw = await AsyncStorage.getItem(SESSION_ME_KEY)
           const cached = raw ? (JSON.parse(raw) as Me) : null
           if (cached) {
+            // Offline cold start: the person's queued captures are theirs.
+            activateOutboxFor(cached.id)
             setMe(cached)
             setStatus('authed')
             return cached
@@ -153,12 +157,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
 
-    // A different person signed in on this phone: anything still queued
-    // belongs to the previous user (kept across an expired login) and must not
-    // post under this one. Runs before `me` is set, i.e. before any drain.
+    // A different person signed in on this phone: unsent chat messages belong
+    // to the previous user (kept across an expired login) and must not post
+    // under this one. Captures sit in per-user queues, so the previous user's
+    // stay put (sent when they sign back in) and only this user's queue drains.
+    // Runs before `me` is set, i.e. before any drain.
     try {
       const previousUser = await AsyncStorage.getItem(SESSION_USER_KEY)
       if (previousUser && previousUser !== profile.id) await clearQueuedWork()
+      // First run after per-user queues: the old global queue belongs to the
+      // session's user (Batch B cleared it on every switch of user).
+      await migrateLegacyOutbox(previousUser ?? profile.id)
       await AsyncStorage.multiSet([
         [SESSION_USER_KEY, profile.id],
         [SESSION_ME_KEY, JSON.stringify(profile)],
@@ -167,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* best-effort */
     }
 
+    activateOutboxFor(profile.id)
     setMe(profile)
     setStatus('authed')
     setSessionExpired(false)

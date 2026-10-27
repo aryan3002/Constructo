@@ -17,7 +17,12 @@ jest.mock('../api/capture', () => ({
 
 import { ApiError, TimeoutError } from '../api/client'
 import { clear, enqueue, list } from './outbox'
-import { __resetOutboxSyncForTests, flushOutbox, isPermanentFailure } from './useOutbox'
+import {
+  __resetOutboxSyncForTests,
+  activateOutboxFor,
+  flushOutbox,
+  isPermanentFailure,
+} from './useOutbox'
 
 test('401, 408 and 429 keep the capture queued', () => {
   for (const status of [401, 408, 429]) expect(isPermanentFailure(new ApiError(status, 'x'))).toBe(false)
@@ -36,6 +41,8 @@ test('a real rejection (403/413/422) is permanent', () => {
 describe('the one drainer', () => {
   beforeEach(async () => {
     __resetOutboxSyncForTests()
+    activateOutboxFor('u1')
+    await flushOutbox()
     await clear()
     mockRequest.mockReset()
     mockSubmit.mockReset()
@@ -67,7 +74,7 @@ describe('the one drainer', () => {
   it('a legacy capture without an id is sent with one, and retried with the same one', async () => {
     const AsyncStorage = require('@react-native-async-storage/async-storage')
     await AsyncStorage.setItem(
-      'constructo.outbox',
+      'constructo.outbox.user.u1',
       JSON.stringify([{ id: 'ob_old', createdAt: 1, label: 'old', path: '/api/v1/capture', method: 'POST', capture: { site_id: 's1', text: 'x' } }]),
     )
     mockSubmit.mockRejectedValueOnce(new TimeoutError()).mockResolvedValue({ raw_message_id: 'r' })

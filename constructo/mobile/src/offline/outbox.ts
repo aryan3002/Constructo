@@ -9,12 +9,41 @@
  *
  * Every read-modify-write runs under one lock (T9): screens enqueue while the
  * drainer removes, and an unlocked write-back would drop the other's change.
+ *
+ * The queue is kept per person (T9): sign-out no longer throws unsent captures
+ * away, and only the signed-in user's queue is read or sent. Before this, one
+ * global key held the queue; {@link migrateLegacyOutbox} moves it over.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { newClientCaptureId, type CapturePayload } from '../api/capture'
 
-const STORAGE_KEY = 'constructo.outbox'
+/** The old single, global queue (before per-user queues). */
+export const LEGACY_OUTBOX_KEY = 'constructo.outbox'
+const QUEUE_PREFIX = 'constructo.outbox.user.'
+
+export function outboxKey(userId: string): string {
+  return `${QUEUE_PREFIX}${userId}`
+}
+
+// The signed-in user whose queue the screens and the drainer use. Set by the
+// sync engine when the session changes (see activateOutboxFor in ./useOutbox).
+let currentUser: string | null = null
+
+export function setOutboxUser(userId: string | null): void {
+  currentUser = userId
+}
+
+export function getOutboxUser(): string | null {
+  return currentUser
+}
+
+// With no one signed in (shouldn't happen: the queueing screens are behind
+// sign-in) an item still isn't lost: it waits in the legacy key and moves to
+// the session's user at the next sign-in.
+function currentKey(): string {
+  return currentUser ? outboxKey(currentUser) : LEGACY_OUTBOX_KEY
+}
 
 export interface OutboxItem {
   id: string
@@ -42,17 +71,17 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
   return run
 }
 
-async function readAll(): Promise<OutboxItem[]> {
+async function readAll(key: string): Promise<OutboxItem[]> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY)
+    const raw = await AsyncStorage.getItem(key)
     return raw ? (JSON.parse(raw) as OutboxItem[]) : []
   } catch {
     return []
   }
 }
 
-async function writeAll(items: OutboxItem[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+async function writeAll(key: string, items: OutboxItem[]): Promise<void> {
+  await AsyncStorage.setItem(key, JSON.stringify(items))
 }
 
 const changeListeners = new Set<() => void>()
@@ -65,12 +94,16 @@ export function subscribeOutboxChanges(listener: () => void): () => void {
   }
 }
 
-/** Read-modify-write under the lock. `mutate` returns false to skip the write. */
-async function mutate<T = void>(fn: (items: OutboxItem[]) => T | false): Promise<T | false> {
+/** Read-modify-write one queue under the lock. `fn` returns false to skip the
+ *  write. The key is fixed by the caller before it waits for the lock. */
+async function mutate<T = void>(
+  key: string,
+  fn: (items: OutboxItem[]) => T | false,
+): Promise<T | false> {
   const out = await withLock(async () => {
-    const items = await readAll()
+    const items = await readAll(key)
     const res = fn(items)
-    if (res !== false) await writeAll(items)
+    if (res !== false) await writeAll(key, items)
     return res
   })
   if (out !== false) changeListeners.forEach((l) => l())
@@ -92,22 +125,29 @@ export async function enqueue(
   if (full.capture && !full.capture.client_capture_id) {
     full.capture = { ...full.capture, client_capture_id: newClientCaptureId() }
   }
-  await mutate((items) => {
+  await mutate(currentKey(), (items) => {
     items.push(full)
   })
   return full
 }
 
+/** The signed-in user's queue. */
 export async function list(): Promise<OutboxItem[]> {
-  return withLock(readAll)
+  return listFor(currentUser)
+}
+
+/** One user's queue (the drainer pins the user it started for). */
+export async function listFor(userId: string | null): Promise<OutboxItem[]> {
+  const key = userId ? outboxKey(userId) : LEGACY_OUTBOX_KEY
+  return withLock(() => readAll(key))
 }
 
 export async function size(): Promise<number> {
   return (await list()).length
 }
 
-export async function remove(id: string): Promise<void> {
-  await mutate((items) => {
+export async function remove(id: string, userId: string | null = currentUser): Promise<void> {
+  await mutate(userId ? outboxKey(userId) : LEGACY_OUTBOX_KEY, (items) => {
     const i = items.findIndex((x) => x.id === id)
     if (i < 0) return false
     items.splice(i, 1)
@@ -116,11 +156,14 @@ export async function remove(id: string): Promise<void> {
 
 /** A capture queued before captures carried an id gets one (persisted) before
  *  its next send, so every later retry repeats the same id. */
-export async function ensureCaptureId(item: OutboxItem): Promise<OutboxItem> {
+export async function ensureCaptureId(
+  item: OutboxItem,
+  userId: string | null = currentUser,
+): Promise<OutboxItem> {
   if (!item.capture || item.capture.client_capture_id) return item
   const id = newClientCaptureId()
   let updated: OutboxItem = { ...item, capture: { ...item.capture, client_capture_id: id } }
-  await mutate((items) => {
+  await mutate(userId ? outboxKey(userId) : LEGACY_OUTBOX_KEY, (items) => {
     const stored = items.find((x) => x.id === item.id)
     if (!stored?.capture) return false
     if (stored.capture.client_capture_id) {
@@ -132,6 +175,34 @@ export async function ensureCaptureId(item: OutboxItem): Promise<OutboxItem> {
   return updated
 }
 
+/** Drop the signed-in user's queue. */
 export async function clear(): Promise<void> {
-  await withLock(() => AsyncStorage.removeItem(STORAGE_KEY))
+  const key = currentKey()
+  await withLock(() => AsyncStorage.removeItem(key))
+  changeListeners.forEach((l) => l())
+}
+
+/** Delete one user's queued work (their account was deleted). */
+export async function clearOutboxFor(userId: string): Promise<void> {
+  await withLock(() => AsyncStorage.removeItem(outboxKey(userId)))
+  changeListeners.forEach((l) => l())
+}
+
+/** First run after the upgrade: the old global queue moves into `userId`'s
+ *  queue. Batch B guaranteed it only ever holds the session user's items (a
+ *  different sign-in cleared it). */
+export async function migrateLegacyOutbox(userId: string): Promise<void> {
+  const moved = await withLock(async () => {
+    const legacy = await readAll(LEGACY_OUTBOX_KEY)
+    if (legacy.length === 0) {
+      await AsyncStorage.removeItem(LEGACY_OUTBOX_KEY)
+      return false
+    }
+    const mine = await readAll(outboxKey(userId))
+    const have = new Set(mine.map((i) => i.id))
+    await writeAll(outboxKey(userId), [...mine, ...legacy.filter((i) => !have.has(i.id))])
+    await AsyncStorage.removeItem(LEGACY_OUTBOX_KEY)
+    return true
+  })
+  if (moved) changeListeners.forEach((l) => l())
 }

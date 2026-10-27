@@ -36,6 +36,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 
 import { enqueueChatSend, listChatOutbox } from '../../chat/outbox'
+import { listFor, outboxKey } from '../../offline/outbox'
 import { AuthProvider, useAuth } from '../AuthContext'
 import { SESSION_ME_KEY, SESSION_USER_KEY } from '../resetSession'
 
@@ -124,12 +125,17 @@ test('a 401 signs out with a note and keeps queued messages', async () => {
   expect(await AsyncStorage.getItem(SESSION_ME_KEY)).toBeNull()
 })
 
-test('a different user signing in drops the previous user\'s queue', async () => {
+test('a different user signing in drops the previous user\'s chat queue, keeps their captures', async () => {
   await AsyncStorage.setItem(SESSION_USER_KEY, 'someone-else')
   await enqueueChatSend({ address: { conversation_id: 'c' }, body: 'old', clientMsgId: 'm0' })
+  // T9: the previous user's unsent capture waits in their own queue.
+  const theirs = [{ id: 'ob_1', createdAt: 1, label: 'x', path: '/api/v1/capture', method: 'POST', capture: { site_id: 's' } }]
+  await AsyncStorage.setItem(outboxKey('someone-else'), JSON.stringify(theirs))
   mockMe(async () => new Response(JSON.stringify(ME), { status: 200 }))
   await mount()
   expect(auth?.status).toBe('authed')
   expect(await listChatOutbox()).toEqual([])
+  expect(await listFor('someone-else')).toEqual(theirs)
+  expect(await listFor('u1')).toEqual([])
   expect(await AsyncStorage.getItem(SESSION_USER_KEY)).toBe('u1')
 })

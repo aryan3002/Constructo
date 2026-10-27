@@ -13,7 +13,16 @@ import NetInfo from '@react-native-community/netinfo'
 
 import { ApiError, request } from '../api/client'
 import { submitCapture } from '../api/capture'
-import { ensureCaptureId, list, remove, subscribeOutboxChanges, type OutboxItem } from './outbox'
+import {
+  ensureCaptureId,
+  getOutboxUser,
+  list,
+  listFor,
+  remove,
+  setOutboxUser,
+  subscribeOutboxChanges,
+  type OutboxItem,
+} from './outbox'
 
 /** A 4xx (except 401 expired login / 408 timeout / 429 rate-limit) is a
  *  PERMANENT rejection — the item can never succeed as-is (too large /
@@ -57,8 +66,8 @@ export async function refreshOutbox(): Promise<void> {
   setSnapshot({ pending: (await list()).length })
 }
 
-async function send(queued: OutboxItem): Promise<void> {
-  const item = await ensureCaptureId(queued)
+async function send(queued: OutboxItem, userId: string): Promise<void> {
+  const item = await ensureCaptureId(queued, userId)
   if (item.capture) {
     // Multipart field capture → the real /capture extraction loop. Its
     // client_capture_id makes a repeat send land once on the server.
@@ -72,24 +81,35 @@ async function send(queued: OutboxItem): Promise<void> {
 }
 
 async function drain(): Promise<void> {
+  // Only the signed-in user's queue is ever sent, under their own login.
+  const user = getOutboxUser()
+  if (!user) return
   setSnapshot({ state: 'syncing' })
   // Items already tried in this pass (never retried twice in one drain).
   const tried = new Set<string>()
   try {
     for (;;) {
+      // Signed out (or someone else signed in) mid-drain: stop.
+      if (getOutboxUser() !== user) break
+      const asked = flushRequests
       // Re-read every step, so a capture enqueued mid-drain goes out too.
-      const next = (await list()).find((i) => !tried.has(i.id))
-      if (!next) break
+      const next = (await listFor(user)).find((i) => !tried.has(i.id))
+      if (!next) {
+        // A screen enqueued and asked for a flush while we were reading: it
+        // joined this drain, so look once more before finishing.
+        if (flushRequests !== asked) continue
+        break
+      }
       tried.add(next.id)
       try {
-        await send(next)
-        await remove(next.id)
+        await send(next, user)
+        await remove(next.id, user)
       } catch (e) {
         if (isPermanentFailure(e)) {
           // This item will NEVER sync (e.g. 413 too-large / 403 not-assigned /
           // 422). Drop it so it can't wedge every capture queued behind it, and
           // keep draining the rest.
-          await remove(next.id)
+          await remove(next.id, user)
           continue
         }
         // Transient (network / 5xx / timeout / expired login): stop and retry
@@ -108,16 +128,31 @@ subscribeOutboxChanges(() => {
   void refreshOutbox()
 })
 
-let inFlight: Promise<void> | null = null
+let inFlight: { user: string | null; promise: Promise<void> } | null = null
+let flushRequests = 0
 
-/** Send what is queued. A call while a drain runs joins it (one sender). */
+/** Send what is queued. A call while a drain runs for the same user joins it
+ *  (one sender); after a sign-in switch it runs once the old drain stops. */
 export function flushOutbox(): Promise<void> {
-  if (!inFlight) {
-    inFlight = drain().finally(() => {
-      inFlight = null
+  flushRequests += 1
+  const user = getOutboxUser()
+  if (inFlight && inFlight.user === user) return inFlight.promise
+  const before = inFlight?.promise ?? Promise.resolve()
+  const promise: Promise<void> = before
+    .then(() => drain())
+    .finally(() => {
+      if (inFlight?.promise === promise) inFlight = null
     })
-  }
-  return inFlight
+  inFlight = { user, promise }
+  return promise
+}
+
+/** The session changed: use `userId`'s queue (null = signed out: nothing is
+ *  read or sent). A signed-in user's waiting items go out straight away. */
+export function activateOutboxFor(userId: string | null): void {
+  setOutboxUser(userId)
+  void refreshOutbox()
+  if (userId) void flushOutbox()
 }
 
 let netUnsubscribe: (() => void) | null = null
@@ -155,5 +190,6 @@ export function __resetOutboxSyncForTests(): void {
   netUnsubscribe?.()
   netUnsubscribe = null
   inFlight = null
+  setOutboxUser(null)
   snapshot = { online: true, state: 'idle', pending: 0 }
 }

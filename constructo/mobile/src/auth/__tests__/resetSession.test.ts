@@ -1,6 +1,7 @@
 /** T2: signing out forgets the person on this phone — query cache, per-user
- * storage, chat caches + outbox, offline captures, the socket and the push
- * token. An expired login (keepQueued) keeps the unsent work. */
+ * storage, chat caches + outbox, the socket and the push token. An expired
+ * login (keepQueued) keeps the unsent work. T9: unsent captures are kept in
+ * the person's own queue either way, and nothing reads it after sign-out. */
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 )
@@ -25,7 +26,7 @@ import { QueryClient } from '@tanstack/react-query'
 
 import { loadThreadCache, mergeMessages } from '../../chat/cache'
 import { enqueueChatSend, listChatOutbox } from '../../chat/outbox'
-import { enqueue, list } from '../../offline/outbox'
+import { enqueue, list, listFor, outboxKey, setOutboxUser } from '../../offline/outbox'
 import type { ChatMessage } from '../../api/chat'
 import { resetSession, SESSION_USER_KEY } from '../resetSession'
 
@@ -42,6 +43,7 @@ async function seed(qc: QueryClient) {
   ])
   await mergeMessages('conv-1', [{ id: 'm1', seq: 1 } as ChatMessage])
   await enqueueChatSend({ address: { conversation_id: 'conv-1' }, body: 'hi', clientMsgId: 'c1' })
+  setOutboxUser('u1') // signed in as u1 (without starting a real send)
   await enqueue({ label: 'x', path: '/api/v1/x', method: 'POST' })
 }
 
@@ -67,9 +69,11 @@ test('sign-out clears everything user-scoped', async () => {
   )
   expect(await loadThreadCache('conv-1')).toEqual([])
   expect(await listChatOutbox()).toEqual([])
+  // The capture queue is no longer read (signed out) but u1's items are kept.
   expect(await list()).toEqual([])
-  // Only the device-level language preference survives.
-  expect(await AsyncStorage.getAllKeys()).toEqual(['constructo.lang'])
+  expect(await listFor('u1')).toHaveLength(1)
+  // Only the device-level language preference and u1's own queue survive.
+  expect([...(await AsyncStorage.getAllKeys())].sort()).toEqual(['constructo.lang', outboxKey('u1')])
 })
 
 test('an expired login keeps the queued messages and captures', async () => {
@@ -82,7 +86,7 @@ test('an expired login keeps the queued messages and captures', async () => {
   expect(qc.getQueryData(['owner', 'home'])).toBeUndefined()
   expect(await loadThreadCache('conv-1')).toEqual([])
   expect((await listChatOutbox()).map((i) => i.clientMsgId)).toEqual(['c1'])
-  expect(await list()).toHaveLength(1)
+  expect(await listFor('u1')).toHaveLength(1)
   expect(await AsyncStorage.getItem(SESSION_USER_KEY)).toBe('u1')
   expect(await AsyncStorage.getItem('constructo.site_id')).toBeNull()
 })

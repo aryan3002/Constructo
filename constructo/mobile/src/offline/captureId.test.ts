@@ -8,7 +8,7 @@ jest.mock('../store/secure', () => ({ getToken: async () => 'jwt' }))
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { newClientCaptureId, submitCapture } from '../api/capture'
-import { clear, enqueue, ensureCaptureId, list } from './outbox'
+import { clear, enqueue, ensureCaptureId, list, setOutboxUser } from './outbox'
 
 const realFetch = global.fetch
 afterEach(() => {
@@ -16,6 +16,7 @@ afterEach(() => {
 })
 
 beforeEach(async () => {
+  setOutboxUser('u1')
   await clear()
 })
 
@@ -54,7 +55,7 @@ test('enqueue keeps the id the screen made, and gives one to a capture without',
 
 test('a legacy queued capture gets an id before its next send, and keeps it', async () => {
   await AsyncStorage.setItem(
-    'constructo.outbox',
+    'constructo.outbox.user.u1',
     JSON.stringify([{ id: 'ob_old', createdAt: 1, label: 'old', path: '/api/v1/capture', method: 'POST', capture: { site_id: 's1', text: 'x' } }]),
   )
   const [legacy] = await list()

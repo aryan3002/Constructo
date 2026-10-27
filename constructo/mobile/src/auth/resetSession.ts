@@ -4,6 +4,9 @@
  * a different account all run through here: the next person must not see the
  * last one's cached screens or chats, receive their pushes, or have their unsent
  * messages posted under the new login.
+ *
+ * Unsent site captures are kept, in the person's own queue (T9): nothing is
+ * read or sent from it until that same person signs back in.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { QueryClient } from '@tanstack/react-query'
@@ -12,7 +15,7 @@ import { authApi } from '../api/auth'
 import { clearThreadCaches } from '../chat/cache'
 import { clearChatOutbox } from '../chat/outbox'
 import { closeSharedSocket } from '../chat/useChatThread'
-import { clear as clearOfflineOutbox } from '../offline/outbox'
+import { activateOutboxFor } from '../offline/useOutbox'
 import { flushPending } from '../owner/pendingDecisions'
 import { unregisterDevicePushToken } from '../push/register'
 import { clearToken, getToken } from '../store/secure'
@@ -36,16 +39,18 @@ export const USER_KEYS = [
 /** Per-user key families (one key per conversation / site). */
 export const USER_KEY_PREFIXES = ['constructo.chat.cache.', 'constructo.ask.session.']
 
-/** Remove the queued-but-unsent work: chat outbox + offline capture outbox. */
+/** Remove the queued-but-unsent chat messages. (Captures live in a per-user
+ *  queue and are never removed by sign-out; see src/offline/outbox.) */
 export async function clearQueuedWork(): Promise<void> {
-  await Promise.all([clearChatOutbox(), clearOfflineOutbox()])
+  await clearChatOutbox()
 }
 
 export async function resetSession(opts: {
   queryClient: QueryClient
-  /** An expired login (401) keeps the unsent chat messages and captures so
-   *  the same person can sign back in and have them send. They are dropped at
-   *  the next sign-in if a DIFFERENT user signs in (see AuthContext). */
+  /** An expired login (401) keeps the unsent chat messages so the same person
+   *  can sign back in and have them send. They are dropped at the next sign-in
+   *  if a DIFFERENT user signs in (see AuthContext). Captures are always kept
+   *  in the person's own queue. */
   keepQueued?: boolean
 }): Promise<void> {
   // Unregister push, then end the login on the server, with the JWT captured
@@ -55,6 +60,8 @@ export async function resetSession(opts: {
   // A money decision still in its undo window is sent while the login is
   // still valid (logout below revokes it on the server).
   await flushPending().catch(() => undefined)
+  // Stop reading or sending the capture queue: it stays, keyed to this person.
+  activateOutboxFor(null)
   const authToken = await getToken()
   const serverToken = opts.keepQueued ? null : authToken
   void (async () => {
