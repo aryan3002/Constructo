@@ -135,3 +135,83 @@ async def test_push_resolvers_skip_inactive_and_deleted_users(factory, db_sessio
     assert await push_tokens_for_user(session=db_session, user_id=inactive.id) == []
     assert await push_tokens_for_user(session=db_session, user_id=deleted.id) == []
     assert await _push_tokens_for_site(db_session, site.id) == ["hm-active"]
+
+
+async def test_deletion_scrubs_name_and_phone_from_raw_json_and_events(
+    client, factory, db_session
+):
+    from datetime import date
+
+    from app.models import SiteEventModel
+
+    company = await factory.company()
+    site = await factory.site(company)
+    user = await factory.user(
+        company=company, role=UserRole.supervisor, phone="+919810000103", name="Asha Rao"
+    )
+    other = await factory.user(company=company, role=UserRole.supervisor, name="Ravi Kumar")
+    mine = _raw("919810000103@s.whatsapp.net", "Asha")
+    mine.raw = {
+        "pushName": "Asha",
+        "key": {"participant": "919810000103@s.whatsapp.net"},
+        "message": {"conversation": "Asha Rao here, call me on +91 98100 00103"},
+    }
+    theirs = _raw(str(other.id), "Ravi Kumar")
+    theirs.raw = {"message": {"conversation": "Asha Rao asked for cement; Asha will pay"}}
+    db_session.add_all([mine, theirs])
+    await db_session.flush()
+    my_event = SiteEventModel(
+        site_id=site.id,
+        event_type="material_delivery",
+        occurred_on=date.today(),
+        summary="ASHA  RAO (9810000103) logged 100 bags; Ashara stays",
+        fields={"reported_by": "Asha Rao", "contact": "09810000103", "qty": 100},
+        confidence=0.9,
+        source_message_ids=[mine.id],
+    )
+    their_event = SiteEventModel(
+        site_id=site.id,
+        event_type="note",
+        occurred_on=date.today(),
+        summary="Asha Rao asked for cement",
+        fields={"by": "Ravi Kumar"},
+        confidence=0.9,
+        source_message_ids=[theirs.id],
+    )
+    db_session.add_all([my_event, their_event])
+    await db_session.commit()
+
+    resp = await client.delete("/api/v1/users/me", headers=_delete_headers(user))
+    assert resp.status_code == 204, resp.text
+
+    for row in (mine, theirs, my_event, their_event):
+        await db_session.refresh(row)
+    assert mine.raw == {
+        "pushName": "Deleted user",
+        "key": {"participant": "Deleted user"},
+        "message": {"conversation": "Deleted user here, call me on Deleted user"},
+    }
+    assert my_event.summary == "Deleted user (Deleted user) logged 100 bags; Ashara stays"
+    assert my_event.fields == {
+        "reported_by": "Deleted user", "contact": "Deleted user", "qty": 100
+    }
+    # Another person's message and event are untouched, even where they name her.
+    assert theirs.raw == {"message": {"conversation": "Asha Rao asked for cement; Asha will pay"}}
+    assert their_event.summary == "Asha Rao asked for cement"
+    assert their_event.fields == {"by": "Ravi Kumar"}
+
+
+def test_identity_patterns_match_full_name_and_phone_formats_only():
+    from app.auth.scrub import identity_patterns, scrub_text
+
+    pats = identity_patterns("Asha Rao", "+919810000103")
+    for text in (
+        "+919810000103", "919810000103", "9810000103", "09810000103",
+        "+91 98100 00103", "98100-00103", "asha rao", "Asha\nRao",
+    ):
+        assert scrub_text(text, pats) == "Deleted user", text
+    for text in ("Asha", "Rao", "Ashara Rao", "Asha Raoji", "198100001034", "9810000104"):
+        assert scrub_text(text, pats) == text, text
+    # Already-deleted or empty names add no name pattern.
+    assert len(identity_patterns("Deleted user", "")) == 0
+    assert len(identity_patterns(None, "")) == 0

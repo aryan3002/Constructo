@@ -21,6 +21,7 @@ from app.auth.jwt import STEP_UP_SCOPE, create_access_token, create_step_up_toke
 from app.auth.landing import landing_for
 from app.auth.otp import assert_otp_valid, dev_otp_hint
 from app.auth.phone import normalize_phone, phone_candidates
+from app.auth.scrub import identity_patterns, scrub_json, scrub_text
 from app.common import ratelimit
 from app.common.errors import AppError
 from app.config import settings
@@ -32,6 +33,7 @@ from app.models import (
     PushToken,
     RawMessageModel,
     RevokedToken,
+    SiteEventModel,
     User,
     UserRole,
 )
@@ -414,6 +416,7 @@ async def delete_own_account(
     requires a fresh step-up token; there is no non-sensitive path.
     """
     original_phone = user.phone
+    original_name = user.name
     user.name = "Deleted user"
     user.phone = f"deleted:{user.id}"
     user.is_active = False
@@ -448,6 +451,7 @@ async def delete_own_account(
         .where(RawMessageModel.sender_id.in_(sender_ids))
         .values(sender_name="Deleted user", sender_id=str(user.id))
     )
+    await _scrub_sent_content(session, str(user.id), original_name, original_phone)
     member_ids = select(HomeownerMember.id).where(HomeownerMember.user_id == user.id)
     await session.execute(
         update(PhotoComment)
@@ -455,6 +459,40 @@ async def delete_own_account(
         .values(author_name="Deleted user")
     )
     await session.commit()
+
+
+async def _scrub_sent_content(
+    session: AsyncSession, sender_id: str, name: str | None, phone: str
+) -> None:
+    """Replace the person's full name and phone with "Deleted user" inside
+    what they sent: the raw payload JSON (WhatsApp pushName/notifyName and any
+    text) and the summary/fields of every event extracted from those
+    messages. Other senders' rows are left alone."""
+    patterns = identity_patterns(name, phone)
+    raws = (
+        await session.execute(
+            select(RawMessageModel).where(RawMessageModel.sender_id == sender_id)
+        )
+    ).scalars().all()
+    for raw in raws:
+        scrubbed = scrub_json(raw.raw or {}, patterns, sender=True)
+        if scrubbed != raw.raw:
+            raw.raw = scrubbed
+    raw_ids = [r.id for r in raws]
+    if not raw_ids or not patterns:
+        return
+    events = (
+        await session.execute(
+            select(SiteEventModel).where(SiteEventModel.source_message_ids.overlap(raw_ids))
+        )
+    ).scalars().all()
+    for ev in events:
+        summary = scrub_text(ev.summary, patterns)
+        if summary != ev.summary:
+            ev.summary = summary
+        fields = scrub_json(ev.fields or {}, patterns)
+        if fields != ev.fields:
+            ev.fields = fields
 
 
 # POST /api/v1/me/push-token — register THIS device's Expo push token (C-F).
