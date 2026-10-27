@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, TextInput, View, type TextStyle } from 'react-native'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
@@ -48,6 +48,7 @@ import {
   ScreenLoader,
   WeeklySummaryCard,
   FLOATING_NAV_CLEARANCE,
+  useToast,
 } from '../../src/ui'
 import {
   SUB_TABS,
@@ -64,6 +65,7 @@ import {
   weekRange,
   type SubTab,
 } from '../../src/screens/homeowner/updates.util'
+import { changeCommentRequest } from '../../src/screens/homeowner/change_comment.util'
 import {
   milestoneSchedule,
   schedulePill,
@@ -128,6 +130,9 @@ const STR = {
     changeOnlyOwnerApprove: 'Only an owner can approve this. You can add a comment.',
     changeCommentPlaceholder: 'Add a note…',
     changeSend: 'Send',
+    changeSending: 'Sending…',
+    changeSent: 'Sent to your builder',
+    changeSendError: "Couldn't send. Try again.",
     changeCancel: 'Cancel',
     changeApprovalStub: 'Approval linked to your Decisions tab.',
     noImpact: 'No impact',
@@ -202,6 +207,9 @@ const STR = {
     changeOnlyOwnerApprove: 'केवल संपत्ति के मालिक इसे मंज़ूर कर सकते हैं। आप एक टिप्पणी छोड़ सकते हैं।',
     changeCommentPlaceholder: 'नोट जोड़ें…',
     changeSend: 'भेजें',
+    changeSending: 'भेजा जा रहा है…',
+    changeSent: 'आपके बिल्डर को भेज दिया',
+    changeSendError: 'भेजा नहीं जा सका। फिर कोशिश करें।',
     changeCancel: 'रद्द करें',
     changeApprovalStub: 'मंज़ूरी आपके निर्णय टैब से जुड़ी है।',
     noImpact: 'कोई असर नहीं',
@@ -1124,6 +1132,20 @@ function ChangeStoryCard({
   const str = STR[lang]
   const [note, setNote] = useState('')
   const [commenting, setCommenting] = useState(false)
+  const qc = useQueryClient()
+  const toast = useToast()
+  // Send = a request to the builder about this change (lands in My Requests).
+  const sendM = useMutation({
+    mutationFn: (body: { title: string; detail: string }) => homeowner.createRequest(body),
+    onSuccess: () => {
+      setNote('')
+      setCommenting(false)
+      toast(str.changeSent, 'check-circle')
+      void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
+      void qc.invalidateQueries({ queryKey: ['home', 'requests'] }) // Home's requests card
+    },
+  })
+  const commentBody = changeCommentRequest(ch.description, note, lang)
 
   const costColor =
     (ch.cost_delta ?? 0) > 0 ? STATUS.risk : (ch.cost_delta ?? 0) < 0 ? STATUS.ok : c.textMute
@@ -1270,13 +1292,26 @@ function ChangeStoryCard({
             multiline
             style={inputStyle}
           />
+          {sendM.isError ? (
+            <Small accessibilityRole="alert" color={STATUS.risk}>
+              {str.changeSendError}
+            </Small>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-            <Button title={str.changeSend} onPress={() => setCommenting(false)} />
+            <Button
+              title={sendM.isPending ? str.changeSending : str.changeSend}
+              disabled={!commentBody || sendM.isPending}
+              onPress={() => {
+                if (commentBody && !sendM.isPending) sendM.mutate(commentBody)
+              }}
+            />
             <Button
               title={str.changeCancel}
               variant="ghost"
+              disabled={sendM.isPending}
               onPress={() => {
                 setNote('')
+                sendM.reset()
                 setCommenting(false)
               }}
             />
