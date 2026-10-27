@@ -1,7 +1,8 @@
 # Handoff: Neev launch fixes, from Batch D onward
 
 Written 2026-10-27 for a fresh chat that picks up the pre-launch fix work, and
-updated the same day as Batches D, E and F were verified (Batch G is next).
+updated the same day as Batches D to G were verified. All seven batches are
+done; "What's left before submission" below lists the rest.
 Everything here is on branch `claude/bold-goodall-11ksuo` (pushed). There is no
 PR; don't open one unless the founder asks.
 
@@ -43,10 +44,10 @@ PR; don't open one unless the founder asks.
 | D | Homeowner wrong facts (T5) and lost captures (T6) | Done, verified (details below) |
 | E | Money guard rails (T8 client) and capture queue (T9) | Done, verified (details below) |
 | F | Account deletion for all roles (S6 client) and store config | Done, verified (details below). Privacy and terms URLs still to come from the founder |
-| G | Web console trust bugs | **Next.** Presented to the founder; waiting for "go" |
+| G | Web console trust bugs | Done, verified (details below) |
 
-Outside the batches: the real SMS/WhatsApp OTP provider and the launch roles
-are still the founder's decisions.
+Outside the batches: the real SMS/WhatsApp OTP provider, the launch roles and
+the rest of "What's left before submission" below.
 
 ### Batch C: what changed (needed for D–G)
 
@@ -148,7 +149,7 @@ Run in session `session_01UneWbgAurSR8ZgfTK4kVhy` (12 commits, `7838703`..`1c035
 - A queued capture that hits a temporary server error while the phone is online waits for the next reconnect or capture before retrying (pre-existing).
 - The supervisor's task screen is still titled "Reply" on a money item they can't answer.
 - If the server is down the first time someone opens Capture (no cached sites), it says "You're offline" rather than "can't reach the server".
-- The web Approvals page hides "Approve selected" from PMs even for non-money items.
+- The web Approvals page hides "Approve selected" from PMs even for non-money items. (Fixed in G.)
 
 ### Batch F: what changed (needed for G)
 
@@ -180,28 +181,87 @@ Run in session `session_01UneWbkF5W5niZs1evb1GMz` (14 commits, `f9fe690`..`9dc7d
 - The notification settings hide the WhatsApp and email delivery options until they actually send.
 - Publish OTA updates with a cleared bundler cache (`eas update --clear-cache`). An export reused a stale `EXPO_PUBLIC_API_BASE` without it.
 
-## Batch G: what was presented (awaiting "go")
+### Batch G: what changed
 
-**The web console's main loop does what it says, every page sits in the frame, and nothing pretends.**
+Run in session `session_01UneWbjZBefrERK6ftoinMs` (11 commits, `1236509`..`55846a9`), plus 3 fixes from verification:
+- `2ab2dd2`: the join page survives an invite role it doesn't describe (it crashed, and `npm test` exited 1 with every test passing).
+- `9159c8e`: avatar initials skip words like "(Owner)" ("R(" became "RG").
+- `1c26709`: the Home header counts exactly what "Needs you" lists. It said "8 need you" above "1 open" because the server count includes homeowner questions.
 
-**Trust bugs**
-1. Home's Approve, Hold and Assign create a new decision (`dashboardApi.createDecision` in `features/owner/useDecide.ts` ~125) instead of acting on the one shown, so the item comes back on reload alongside a duplicate. Act on the real decision, with the same confirm and undo for money as the app.
-2. The decision log labels rows by kind (`features/owner/DecisionLog.tsx`: `approval` reads "Approved"), so pending items say "Approved". Show the real state.
-3. Sign-out (`ui/AvatarMenu.tsx`) clears the token but not the query cache, so the next person can see the last company's data. An expired token shows "All quiet" forever. Clear everything on sign-out, and send an expired session to sign-in.
-4. Mock data in production: a 404 on the events endpoint falls back to mock events with a "Mock events" badge (`api/client.ts` ~150). Show an honest error instead.
-5. Every decision type gets Approve and Reject, even "choose tile A or B". Only yes/no decisions get them; others get their options or a reply.
-6. PMs land on the right screen. `/approvals` hides "Approve selected" from PMs even for non-money items (an E follow-up), and the nav tab highlights are wrong (`RoleLanding.tsx`, `ReconcilePage.tsx`).
+What changed:
+- **Home chips.**
+  - Approve resolves the decision it's shown on; on a site risk it records an approval that's already resolved.
+  - Hold (new owner-only `POST /approvals/{id}/hold`) turns an internal money decision into `hold_payment` and keeps it pending ("On hold").
+  - Assign needs a person (422 `assignee_required`).
+  - On the dashboard endpoints, Approve and Hold are owner-only (403 `owner_only`).
+  - A risk whose evidence a decision already cites drops out of the home payload (`dashboard/aggregate.py`).
+  - Money chips confirm, then wait 5 s with Undo (`features/owner/pendingDecisions.ts`).
+- **Decision log.** Labels come from kind and state: Pending, Escalated, Seen, Approved or Resolved, Rejected, "On hold" and "Assigned to <name>".
+- **Sign-out and expired sessions.**
+  - Sign-out sends any money action still in its undo window, then revokes the token. It also clears the query cache and the web capture queue.
+  - A 401 on a request that carried a token goes to `/login?next=…`, which says "Your session ended, please sign in again."
+- **No mocks.** Mock events appear only with `VITE_USE_MOCKS=true`. Otherwise the timeline shows its error.
+- **Homeowner questions.** `DecisionOut.audience` is returned. A homeowner question has no buttons and no select box. It reads "Waiting for the homeowner for <time>" on web `/approvals` and on the app's owner Brief and Approvals cards, and Home's "Needs you" never lists it.
+- **PMs.**
+  - A PM's landing key is `today` (`/pm`). The app doesn't read landing keys.
+  - PMs get "Approve selected". The server skips money items and the result counts the skipped ones.
+  - `/reconcile` keeps the visitor's own nav.
+- **Frame.**
+  - Approvals, Payments, Permits, Search, Settings, Site Health and Invite now sit in the app frame.
+  - At phone width, a role with more than five tabs gets four plus "More".
+  - The admin console fits a phone.
+- **Colours.** The Tailwind config wraps variable colours, so opacity variants like `bg-ok/10` are generated, and status pills are filled. Status text uses tones that reach 4.5:1 contrast. Tests build the CSS and check the colour pairs.
+- **Leftovers.**
+  - The local-only notification toggles are gone from Settings.
+  - Intake shows only when Labs answers.
+  - `/dpr` is linked from the PM nav, and `/components` is dev-only.
+  - The admin console reads "Company settings" and shows no raw company ID.
+  - Counts read "1 item" and quantities "24 pcs".
+  - The avatar shows the person's real initials.
+  - Public pages make no `/auth/me` calls, and there's a skip-to-content link.
 
-**Frame and readability**
-7. Approvals, Payments, Permits, Search, Settings, Site Health and Invite render without the app frame (`App.tsx`). Payments and Permits scroll sideways.
-8. Status pills are hollow: Tailwind colours are bare `var(--x)`, so `bg-ok/10`-style opacity variants never generate (38 files). Fix it in the colour config. Status and action text gets at least 4.5:1 contrast.
-9. On a phone, owners get a 9-tab bar and the admin console is 664px wide. Make both usable.
+**Verified:**
+- Test totals: backend 1821 passed plus the known Pinterest failure; mobile 87 suites / 662 tests; web 151 files / 990 tests, with `npm test` exiting 0.
+- Ruff, typecheck, web lint and build are clean. There's no migration in this batch; one head, current.
+- On screen and via the API:
+  - Home Hold: confirm, then "On hold … · Undo". After a reload it isn't asked again, the log reads "On hold", and the database has one `hold_payment` decision, still pending.
+  - The PM lands on `/pm` and bulk-approves a non-money decision. The homeowner question has no checkbox and reads "Waiting for the homeowner" on the web and in the app.
+  - The seven pages are in the frame with no sideways scroll at 390 and 1280 px.
+  - A bad token goes to sign-in with the session-ended message.
+  - The phone bar shows Latest, Projects, Chat, Approvals and More. Settings has no "coming soon", and `/components` isn't served.
+  - The Home header and "Needs you" agree, for all sites and for one site. The avatar reads "RG".
 
-**Leftovers**
-10. "Coming soon — preferences are saved locally" in settings, the empty Intake tab, the unlinked `/dpr` page and the public `/components` page. Also the raw company ID, "across 1 items" and "24.00 nos".
-11. The skin sync and `/auth/me` run on the public pages and fail; add a skip-to-content link.
+### Follow-ups found while verifying G (not yet assigned)
 
-Not included: the reskin onto the mobile tokens (post-launch, per the review) and translating chat into Hindi.
+- The web Reports page still has a "Coming soon" payroll row (`reports.payroll_soon`).
+- "Show proof" (`ui/EvidenceCard.tsx`) and the PM Today page are English-only.
+- The Home header's "updates today" counts every site even when one is selected; its "need you" part follows the selection.
+- Home shows the server's risk text as is: "1 event(s) need clarification or are low-confidence".
+
+## What's left before submission
+
+**Decisions and accounts only the founder can supply**
+1. **OTP channel (S2, stop-ship).** Choose SMS, which needs TRAI DLT registration (entity, sender ID, template), or WhatsApp authentication messages. Then wire it up, with one review number on a fixed code that reaches only a demo company. Until then, production can only take the dev code behind a phone allowlist (`app/auth/otp.py`) or refuse sign-in.
+2. **Privacy policy and terms URLs.** Every preview and production build stops on "This build of Neev isn't set up" until they're set. The policy should name the AI providers.
+3. **Launch roles.** Ship PM, mukadam and procurement, or hide them? The procurement landing still says "coming soon" until this is decided.
+4. **Contractor design direction (D1).** Calm Cockpit for every role (the review's recommendation) or Neev. This is needed before the design phase.
+5. **Store accounts.**
+   - The App Store Connect app ID and the Play service account (`submit.production` in `eas.json` is empty).
+   - A personal Play developer account needs a 14-day closed test with 12+ testers; an organisation account doesn't.
+6. **Sentry** for crash reporting, before the closed test.
+7. **The API on your own domain** instead of the raw `azurecontainerapps.io` host, before binaries ship.
+8. **Save photo on Android 12 and below.** Keep the share sheet, or keep `WRITE_EXTERNAL_STORAGE` for old versions (one line).
+
+**Store paperwork**
+- Apple App Privacy answers and the Play Data safety form. Play's form asks for a web link for account deletion: use `/delete-account` on the web console.
+- The reviewer demo login and Play's app-access instructions, which need the review number from item 1.
+
+**Work not yet done**
+- Chat safety (Apple 1.2, a warning in the review): report a message, block a user, and a published contact.
+- Play AI content (a warning in the review): let people report an AI answer (Ask, drafts).
+- The design phase, D1 to D7 (the review's Phase 2, about 2–3 weeks).
+- The review's Phase 3: preview builds to closed-track testers and TestFlight with Sentry watching, Maestro flows per role, then submit.
+- The follow-ups listed under each batch above.
 
 ## Local environment recipe
 
