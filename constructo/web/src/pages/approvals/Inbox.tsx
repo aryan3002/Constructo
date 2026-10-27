@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button, Display, Small, StatusPill, ThemeSurface } from '../../ui'
 import { EmptyState, ErrorState, Spinner } from '../../components/states'
-import { useCan } from '../../auth/useCan'
+import { useCan, useMeRole } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import type { TranslationKey } from '../../i18n'
 import type { DecisionState } from '../../api/approvals'
@@ -34,6 +34,10 @@ const TAB_KEY: Record<Tab, TranslationKey> = {
 export function ApprovalInbox() {
   const t = useT()
   const canApproveMoney = useCan('approve_money')
+  // Owners and PMs settle decisions (the server's deciders); a PM's batch
+  // skips the money items, which the note below says before they press it.
+  const role = useMeRole()
+  const canDecide = role === 'owner' || role === 'pm'
   const [tab, setTab] = useState<Tab>('open')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
@@ -151,8 +155,8 @@ export function ApprovalInbox() {
               {t('approvals.batch.selected', { count: selected.size })}
             </Small>
             <div className="ml-auto flex gap-2">
-              {/* WC4: only the owner can bulk-approve money decisions. */}
-              {canApproveMoney ? (
+              {/* WC4: money items in a PM's selection are skipped (owner only). */}
+              {canDecide ? (
                 <Button
                   size="md"
                   variant="primary"

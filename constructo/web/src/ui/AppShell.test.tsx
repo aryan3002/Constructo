@@ -56,8 +56,8 @@ describe('AppShell', () => {
 
   it('defines a tab set for every backend role with a sensible primary lane', () => {
     const primaryHome: Record<string, string> = {
-      owner: '/',
-      pm: '/',
+      owner: '/owner',
+      pm: '/pm',
       supervisor: '/supervisor/capture',
       accountant: '/reconcile',
       procurement: '/reconcile',

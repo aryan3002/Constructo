@@ -39,8 +39,9 @@ function useReconcile(siteId: string | null) {
 export function ReconcilePage() {
   const t = useT()
   const sites = useSites()
-  // Reconcile is home for accountant + procurement; default to accountant tabs.
-  const role: Role = useMeRole() === 'procurement' ? 'procurement' : 'accountant'
+  // Reconcile is home for accountant + procurement, but whoever opens it keeps
+  // their own nav (an owner here still sees the owner tabs).
+  const role: Role = useMeRole() ?? 'accountant'
   const tabs = useRoleTabs(role as ShellRole)
 
   // URL-as-state (04 §4.1): /reconcile?site=…&status=mismatch&sel=… restores the

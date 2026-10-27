@@ -17,6 +17,12 @@ describe('navForRole', () => {
     expect(routes(z.admin)).toEqual(['/settings/admin', '/settings'])
   })
 
+  it("pm: their own Today cockpit, never the owner's Home", () => {
+    const z = navForRole('pm')
+    expect(routes(z.primary)).toEqual(['/pm', '/approvals'])
+    expect(labelKeyFor(z.primary[0], 'pm')).toBe('nav.today')
+  })
+
   it('architect: Designer cockpit, no Reports (no export_tally), no Admin (no manage_settings)', () => {
     const z = navForRole('architect')
     expect(routes(z.primary)).toEqual(['/designer'])

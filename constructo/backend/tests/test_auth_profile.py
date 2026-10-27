@@ -96,7 +96,8 @@ async def test_patch_users_me_requires_auth(client):
 
 async def test_landing_map_for_roles():
     assert landing_for(UserRole.owner) == "brief"
-    assert landing_for(UserRole.pm) == "brief"
+    # A PM lands on their own Today, not the owner's Home.
+    assert landing_for(UserRole.pm) == "today"
     assert landing_for(UserRole.supervisor) == "capture"
     assert landing_for(UserRole.accountant) == "reconcile"
     assert landing_for(UserRole.labor_contractor) == "attendance"

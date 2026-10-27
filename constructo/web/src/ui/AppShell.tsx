@@ -60,7 +60,7 @@ const CashIcon = <span className="cstk-mono text-[1.05em] font-semibold">₹</sp
  */
 export const ROLE_TABS: Record<Role, TabDef[]> = {
   owner: [
-    { to: '/', labelKey: 'nav.latest', label: 'Latest', icon: <GridIcon />, end: true },
+    { to: '/owner', labelKey: 'nav.latest', label: 'Latest', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.projects', label: 'Projects', icon: <ListIcon /> },
     { to: '/requests', labelKey: 'nav.requests', label: 'Requests', icon: <BellIcon /> },
     { to: '/chat', labelKey: 'nav.chat', label: 'Chat', icon: <MessageIcon /> },
@@ -71,9 +71,11 @@ export const ROLE_TABS: Record<Role, TabDef[]> = {
     { to: '/more', labelKey: 'nav.more', label: 'More', icon: <DotsIcon /> },
   ],
   pm: [
-    { to: '/', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
+    { to: '/pm', labelKey: 'nav.today', label: 'Today', icon: <GridIcon />, end: true },
     { to: '/sites', labelKey: 'nav.sites', label: 'Sites', icon: <ListIcon /> },
-    { to: '/spec-desk', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
+    // The spec desk lives in the designer workspace (/spec-desk only redirects
+    // there), so link the real route and the tab highlights.
+    { to: '/designer?tab=selections', labelKey: 'nav.specs', label: 'Spec desk', icon: <ListIcon /> },
     { to: '/approvals', labelKey: 'nav.approvals', label: 'Approvals', icon: <CheckIcon /> },
     { to: '/settings/documents', labelKey: 'nav.documents', label: 'Drawings', icon: <DocIcon /> },
     { to: '/reports', labelKey: 'nav.reports', label: 'Reports', icon: <DocIcon /> },

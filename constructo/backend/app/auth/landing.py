@@ -3,7 +3,8 @@
 Single source of truth shared by the invite-accept flow and the /auth/me/landing
 lookup so the backend and the web client never disagree about a role's home.
 
-  owner / pm        -> command brief (the exceptions-first home)
+  owner             -> command brief (the exceptions-first home)
+  pm                -> today (the multi-site execution glance, web /pm)
   supervisor        -> capture (photo/voice first; near-zero friction)
   accountant        -> reconcile (payments vs challans)
   labor_contractor  -> attendance (mukadam marks the crew present)
@@ -13,7 +14,7 @@ from app.models import UserRole
 
 ROLE_LANDING: dict[UserRole, str] = {
     UserRole.owner: "brief",
-    UserRole.pm: "brief",
+    UserRole.pm: "today",
     UserRole.supervisor: "capture",
     UserRole.accountant: "reconcile",
     UserRole.labor_contractor: "attendance",

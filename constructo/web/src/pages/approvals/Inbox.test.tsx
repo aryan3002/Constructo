@@ -125,9 +125,45 @@ describe('ApprovalInbox', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /propose/i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
-    // And no bulk-approve once selected.
+    // Selecting it says up front that a batch will skip it.
     await userEvent.click(
       screen.getByRole('checkbox', { name: /select Approve extra cement/i }),
+    )
+    expect(screen.getByTestId('money-skipped-note')).toBeInTheDocument()
+  })
+
+  it('a PM bulk-approves the non-money items; the money one is skipped and the result says so', async () => {
+    list.mockResolvedValue({
+      items: [
+        makeDecision(),
+        makeDecision({ id: 'd2', kind: 'generic', title: 'Pick tile batch' }),
+      ],
+      next_cursor: null,
+    })
+    batch.mockResolvedValue({ updated: ['d2'], skipped: ['d1'] })
+    wrap(<ApprovalInbox />, 'pm')
+    await screen.findByText('Pick tile batch')
+    await userEvent.click(screen.getByRole('checkbox', { name: /select Pick tile batch/i }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /select Approve extra cement/i }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected' }))
+    await waitFor(() => expect(batch).toHaveBeenCalledWith('resolve', ['d2', 'd1'], undefined))
+    expect(
+      await screen.findByText(
+        '1 done · 1 skipped (no longer open, or only the owner can decide them)',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('a supervisor gets no bulk Approve', async () => {
+    list.mockResolvedValue({
+      items: [makeDecision({ kind: 'generic', title: 'Pick tile batch' })],
+      next_cursor: null,
+    })
+    wrap(<ApprovalInbox />, 'supervisor')
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /select Pick tile batch/i }),
     )
     expect(screen.queryByRole('button', { name: 'Approve selected' })).toBeNull()
   })

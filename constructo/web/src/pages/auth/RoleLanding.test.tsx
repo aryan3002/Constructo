@@ -25,6 +25,7 @@ function renderLanding() {
           <Routes>
             <Route path="/" element={<RoleLanding />} />
             <Route path="/owner" element={<p>owner-home</p>} />
+            <Route path="/pm" element={<p>pm-today</p>} />
             <Route path="/supervisor/capture" element={<p>supervisor-capture</p>} />
             <Route path="/mukadam/attendance" element={<p>mukadam-attendance</p>} />
             <Route path="/reconcile" element={<p>reconcile-home</p>} />
@@ -44,6 +45,8 @@ describe('auth/RoleLanding', () => {
 
   it.each([
     ['brief', 'owner', 'owner-home'],
+    // A PM lands on their own Today, not the owner's Home.
+    ['today', 'pm', 'pm-today'],
     ['capture', 'supervisor', 'supervisor-capture'],
     ['attendance', 'labor_contractor', 'mukadam-attendance'],
     ['reconcile', 'accountant', 'reconcile-home'],
