@@ -10,7 +10,7 @@ import { useT } from '../../i18n'
 import { ErrorState, Spinner } from '../../components/states'
 import { SetupChecklist } from './SetupChecklist'
 import { HonestHero } from '../../features/owner/HonestHero'
-import { NeedsYou } from '../../features/owner/NeedsYou'
+import { NeedsYou, useNeedsYouRows } from '../../features/owner/NeedsYou'
 import { ActivityStream } from '../../features/owner/ActivityStream'
 import { NewProjectModal } from '../../features/owner/NewProjectModal'
 import { ProjectsStrip } from '../../features/owner/ProjectsStrip'
@@ -69,6 +69,8 @@ export function OwnerHome() {
   )
 
   const lastActivityAt = summaryQ.data?.items[0]?.occurred_at ?? null
+  // The hero's "· N need you" counts exactly what Needs you lists below it.
+  const needsYou = useNeedsYouRows(home.data, selectedSiteId)
 
   // A request-kind activity row's Reply button opens the project's homeowner
   // 1:1 channel; the row itself still links to the full Requests surface.
@@ -84,7 +86,12 @@ export function OwnerHome() {
       onSelectSite={setSelectedSiteId}
       roleBadge={roleBadge}
     >
-      <HonestHero summary={summaryQ.data?.summary} lastActivityAt={lastActivityAt} date={date} />
+      <HonestHero
+        summary={summaryQ.data?.summary}
+        lastActivityAt={lastActivityAt}
+        needsCount={needsYou.rows.length}
+        date={date}
+      />
 
       <div className="mt-6">
         {home.isLoading ? (

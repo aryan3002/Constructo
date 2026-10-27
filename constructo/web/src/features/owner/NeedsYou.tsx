@@ -67,28 +67,11 @@ type Row =
   | { type: 'decision'; key: string; decision: Decision }
   | { type: 'risk'; key: string; siteId: string; risk: DashRisk }
 
-export function NeedsYou({
-  date,
-  home,
-  selectedSiteId,
-  siteNames,
-}: {
-  date: string
-  /** The home brief whose open risks are listed after the approvals. */
-  home?: OwnerHome
-  selectedSiteId: string | null
-  /** site_id → display name, so a card reads "Tower B" not a UUID. */
-  siteNames: Record<string, string>
-}) {
-  const t = useT()
-  const canApprove = useCan('approve_money')
-  const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
-  const { act, dialogs } = useChipActions(date, (o) =>
-    setToast({ status: o.status, msg: o.message }),
-  )
-  // Rows whose money action is waiting in its undo window.
+/** The rows "Needs you" lists: open owner decisions, then today's site risks,
+ *  for the selected site (all sites when none), minus rows waiting in their
+ *  undo window. The Home header counts these same rows. */
+export function useNeedsYouRows(home: OwnerHome | undefined, selectedSiteId: string | null) {
   const hidden = usePendingHiddenIds()
-
   const { data, isLoading, isError } = useQuery({
     queryKey: qk.decisions(),
     queryFn: () => approvalsApi.list(),
@@ -112,6 +95,30 @@ export function NeedsYou({
       )
     return [...decisions, ...risks].filter((r) => !hidden.has(r.key))
   }, [data?.items, home?.sites, selectedSiteId, hidden])
+
+  return { rows, isLoading, isError }
+}
+
+export function NeedsYou({
+  date,
+  home,
+  selectedSiteId,
+  siteNames,
+}: {
+  date: string
+  /** The home brief whose open risks are listed after the approvals. */
+  home?: OwnerHome
+  selectedSiteId: string | null
+  /** site_id → display name, so a card reads "Tower B" not a UUID. */
+  siteNames: Record<string, string>
+}) {
+  const t = useT()
+  const canApprove = useCan('approve_money')
+  const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
+  const { act, dialogs } = useChipActions(date, (o) =>
+    setToast({ status: o.status, msg: o.message }),
+  )
+  const { rows, isLoading, isError } = useNeedsYouRows(home, selectedSiteId)
 
   return (
     <section aria-labelledby="owner-needs-heading" className="flex flex-col gap-4">

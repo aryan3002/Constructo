@@ -1,7 +1,8 @@
-// HonestHero — the activity-first OwnerHome headline. A PURE function of the
-// activity summary counts + the newest activity timestamp: no fabricated
-// numbers, no spinners. Mirrors the two skins the old OwnerHome header used
-// (Neev editorial serif vs default Blueprint).
+// HonestHero — the activity-first OwnerHome headline. A PURE function of
+// today's update count, the newest activity timestamp and how many rows
+// "Needs you" lists right below it: no fabricated numbers, no spinners.
+// Mirrors the two skins the old OwnerHome header used (Neev editorial serif vs
+// default Blueprint).
 import { useT, type TFunction } from '../../i18n'
 import { formatDate } from '../../lib/format'
 import { Display, Small } from '../../ui'
@@ -23,16 +24,26 @@ function relativeActivity(iso: string | null, t: TFunction): string {
   return t('activity.rel.days_ago', { n: days })
 }
 
-/** Pure headline builder — unit tested directly (no React). */
+/** Pure headline builder — unit tested directly (no React). `needsCount` is
+ *  the number of rows "Needs you" lists, so the two always agree. */
 export function buildHeroHeadline(
   summary: ActivitySummary | undefined,
   lastActivityAt: string | null,
   t: TFunction,
+  needsCount: number,
 ): string {
   const updates = summary?.updates_today ?? 0
-  const decisions = summary?.needs_decision_count ?? 0
+
+  const tail =
+    needsCount === 1
+      ? t('owner.hero.and_one_decision')
+      : needsCount > 1
+        ? t('owner.hero.and_many_decisions', { count: needsCount })
+        : ''
 
   if (updates === 0) {
+    // Never "All quiet" while something is waiting on the owner.
+    if (tail) return `${t('owner.hero.no_updates')}${tail}`
     return lastActivityAt
       ? t('owner.hero.all_quiet', { rel: relativeActivity(lastActivityAt, t) })
       : t('owner.hero.all_quiet_never')
@@ -43,28 +54,24 @@ export function buildHeroHeadline(
       ? t('owner.hero.one_update')
       : t('owner.hero.many_updates', { count: updates })
 
-  const tail =
-    decisions === 1
-      ? t('owner.hero.and_one_decision')
-      : decisions > 1
-        ? t('owner.hero.and_many_decisions', { count: decisions })
-        : ''
-
   return `${head}${tail}`
 }
 
 export function HonestHero({
   summary,
   lastActivityAt,
+  needsCount,
   date,
 }: {
   summary?: ActivitySummary
   lastActivityAt: string | null
+  /** How many rows "Needs you" lists. */
+  needsCount: number
   date: string
 }) {
   const t = useT()
   const neev = useSkin() === 'neev'
-  const headline = buildHeroHeadline(summary, lastActivityAt, t)
+  const headline = buildHeroHeadline(summary, lastActivityAt, t, needsCount)
   const eyebrow = t('owner.hero.eyebrow', { date: formatDate(date) })
 
   if (neev) {

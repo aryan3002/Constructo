@@ -466,6 +466,7 @@ export const en = {
   'owner.hero.eyebrow': 'Owner · {date}',
   'owner.hero.all_quiet': 'All quiet — last update {rel}',
   'owner.hero.all_quiet_never': 'All quiet — no activity yet',
+  'owner.hero.no_updates': 'No updates today',
   'owner.hero.one_update': '1 update today',
   'owner.hero.many_updates': '{count} updates today',
   'owner.hero.and_one_decision': ' · 1 needs you',

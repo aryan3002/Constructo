@@ -10,6 +10,7 @@ const t = ((key: string, vars?: Record<string, unknown>) => {
   const map: Record<string, string> = {
     'owner.hero.all_quiet': `All quiet — last update ${vars?.rel}`,
     'owner.hero.all_quiet_never': 'All quiet — no activity yet',
+    'owner.hero.no_updates': 'No updates today',
     'owner.hero.one_update': '1 update today',
     'owner.hero.many_updates': `${vars?.count} updates today`,
     'owner.hero.and_one_decision': ' · 1 needs you',
@@ -32,32 +33,42 @@ const sum = (o: Partial<ActivitySummary>): ActivitySummary => ({
 describe('buildHeroHeadline', () => {
   it('0 updates → all-quiet with the last-activity relative time', () => {
     const iso = new Date(Date.now() - 2 * 3600_000).toISOString()
-    expect(buildHeroHeadline(sum({ updates_today: 0 }), iso, t)).toBe(
+    expect(buildHeroHeadline(sum({ updates_today: 0 }), iso, t, 0)).toBe(
       'All quiet — last update 2h ago',
     )
   })
   it('0 updates + never → all-quiet-never', () => {
-    expect(buildHeroHeadline(sum({ updates_today: 0 }), null, t)).toBe(
+    expect(buildHeroHeadline(sum({ updates_today: 0 }), null, t, 0)).toBe(
       'All quiet — no activity yet',
     )
   })
-  it('1 update, 0 decisions → singular, no decision clause', () => {
-    expect(buildHeroHeadline(sum({ updates_today: 1 }), '2026-07-03T00:00:00Z', t)).toBe(
+  it('0 updates but something needs you → never "All quiet"', () => {
+    expect(buildHeroHeadline(sum({ updates_today: 0 }), '2026-07-03T00:00:00Z', t, 2)).toBe(
+      'No updates today · 2 need you',
+    )
+  })
+  it('1 update, nothing waiting → singular, no decision clause', () => {
+    expect(buildHeroHeadline(sum({ updates_today: 1 }), '2026-07-03T00:00:00Z', t, 0)).toBe(
       '1 update today',
     )
   })
-  it('3 updates + 1 decision → plural updates + singular decision clause', () => {
-    expect(
-      buildHeroHeadline(sum({ updates_today: 3, needs_decision_count: 1 }), '2026-07-03T00:00:00Z', t),
-    ).toBe('3 updates today · 1 needs you')
+  it('3 updates + 1 waiting → plural updates + singular decision clause', () => {
+    expect(buildHeroHeadline(sum({ updates_today: 3 }), '2026-07-03T00:00:00Z', t, 1)).toBe(
+      '3 updates today · 1 needs you',
+    )
   })
-  it('5 updates + 2 decisions → both plural', () => {
+  it('5 updates + 2 waiting → both plural', () => {
+    expect(buildHeroHeadline(sum({ updates_today: 5 }), '2026-07-03T00:00:00Z', t, 2)).toBe(
+      '5 updates today · 2 need you',
+    )
+  })
+  it("counts what Needs you lists, not the server's wider decision count", () => {
     expect(
-      buildHeroHeadline(sum({ updates_today: 5, needs_decision_count: 2 }), '2026-07-03T00:00:00Z', t),
-    ).toBe('5 updates today · 2 need you')
+      buildHeroHeadline(sum({ updates_today: 15, needs_decision_count: 8 }), '2026-07-03T00:00:00Z', t, 1),
+    ).toBe('15 updates today · 1 needs you')
   })
   it('undefined summary → all-quiet-never (no crash)', () => {
-    expect(buildHeroHeadline(undefined, null, t)).toBe('All quiet — no activity yet')
+    expect(buildHeroHeadline(undefined, null, t, 0)).toBe('All quiet — no activity yet')
   })
 })
 
@@ -67,8 +78,9 @@ describe('<HonestHero>', () => {
       <ThemeModeProvider>
         <LanguageProvider defaultLanguage="en">
           <HonestHero
-            summary={sum({ updates_today: 3, needs_decision_count: 1 })}
+            summary={sum({ updates_today: 3 })}
             lastActivityAt="2026-07-03T00:00:00Z"
+            needsCount={1}
             date="2026-07-03"
           />
         </LanguageProvider>

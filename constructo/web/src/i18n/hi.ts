@@ -444,6 +444,7 @@ export const hi: Record<TranslationKey, string> = {
   'owner.hero.eyebrow': 'मालिक · {date}',
   'owner.hero.all_quiet': 'सब शांत — पिछला अपडेट {rel}',
   'owner.hero.all_quiet_never': 'सब शांत — अभी कोई गतिविधि नहीं',
+  'owner.hero.no_updates': 'आज कोई अपडेट नहीं',
   'owner.hero.one_update': 'आज 1 अपडेट',
   'owner.hero.many_updates': 'आज {count} अपडेट',
   'owner.hero.and_one_decision': ' · 1 पर आपका निर्णय चाहिए',

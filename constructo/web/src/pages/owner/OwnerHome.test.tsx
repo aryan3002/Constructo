@@ -14,7 +14,11 @@ vi.mock('../../api/activity', async () => {
 })
 
 // Child feature panels are unit-tested elsewhere; stub to keep this a composition test.
-vi.mock('../../features/owner/NeedsYou', () => ({ NeedsYou: () => <div data-testid="needs-you" /> }))
+const needsYouRows = vi.fn()
+vi.mock('../../features/owner/NeedsYou', () => ({
+  NeedsYou: () => <div data-testid="needs-you" />,
+  useNeedsYouRows: (...a: unknown[]) => needsYouRows(...a),
+}))
 const activityStreamProps = vi.fn()
 vi.mock('../../features/owner/ActivityStream', () => ({
   ActivityStream: (props: unknown) => {
@@ -131,6 +135,8 @@ describe('<OwnerHome> (activity-first)', () => {
     mockNavigate.mockReset()
     openHomeownerChannelMutate.mockReset()
     listSites.mockResolvedValue({ items: SITES, next_cursor: null })
+    needsYouRows.mockReset()
+    needsYouRows.mockReturnValue({ rows: [{ key: 'dec-1' }], isLoading: false, isError: false })
   })
 
   it('renders the HonestHero headline from the activity summary + all three panels', async () => {
@@ -142,6 +148,23 @@ describe('<OwnerHome> (activity-first)', () => {
     expect(screen.getByTestId('needs-you')).toBeInTheDocument()
     expect(screen.getByTestId('activity-stream')).toBeInTheDocument()
     expect(screen.getByTestId('projects-strip')).toBeInTheDocument()
+  })
+
+  it("the hero's \"need you\" counts the rows Needs you lists, not the server's wider count", async () => {
+    getHome.mockResolvedValue(NON_COLD_START)
+    activityPage.mockResolvedValue(
+      page({ summary: { updates_today: 15, needs_decision_count: 8, sites_total: 2 } }),
+    )
+    needsYouRows.mockReturnValue({
+      rows: [{ key: 'dec-1' }, { key: 'site-a-0' }],
+      isLoading: false,
+      isError: false,
+    })
+    renderHome()
+
+    expect(await screen.findByText(/15 updates today · 2 need you/)).toBeInTheDocument()
+    // Same home brief and site selection as the Needs you panel.
+    expect(needsYouRows).toHaveBeenLastCalledWith(NON_COLD_START, null)
   })
 
   it('does not render the removed CommandCenter columns (Portfolio / This Week)', async () => {
