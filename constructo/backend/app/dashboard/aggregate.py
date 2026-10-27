@@ -194,6 +194,12 @@ def _pulse_tiles(events: list[SiteEvent], risks: list[dict]) -> list[dict]:
     return tiles
 
 
+def _is_handled(risk: dict, covered_event_ids: set[UUID]) -> bool:
+    """True when every evidence event of ``risk`` is cited by a decision."""
+    evidence = risk["evidence_event_ids"]
+    return bool(evidence) and all(eid in covered_event_ids for eid in evidence)
+
+
 def build_site_card(
     site: Site,
     event_rows: list[SiteEventModel],
@@ -202,6 +208,7 @@ def build_site_card(
     prev_event_rows: list[SiteEventModel] | None = None,
     history_event_rows: list[SiteEventModel] | None = None,
     max_risks: int = MAX_TOP_RISKS,
+    covered_event_ids: set[UUID] | None = None,
 ) -> dict:
     """Aggregate one site into a command-card payload.
 
@@ -210,6 +217,10 @@ def build_site_card(
     baseline is set, ``history_event_rows`` (a trailing window of prior days)
     lets risk detection auto-learn an expected headcount so a site with history
     still surfaces a real shortfall.
+
+    ``covered_event_ids`` are events a decision already cites (any state). A
+    risk whose evidence is all covered has been handled and is left out, so it
+    never comes back with chips.
     """
     events = [_to_contract(r) for r in event_rows]
     prev_events = (
@@ -227,6 +238,8 @@ def build_site_card(
         prev_events=prev_events,
         history_events=history_events,
     )
+    if covered_event_ids:
+        risks = [r for r in risks if not _is_handled(r, covered_event_ids)]
     # Lookup so each risk's evidence ids resolve to real event summaries (proof
     # rows), covering today's events plus the prev/history windows a risk may
     # cite as evidence.
@@ -261,6 +274,7 @@ def build_home(
     *,
     prev_events_by_site: dict[UUID, list[SiteEventModel]] | None = None,
     history_events_by_site: dict[UUID, list[SiteEventModel]] | None = None,
+    covered_event_ids: set[UUID] | None = None,
 ) -> dict:
     """Assemble the whole Owner Home payload.
 
@@ -278,6 +292,7 @@ def build_home(
             baselines_by_site.get(site.id),
             prev_event_rows=prev_events_by_site.get(site.id),
             history_event_rows=history_events_by_site.get(site.id),
+            covered_event_ids=covered_event_ids,
         )
         cards.append(card)
 

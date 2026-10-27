@@ -164,3 +164,52 @@ async def test_mukadam_sees_the_invoice_but_cannot_settle_or_hide_it(
     _assert_refused(hide, DecisionKind.approval)
     await db_session.refresh(d)
     assert d.state is DecisionState.pending
+
+
+async def _decision(db_session, company, site, kind, **kw) -> Decision:
+    d = Decision(company_id=company.id, site_id=site.id, kind=kind, title="ACC invoice", **kw)
+    db_session.add(d)
+    await db_session.flush()
+    return d
+
+
+async def test_hold_keeps_a_money_decision_open_as_a_held_payment(client, db_session, world):
+    company, site, users = world
+    d = await _decision(db_session, company, site, DecisionKind.approval)
+    resp = await client.post(
+        f"/api/v1/approvals/{d.id}/hold", headers=auth(users[UserRole.owner])
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["kind"] == "hold_payment"
+    assert body["state"] == "pending"
+    # Holding a held payment again changes nothing.
+    again = await client.post(
+        f"/api/v1/approvals/{d.id}/hold", headers=auth(users[UserRole.owner])
+    )
+    assert again.status_code == 200
+    assert again.json()["kind"] == "hold_payment"
+
+
+@pytest.mark.parametrize("role", [r for r in ROLES if r is not UserRole.owner])
+async def test_hold_is_owner_only(client, db_session, world, role):
+    company, site, users = world
+    d = await _decision(db_session, company, site, DecisionKind.approval)
+    resp = await client.post(f"/api/v1/approvals/{d.id}/hold", headers=auth(users[role]))
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "owner_only"
+
+
+async def test_hold_refuses_settled_and_non_money_decisions(client, db_session, world):
+    company, site, users = world
+    owner = users[UserRole.owner]
+    done = await _decision(
+        db_session, company, site, DecisionKind.approval, state=DecisionState.resolved
+    )
+    ask = await _decision(db_session, company, site, DecisionKind.generic)
+    assert (
+        await client.post(f"/api/v1/approvals/{done.id}/hold", headers=auth(owner))
+    ).status_code == 409
+    assert (
+        await client.post(f"/api/v1/approvals/{ask.id}/hold", headers=auth(owner))
+    ).status_code == 409

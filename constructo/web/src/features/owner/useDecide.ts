@@ -1,34 +1,45 @@
 // Optimistic decision hook for the Owner Command Center (vault 11/04 §3.3, W1.2).
 //
-// Replaces OwnerHome's old invalidate-on-success path with honest optimism:
-//   onMutate  → cancel in-flight home reads, snapshot, then *immediately* drop
-//               the actioned exception from the brief (chip vanishes, the
-//               "Needs You" count ticks down) and prepend it to the Decision Log.
-//   onError   → roll BOTH caches back to the snapshot (the chip returns) so a
-//               failed money decision is never silently swallowed.
-//   onSettled → invalidate home + decisions so the server reconciles the truth.
+// A chip acts on one of two things:
+//   - a decision already in the ledger (a pending approval): Approve resolves
+//     it, Hold keeps it open as a held payment, Assign names who handles it;
+//   - a site risk from the home brief: the chip records a new decision that
+//     says what happened (approve → the owner's resolved approval, hold → an
+//     open held payment, assign → an open ask for the chosen person). Its
+//     evidence then marks the risk handled, so the server leaves it off Home.
 //
-// Each call carries a client-generated `client_decision_id` (CA8 idempotency
-// seam). KNOWN GAP (W1): the server does not yet de-dupe on it, so a mirrored
-// duplicate action could still double-act — tracked in the W1 wave notes.
+//   onMutate  → cancel in-flight reads, snapshot, drop the risk from the brief
+//               and write the Decision Log row exactly as the server records it.
+//   onError   → roll BOTH caches back to the snapshot (the chip returns).
+//   onSettled → invalidate home + decisions + the inbox so the server reconciles.
+//
+// Each risk action carries a client-generated `client_decision_id` (CA8): the
+// server answers a repeat with the row it already recorded, never a second one.
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../../api/queryKeys'
-import {
-  dashboardApi,
-  type DecisionAction,
-  type OwnerHome,
-} from '../../api/dashboard'
-import type { Decision, Paginated } from '../../api/approvals'
+import { dashboardApi, type DecisionAction, type OwnerHome } from '../../api/dashboard'
+import { approvalsApi, type Decision, type Paginated } from '../../api/approvals'
 
-/** Caller-facing input for one inline decision chip. */
+export type { DecisionAction }
+
+/** What a chip acts on. */
+export type DecideTarget =
+  | {
+      type: 'risk'
+      siteId: string
+      /** Composed risk id (`${siteId}-${index}`) so onMutate can drop the exact row. */
+      riskKey: string
+      title: string
+      evidenceEventIds: string[]
+    }
+  | { type: 'decision'; decision: Decision }
+
+/** Caller-facing input for one chip. */
 export interface DecideInput {
-  siteId: string
-  siteName: string
-  /** Composed risk id (`${siteId}-${index}`) so onMutate can drop the exact row. */
-  riskKey: string
+  target: DecideTarget
   action: DecisionAction
-  title: string
-  evidenceEventIds: string[]
+  /** Who an Assign goes to (required for assign). */
+  assignee?: { id: string; name: string }
 }
 
 interface DecideVars extends DecideInput {
@@ -40,7 +51,17 @@ interface DecideContext {
   prevDecisions?: Paginated<Decision>
 }
 
-/** Map the inline chip action onto the backend Decision kind (mirrors the API). */
+/** The id a chip's row is known by (hidden while its action waits). */
+export function targetId(target: DecideTarget): string {
+  return target.type === 'risk' ? target.riskKey : target.decision.id
+}
+
+/** Approve and Hold move money: the owner's alone, behind a confirm + undo. */
+export function isMoneyAction(action: DecisionAction): boolean {
+  return action === 'approve' || action === 'hold'
+}
+
+/** Map a risk chip onto the backend Decision kind (mirrors the API). */
 const ACTION_KIND: Record<DecisionAction, Decision['kind']> = {
   approve: 'approval',
   hold: 'hold_payment',
@@ -84,36 +105,62 @@ export function applyDecisionToHome(
   }
 }
 
-/** Build the optimistic Decision Log row for an in-flight chip. */
-function optimisticDecision(v: DecideVars): Decision {
+/**
+ * The Decision Log row the server will record for this chip — the same kind,
+ * state and assignee, so the optimistic row never claims more than happened.
+ */
+export function recordedDecision(input: DecideInput, id: string, now = new Date()): Decision {
+  const at = now.toISOString()
+  if (input.target.type === 'decision') {
+    const d = input.target.decision
+    if (input.action === 'approve') {
+      return { ...d, state: 'resolved', resolved_at: at, updated_at: at }
+    }
+    if (input.action === 'hold') return { ...d, kind: 'hold_payment', updated_at: at }
+    return { ...d, assigned_to: input.assignee?.id ?? d.assigned_to, updated_at: at }
+  }
+  const approved = input.action === 'approve'
   return {
-    id: v.clientDecisionId,
+    id,
     company_id: '',
-    site_id: v.siteId,
-    kind: ACTION_KIND[v.action],
-    title: v.title,
+    site_id: input.target.siteId,
+    kind: ACTION_KIND[input.action],
+    title: input.target.title,
     detail: null,
     raised_by: null,
-    assigned_to: null,
-    state: v.action === 'approve' ? 'resolved' : 'pending',
+    assigned_to: input.action === 'assign' ? (input.assignee?.id ?? null) : null,
+    state: approved ? 'resolved' : 'pending',
     sla_due_at: null,
-    resolved_at: null,
+    resolved_at: approved ? at : null,
     resolution_note: null,
-    evidence_event_ids: v.evidenceEventIds,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    evidence_event_ids: input.target.evidenceEventIds,
+    created_at: at,
+    updated_at: at,
   }
 }
 
-export interface DecideCallbacks {
-  onError?: (input: DecideInput) => void
-  onSuccess?: (input: DecideInput) => void
+function send(v: DecideVars): Promise<unknown> {
+  const { target, action } = v
+  if (target.type === 'decision') {
+    const id = target.decision.id
+    if (action === 'approve') return approvalsApi.approve(id)
+    if (action === 'hold') return approvalsApi.hold(id)
+    return approvalsApi.assign(id, v.assignee!.id)
+  }
+  return dashboardApi.createDecision({
+    site_id: target.siteId,
+    action,
+    title: target.title,
+    evidence_event_ids: target.evidenceEventIds,
+    assigned_to: action === 'assign' ? v.assignee?.id : undefined,
+    client_decision_id: v.clientDecisionId,
+  })
 }
 
 /**
- * `useDecide(date)` → `{ decide, isPending }`. Call `decide(input, callbacks?)`
- * from an inline chip; the optimistic update + rollback are handled here so each
- * column stays a thin view.
+ * `useDecide(date)` → `{ decide, isPending }`. `decide(input)` sends one chip
+ * action and resolves when the server has recorded it (rejects on failure,
+ * after rolling the optimistic rows back).
  */
 export function useDecide(date: string) {
   const qc = useQueryClient()
@@ -121,14 +168,7 @@ export function useDecide(date: string) {
   const logKey = qk.decisions()
 
   const mutation = useMutation<unknown, Error, DecideVars, DecideContext>({
-    mutationFn: (v) =>
-      dashboardApi.createDecision({
-        site_id: v.siteId,
-        action: v.action,
-        title: v.title,
-        evidence_event_ids: v.evidenceEventIds,
-        client_decision_id: v.clientDecisionId,
-      }),
+    mutationFn: send,
     async onMutate(v) {
       // 1) Stop in-flight refetches from clobbering our optimistic write.
       await qc.cancelQueries({ queryKey: homeKey })
@@ -138,17 +178,21 @@ export function useDecide(date: string) {
       const prevHome = qc.getQueryData<OwnerHome>(homeKey)
       const prevDecisions = qc.getQueryData<Paginated<Decision>>(logKey)
 
-      // 3) Optimistically clear the exception + prepend it to the log.
-      if (prevHome) {
+      // 3) Clear a risk from the brief, and write the log row as recorded.
+      if (prevHome && v.target.type === 'risk') {
         qc.setQueryData<OwnerHome>(
           homeKey,
-          applyDecisionToHome(prevHome, v.siteId, v.riskKey),
+          applyDecisionToHome(prevHome, v.target.siteId, v.target.riskKey),
         )
       }
+      const row = recordedDecision(v, v.clientDecisionId)
       qc.setQueryData<Paginated<Decision>>(logKey, (cur) => {
-        const row = optimisticDecision(v)
         const items = cur?.items ?? []
-        return { items: [row, ...items], next_cursor: cur?.next_cursor ?? null }
+        const next =
+          v.target.type === 'decision'
+            ? items.map((d) => (d.id === row.id ? row : d))
+            : [row, ...items]
+        return { items: next, next_cursor: cur?.next_cursor ?? null }
       })
 
       return { prevHome, prevDecisions }
@@ -162,17 +206,12 @@ export function useDecide(date: string) {
     onSettled() {
       qc.invalidateQueries({ queryKey: homeKey })
       qc.invalidateQueries({ queryKey: logKey })
+      qc.invalidateQueries({ queryKey: ['approvals'] })
     },
   })
 
-  function decide(input: DecideInput, cb?: DecideCallbacks) {
-    mutation.mutate(
-      { ...input, clientDecisionId: newDecisionId() },
-      {
-        onError: () => cb?.onError?.(input),
-        onSuccess: () => cb?.onSuccess?.(input),
-      },
-    )
+  function decide(input: DecideInput): Promise<unknown> {
+    return mutation.mutateAsync({ ...input, clientDecisionId: newDecisionId() })
   }
 
   return { decide, isPending: mutation.isPending }

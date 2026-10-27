@@ -32,6 +32,7 @@ from app.common.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page, decode_cursor,
 from app.db import get_session
 from app.models import (
     Decision,
+    DecisionAudience,
     DecisionKind,
     DecisionState,
     User,
@@ -337,6 +338,38 @@ async def reject_decision(
     return await _action(
         decision_id, DecisionAction.reject, (body or DecisionResolveIn()).note, user, session
     )
+
+
+@router.post("/{decision_id}/hold", response_model=DecisionOut)
+async def hold_decision(
+    decision_id: UUID,
+    body: DecisionResolveIn | None = None,
+    user: User = Depends(_team_user),
+    session: AsyncSession = Depends(get_session),
+) -> DecisionOut:
+    """Put the payment behind an open money decision on hold (owner only).
+
+    The decision stays open and becomes a held payment (``hold_payment``), so
+    it reads "On hold" until the owner releases (approves) or rejects it.
+    Idempotent: holding a held payment changes nothing.
+    """
+    decision = await _get_in_scope(session, user, decision_id)
+    if user.role is not UserRole.owner:
+        raise _owner_only()
+    if decision.kind not in _OWNER_ONLY_KINDS or decision.audience is not DecisionAudience.internal:
+        raise AppError(409, "not_holdable", "Only a payment can be put on hold")
+    if decision.state in (DecisionState.resolved, DecisionState.rejected):
+        raise AppError(
+            409, "invalid_transition", f"Cannot hold a decision that is {decision.state.value}"
+        )
+    note = (body or DecisionResolveIn()).note
+    if decision.kind is not DecisionKind.hold_payment or note:
+        decision.kind = DecisionKind.hold_payment
+        if note:
+            decision.resolution_note = note
+        await session.commit()
+        await session.refresh(decision)
+    return _out(decision)
 
 
 # Contractor/assignee respond verbs → state-machine actions. ``confirm`` is the

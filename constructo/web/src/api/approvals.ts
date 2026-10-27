@@ -88,13 +88,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
     let detail = res.statusText
+    let code: string | undefined
     try {
       const body = await res.json()
       detail = body?.error?.message ?? body?.detail ?? body?.message ?? detail
+      code = typeof body?.error?.code === 'string' ? body.error.code : undefined
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, code)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -239,6 +241,23 @@ export const approvalsApi = {
       return applyMock(id, 'rejected')
     }
     return request<Decision>(`/api/v1/approvals/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note: note ?? null }),
+    })
+  },
+
+  /** Put the payment behind an open money decision on hold (owner only); it
+   *  stays open as a `hold_payment` ("On hold"). */
+  async hold(id: string, note?: string): Promise<Decision> {
+    if (USE_MOCKS) {
+      await delay()
+      const d = mockDecisions.find((x) => x.id === id)
+      if (!d) throw new ApiError(404, 'Decision not found')
+      d.kind = 'hold_payment'
+      d.updated_at = new Date().toISOString()
+      return { ...d }
+    }
+    return request<Decision>(`/api/v1/approvals/${id}/hold`, {
       method: 'POST',
       body: JSON.stringify({ note: note ?? null }),
     })

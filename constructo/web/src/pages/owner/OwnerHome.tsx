@@ -101,7 +101,12 @@ export function OwnerHome() {
           </>
         ) : (
           <div className="flex flex-col gap-8">
-            <NeedsYou date={date} selectedSiteId={selectedSiteId} siteNames={siteNames} />
+            <NeedsYou
+              date={date}
+              home={home.data}
+              selectedSiteId={selectedSiteId}
+              siteNames={siteNames}
+            />
             <ActivityStream selectedSiteId={selectedSiteId} onReply={handleReply} />
             <ProjectsStrip sites={sitesQ.data?.items ?? []} />
           </div>

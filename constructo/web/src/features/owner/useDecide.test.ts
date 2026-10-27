@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyDecisionToHome } from './useDecide'
+import { applyDecisionToHome, recordedDecision, type DecideInput } from './useDecide'
+import type { Decision } from '../../api/approvals'
 import type { OwnerHome } from '../../api/dashboard'
 
 function home(): OwnerHome {
@@ -66,5 +67,48 @@ describe('applyDecisionToHome', () => {
     applyDecisionToHome(h, 's1', 's1-0')
     expect(h.sites[0].top_risks).toHaveLength(2)
     expect(h.needs_attention_count).toBe(2)
+  })
+})
+
+describe('recordedDecision — the log row says exactly what the server records', () => {
+  const now = new Date('2026-07-03T10:00:00Z')
+  const risk = {
+    type: 'risk' as const,
+    siteId: 's1',
+    riskKey: 's1-0',
+    title: 'Invoice received with no matching delivery',
+    evidenceEventIds: ['ev-1'],
+  }
+  const pending: Decision = {
+    id: 'd1', company_id: 'co', site_id: 's1', kind: 'approval', title: 'ACC invoice',
+    detail: null, raised_by: null, assigned_to: null, state: 'pending', sla_due_at: null,
+    resolved_at: null, resolution_note: null, evidence_event_ids: [], created_at: '2026-07-01T00:00:00Z',
+    updated_at: '2026-07-01T00:00:00Z',
+  }
+  const rec = (input: DecideInput) => recordedDecision(input, 'cid-1', now)
+
+  it('approve on a risk is the owner\'s resolved approval', () => {
+    const row = rec({ target: risk, action: 'approve' })
+    expect(row).toMatchObject({ id: 'cid-1', kind: 'approval', state: 'resolved', evidence_event_ids: ['ev-1'] })
+    expect(row.resolved_at).toBe(now.toISOString())
+  })
+
+  it('hold on a risk is an open held payment', () => {
+    expect(rec({ target: risk, action: 'hold' })).toMatchObject({ kind: 'hold_payment', state: 'pending', resolved_at: null })
+  })
+
+  it('assign on a risk is an open ask for the chosen person', () => {
+    expect(rec({ target: risk, action: 'assign', assignee: { id: 'u-ravi', name: 'Ravi' } })).toMatchObject({
+      kind: 'generic', state: 'pending', assigned_to: 'u-ravi',
+    })
+  })
+
+  it('acts on an existing decision in place', () => {
+    const target = { type: 'decision' as const, decision: pending }
+    expect(rec({ target, action: 'approve' })).toMatchObject({ id: 'd1', kind: 'approval', state: 'resolved' })
+    expect(rec({ target, action: 'hold' })).toMatchObject({ id: 'd1', kind: 'hold_payment', state: 'pending' })
+    expect(rec({ target, action: 'assign', assignee: { id: 'u2', name: 'A' } })).toMatchObject({
+      id: 'd1', kind: 'approval', state: 'pending', assigned_to: 'u2',
+    })
   })
 })

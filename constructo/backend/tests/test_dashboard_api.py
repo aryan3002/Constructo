@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from app.auth.jwt import create_access_token
 from app.brief.generate import build_brief
 from app.extraction.llm import FakeLLMClient
-from app.models import Decision, Site, SiteBaseline, SiteEventModel, UserRole
+from app.models import Company, Decision, Site, SiteBaseline, SiteEventModel, UserRole
 
 DAY = date(2026, 5, 28)
 
@@ -143,8 +143,12 @@ async def test_create_decision_from_approve_chip(client, db_session, owner):
     assert resp.status_code == 201
     body = resp.json()
     assert body["kind"] == "approval"
-    assert body["state"] == "pending"
+    # The owner approved it there and then: recorded resolved, not pending.
+    assert body["state"] == "resolved"
     assert body["evidence_event_ids"] == [str(ev.id)]
+    row = await db_session.get(Decision, body["id"])
+    await db_session.refresh(row)
+    assert row.resolved_at is not None
 
 
 async def test_create_decision_rejects_unknown_action(client, db_session, owner):
@@ -244,6 +248,147 @@ async def test_create_decision_without_client_id_still_creates_each_time(
     await client.post("/api/v1/dashboard/decisions", headers=auth(owner), json=payload)
     await client.post("/api/v1/dashboard/decisions", headers=auth(owner), json=payload)
     assert await _count_decisions(db_session, owner.company_id) == 2
+
+
+async def _pm(db_session, factory, owner):
+    company = await db_session.get(Company, owner.company_id)
+    return await factory.user(company=company, role=UserRole.pm, phone="+919811111112")
+
+
+async def test_approve_chip_is_owner_only(client, db_session, factory, owner):
+    pm = await _pm(db_session, factory, owner)
+    site = await _site(db_session, owner.company_id)
+    resp = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(pm),
+        json={"site_id": str(site.id), "action": "approve", "title": "Approve"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "owner_only"
+    assert await _count_decisions(db_session, owner.company_id) == 0
+
+
+async def test_hold_chip_stays_open_and_is_owner_only(client, db_session, factory, owner):
+    site = await _site(db_session, owner.company_id)
+    resp = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={"site_id": str(site.id), "action": "hold", "title": "Hold ACC invoice"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["kind"] == "hold_payment"
+    assert resp.json()["state"] == "pending"
+
+    pm = await _pm(db_session, factory, owner)
+    refused = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(pm),
+        json={"site_id": str(site.id), "action": "hold", "title": "Hold"},
+    )
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "owner_only"
+    assert await _count_decisions(db_session, owner.company_id) == 1
+
+
+async def test_assign_chip_works_for_a_pm_and_names_the_assignee(
+    client, db_session, factory, owner
+):
+    pm = await _pm(db_session, factory, owner)
+    site = await _site(db_session, owner.company_id)
+    company = await db_session.get(Company, owner.company_id)
+    sup = await factory.user(company=company, role=UserRole.supervisor, phone="+919811111113")
+    resp = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(pm),
+        json={
+            "site_id": str(site.id),
+            "action": "assign",
+            "title": "Attendance 3 of 10",
+            "assigned_to": str(sup.id),
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["kind"] == "generic"
+    assert body["state"] == "pending"
+    assert body["assigned_to"] == str(sup.id)
+
+
+async def test_assign_chip_needs_an_assignee_in_the_company(
+    client, db_session, factory, owner
+):
+    site = await _site(db_session, owner.company_id)
+    missing = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={"site_id": str(site.id), "action": "assign", "title": "x"},
+    )
+    assert missing.status_code == 422
+    assert missing.json()["error"]["code"] == "assignee_required"
+
+    other = await factory.company(name="Other Co")
+    stranger = await factory.user(company=other, role=UserRole.pm, phone="+919811111119")
+    foreign = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={
+            "site_id": str(site.id),
+            "action": "assign",
+            "title": "x",
+            "assigned_to": str(stranger.id),
+        },
+    )
+    assert foreign.status_code == 404
+    assert await _count_decisions(db_session, owner.company_id) == 0
+
+
+async def test_a_handled_risk_leaves_home(client, db_session, owner):
+    site = await _site(db_session, owner.company_id)
+    db_session.add(SiteBaseline(site_id=site.id, expected_daily_headcount=10))
+    att = await _add_event(db_session, site.id, "attendance", fields={"headcount": 3})
+    inv = await _add_event(db_session, site.id, "invoice_received", fields={"vendor": "ACC"})
+
+    url = f"/api/v1/dashboard/home?date={DAY.isoformat()}"
+    before = (await client.get(url, headers=auth(owner))).json()
+    kinds = {r["kind"] for r in before["sites"][0]["top_risks"]}
+    assert {"labor_shortfall", "unverified_invoice"} <= kinds
+
+    held = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={
+            "site_id": str(site.id),
+            "action": "hold",
+            "title": "Invoice received with no matching delivery",
+            "evidence_event_ids": [str(inv.id)],
+            "client_decision_id": "hold-1",
+        },
+    )
+    assert held.status_code == 201
+
+    after = (await client.get(url, headers=auth(owner))).json()
+    risks = after["sites"][0]["top_risks"]
+    assert {r["kind"] for r in risks} == {"labor_shortfall"}
+    assert all(str(inv.id) not in r["evidence_event_ids"] for r in risks)
+    assert after["needs_attention_count"] == before["needs_attention_count"] - 1
+    # The untouched attendance risk is still offered.
+    assert str(att.id) in risks[0]["evidence_event_ids"]
+
+    # A repeat of the same tap (reload, double click) records nothing new.
+    again = await client.post(
+        "/api/v1/dashboard/decisions",
+        headers=auth(owner),
+        json={
+            "site_id": str(site.id),
+            "action": "hold",
+            "title": "Invoice received with no matching delivery",
+            "evidence_event_ids": [str(inv.id)],
+            "client_decision_id": "hold-1",
+        },
+    )
+    assert again.status_code == 200
+    assert again.json()["id"] == held.json()["id"]
+    assert await _count_decisions(db_session, owner.company_id) == 1
 
 
 async def test_brief_rendering_is_exceptions_first_and_network_free(db_session, factory):

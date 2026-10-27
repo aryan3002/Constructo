@@ -24,6 +24,20 @@ vi.mock('../../api/approvals', () => ({
   },
 }))
 
+vi.mock('../../api/auth', async () => {
+  const actual = await vi.importActual<typeof import('../../api/auth')>('../../api/auth')
+  return {
+    ...actual,
+    authApi: {
+      ...actual.authApi,
+      listTeam: () =>
+        Promise.resolve([
+          { id: 'u-ravi', company_id: 'co', name: 'Ravi', phone: '+91', role: 'supervisor', is_active: true },
+        ]),
+    },
+  }
+})
+
 const { Today } = await import('./Today')
 
 function site(over: Partial<SiteCard> = {}): SiteCard {
@@ -109,38 +123,28 @@ describe('PM Today', () => {
     createDecision.mockResolvedValue({})
   })
 
-  it('proposes money exceptions to the owner — never an Approve chip', async () => {
+  it('shows the owner-only note on money exceptions — never an Approve or Hold chip', async () => {
     getHome.mockResolvedValue(home([MONEY_SITE]))
     renderToday('pm')
     expect(
-      await screen.findByRole('button', { name: /propose to owner/i }),
+      await screen.findByText(/only the owner can approve this/i),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /approve/i }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^hold$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /propose/i })).not.toBeInTheDocument()
   })
 
-  it('lets the PM assign operational exceptions', async () => {
+  it('lets the PM assign an exception to a chosen teammate', async () => {
     getHome.mockResolvedValue(home([OPS_SITE]))
     renderToday('pm')
     const assign = await screen.findByRole('button', { name: /assign/i })
     await userEvent.click(assign)
+    await userEvent.click(await screen.findByRole('button', { name: /ravi/i }))
     await waitFor(() => expect(createDecision).toHaveBeenCalled())
     expect(createDecision.mock.calls[0][0]).toMatchObject({
       site_id: 's2',
       action: 'assign',
-    })
-  })
-
-  it('routes a money proposal through the propose (approve) action', async () => {
-    getHome.mockResolvedValue(home([MONEY_SITE]))
-    renderToday('pm')
-    const propose = await screen.findByRole('button', { name: /propose to owner/i })
-    await userEvent.click(propose)
-    await waitFor(() => expect(createDecision).toHaveBeenCalled())
-    expect(createDecision.mock.calls[0][0]).toMatchObject({
-      site_id: 's1',
-      action: 'approve',
+      assigned_to: 'u-ravi',
     })
   })
 

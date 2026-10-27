@@ -1,34 +1,52 @@
-// Col-1 of the activity-first OwnerHome: "Needs you" — ONLY the genuine pending
-// owner decisions (kind approval / hold_payment) read straight from the
-// decisions query (qk.decisions() → approvalsApi.list()). Each row carries the
-// existing capability-gated Approve/Hold/Assign chips wired to useDecide's
-// optimistic path. Honest empty: "Nothing needs a decision right now."
+// Col-1 of the activity-first OwnerHome: "Needs you" — what is waiting on the
+// owner's call:
+//   - pending approvals from the decisions ledger (qk.decisions()); a chip acts
+//     on that decision itself (Approve resolves it, Hold keeps it open as a
+//     held payment, Assign names who handles it);
+//   - today's site risks from the home brief that no decision covers yet; a
+//     chip records the decision that handles it, so it doesn't come back.
+// Money chips are the owner's, behind a confirm and a 5-second undo; a PM sees
+// the owner-only note instead. Honest empty: "Nothing needs a decision right now."
 //
-// This replaces the old brief/SiteCard-driven NeedsYou. Homeowner questions and
-// site-health flags are NO LONGER decisions here — they live in the activity
-// stream / Requests surface.
-import { useMemo, useState, type ReactNode } from 'react'
+// Held payments and homeowner questions are not asked again here: they read
+// "On hold" in the Decision Log, and questions live in Requests / Approvals.
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { approvalsApi, type Decision } from '../../api/approvals'
+import type { DashRisk, OwnerHome } from '../../api/dashboard'
 import { qk } from '../../api/queryKeys'
-import { useDecide, type DecideInput } from './useDecide'
 import { DecisionLog } from './DecisionLog'
 import { useCan } from '../../auth/useCan'
 import { useT, type TFunction } from '../../i18n'
 import { Body, Mono, StatusPill, StatusDot, type Status } from '../../ui'
-import { CheckIcon, PauseIcon, UserPlusIcon } from '../../ui/icons'
 import { Spinner } from '../../components/states'
-import type { TranslationKey } from '../../i18n'
+import { ChipRow, PendingUndoBar, useChipActions, type ChipSet } from './DecisionChips'
+import { usePendingHiddenIds } from './pendingDecisions'
 
-const ACTION_LABEL: Record<'approve' | 'hold' | 'assign', TranslationKey> = {
-  approve: 'action.approve',
-  hold: 'action.hold',
-  assign: 'action.assign',
+/** Risk kinds that are about money: Approve/Hold are offered (owner only). */
+export const MONEY_RISK_KINDS = new Set(['unverified_invoice', 'pending_approval'])
+
+const OPEN_STATES = new Set<Decision['state']>(['pending', 'acknowledged', 'escalated'])
+
+/** An open approval the builder decides (never a held payment or a question). */
+export function isOwnerDecision(d: Decision): boolean {
+  return d.kind === 'approval' && OPEN_STATES.has(d.state)
 }
 
-/** The only decision kinds the owner actually decides here. */
-function isOwnerDecision(d: Decision): boolean {
-  return d.state === 'pending' && (d.kind === 'approval' || d.kind === 'hold_payment')
+/** The chips a row offers for this viewer. */
+export function chipsFor(
+  row: { type: 'decision' } | { type: 'risk'; kind: string },
+  canApprove: boolean,
+): ChipSet {
+  const money = row.type === 'decision' || MONEY_RISK_KINDS.has(row.kind)
+  if (row.type === 'decision') {
+    // Every chip on a money decision is the owner's (assign included, S9).
+    return canApprove ? { approve: true, hold: true, assign: true } : { ownerOnly: true }
+  }
+  if (!money) return { assign: true }
+  return canApprove
+    ? { approve: true, hold: true, assign: true }
+    : { ownerOnly: true, assign: true }
 }
 
 function relativeTime(iso: string, t: TFunction): string {
@@ -44,57 +62,55 @@ function relativeTime(iso: string, t: TFunction): string {
   return t('activity.rel.days_ago', { n: days })
 }
 
+type Row =
+  | { type: 'decision'; key: string; decision: Decision }
+  | { type: 'risk'; key: string; siteId: string; risk: DashRisk }
+
 export function NeedsYou({
   date,
+  home,
   selectedSiteId,
   siteNames,
 }: {
   date: string
+  /** The home brief whose open risks are listed after the approvals. */
+  home?: OwnerHome
   selectedSiteId: string | null
   /** site_id → display name, so a card reads "Tower B" not a UUID. */
   siteNames: Record<string, string>
 }) {
   const t = useT()
   const canApprove = useCan('approve_money')
-  const { decide } = useDecide(date)
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
-  // Locally-hidden ids so an actioned card vanishes instantly (honest optimism);
-  // the useDecide onSettled refetch reconciles server truth.
-  const [actioned, setActioned] = useState<Set<string>>(() => new Set())
+  const { act, dialogs } = useChipActions(date, (o) =>
+    setToast({ status: o.status, msg: o.message }),
+  )
+  // Rows whose money action is waiting in its undo window.
+  const hidden = usePendingHiddenIds()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: qk.decisions(),
     queryFn: () => approvalsApi.list(),
   })
 
-  const pending = useMemo(() => {
-    const all = (data?.items ?? []).filter(isOwnerDecision).filter((d) => !actioned.has(d.id))
-    return selectedSiteId ? all.filter((d) => d.site_id === selectedSiteId) : all
-  }, [data?.items, selectedSiteId, actioned])
-
-  function act(d: Decision, action: DecideInput['action']) {
-    const siteName = (d.site_id && siteNames[d.site_id]) || ''
-    const input: DecideInput = {
-      siteId: d.site_id ?? '',
-      siteName,
-      riskKey: d.id,
-      action,
-      title: d.title,
-      evidenceEventIds: d.evidence_event_ids,
-    }
-    decide(input, {
-      onSuccess: () => {
-        setActioned((prev) => new Set(prev).add(d.id))
-        setToast({
-          status: 'ok',
-          msg: canApprove
-            ? t('owner.home.action_done', { action: t(ACTION_LABEL[action]), site: siteName })
-            : t('owner.needs.proposed', { site: siteName }),
-        })
-      },
-      onError: () => setToast({ status: 'risk', msg: t('owner.home.action_failed') }),
-    })
-  }
+  const rows = useMemo<Row[]>(() => {
+    const inSite = (siteId: string | null) => !selectedSiteId || siteId === selectedSiteId
+    const decisions: Row[] = (data?.items ?? [])
+      .filter(isOwnerDecision)
+      .filter((d) => inSite(d.site_id))
+      .map((d) => ({ type: 'decision', key: d.id, decision: d }))
+    const risks: Row[] = (home?.sites ?? [])
+      .filter((s) => inSite(s.site_id))
+      .flatMap((s) =>
+        s.top_risks.map((risk, i) => ({
+          type: 'risk' as const,
+          key: `${s.site_id}-${i}`,
+          siteId: s.site_id,
+          risk,
+        })),
+      )
+    return [...decisions, ...risks].filter((r) => !hidden.has(r.key))
+  }, [data?.items, home?.sites, selectedSiteId, hidden])
 
   return (
     <section aria-labelledby="owner-needs-heading" className="flex flex-col gap-4">
@@ -102,10 +118,12 @@ export function NeedsYou({
         <h2 id="owner-needs-heading" className="font-display text-h1 font-bold text-text">
           {t('owner.needs.title')}
         </h2>
-        {pending.length > 0 ? (
-          <StatusPill status="risk" label={t('owner.needs.count', { n: pending.length })} />
+        {rows.length > 0 ? (
+          <StatusPill status="risk" label={t('owner.needs.count', { n: rows.length })} />
         ) : null}
       </header>
+
+      <PendingUndoBar />
 
       {toast ? (
         <p role="status" aria-live="polite">
@@ -119,41 +137,58 @@ export function NeedsYou({
         <section className="rounded-sheet border border-line bg-card p-6 text-center shadow-card">
           <StatusPill status="warn" label={t('owner.home.error')} />
         </section>
-      ) : pending.length === 0 ? (
+      ) : rows.length === 0 ? (
         <section className="rounded-sheet border border-line bg-card p-6 text-center shadow-card">
           <StatusPill status="ok" label={t('owner.needs.empty_clean')} />
         </section>
       ) : (
         <ul className="flex flex-col gap-3">
-          {pending.map((d) => {
-            const site = d.site_id ? siteNames[d.site_id] : null
+          {rows.map((row) => {
+            const siteId = row.type === 'decision' ? row.decision.site_id : row.siteId
+            const site = (siteId && siteNames[siteId]) || ''
+            const title = row.type === 'decision' ? row.decision.title : row.risk.message
+            const status: Status =
+              row.type === 'decision' ? 'risk' : ((row.risk.status as Status) ?? 'warn')
+            const chips = chipsFor(
+              row.type === 'decision' ? row : { type: 'risk', kind: row.risk.kind },
+              canApprove,
+            )
             return (
-              <li
-                key={d.id}
-                className="rounded-card border border-line bg-card p-3 shadow-card"
-              >
+              <li key={row.key} className="rounded-card border border-line bg-card p-3 shadow-card">
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5">
-                    <StatusDot status={d.kind === 'hold_payment' ? 'warn' : 'risk'} />
+                    <StatusDot status={status} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <Body className="font-semibold text-text">{d.title}</Body>
+                    <Body className="font-semibold text-text">{title}</Body>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 font-body text-micro text-text-mute">
                       {site ? <span className="truncate">{site}</span> : null}
-                      <Mono className="text-micro text-text-mute">
-                        {relativeTime(d.created_at, t)}
-                      </Mono>
+                      {row.type === 'decision' ? (
+                        <Mono className="text-micro text-text-mute">
+                          {relativeTime(row.decision.created_at, t)}
+                        </Mono>
+                      ) : null}
                     </p>
                   </div>
                 </div>
-                <div className="mt-2 flex justify-end">
-                  <DecisionChips
-                    canApprove={canApprove}
-                    money={d.kind === 'approval'}
-                    onApprove={() => act(d, 'approve')}
-                    onHold={() => act(d, 'hold')}
-                    onAssign={() => act(d, 'assign')}
-                    onPropose={() => act(d, 'approve')}
+                <div className="mt-2">
+                  <ChipRow
+                    chips={chips}
+                    onAct={(action) =>
+                      act(
+                        row.type === 'decision'
+                          ? { type: 'decision', decision: row.decision }
+                          : {
+                              type: 'risk',
+                              siteId: row.siteId,
+                              riskKey: row.key,
+                              title: row.risk.message,
+                              evidenceEventIds: row.risk.evidence_event_ids,
+                            },
+                        action,
+                        site,
+                      )
+                    }
                   />
                 </div>
               </li>
@@ -162,84 +197,8 @@ export function NeedsYou({
         </ul>
       )}
 
+      {dialogs}
       <DecisionLog siteNames={siteNames} />
     </section>
-  )
-}
-
-/** Capability-gated chip cluster — owner acts, everyone else proposes. */
-function DecisionChips({
-  canApprove,
-  money,
-  onApprove,
-  onHold,
-  onAssign,
-  onPropose,
-}: {
-  canApprove: boolean
-  money: boolean
-  onApprove: () => void
-  onHold: () => void
-  onAssign: () => void
-  onPropose: () => void
-}) {
-  const t = useT()
-  if (!canApprove) {
-    return (
-      <button
-        type="button"
-        onClick={onPropose}
-        className="inline-flex min-h-tap items-center gap-1.5 rounded-pill border border-brand/50 bg-card px-3 font-body text-small font-semibold text-brand-text cstk-animate transition hover:bg-brand/10 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-card"
-      >
-        {t('owner.needs.propose')} <span aria-hidden>→</span>
-      </button>
-    )
-  }
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
-      <Chip
-        onClick={onApprove}
-        label={money ? t('owner.needs.approve_money') : t('action.approve')}
-        cls="border-ok/40 text-ok hover:bg-ok/10 active:bg-ok/15"
-        Icon={CheckIcon}
-      />
-      <Chip
-        onClick={onHold}
-        label={t('action.hold')}
-        cls="border-warn/40 text-warn hover:bg-warn/10 active:bg-warn/15"
-        Icon={PauseIcon}
-      />
-      <Chip
-        onClick={onAssign}
-        label={t('action.assign')}
-        cls="border-info/40 text-info hover:bg-info/10 active:bg-info/15"
-        Icon={UserPlusIcon}
-      />
-    </div>
-  )
-}
-
-function Chip({
-  onClick,
-  label,
-  cls,
-  Icon,
-}: {
-  onClick: () => void
-  label: string
-  cls: string
-  Icon: (p: { title?: string }) => ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex min-h-tap items-center gap-1.5 rounded-pill border bg-card px-3 font-body text-small font-semibold cstk-animate transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-card ${cls}`}
-    >
-      <span className="text-[1.05em] leading-none" aria-hidden>
-        <Icon title={label} />
-      </span>
-      {label}
-    </button>
   )
 }

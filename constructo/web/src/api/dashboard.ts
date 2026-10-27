@@ -89,9 +89,8 @@ export interface CreateDecisionRequest {
    * owner action (e.g. the chip + the mirrored WhatsApp action) reconciles to
    * "already actioned" instead of double-acting.
    *
-   * KNOWN GAP (W1): the backend does not yet persist or de-dupe on this field,
-   * so true idempotency is NOT in force — see the W1 wave notes / PR. We send it
-   * anyway so the client seam is ready the moment the server lands it.
+   * The server stores it per company and answers a repeat with the row it
+   * already recorded (200), so a double tap or a replay never adds a second.
    */
   client_decision_id?: string
 }
@@ -120,13 +119,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
     let detail = res.statusText
+    let code: string | undefined
     try {
       const body = await res.json()
-      detail = body?.detail ?? body?.message ?? detail
+      detail = body?.error?.message ?? body?.detail ?? body?.message ?? detail
+      code = typeof body?.error?.code === 'string' ? body.error.code : undefined
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, code)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -299,8 +300,13 @@ export const dashboardApi = {
         id: body.client_decision_id ?? 'mock-decision',
         company_id: 'mock-co',
         site_id: body.site_id ?? null,
-        kind: body.action,
-        state: 'pending',
+        kind:
+          body.action === 'approve'
+            ? 'approval'
+            : body.action === 'hold'
+              ? 'hold_payment'
+              : 'generic',
+        state: body.action === 'approve' ? 'resolved' : 'pending',
         title: body.title,
         detail: body.detail ?? null,
         assigned_to: body.assigned_to ?? null,

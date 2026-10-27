@@ -1,17 +1,18 @@
 // PM "Today" (W3.4) — the project manager's multi-site execution glance.
 //
 // Not the owner's cash brief: the PM scans every site that needs action and
-// either *assigns* the operational exceptions (their job) or *proposes* the
+// either *assigns* the operational exceptions (their job) or leaves the
 // money ones to the owner — never approves spend (WC4 / Invariant 4). The
-// propose-not-approve shape comes straight from the capability gate
+// owner-only note comes straight from the capability gate
 // (`useCan('approve_money')` is false for the PM), exactly as in NeedsYou.
 //
-// Money decisions (unverified invoice, pending approval) → "Propose to owner →".
-// Everything else → "Assign" (delegate to the team). Both ride the shared
-// optimistic `useDecide` hook so the card clears instantly and rolls back on
-// error. DPR-due weighting (vault 11/03 §5) is deferred until `getHome` exposes
-// a per-site DPR signal — we don't invent one.
-import { useMemo, useState, type ReactNode } from 'react'
+// Money exceptions (unverified invoice, pending approval) show the owner-only
+// note — the owner decides them on Home — plus "Assign" to delegate the
+// follow-up; everything else gets "Assign". The chips are shared with the
+// owner's Home (DecisionChips), so a recorded decision clears the risk.
+// DPR-due weighting (vault 11/03 §5) is deferred until `getHome` exposes a
+// per-site DPR signal — we don't invent one.
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { todayIso } from '../../api/config'
 import { qk } from '../../api/queryKeys'
@@ -23,7 +24,10 @@ import {
 } from '../../api/dashboard'
 import { useCan } from '../../auth/useCan'
 import { toEvidenceItems } from '../../lib/evidence'
-import { useDecide, type DecideInput } from '../owner/useDecide'
+import type { DecisionAction } from '../owner/useDecide'
+import { ChipRow, PendingUndoBar, useChipActions } from '../owner/DecisionChips'
+import { chipsFor } from '../owner/NeedsYou'
+import { usePendingHiddenIds } from '../owner/pendingDecisions'
 import { useT, type TranslationKey } from '../../i18n'
 import { formatDate } from '../../lib/format'
 import { ErrorState, Spinner } from '../../components/states'
@@ -38,10 +42,6 @@ import {
   type SiteSummary,
   type Status,
 } from '../../ui'
-import { CheckIcon, UserPlusIcon } from '../../ui/icons'
-
-/** Money-bearing exception kinds the PM must escalate, never action. */
-const MONEY_KINDS = new Set(['unverified_invoice', 'pending_approval'])
 
 const RISK_KIND_KEY: Record<string, TranslationKey> = {
   labor_shortfall: 'brief.risk.labor_shortfall',
@@ -145,40 +145,29 @@ function Glance({
 }) {
   const t = useT()
   const canApprove = useCan('approve_money')
-  const { decide } = useDecide(date)
   const [toast, setToast] = useState<{ status: Status; msg: string } | null>(null)
+  const { act, dialogs } = useChipActions(date, (o) =>
+    setToast({ status: o.status, msg: o.message }),
+  )
+  // Risks whose money action is waiting in its undo window.
+  const hidden = usePendingHiddenIds()
 
   const ranked = useMemo(() => {
     const all = rankExceptionSites(home.sites)
     return selectedSiteId ? all.filter((s) => s.site_id === selectedSiteId) : all
   }, [home.sites, selectedSiteId])
 
-  function act(
-    site: SiteCard,
-    risk: DashRisk,
-    riskKey: string,
-    action: DecideInput['action'],
-  ) {
-    decide(
+  function actOn(site: SiteCard, risk: DashRisk, riskKey: string, action: DecisionAction) {
+    act(
       {
+        type: 'risk',
         siteId: site.site_id,
-        siteName: site.name,
         riskKey,
-        action,
         title: risk.message,
         evidenceEventIds: risk.evidence_event_ids,
       },
-      {
-        onSuccess: () =>
-          setToast({
-            status: 'ok',
-            msg:
-              action === 'assign'
-                ? t('pm.today.assigned', { site: site.name })
-                : t('owner.needs.proposed', { site: site.name }),
-          }),
-        onError: () => setToast({ status: 'risk', msg: t('owner.home.action_failed') }),
-      },
+      action,
+      site.name,
     )
   }
 
@@ -195,6 +184,7 @@ function Glance({
 
   return (
     <section aria-label={t('pm.today.glance_label')} className="flex flex-col gap-4">
+      <PendingUndoBar />
       {toast ? (
         <p role="status" aria-live="polite">
           <StatusPill status={toast.status} label={toast.msg} />
@@ -208,27 +198,25 @@ function Glance({
               siteName={site.name}
               siteStatus={site.status as Status}
               meta={`${site.counts.attendance} present · ${site.counts.deliveries} del · ${site.counts.issues} issues`}
-              risks={toBriefRisks(site, t)}
+              risks={toBriefRisks(site, t).filter((r) => !hidden.has(r.id))}
               renderActions={(brisk) => {
                 const idx = Number(brisk.id.slice(site.site_id.length + 1))
                 const risk = site.top_risks[idx]
                 if (!risk) return null
-                if (MONEY_KINDS.has(risk.kind)) {
-                  // Money is gated on `approve_money` (false for the PM): the PM
-                  // sees "Propose to owner →", never Approve (WC4 / Invariant 4).
-                  return canApprove ? (
-                    <ApproveChip onClick={() => act(site, risk, brisk.id, 'approve')} />
-                  ) : (
-                    <ProposeChip onClick={() => act(site, risk, brisk.id, 'approve')} />
-                  )
-                }
-                // Operational exception → the PM's lever is delegation.
-                return <AssignChip onClick={() => act(site, risk, brisk.id, 'assign')} />
+                // Money is the owner's call (WC4 / Invariant 4): a PM sees the
+                // owner-only note and can still delegate the follow-up.
+                return (
+                  <ChipRow
+                    chips={chipsFor({ type: 'risk', kind: risk.kind }, canApprove)}
+                    onAct={(action) => actOn(site, risk, brisk.id, action)}
+                  />
+                )
               }}
             />
           </li>
         ))}
       </ul>
+      {dialogs}
     </section>
   )
 }
@@ -241,49 +229,4 @@ function toBriefRisks(site: SiteCard, t: ReturnType<typeof useT>): BriefRisk[] {
     detail: t(RISK_KIND_KEY[r.kind] ?? 'brief.risk.data_quality'),
     evidence: toEvidenceItems(r.evidence, r.evidence_event_ids, t),
   }))
-}
-
-function ApproveChip({ onClick }: { onClick: () => void }) {
-  const t = useT()
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex min-h-tap items-center gap-1.5 rounded-pill border border-ok/40 bg-card px-3 font-body text-small font-semibold text-ok cstk-animate transition hover:bg-ok/10 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok focus-visible:ring-offset-1 focus-visible:ring-offset-card"
-    >
-      <span className="text-[1.05em] leading-none" aria-hidden>
-        <CheckIcon title={t('owner.needs.approve_money')} />
-      </span>
-      {t('owner.needs.approve_money')}
-    </button>
-  )
-}
-
-function ProposeChip({ onClick }: { onClick: () => void }) {
-  const t = useT()
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex min-h-tap items-center gap-1.5 rounded-pill border border-brand/50 bg-card px-3 font-body text-small font-semibold text-brand-text cstk-animate transition hover:bg-brand/10 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-card"
-    >
-      {t('owner.needs.propose')} <span aria-hidden>→</span>
-    </button>
-  )
-}
-
-function AssignChip({ onClick }: { onClick: () => void }): ReactNode {
-  const t = useT()
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex min-h-tap items-center gap-1.5 rounded-pill border border-info/40 bg-card px-3 font-body text-small font-semibold text-info cstk-animate transition hover:bg-info/10 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-1 focus-visible:ring-offset-card"
-    >
-      <span className="text-[1.05em] leading-none" aria-hidden>
-        <UserPlusIcon title={t('action.assign')} />
-      </span>
-      {t('action.assign')} <span aria-hidden>→</span>
-    </button>
-  )
 }
