@@ -1,7 +1,7 @@
 # Handoff: Neev launch fixes, from Batch D onward
 
 Written 2026-10-27 for a fresh chat that picks up the pre-launch fix work, and
-updated the same day once Batch D was verified (Batch E is next).
+updated the same day as Batches D and E were verified (Batch F is next).
 Everything here is on branch `claude/bold-goodall-11ksuo` (pushed). There is no
 PR; don't open one unless the founder asks.
 
@@ -41,8 +41,8 @@ PR; don't open one unless the founder asks.
 | B | Mobile session and chat integrity: T1 outbox, T2 sign-out reset, T3 401 handling, S9 client push routing | Done, verified |
 | C | Backend security: S3 signup, S4 prod guard, S9 approvals, payment roles, T4 audience, rate limits, S6 deletion cleanup, server logout | Done, verified (details below) |
 | D | Homeowner wrong facts (T5) and lost captures (T6) | Done, verified (details below) |
-| E | Money guard rails (T8 client) and capture queue (T9) | **Next.** Presented to the founder; waiting for "go" |
-| F | Account deletion for all roles (S6 client) and store config | Pending |
+| E | Money guard rails (T8 client) and capture queue (T9) | Done, verified (details below) |
+| F | Account deletion for all roles (S6 client) and store config | **Next.** Presented to the founder; waiting for "go" and the inputs listed under Batch F |
 | G | Web console trust bugs | Pending |
 
 Outside the batches: the real SMS/WhatsApp OTP provider and the launch roles
@@ -111,27 +111,71 @@ plus 3 fixes from verification (`937ae92`, `5b8096b`, `1c581b6`).
 - The demo seeds overlap (two "now" stages, duplicate Foundation and Handover).
 - An unnamed member shows as "—" on Members; the role line above it still says who they are.
 
-## Batch E: what was presented (awaiting "go")
+### Batch E: what changed (needed for F–G)
 
-**Money approvals get guard rails, and site captures can't be lost or doubled.**
-Contractor side of the mobile app, the web approve buttons, and a small backend
-change for duplicate captures. The server role checks for money were done in C.
+Run in session `session_01UneWbgAurSR8ZgfTK4kVhy` (12 commits, `7838703`..`1c03547`). Verification needed no code fixes.
 
-**Money (T8 client, plus the C follow-ups)**
-1. "Approve all" on the owner's Approvals screen posts `batch/approve`, but the server only accepts `resolve`, so it has always failed with 422. Send `resolve` and say what was skipped (`owner/approvals.tsx:128`, `src/api/owner.ts:459`).
-2. Confirm before money moves: approve or reject on a payment hold or money approval asks once, showing the amount and what happens (`owner/brief.tsx:100` and the approvals screens).
-3. Undo: after confirming, the decision waits about 5 seconds with an Undo button before it's sent. Going to the background sends it at once. No server change.
-4. Failures are visible. Toasts always use the green success style today, even for errors (`src/ui/Toast.tsx`), and 35 of 50 contractor mutations have no error handling. Add an error style and one app-wide fallback for any mutation without its own error message.
-5. Non-owners aren't shown buttons that fail. For money decisions, PMs, supervisors and other roles see "Only the owner can approve this; it's waiting in their Brief" instead of Approve/Reject, on mobile and web. A 403 `owner_only` from a stale screen shows the same message.
+- **Approvals route fix.** `POST /approvals/batch/{action}` is now registered before the `/{decision_id}/...` routes. Before, `batch/reject`, `batch/acknowledge` and the app's `batch/approve` matched `/{decision_id}/reject|acknowledge|approve` and failed UUID validation with 422. The app's "Approve all" now sends `resolve`.
+- **Money confirm and undo (T8).**
+  - Kinds `approval` and `hold_payment` ask once (`MoneyConfirmSheet`, copy in `src/screens/owner/approvals.util.ts`).
+  - The action is then held for 5 s with Undo (`src/owner/pendingDecisions.ts`). It is sent early when the app leaves the foreground, and before sign-out revokes the token.
+  - Decided rows are hidden until sent or undone.
+- **Errors (T8).**
+  - `src/ui/Toast.tsx` has tones (success, error, info) and an optional action button.
+  - `src/ui/toastBus.ts` lets non-React code show toasts. Every role layout mounts a `ToastProvider`.
+  - The root `QueryClient`'s `MutationCache` shows an error toast for any mutation without its own `onError` or `meta: { errorHandled: true }`.
+  - `src/api/errorText.ts` maps errors to plain en/hi text.
+- **Non-owners (T8).** Web `/approvals` shows "Only the owner can approve this. It's waiting in their inbox." instead of the fake "Propose" toast, and reports batch `skipped`. Supervisors see "Only the owner can decide this." on money asks.
+- **Capture queue (T9).**
+  - One module-level drainer with a lock (`src/offline/useOutbox.ts`).
+  - Per-user queues `constructo.outbox.user.<id>` and a "Couldn't send" list `constructo.outbox.failed.<id>` (`src/offline/outbox.ts`). Sign-out keeps them; account deletion clears them.
+  - `client_capture_id` on `POST /api/v1/capture` is stored as `raw_messages.provider_message_id = "{user}:{id}"`, reusing `uq_raw_provider_message`, with no migration. A repeat answers 201 `status: "duplicate"`.
+  - Sites are cached per user (`src/offline/siteCache.ts`).
+- **Verified:**
+  - Test totals: backend 1794 passed, plus the known Pinterest failure; mobile 78 suites / 613 tests; web 137 files / 887 tests. Ruff, typecheck, web lint and build are clean.
+  - On screen:
+    - The owner confirm, undo and send. The server stays pending after Undo and is resolved after the window.
+    - A red error when a send fails, with the row coming back.
+    - Approve all with 3 items, 1 of them money.
+    - The supervisor and PM owner-only notes.
+    - "Couldn't send" with a 403 reason.
+    - The cached site with the API unreachable, and the offline message with no cache.
+  - Four simultaneous sends of one capture id gave one row.
 
-**Capture queue (T9)**
-6. One sender. Five screens each run their own drain (`useOutbox` in capture, task, tasks-asks, mukadam attendance, `SyncStatus`), so a reconnect can send the same item twice. One shared, locked sender, like the chat outbox fix in B.
-7. No doubles on retry. Each capture carries an id; the server records it and answers a repeat with the first result instead of filing it again.
-8. A queue per person. Sign-out deletes unsent captures today (B's shared-phone fix). Keep each person's queue under their own login instead: nothing is thrown away, and nothing goes out under someone else's login.
-9. Nothing dropped silently. Captures the server permanently refuses (too large, not assigned, invalid) go to a "Couldn't send" list with the reason, Retry and Delete.
-10. Offline start knows your site. The capture screen caches the user's sites, so opening it offline no longer says "No site assigned yet — ask your PM" (`supervisor/capture.tsx:141`).
+### Follow-ups found while verifying E (not yet assigned)
 
-Every fix needs a test, plus a walk through the owner and PM approve flows and an offline capture.
+- Sign-out waits for a money decision still in its undo window. Offline that can take about 15 s and then fail; the decision simply stays pending, but the owner may not see the failure toast while signing out.
+- A queued capture that hits a temporary server error while the phone is online waits for the next reconnect or capture before retrying (pre-existing).
+- The supervisor's task screen is still titled "Reply" on a money item they can't answer.
+- If the server is down the first time someone opens Capture (no cached sites), it says "You're offline" rather than "can't reach the server".
+- The web Approvals page hides "Approve selected" from PMs even for non-money items.
+
+## Batch F: what was presented (awaiting "go")
+
+**The app meets the App Store and Google Play rules for accounts, privacy and release.**
+
+**Account and deletion (S6 client)**
+1. One Account section in every role (owner, homeowner, site engineer, architect, accountant, PM, mukadam): language, privacy policy and terms, delete account, sign out. Today only `owner/more.tsx` and `(homeowner)/settings.tsx` can delete (`src/auth/useDeleteAccount.ts`).
+2. A public web page to delete your account (Google Play needs its URL): sign in with phone and code, then delete, using the same server deletion as the app.
+3. Deletion also scrubs the person's name from `raw_messages.raw` JSON and from extracted event text (C did sender names, photo comments and push tokens).
+
+**Privacy and consent (S7, S8)**
+4. Privacy policy and terms links at sign-in, in every Account section and on the web console. Only help text exists today (`src/auth/ui/GuideSheet.tsx`).
+5. A one-time AI consent screen saying what is sent to OpenAI/Azure, recorded on the server.
+6. Android: block `READ_MEDIA_IMAGES/VIDEO/AUDIO`, `ACCESS_MEDIA_LOCATION` and the old storage permissions; set `isAccessMediaLocationEnabled` to false (`mobile/app.json`). Save photos with write-only access.
+
+**Invited crew (C follow-up)**
+7. An invited staff number signs in directly, in the app or on the web, into the inviting company with the invited role. Web invite acceptance no longer sends `signup: true` and creates an empty company.
+
+**Release settings**
+8. `eas.json`: `autoIncrement` for production.
+9. `supportsTablet: false`.
+10. Release builds refuse to start without `EXPO_PUBLIC_API_BASE`: no `10.0.2.2` fallback (`src/api/config.ts`).
+11. `EXPO_PUBLIC_WEB_BASE` set for builds, so invite and vendor-confirm links open the web app.
+12. A one-colour Android notification icon (today `./assets/icon.png`).
+13. "Coming soon" placeholders (8 screens, including the drawing Approve/Comment stubs) are hidden from store builds, or turned into something that works today, e.g. "Message your builder".
+
+**Founder inputs:** the privacy-policy and terms URLs (and a check that the policy names OpenAI/Azure); what happens when someone declines AI consent; the web address for links (today `constructo-topaz.vercel.app`). Not blocking: store submission IDs, Sentry, the API's own domain, and a reviewer login, which depends on the OTP decision.
 
 ## Local environment recipe
 
