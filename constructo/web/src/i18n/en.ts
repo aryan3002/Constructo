@@ -459,6 +459,7 @@ export const en = {
   'requests.group.open': 'Open',
   'requests.group.resolved': 'Resolved',
   'requests.reply': 'Reply in chat',
+  'requests.photo_open': 'Open photo {n} in a new tab',
   'requests.status.sent': 'New',
   'requests.status.seen': 'Seen',
   'requests.status.in_progress': 'In progress',

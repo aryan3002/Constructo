@@ -34,7 +34,7 @@ function req(p: Partial<RequestOut>): RequestOut {
     id: 'r', site_id: 's', raised_by: 'ho', title: 't', detail: null,
     status: 'sent', sla_due_at: null,
     created_at: '2026-07-01T00:00:00Z', updated_at: '2026-07-01T00:00:00Z',
-    voice_url: null, ...p,
+    voice_url: null, photos: [], ...p,
   }
 }
 
@@ -96,6 +96,29 @@ describe('RequestsView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Reply in chat' }))
     expect(openHomeownerChannelMutate).toHaveBeenCalledWith('site-a')
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('shows attached photos as thumbnails that open the full image in a new tab', async () => {
+    listMock.mockResolvedValue([
+      req({
+        id: 'a', title: 'Leak', status: 'sent',
+        photos: [
+          { id: 'p1', url: 'https://cdn.example/p1.jpg?sig=1' },
+          { id: 'p2', url: 'https://cdn.example/p2.jpg?sig=2' },
+        ],
+      }),
+      req({ id: 'b', title: 'No photos', status: 'sent' }),
+    ])
+    renderView()
+    const first = await screen.findByRole('link', { name: 'Open photo 1 in a new tab' })
+    expect(first).toHaveAttribute('href', 'https://cdn.example/p1.jpg?sig=1')
+    expect(first).toHaveAttribute('target', '_blank')
+    expect(first).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    expect(first.querySelector('img')).toHaveAttribute('src', 'https://cdn.example/p1.jpg?sig=1')
+    expect(screen.getByRole('link', { name: 'Open photo 2 in a new tab' })).toHaveAttribute(
+      'href', 'https://cdn.example/p2.jpg?sig=2',
+    )
+    expect(screen.getAllByRole('link')).toHaveLength(2)
   })
 
   it('shows the error state when the list call rejects', async () => {

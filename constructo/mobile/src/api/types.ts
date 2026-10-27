@@ -408,6 +408,13 @@ export interface HomeownerRequest {
   updated_at: string
   /** Presigned GET URL for an attached voice note (null when there is none). */
   voice_url: string | null
+  /** Photos attached to the report, with presigned GET URLs. */
+  photos: RequestPhoto[]
+}
+
+export interface RequestPhoto {
+  id: string
+  url: string
 }
 
 /** Result of POST /homeowner/voice-notes — the stored key, a playback URL, and

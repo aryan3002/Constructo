@@ -437,6 +437,7 @@ export const hi: Record<TranslationKey, string> = {
   'requests.group.open': 'खुले',
   'requests.group.resolved': 'हल हो गए',
   'requests.reply': 'चैट में जवाब दें',
+  'requests.photo_open': 'फ़ोटो {n} नए टैब में खोलें',
   'requests.status.sent': 'नया',
   'requests.status.seen': 'देखा गया',
   'requests.status.in_progress': 'चल रहा है',

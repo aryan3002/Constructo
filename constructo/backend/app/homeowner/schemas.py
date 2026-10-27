@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import (
     ComponentStatus,
@@ -431,12 +431,25 @@ class ConsistencyCheckOut(BaseModel):
 # ---- requests & decisions --------------------------------------------------
 
 
+MAX_REQUEST_PHOTOS = 5
+
+
 class RequestCreateIn(BaseModel):
     site_id: UUID | None = None
     title: str = Field(min_length=1)
     detail: str | None = None
     # R2 key of a voice note uploaded via POST /homeowner/voice-notes.
     voice_key: str | None = None
+    # Ids of the caller's own visit photos (POST /homeowner/photos) to attach.
+    photo_ids: list[UUID] = Field(default_factory=list)
+
+    @field_validator("photo_ids")
+    @classmethod
+    def _dedupe_photo_ids(cls, v: list[UUID]) -> list[UUID]:
+        v = list(dict.fromkeys(v))
+        if len(v) > MAX_REQUEST_PHOTOS:
+            raise ValueError(f"at most {MAX_REQUEST_PHOTOS} photos")
+        return v
 
 
 class RequestStatusPatchIn(BaseModel):
@@ -480,6 +493,11 @@ class NotificationsOut(BaseModel):
     unread_count: int
 
 
+class RequestPhotoOut(BaseModel):
+    id: UUID
+    url: str
+
+
 class RequestOut(BaseModel):
     id: UUID
     site_id: UUID
@@ -492,6 +510,8 @@ class RequestOut(BaseModel):
     updated_at: datetime
     # Presigned GET URL for the attached voice note (None when there is none).
     voice_url: str | None = None
+    # Attached photos with presigned GET URLs.
+    photos: list[RequestPhotoOut] = Field(default_factory=list)
 
 
 class DecisionRespondIn(BaseModel):

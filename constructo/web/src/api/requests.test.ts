@@ -16,6 +16,7 @@ const sample = [
     status: 'sent', sla_due_at: '2026-07-06T00:00:00Z',
     created_at: '2026-07-03T09:00:00Z', updated_at: '2026-07-03T09:00:00Z',
     voice_url: null,
+    photos: [],
   },
 ]
 

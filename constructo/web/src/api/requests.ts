@@ -24,6 +24,13 @@ export interface RequestOut {
   created_at: string
   updated_at: string
   voice_url: string | null
+  /** Photos the homeowner attached to the report, with presigned GET URLs. */
+  photos: RequestPhoto[]
+}
+
+export interface RequestPhoto {
+  id: string
+  url: string
 }
 
 // ---- request helper (identical shape to approvals.ts) ---------------------
@@ -57,21 +64,21 @@ const mockRequests: RequestOut[] = [
     title: 'Leak under the kitchen sink', detail: 'Water pooling since Tuesday.',
     status: 'sent', sla_due_at: '2026-07-01T00:00:00Z',
     created_at: '2026-06-29T09:00:00Z', updated_at: '2026-06-29T09:00:00Z',
-    voice_url: null,
+    voice_url: null, photos: [],
   },
   {
     id: 'req-2', site_id: 'site-1', raised_by: 'ho-1',
     title: 'Please send a photo of the master bedroom', detail: null,
     status: 'in_progress', sla_due_at: null,
     created_at: '2026-07-02T11:20:00Z', updated_at: '2026-07-02T14:00:00Z',
-    voice_url: null,
+    voice_url: null, photos: [],
   },
   {
     id: 'req-3', site_id: 'site-1', raised_by: 'ho-1',
     title: 'Confirm the tile colour for the guest bath', detail: 'Went with the sand beige.',
     status: 'done', sla_due_at: null,
     created_at: '2026-06-20T08:00:00Z', updated_at: '2026-06-24T08:00:00Z',
-    voice_url: null,
+    voice_url: null, photos: [],
   },
 ]
 

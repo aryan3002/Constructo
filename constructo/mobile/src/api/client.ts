@@ -368,6 +368,8 @@ export const homeowner = {
     detail?: string
     site_id?: string
     voice_key?: string
+    /** Ids of the caller's own visit photos (from uploadVisitPhoto), max 5. */
+    photo_ids?: string[]
   }) =>
     request<HomeownerRequest>('/api/v1/homeowner/requests', {
       method: 'POST',

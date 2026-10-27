@@ -93,6 +93,7 @@ from app.homeowner.schemas import (
     ReferenceUploadOut,
     RequestCreateIn,
     RequestOut,
+    RequestPhotoOut,
     RequestStatusPatchIn,
     RoomFinishes,
     SelectionCreateIn,
@@ -2325,13 +2326,94 @@ async def resolve_design_conflict(
 # ---- requests --------------------------------------------------------------
 
 
-def _request_out(r: HomeownerRequest) -> RequestOut:
+def _request_out(
+    r: HomeownerRequest, photos: dict[UUID, list[RequestPhotoOut]] | None = None
+) -> RequestOut:
+    """Map a request; ``photos`` comes from :func:`_request_photos` (one query
+    per list) — use :func:`_requests_out` rather than calling this per row."""
     return RequestOut(
         id=r.id, site_id=r.site_id, raised_by=r.raised_by, title=r.title, detail=r.detail,
         status=r.status, sla_due_at=r.sla_due_at, created_at=r.created_at, updated_at=r.updated_at,
         # Resolve the bare R2 key to a short-lived presigned GET (mirrors photos).
         voice_url=get_storage().url_for(r.voice_key) if r.voice_key else None,
+        photos=(photos or {}).get(r.id, []),
     )
+
+
+async def _request_photos(
+    session: AsyncSession, rows: list[HomeownerRequest]
+) -> dict[UUID, list[RequestPhotoOut]]:
+    """Attached photos (presigned) for a list of requests, in ONE query.
+
+    A photo deleted since, or one that isn't on the request's own site, is
+    simply left out."""
+    wanted = {pid for r in rows for pid in (r.photo_ids or [])}
+    if not wanted:
+        return {}
+    photos = {
+        p.id: p
+        for p in (
+            await session.execute(
+                select(HomeownerVisitPhoto).where(HomeownerVisitPhoto.id.in_(wanted))
+            )
+        ).scalars().all()
+    }
+    storage = get_storage()
+    out: dict[UUID, list[RequestPhotoOut]] = {}
+    for r in rows:
+        items = []
+        for pid in r.photo_ids or []:
+            p = photos.get(pid)
+            if p is not None and p.site_id == r.site_id:
+                items.append(
+                    RequestPhotoOut(id=p.id, url=storage.url_for(p.storage_key) or p.storage_key)
+                )
+        out[r.id] = items
+    return out
+
+
+async def _requests_out(session: AsyncSession, rows: list[HomeownerRequest]) -> list[RequestOut]:
+    """Map requests with their photos loaded in one query (no N+1)."""
+    photos = await _request_photos(session, rows)
+    return [_request_out(r, photos) for r in rows]
+
+
+def _check_voice_key(sid: UUID, key: str | None) -> None:
+    """A voice key must be one minted by POST /voice-notes for THIS site —
+    otherwise any object in the bucket could come back as a signed link."""
+    if key is None:
+        return
+    prefix = f"homeowner/{sid}/voice/"
+    if not key.startswith(prefix) or ".." in key or len(key) == len(prefix):
+        raise AppError(422, "invalid_voice_key", "That voice note can't be attached")
+
+
+async def _check_request_photo_ids(
+    session: AsyncSession, user: User, sid: UUID, photo_ids: list[UUID]
+) -> None:
+    """Every photo must be a visit photo on this site uploaded by one of the
+    caller's own active memberships. One opaque error either way, so a caller
+    can't probe whether someone else's photo exists."""
+    if not photo_ids:
+        return
+    my_member_ids = select(HomeownerMember.id).where(
+        HomeownerMember.user_id == user.id,
+        HomeownerMember.site_id == sid,
+        HomeownerMember.status == MemberStatus.active,
+    )
+    found = set(
+        (
+            await session.execute(
+                select(HomeownerVisitPhoto.id).where(
+                    HomeownerVisitPhoto.id.in_(photo_ids),
+                    HomeownerVisitPhoto.site_id == sid,
+                    HomeownerVisitPhoto.member_id.in_(my_member_ids),
+                )
+            )
+        ).scalars().all()
+    )
+    if found != set(photo_ids):
+        raise AppError(422, "invalid_photo", "One or more photos can't be attached")
 
 
 @router.post("/requests", response_model=RequestOut, status_code=201)
@@ -2342,12 +2424,15 @@ async def create_request(
 ) -> RequestOut:
     """Raise a request/issue. Gets a default SLA so the one-nudge sweep can act."""
     sid = await resolve_site(session, user, site_id=body.site_id)
+    _check_voice_key(sid, body.voice_key)
+    await _check_request_photo_ids(session, user, sid, body.photo_ids)
     req = HomeownerRequest(
         site_id=sid,
         raised_by=user.id,
         title=body.title,
         detail=body.detail,
         voice_key=body.voice_key,
+        photo_ids=body.photo_ids,
         sla_due_at=datetime.now(UTC) + timedelta(days=DEFAULT_REQUEST_SLA_DAYS),
     )
     session.add(req)
@@ -2361,7 +2446,7 @@ async def create_request(
     await session.commit()
     await session.refresh(req)
     await _alert_site_leads(session, sid, user, req)
-    return _request_out(req)
+    return (await _requests_out(session, [req]))[0]
 
 
 async def _alert_site_leads(
@@ -2411,7 +2496,7 @@ async def list_requests(
             .order_by(HomeownerRequest.created_at.desc())
         )
     ).scalars().all()
-    return [_request_out(r) for r in rows]
+    return await _requests_out(session, list(rows))
 
 
 @router.patch("/requests/{request_id}", response_model=RequestOut)
@@ -2442,7 +2527,7 @@ async def update_request_status(
         f"\"{req.title}\" is now {body.status.value.replace('_', ' ')}.",
         data={"type": "request", "request_id": str(req.id), "status": body.status.value},
     )
-    return _request_out(req)
+    return (await _requests_out(session, [req]))[0]
 
 
 # ---- decisions -------------------------------------------------------------
@@ -2748,6 +2833,7 @@ async def flag_something(
 ) -> FlagOut:
     """Homeowner-initiated 'something looks off' → a builder handoff request."""
     sid = await resolve_site(session, user, body.site_id)
+    _check_voice_key(sid, body.voice_key)
     req = _new_handoff(
         sid, user.id,
         title="Homeowner flagged something",

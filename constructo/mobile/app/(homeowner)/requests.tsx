@@ -10,7 +10,7 @@
  * Route: (homeowner)/requests — registered `href: null` so the tab bar is
  * hidden (this is a pushed screen, not a tab).
  */
-import { View } from 'react-native'
+import { Image, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -49,6 +49,7 @@ interface Strings {
   raised: string
   loadError: string
   retry: string
+  photosAttached: (n: number) => string
 }
 
 const STR: Record<Lang, Strings> = {
@@ -63,6 +64,7 @@ const STR: Record<Lang, Strings> = {
     raised: 'Raised',
     loadError: 'Could not load requests. Please retry.',
     retry: 'Retry',
+    photosAttached: (n) => `${n} photo${n === 1 ? '' : 's'} attached`,
   },
   hi: {
     title: 'मेरे अनुरोध',
@@ -75,6 +77,7 @@ const STR: Record<Lang, Strings> = {
     raised: 'दर्ज किया',
     loadError: 'अनुरोध लोड नहीं हो सके। कृपया पुनः प्रयास करें।',
     retry: 'पुनः प्रयास',
+    photosAttached: (n) => `${n} फ़ोटो संलग्न`,
   },
 } as const
 
@@ -89,6 +92,34 @@ function formatDate(iso: string, lang: Lang): string {
   } catch {
     return d.toDateString()
   }
+}
+
+/** Small thumbnails of the photos attached to a report (T6). */
+function RequestThumbs({ req, label }: { req: HomeownerRequest; label: string }) {
+  const { theme } = useTheme()
+  const photos = req.photos ?? []
+  if (photos.length === 0) return null
+  return (
+    <View
+      accessible
+      accessibilityLabel={label}
+      style={{ flexDirection: 'row', gap: SPACE.xs, paddingLeft: 52, paddingBottom: SPACE.sm }}
+    >
+      {photos.map((p) => (
+        <Image
+          key={p.id}
+          source={{ uri: p.url }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: theme.radii.chip,
+            backgroundColor: theme.colors.paper,
+          }}
+          resizeMode="cover"
+        />
+      ))}
+    </View>
+  )
 }
 
 export default function RequestsScreen() {
@@ -168,8 +199,8 @@ export default function RequestsScreen() {
                   const sla = slaPromise(req, lang as Lang)
                   const subtitle = sla || `${t.raised} · ${formatDate(req.created_at, lang as Lang)}`
                   return (
+                    <View key={req.id}>
                     <ListRow
-                      key={req.id}
                       icon="message-square"
                       title={req.title}
                       subtitle={subtitle}
@@ -186,6 +217,8 @@ export default function RequestsScreen() {
                         />
                       }
                     />
+                    <RequestThumbs req={req} label={t.photosAttached(req.photos?.length ?? 0)} />
+                    </View>
                   )
                   })}
                 </Card>
@@ -211,8 +244,8 @@ export default function RequestsScreen() {
               <FadeInUp delay={80}>
                 <Card>
                   {resolved.map((req, idx) => (
+                  <View key={req.id}>
                   <ListRow
-                    key={req.id}
                     icon="check"
                     title={req.title}
                     subtitle={`${t.raised} · ${formatDate(req.created_at, lang as Lang)}`}
@@ -229,6 +262,8 @@ export default function RequestsScreen() {
                       />
                     }
                   />
+                  <RequestThumbs req={req} label={t.photosAttached(req.photos?.length ?? 0)} />
+                  </View>
                   ))}
                 </Card>
               </FadeInUp>

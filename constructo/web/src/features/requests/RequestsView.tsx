@@ -57,6 +57,22 @@ function RequestRow({
       <div className="min-w-0 flex-1">
         <Body as="span" className="block font-semibold !text-text">{r.title}</Body>
         {r.detail ? <Small className="mt-0.5 block">{r.detail}</Small> : null}
+        {r.photos?.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {r.photos.map((p, i) => (
+              <a
+                key={p.id}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t('requests.photo_open', { n: i + 1 })}
+                className="block overflow-hidden rounded-control border border-line"
+              >
+                <img src={p.url} alt="" className="h-14 w-14 object-cover" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        ) : null}
         <Small className="mt-1 block !text-text-mute">
           {r.sla_due_at
             ? t('requests.overdue_since', { when: new Date(r.sla_due_at).toLocaleDateString() })

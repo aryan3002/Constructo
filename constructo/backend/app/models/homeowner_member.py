@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -116,6 +116,11 @@ class HomeownerRequest(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Optional voice note — the R2 object key (audio); served as a presigned URL.
     voice_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The caller's own visit photos attached to the report (T6); served as
+    # presigned URLs on RequestOut.photos.
+    photo_ids: Mapped[list[UUID]] = mapped_column(
+        ARRAY(PgUUID(as_uuid=True)), nullable=False, default=list, server_default="{}"
+    )
     status: Mapped[HomeownerRequestStatus] = mapped_column(
         SAEnum(HomeownerRequestStatus, name="homeowner_request_status"),
         nullable=False,

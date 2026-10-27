@@ -9,7 +9,8 @@
  *
  * Real API calls:
  *   - `homeowner.uploadVisitPhoto(file: UploadFile, caption?, siteId?)` → `Photo`
- *   - `homeowner.createRequest({ title, detail?, site_id? })` → `HomeownerRequest`
+ *   - `homeowner.createRequest({ title, detail?, voice_key?, photo_ids? })` → `HomeownerRequest`
+ *     (the ids of the photos that actually uploaded are attached to the request)
  *
  * Route: (homeowner)/issue — registered `href: null` in _layout.tsx.
  */
@@ -52,6 +53,7 @@ import {
   useToast,
 } from '../../src/ui'
 import { buildRequestDetail, ROOM_PRESETS, URGENCY_PRESETS, type Urgency } from '../../src/screens/requests.util'
+import { sendIssueReport } from '../../src/screens/homeowner/issue_photos.util'
 
 type Lang = 'en' | 'hi'
 type Step = 1 | 2
@@ -88,7 +90,6 @@ interface Strings {
   submitting: string
   titleRequired: string
   submitError: string
-  uploadError: string
   successToast: string
 }
 
@@ -122,7 +123,6 @@ const STR: Record<Lang, Strings> = {
     submitting: 'Sending…',
     titleRequired: 'Please add a short title first.',
     submitError: 'Could not send. Please try again.',
-    uploadError: 'Photo upload failed — issue sent without photos.',
     successToast: 'Request sent to your team',
   },
   hi: {
@@ -154,7 +154,6 @@ const STR: Record<Lang, Strings> = {
     submitting: 'भेजा जा रहा है…',
     titleRequired: 'कृपया पहले एक छोटा शीर्षक जोड़ें।',
     submitError: 'भेजा नहीं जा सका। कृपया पुनः प्रयास करें।',
-    uploadError: 'फ़ोटो अपलोड नहीं हुई — समस्या बिना फ़ोटो के भेजी गई।',
     successToast: 'आपकी टीम को अनुरोध भेजा गया',
   },
 } as const
@@ -316,43 +315,40 @@ export default function IssueScreen() {
         roomKey && roomKey !== 'other'
           ? ROOM_PRESETS.find((r) => r.key === roomKey)?.en
           : undefined
-      let uploadedCount = 0
-      if (photos.length > 0) {
-        try {
-          await Promise.all(
-            photos.map((p) =>
-              homeowner.uploadVisitPhoto(
-                { uri: p.uri, name: p.name, type: p.type } satisfies UploadFile,
-                undefined,
-                roomTag,
-              ),
-            ),
-          )
-          uploadedCount = photos.length
-        } catch {
-          // Upload failed — issue sent anyway, warning via toast.
-          toast(t.uploadError, 'alert-circle')
-        }
-      }
-
-      // Step 2: build detail string (rooms + urgency + photo count) via shared util.
-      const detail = buildRequestDetail({
-        detail: detailText,
-        roomKey,
-        urgency,
-        photoCount: uploadedCount,
+      // Each photo uploads on its own; the ones that made it are attached to
+      // the request (photo_ids) and the detail counts only those (T6).
+      return sendIssueReport({
+        photos,
+        upload: (p) =>
+          homeowner.uploadVisitPhoto(
+            { uri: p.uri, name: p.name, type: p.type } satisfies UploadFile,
+            undefined,
+            roomTag,
+          ),
+        // Step 2: build detail string (rooms + urgency + photo count) via shared util.
+        buildDetail: (attached) =>
+          buildRequestDetail({
+            detail: detailText,
+            roomKey,
+            urgency,
+            photoCount: attached,
+            lang: lang as 'en' | 'hi',
+          }),
+        send: ({ detail, photo_ids }) =>
+          homeowner.createRequest({
+            title: titleText.trim(),
+            detail,
+            voice_key: voiceKey ?? undefined,
+            photo_ids,
+          }),
         lang: lang as 'en' | 'hi',
       })
-
-      return homeowner.createRequest({
-        title: titleText.trim(),
-        detail,
-        voice_key: voiceKey ?? undefined,
-      })
     },
-    onSuccess: () => {
+    onSuccess: ({ warning }) => {
       void qc.invalidateQueries({ queryKey: ['homeowner', 'requests'] })
-      toast(t.successToast)
+      // A partial photo failure is said out loud, never swallowed.
+      if (warning) toast(warning, 'alert-circle')
+      else toast(t.successToast)
       // Land on "My reports" so the homeowner SEES the report arrived and can
       // track its status — instead of bouncing back to the photo (the reported
       // "I don't see it anywhere after sending"). replace() avoids a dangling
