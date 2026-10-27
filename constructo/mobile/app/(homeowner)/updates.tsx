@@ -70,6 +70,7 @@ import {
   milestoneSchedule,
   schedulePill,
   scheduleStatus,
+  targetHandoverOn,
 } from '../../src/screens/homeowner/schedule.util'
 
 // ---- localised copy ----
@@ -415,21 +416,23 @@ function MilestonesCard({
   const doneCount = sorted.filter((m) => m.status === 'done').length
   const upcomingCount = sorted.filter((m) => m.status === 'upcoming').length
   const nowM = sorted.find((m) => m.status === 'now')
-  // Target handover = last milestone's expected_on
+  // Last stage — names the end of the strip.
   const handoverM = sorted[sorted.length - 1]
-  const handoverLabel = handoverM ? shortDate(handoverM.expected_on, lang) : null
 
-  // Same schedule rule as Home (T5); shares the Property tab's cache key.
+  // Same schedule rule and the same target handover date as Home (T5), so the
+  // label and the pill always judge by one date; shares the Property tab's
+  // cache key.
   const propertyQ = useQuery({
     queryKey: ['homeowner', 'property'],
     queryFn: () => homeowner.property(),
   })
+  const handoverOn = propertyQ.isLoading
+    ? null
+    : targetHandoverOn(propertyQ.data?.expected_handover_on, sorted)
+  const handoverLabel = handoverOn ? shortDate(handoverOn, lang) : null
   const schedule = propertyQ.isLoading
     ? null
-    : scheduleStatus({
-        milestones: sorted,
-        expectedHandoverOn: propertyQ.data?.expected_handover_on ?? null,
-      })
+    : scheduleStatus({ milestones: sorted, expectedHandoverOn: handoverOn })
   const pill = schedule ? schedulePill(schedule, lang) : null
 
   if (sorted.length === 0) return null

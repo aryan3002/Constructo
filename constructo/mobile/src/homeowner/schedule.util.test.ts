@@ -4,6 +4,7 @@ import {
   milestoneSchedule,
   schedulePill,
   scheduleStatus,
+  targetHandoverOn,
 } from '../screens/homeowner/schedule.util'
 
 type M = { status: 'done' | 'now' | 'upcoming'; expected_on: string | null; order: number }
@@ -107,5 +108,26 @@ describe('schedulePill', () => {
     expect(schedulePill('handed_over', 'en')).toEqual({ status: 'ok', label: 'Handed over' })
     expect(schedulePill('late', 'hi').label).toBe('देरी चल रही है')
     expect(schedulePill('past_handover', 'hi').label).toBe('सौंपने की तारीख़ निकल गई')
+  })
+})
+
+describe('targetHandoverOn', () => {
+  it("uses the property's handover date when it has one", () => {
+    expect(targetHandoverOn('2026-09-15', ms('2026-11-01'))).toBe('2026-09-15')
+  })
+  it("falls back to the last stage's expected date (by order, not list order)", () => {
+    const shuffled = [...ms('2026-11-01')].reverse()
+    expect(targetHandoverOn(null, shuffled)).toBe('2026-12-01')
+  })
+  it('is null with no property date and no stages', () => {
+    expect(targetHandoverOn(undefined, [])).toBeNull()
+  })
+  it('keeps the label and the pill on one date', () => {
+    // Property says 15 Sep (passed); the last stage says 1 Dec. Both the label
+    // and the rule must use 15 Sep, never "Target handover · 1 Dec" + "Past".
+    const date = targetHandoverOn('2026-09-15', ms('2026-11-01'))
+    expect(scheduleStatus({ milestones: ms('2026-11-01'), expectedHandoverOn: date, today })).toBe(
+      'past_handover',
+    )
   })
 })

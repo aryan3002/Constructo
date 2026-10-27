@@ -26,6 +26,19 @@ function dayKey(value: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : localDateKey(d)
 }
 
+/** The one target handover date Home and Updates both show and judge by: the
+ *  property's expected handover, else the last stage's expected date. Using
+ *  different dates for the label and the pill could print "Target handover ·
+ *  15 Dec" next to "Past handover date". */
+export function targetHandoverOn(
+  propertyHandover: string | null | undefined,
+  milestones: Pick<Milestone, 'expected_on' | 'order'>[],
+): string | null {
+  if (propertyHandover) return propertyHandover
+  const last = [...milestones].sort((a, b) => a.order - b.order).pop()
+  return last?.expected_on ?? null
+}
+
 /** Late when the stage's expected date has passed; on track when it hasn't
  *  (expected today still counts as on track); null when it has no date. */
 export function milestoneSchedule(

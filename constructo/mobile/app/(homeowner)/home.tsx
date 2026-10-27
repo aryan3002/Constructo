@@ -59,7 +59,11 @@ import {
 import type { AttentionItem, Update } from '../../src/api/types'
 import { REQUEST_STATUS_META, slaPromise } from '../../src/screens/requests.util'
 import { paymentsCardView } from '../../src/screens/homeowner/home_payments.util'
-import { schedulePill, scheduleStatus } from '../../src/screens/homeowner/schedule.util'
+import {
+  schedulePill,
+  scheduleStatus,
+  targetHandoverOn,
+} from '../../src/screens/homeowner/schedule.util'
 
 // ─── i18n table (en / hi) ───────────────────────────────────────────────────
 
@@ -428,10 +432,12 @@ export default function Home() {
 
   // One schedule rule (T5) for the hero chip and the milestones pill, so they
   // can never disagree. Null → no schedule pill at all. Wait for the milestones
-  // so the pill doesn't flip once they arrive.
+  // so the pill doesn't flip once they arrive. The card's "Target handover"
+  // date is the one the rule judges by — the same one Updates shows.
+  const targetHandover = targetHandoverOn(handoverOn, milestones)
   const schedule = milestonesQ.isLoading
     ? null
-    : scheduleStatus({ milestones, expectedHandoverOn: handoverOn })
+    : scheduleStatus({ milestones, expectedHandoverOn: targetHandover })
   const schedulePillProps = schedule ? schedulePill(schedule, lang) : null
   const heroChip =
     state === 'quiet'
@@ -775,7 +781,7 @@ export default function Home() {
                 <Eyebrow>{t.milestonesEyebrow}</Eyebrow>
                 <Body style={{ marginTop: SPACE.xs, fontWeight: '600', color: c.text }}>
                   {t.milestonesHandover}
-                  {handoverOn ? ` · ${handoverDate(handoverOn)}` : ''}
+                  {targetHandover ? ` · ${handoverDate(targetHandover)}` : ''}
                 </Body>
               </View>
               {schedulePillProps ? (
