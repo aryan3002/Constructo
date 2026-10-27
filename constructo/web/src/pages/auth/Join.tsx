@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   authApi,
-  clearToken,
   isAuthenticated,
   type InvitePreview,
   type Role,
@@ -19,6 +18,7 @@ import {
   ScaleIcon,
   UsersIcon,
 } from '../../ui/icons'
+import { clearSession } from '../../auth/session'
 import { AuthLayout } from './AuthLayout'
 import { mapAuthError, type AuthErrorAction, type AuthErrorView } from './authErrors'
 import { AuthError } from './fields'
@@ -126,7 +126,7 @@ export function Join() {
     else if (action === 'changeNumber') {
       // Signed in with a number the invite wasn't sent to: sign that one out
       // and sign in again with the invited number.
-      void authApi.logout().finally(clearToken)
+      void authApi.logout().finally(clearSession)
       goLogin()
     }
   }

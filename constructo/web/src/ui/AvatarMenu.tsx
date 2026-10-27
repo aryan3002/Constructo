@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { authApi, clearToken } from '../api/auth'
+import { signOut as endSession } from '../auth/session'
 import { legalUrls } from '../api/config'
 import { useT } from '../i18n'
 import { SettingsIcon, SignOutIcon } from './icons'
@@ -30,9 +30,10 @@ export function AvatarMenu({ roleBadge }: { roleBadge: { name: string; initials:
 
   const legal = legalUrls()
 
-  function signOut() {
-    void authApi.logout()
-    clearToken()
+  async function signOut() {
+    // Sends a money action still in its undo window, revokes the token and
+    // clears every cached query so the next person sees none of it.
+    await endSession()
     navigate('/login', { replace: true })
   }
 

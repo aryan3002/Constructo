@@ -5,7 +5,8 @@
 // be used without it and offers sign out or account deletion.
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authApi, clearToken, getToken } from '../api/auth'
+import { authApi, getToken } from '../api/auth'
+import { signOut as endSession } from '../auth/session'
 import { legalUrls, USE_MOCKS } from '../api/config'
 import { useT } from '../i18n'
 import { Body, Button, Display, H2, Small, ThemeProvider } from '../ui'
@@ -104,10 +105,9 @@ function ConsentBody({
     }
   }
 
-  function signOut() {
-    void authApi.logout()
-    clearToken()
+  async function signOut() {
     agreedToken = null
+    await endSession()
     navigate('/login', { replace: true })
   }
 

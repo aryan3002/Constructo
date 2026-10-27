@@ -218,3 +218,47 @@ describe('auth/Login', () => {
     expect(screen.getByText('Step 1 of 2')).toBeInTheDocument()
   })
 })
+
+describe('auth/Login after a session ended', () => {
+  beforeEach(() => {
+    clearToken()
+    navigateMock.mockReset()
+    sessionStorage.clear()
+  })
+
+  it('says the session ended (once) and returns to where the person was', async () => {
+    sessionStorage.setItem('constructo.session_ended', '1')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/auth/request-otp')) return jsonOk({ sent: true })
+      if (url.endsWith('/auth/login')) return jsonOk({ token: 'fresh' })
+      return jsonOk({})
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderLogin(`/login?next=${encodeURIComponent('/approvals?tab=open')}`)
+    expect(screen.getByRole('status')).toHaveTextContent(/your session ended, please sign in again/i)
+    expect(sessionStorage.getItem('constructo.session_ended')).toBeNull()
+
+    const otp = await goToOtpStep()
+    await userEvent.type(otp, '000000')
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith('/approvals?tab=open', { replace: true }),
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('never follows a next link off the app', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/auth/request-otp')) return jsonOk({ sent: true })
+      if (url.endsWith('/auth/login')) return jsonOk({ token: 'fresh' })
+      if (url.endsWith('/auth/me')) return jsonOk({ ...meOwner('u9'), role: 'pm' })
+      return jsonOk({})
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderLogin(`/login?next=${encodeURIComponent('//evil.example')}`)
+    expect(screen.queryByText(/your session ended/i)).not.toBeInTheDocument()
+    const otp = await goToOtpStep()
+    await userEvent.type(otp, '000000')
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/', { replace: true }))
+    vi.unstubAllGlobals()
+  })
+})

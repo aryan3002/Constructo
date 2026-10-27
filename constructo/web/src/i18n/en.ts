@@ -152,6 +152,7 @@ export const en = {
   'auth.verified': 'Verified · welcome in',
   'auth.step_of': 'Step {n} of {total}',
   'auth.no_password': 'No password. We text you a one-time code.',
+  'auth.session_ended': "Your session ended, please sign in again.",
   'consent.title': 'Before you start: Neev uses AI',
   'consent.intro': 'Neev uses AI to do the paperwork for you. Please read what that means.',
   'consent.what_title': 'What is sent',

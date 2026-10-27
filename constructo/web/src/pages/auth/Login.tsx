@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi } from '../../api/auth'
+import { safeNext, takeSessionEnded } from '../../auth/session'
 import { api } from '../../api/client'
 import { useT } from '../../i18n'
 import { Body, Button, Display, Small } from '../../ui'
@@ -70,7 +71,9 @@ export function Login() {
 function LoginForm() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next')
+  const next = safeNext(params.get('next'))
+  // Shown once when an expired or revoked token brought the person here.
+  const [sessionEnded] = useState(takeSessionEnded)
   const t = useT()
   const { openGuide } = useAuthGuide()
   const { seconds, start } = useCountdown()
@@ -177,6 +180,14 @@ function LoginForm() {
     return (
       <form onSubmit={sendCode} className="space-y-5" noValidate>
         <StepDots n={1} total={2} />
+        {sessionEnded ? (
+          <p
+            role="status"
+            className="rounded-control border border-warn/40 bg-warn-bg px-3 py-2 font-body text-small font-semibold text-warn-fg"
+          >
+            {t('auth.session_ended')}
+          </p>
+        ) : null}
         <div>
           <Display as="h1" className="!text-h1">
             {t('auth.phone.title')}

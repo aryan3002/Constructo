@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/auth'
-import { clearToken } from '../../api/auth'
+import { signOut as endSession } from '../../auth/session'
 import { ApiError } from '../../api/client'
 import { useT, type TranslationKey } from '../../i18n'
 import { Body, Button, Display, H2, Small, ThemeProvider } from '../../ui'
@@ -76,9 +76,10 @@ export function Settings() {
     }
   }
 
-  function signOut() {
-    void authApi.logout()
-    clearToken()
+  async function signOut() {
+    // Sends a money action still in its undo window, revokes the token and
+    // clears every cached query so the next person sees none of it.
+    await endSession()
     navigate('/login', { replace: true })
   }
 

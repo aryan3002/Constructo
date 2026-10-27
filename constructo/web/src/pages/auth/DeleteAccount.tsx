@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { authApi, clearToken, isAuthenticated } from '../../api/auth'
+import { clearSession } from '../../auth/session'
 import { ApiError } from '../../api/client'
 import { useT } from '../../i18n'
 import { Body, Button, Display, H2, Small } from '../../ui'
@@ -128,7 +129,7 @@ export function DeleteAccount() {
     try {
       await authApi.deleteAccount(stepUpToken)
       await authApi.logout()
-      clearToken()
+      clearSession()
       setStep('done')
     } catch (err) {
       setError(mapAuthError(err))

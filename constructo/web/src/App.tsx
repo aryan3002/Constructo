@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { RequireAuth } from './components/RequireAuth'
+import { SessionGuard } from './components/SessionGuard'
 import { Spinner } from './components/states'
 import { Components } from './pages/Components'
 import { Groups } from './pages/Groups'
@@ -109,6 +110,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <>
+      <SessionGuard />
       <CommandPalette />
       <Suspense fallback={<Spinner />}>
       <Routes>

@@ -141,6 +141,7 @@ export const hi: Record<TranslationKey, string> = {
   'auth.verified': 'सत्यापित · स्वागत है',
   'auth.step_of': 'चरण {n} / {total}',
   'auth.no_password': 'कोई पासवर्ड नहीं। हम एक बार का कोड भेजते हैं।',
+  'auth.session_ended': "आपका सत्र खत्म हो गया, कृपया फिर से साइन इन करें।",
   'consent.title': 'शुरू करने से पहले: नींव AI का इस्तेमाल करता है',
   'consent.intro': 'नींव आपका काग़ज़ी काम AI से करता है। कृपया पढ़ें इसका क्या मतलब है।',
   'consent.what_title': 'क्या भेजा जाता है',

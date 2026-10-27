@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, clearToken, type Role } from '../api/auth'
+import { type Role } from '../api/auth'
+import { signOut as endSession } from '../auth/session'
 import { useMeRole } from '../auth/useCan'
 import { useT, type TranslationKey } from '../i18n'
 import { AppShell, Display, H2, Small, useRoleTabs, type Role as ShellRole } from '../ui'
@@ -66,9 +67,10 @@ export function More() {
   const tabs = useRoleTabs(role as ShellRole)
   const workLinks = ROLE_MORE[role] ?? []
 
-  function signOut() {
-    void authApi.logout()
-    clearToken()
+  async function signOut() {
+    // Sends a money action still in its undo window, revokes the token and
+    // clears every cached query so the next person sees none of it.
+    await endSession()
     navigate('/login', { replace: true })
   }
 
