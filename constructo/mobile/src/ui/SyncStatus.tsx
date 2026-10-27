@@ -1,6 +1,7 @@
 /**
  * SyncStatus — the visible offline/sync indicator driven by {@link useOutbox}.
- * Shows "Offline", "Syncing…", "N waiting", or stays quiet when caught up.
+ * Shows "Offline", "Syncing…", "N waiting", or stays quiet when caught up, plus
+ * how many items the server refused ("N couldn't send"; T9).
  */
 import { View } from 'react-native'
 
@@ -12,7 +13,7 @@ import { Micro } from './Typography'
 
 export function SyncStatus() {
   const { t } = useT()
-  const { online, state, pending } = useOutbox()
+  const { online, state, pending, failed } = useOutbox()
   // Call every hook unconditionally, BEFORE any early return (rules of hooks) —
   // this previously sat after `if (!label) return null`, which crashed when the
   // indicator toggled between rendered and null.
@@ -29,6 +30,13 @@ export function SyncStatus() {
   } else if (pending > 0) {
     label = t('common.pendingChanges', { count: pending })
     color = STATUS.info
+  }
+
+  // Refused items need the person; they outrank "caught up" and join the rest.
+  if (failed > 0) {
+    const refused = t('common.couldntSend', { count: failed })
+    label = label ? `${label} · ${refused}` : refused
+    color = STATUS.risk
   }
 
   if (!label) return null

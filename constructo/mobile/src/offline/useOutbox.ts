@@ -17,7 +17,9 @@ import {
   ensureCaptureId,
   getOutboxUser,
   list,
+  listFailed,
   listFor,
+  moveToFailed,
   remove,
   setOutboxUser,
   subscribeOutboxChanges,
@@ -46,6 +48,8 @@ export interface OutboxSnapshot {
   online: boolean
   state: SyncState
   pending: number
+  /** Items the server refused for good, waiting for Retry or Delete. */
+  failed: number
 }
 
 export interface OutboxStatus extends OutboxSnapshot {
@@ -53,7 +57,7 @@ export interface OutboxStatus extends OutboxSnapshot {
   flush: () => Promise<void>
 }
 
-let snapshot: OutboxSnapshot = { online: true, state: 'idle', pending: 0 }
+let snapshot: OutboxSnapshot = { online: true, state: 'idle', pending: 0, failed: 0 }
 const listeners = new Set<() => void>()
 
 function setSnapshot(patch: Partial<OutboxSnapshot>): void {
@@ -63,7 +67,8 @@ function setSnapshot(patch: Partial<OutboxSnapshot>): void {
 
 /** Re-read the queue length (after an enqueue, a remove, a sign-in). */
 export async function refreshOutbox(): Promise<void> {
-  setSnapshot({ pending: (await list()).length })
+  const [queued, failed] = await Promise.all([list(), listFailed()])
+  setSnapshot({ pending: queued.length, failed: failed.length })
 }
 
 async function send(queued: OutboxItem, userId: string): Promise<void> {
@@ -106,10 +111,12 @@ async function drain(): Promise<void> {
         await remove(next.id, user)
       } catch (e) {
         if (isPermanentFailure(e)) {
-          // This item will NEVER sync (e.g. 413 too-large / 403 not-assigned /
-          // 422). Drop it so it can't wedge every capture queued behind it, and
-          // keep draining the rest.
-          await remove(next.id, user)
+          // This item will NEVER sync as-is (e.g. 413 too-large / 403
+          // not-assigned / 422). Move it to the "Couldn't send" list with the
+          // reason, so it can't wedge every capture queued behind it and isn't
+          // lost without a trace; keep draining the rest.
+          const err = e as ApiError
+          await moveToFailed(next.id, user, { status: err.status, code: err.code })
           continue
         }
         // Transient (network / 5xx / timeout / expired login): stop and retry
@@ -176,6 +183,11 @@ function subscribe(listener: () => void): () => void {
 
 const getSnapshot = () => snapshot
 
+/** The current sync status (what {@link useOutbox} renders). */
+export function outboxSnapshot(): OutboxSnapshot {
+  return snapshot
+}
+
 export function useOutbox(): OutboxStatus {
   const s = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   useEffect(() => {
@@ -191,5 +203,5 @@ export function __resetOutboxSyncForTests(): void {
   netUnsubscribe = null
   inFlight = null
   setOutboxUser(null)
-  snapshot = { online: true, state: 'idle', pending: 0 }
+  snapshot = { online: true, state: 'idle', pending: 0, failed: 0 }
 }

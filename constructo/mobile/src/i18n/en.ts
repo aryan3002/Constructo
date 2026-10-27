@@ -11,6 +11,7 @@ export const en = {
     syncing: 'Syncing…',
     synced: 'All changes saved',
     pendingChanges: '{count} change(s) waiting to sync',
+    couldntSend: "{count} couldn't send",
   },
   auth: {
     // ─── Front door ───────────────────────────────────────────────────────

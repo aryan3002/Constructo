@@ -13,6 +13,7 @@ export const hi: Dict = {
     syncing: 'सिंक हो रहा है…',
     synced: 'सभी बदलाव सेव हो गए',
     pendingChanges: '{count} बदलाव सिंक के लिए बाकी',
+    couldntSend: '{count} नहीं भेजे जा सके',
   },
   auth: {
     // ─── Front door ───────────────────────────────────────────────────────

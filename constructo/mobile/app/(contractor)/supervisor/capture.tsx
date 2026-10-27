@@ -32,10 +32,20 @@ import {
 import type { CaptureKind } from '../../../src/api/supervisor'
 import type { Site } from '../../../src/api/types'
 import { useT } from '../../../src/i18n/I18nProvider'
-import { Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus, useToast } from '../../../src/ui'
+import { BodyStrong, Button, Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus, useToast } from '../../../src/ui'
+import { useTheme } from '../../../src/theme/ThemeProvider'
+import { refusalText } from '../../../src/api/errorText'
 import { HoldToTalk, TranscriptConfirm, type RecordedAudio } from '../../../src/audio'
 import { useOutbox } from '../../../src/offline/useOutbox'
-import { enqueue, list, type OutboxItem } from '../../../src/offline/outbox'
+import {
+  deleteFailed,
+  enqueue,
+  list,
+  listFailed,
+  retryFailed,
+  type FailedItem,
+  type OutboxItem,
+} from '../../../src/offline/outbox'
 import {
   CaptureBar,
   KindChipRow,
@@ -80,6 +90,10 @@ const STR = {
     headcountLabel: 'People',
     quantityLabel: 'Quantity',
     amountLabel: 'Amount ₹',
+    failedTitle: "COULDN'T SEND",
+    failedHint: 'The server refused these. Retry once the problem is fixed, or delete them.',
+    retry: 'Retry',
+    delete: 'Delete',
   },
   hi: {
     promise: 'एक बार भेजो। हम फ़ाइल कर देंगे।',
@@ -113,6 +127,10 @@ const STR = {
     headcountLabel: 'आदमी',
     quantityLabel: 'मात्रा',
     amountLabel: 'रकम ₹',
+    failedTitle: 'नहीं भेजे जा सके',
+    failedHint: 'सर्वर ने इन्हें मना कर दिया। दिक्कत ठीक होने पर फिर भेजें, या हटा दें।',
+    retry: 'फिर भेजें',
+    delete: 'हटाएँ',
   },
 } as const
 
@@ -123,13 +141,14 @@ function mediaFromAsset(a: ImagePicker.ImagePickerAsset): CaptureMedia {
 
 export default function Capture() {
   const { lang } = useT()
-  const { online, pending, flush } = useOutbox()
+  const { online, pending, failed: failedCount, flush } = useOutbox()
   const toast = useToast()
   const str = STR[lang]
 
   const [kind, setKind] = useState<CaptureKind>('progress')
   const [busy, setBusy] = useState(false)
   const [queued, setQueued] = useState<OutboxItem[]>([])
+  const [failed, setFailed] = useState<FailedItem[]>([])
   const [sites, setSites] = useState<Site[]>([])
   const [siteIdx, setSiteIdx] = useState(0)
 
@@ -147,7 +166,9 @@ export default function Capture() {
   const site = sites[siteIdx]
 
   const refresh = useCallback(async () => {
-    setQueued(await list())
+    const [q, f] = await Promise.all([list(), listFailed()])
+    setQueued(q)
+    setFailed(f)
   }, [])
 
   useFocusEffect(
@@ -157,7 +178,24 @@ export default function Capture() {
   )
   useEffect(() => {
     void refresh()
-  }, [pending, refresh])
+  }, [pending, failedCount, refresh])
+
+  const onRetryFailed = useCallback(
+    async (id: string) => {
+      await retryFailed(id)
+      await refresh()
+      void flush()
+    },
+    [refresh, flush],
+  )
+
+  const onDeleteFailed = useCallback(
+    async (id: string) => {
+      await deleteFailed(id)
+      await refresh()
+    },
+    [refresh],
+  )
 
   const enqueueCapture = useCallback(
     async (media: CaptureMedia | null, text?: string, clientCaptureId?: string) => {
@@ -336,6 +374,28 @@ export default function Capture() {
         />
       ) : null}
 
+      {/* Refused by the server for good (T9): kept with the reason, never dropped. */}
+      {failed.length > 0 ? (
+        <>
+          <Eyebrow style={{ marginTop: SPACE.sm }}>{str.failedTitle}</Eyebrow>
+          <Small muted>{str.failedHint}</Small>
+          <Card padded={false} style={{ paddingHorizontal: SPACE.lg }}>
+            {failed.map((f, i) => (
+              <FailedRow
+                key={f.item.id}
+                f={f}
+                reason={refusalText(f.status, f.code, lang)}
+                retryLabel={str.retry}
+                deleteLabel={str.delete}
+                isLast={i === failed.length - 1}
+                onRetry={() => void onRetryFailed(f.item.id)}
+                onDelete={() => void onDeleteFailed(f.item.id)}
+              />
+            ))}
+          </Card>
+        </>
+      ) : null}
+
       <Eyebrow style={{ marginTop: SPACE.sm }}>{str.sentTitle}</Eyebrow>
       {captureItems.length === 0 ? (
         <EmptyState variant="empty" title={str.emptyTitle} body={str.emptyBody} />
@@ -366,5 +426,44 @@ export default function Capture() {
         </Card>
       )}
     </Screen>
+  )
+}
+
+function FailedRow({
+  f,
+  reason,
+  retryLabel,
+  deleteLabel,
+  isLast,
+  onRetry,
+  onDelete,
+}: {
+  f: FailedItem
+  reason: string
+  retryLabel: string
+  deleteLabel: string
+  isLast: boolean
+  onRetry: () => void
+  onDelete: () => void
+}) {
+  const { theme } = useTheme()
+  const time = new Date(f.item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    <View
+      style={{
+        gap: SPACE.xs,
+        paddingVertical: SPACE.md,
+        borderBottomWidth: isLast ? 0 : 1,
+        borderBottomColor: theme.colors.line,
+      }}
+    >
+      <BodyStrong numberOfLines={1}>{f.item.label}</BodyStrong>
+      <Small muted>{time}</Small>
+      <Small color={theme.colors.risk}>{reason}</Small>
+      <View style={{ flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.xs }}>
+        <Button title={retryLabel} variant="secondary" size="md" onPress={onRetry} />
+        <Button title={deleteLabel} variant="ghost" size="md" onPress={onDelete} />
+      </View>
+    </View>
   )
 }

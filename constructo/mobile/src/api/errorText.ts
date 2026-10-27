@@ -64,6 +64,12 @@ export function errorKindText(kind: ErrorKind, lang: Lang): string {
   return TEXT[lang][kind]
 }
 
+/** Why an item in the "Couldn't send" list was refused: the plain text for
+ *  its status/code plus the status, e.g. "This file is too large to send. (413)". */
+export function refusalText(status: number, code: string, lang: Lang): string {
+  return `${errorText(new ApiError(status, '', code), lang)} (${status})`
+}
+
 /** True when the server refused a money decision for a non-owner. */
 export function isOwnerOnly(err: unknown): boolean {
   return err instanceof ApiError && err.code === 'owner_only'

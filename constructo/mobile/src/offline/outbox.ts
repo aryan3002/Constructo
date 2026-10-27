@@ -21,9 +21,26 @@ import { newClientCaptureId, type CapturePayload } from '../api/capture'
 /** The old single, global queue (before per-user queues). */
 export const LEGACY_OUTBOX_KEY = 'constructo.outbox'
 const QUEUE_PREFIX = 'constructo.outbox.user.'
+const FAILED_PREFIX = 'constructo.outbox.failed.'
 
 export function outboxKey(userId: string): string {
   return `${QUEUE_PREFIX}${userId}`
+}
+
+/** The user's "Couldn't send" list: items the server permanently refused. */
+export function failedKey(userId: string): string {
+  return `${FAILED_PREFIX}${userId}`
+}
+
+/** An item the server refused for good (4xx other than 401/408/429), kept so
+ *  the person can see why, and Retry or Delete it (T9). */
+export interface FailedItem {
+  item: OutboxItem
+  /** The refusal's HTTP status and error code (the reason shown is built
+   *  from these, in the user's language). */
+  status: number
+  code: string
+  failedAt: number
 }
 
 // The signed-in user whose queue the screens and the drainer use. Set by the
@@ -175,6 +192,76 @@ export async function ensureCaptureId(
   return updated
 }
 
+async function readFailed(key: string): Promise<FailedItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as FailedItem[]) : []
+  } catch {
+    return []
+  }
+}
+
+function notify(): void {
+  changeListeners.forEach((l) => l())
+}
+
+/** The server refused this item for good: move it from the queue to the
+ *  user's "Couldn't send" list, with the reason (one locked step). */
+export async function moveToFailed(
+  id: string,
+  userId: string,
+  reason: { status: number; code: string },
+): Promise<void> {
+  const moved = await withLock(async () => {
+    const queue = await readAll(outboxKey(userId))
+    const i = queue.findIndex((x) => x.id === id)
+    if (i < 0) return false
+    const [item] = queue.splice(i, 1)
+    const failed = await readFailed(failedKey(userId))
+    failed.push({ item, status: reason.status, code: reason.code, failedAt: Date.now() })
+    await AsyncStorage.setItem(failedKey(userId), JSON.stringify(failed))
+    await writeAll(outboxKey(userId), queue)
+    return true
+  })
+  if (moved) notify()
+}
+
+/** The signed-in user's "Couldn't send" list, oldest first. */
+export async function listFailed(userId: string | null = currentUser): Promise<FailedItem[]> {
+  if (!userId) return []
+  return withLock(() => readFailed(failedKey(userId)))
+}
+
+/** Retry: put a refused item back at the end of the queue. */
+export async function retryFailed(id: string, userId: string | null = currentUser): Promise<void> {
+  if (!userId) return
+  const moved = await withLock(async () => {
+    const failed = await readFailed(failedKey(userId))
+    const i = failed.findIndex((f) => f.item.id === id)
+    if (i < 0) return false
+    const [f] = failed.splice(i, 1)
+    const queue = await readAll(outboxKey(userId))
+    if (!queue.some((x) => x.id === id)) queue.push(f.item)
+    await writeAll(outboxKey(userId), queue)
+    await AsyncStorage.setItem(failedKey(userId), JSON.stringify(failed))
+    return true
+  })
+  if (moved) notify()
+}
+
+/** Delete: the person decided this refused item isn't worth keeping. */
+export async function deleteFailed(id: string, userId: string | null = currentUser): Promise<void> {
+  if (!userId) return
+  const removed = await withLock(async () => {
+    const failed = await readFailed(failedKey(userId))
+    const next = failed.filter((f) => f.item.id !== id)
+    if (next.length === failed.length) return false
+    await AsyncStorage.setItem(failedKey(userId), JSON.stringify(next))
+    return true
+  })
+  if (removed) notify()
+}
+
 /** Drop the signed-in user's queue. */
 export async function clear(): Promise<void> {
   const key = currentKey()
@@ -182,9 +269,9 @@ export async function clear(): Promise<void> {
   changeListeners.forEach((l) => l())
 }
 
-/** Delete one user's queued work (their account was deleted). */
+/** Delete one user's queued work and "Couldn't send" list (account deleted). */
 export async function clearOutboxFor(userId: string): Promise<void> {
-  await withLock(() => AsyncStorage.removeItem(outboxKey(userId)))
+  await withLock(() => AsyncStorage.multiRemove([outboxKey(userId), failedKey(userId)]))
   changeListeners.forEach((l) => l())
 }
 
