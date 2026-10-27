@@ -11,9 +11,10 @@ const ROLE_LABELS: Record<string, string> = {
   contractor: 'Mukadam',
 }
 
-/** Up to two initials from a person's name ("Asha Rao" → "AR"), or null. */
+/** Up to two initials from a person's name ("Asha Rao" → "AR"), or null.
+ *  Only words that start with a letter count, so "Rajesh Gupta (Owner)" is "RG". */
 export function personInitials(name: string | null | undefined): string | null {
-  const words = (name ?? '').trim().split(/\s+/).filter(Boolean)
+  const words = (name ?? '').trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w))
   if (words.length === 0) return null
   const first = [...words[0]]
   const letters = words.length === 1 ? first.slice(0, 2) : [first[0], [...words[words.length - 1]][0]]
