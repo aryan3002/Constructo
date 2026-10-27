@@ -502,9 +502,9 @@ async def _scrub_sent_content(
     session: AsyncSession, sender_id: str, name: str | None, phone: str
 ) -> None:
     """Replace the person's full name and phone with "Deleted user" inside
-    what they sent: the raw payload JSON (WhatsApp pushName/notifyName and any
-    text) and the summary/fields of every event extracted from those
-    messages. Other senders' rows are left alone."""
+    what they sent: the message text, the raw payload JSON (WhatsApp
+    pushName/notifyName and any text) and the summary/fields of every event
+    extracted from those messages. Other senders' rows are left alone."""
     patterns = identity_patterns(name, phone)
     raws = (
         await session.execute(
@@ -515,6 +515,11 @@ async def _scrub_sent_content(
         scrubbed = scrub_json(raw.raw or {}, patterns, sender=True)
         if scrubbed != raw.raw:
             raw.raw = scrubbed
+        # The message body is stored again in its own column.
+        if raw.text:
+            text = scrub_text(raw.text, patterns)
+            if text != raw.text:
+                raw.text = text
     raw_ids = [r.id for r in raws]
     if not raw_ids or not patterns:
         return

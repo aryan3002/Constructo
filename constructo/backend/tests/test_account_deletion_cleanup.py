@@ -151,12 +151,14 @@ async def test_deletion_scrubs_name_and_phone_from_raw_json_and_events(
     )
     other = await factory.user(company=company, role=UserRole.supervisor, name="Ravi Kumar")
     mine = _raw("919810000103@s.whatsapp.net", "Asha")
+    mine.text = "Asha Rao here, call me on +91 98100 00103"
     mine.raw = {
         "pushName": "Asha",
         "key": {"participant": "919810000103@s.whatsapp.net"},
         "message": {"conversation": "Asha Rao here, call me on +91 98100 00103"},
     }
     theirs = _raw(str(other.id), "Ravi Kumar")
+    theirs.text = "Asha Rao asked for cement; Asha will pay"
     theirs.raw = {"message": {"conversation": "Asha Rao asked for cement; Asha will pay"}}
     db_session.add_all([mine, theirs])
     await db_session.flush()
@@ -191,12 +193,15 @@ async def test_deletion_scrubs_name_and_phone_from_raw_json_and_events(
         "key": {"participant": "Deleted user"},
         "message": {"conversation": "Deleted user here, call me on Deleted user"},
     }
+    # The message body column carries the same text and is scrubbed too.
+    assert mine.text == "Deleted user here, call me on Deleted user"
     assert my_event.summary == "Deleted user (Deleted user) logged 100 bags; Ashara stays"
     assert my_event.fields == {
         "reported_by": "Deleted user", "contact": "Deleted user", "qty": 100
     }
     # Another person's message and event are untouched, even where they name her.
     assert theirs.raw == {"message": {"conversation": "Asha Rao asked for cement; Asha will pay"}}
+    assert theirs.text == "Asha Rao asked for cement; Asha will pay"
     assert their_event.summary == "Asha Rao asked for cement"
     assert their_event.fields == {"by": "Ravi Kumar"}
 
