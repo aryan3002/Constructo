@@ -16,6 +16,7 @@ import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
 import { Body, BodyStrong, Button, EmptyState, H1, Small, useToast } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from '../../../src/screens/owner/components'
+import { batchSummary } from '../../../src/screens/owner/approvals.util'
 
 const STR = {
   en: {
@@ -40,7 +41,6 @@ const STR = {
     approveToast: 'Approved · released to site',
     holdToast: 'Held · sent back to the team to revise',
     assignToast: 'Assigned · the team is notified',
-    batchToast: (n: number) => `${n} approved · released to site`,
   },
   hi: {
     title: 'मंज़ूरी',
@@ -64,7 +64,6 @@ const STR = {
     approveToast: 'मंज़ूर · साइट पर भेजा',
     holdToast: 'रोका · टीम को संशोधन हेतु वापस',
     assignToast: 'सौंपा · टीम को सूचित किया',
-    batchToast: (n: number) => `${n} मंज़ूर · साइट पर भेजे`,
   },
 } as const
 
@@ -125,9 +124,9 @@ export default function Approvals() {
   })
 
   const batch = useMutation({
-    mutationFn: (ids: string[]) => owner.batch('approve', ids),
-    onSuccess: (_d, ids) => {
-      toast(t.batchToast(ids.length), 'check-circle')
+    mutationFn: (ids: string[]) => owner.batch('resolve', ids),
+    onSuccess: (res) => {
+      toast(batchSummary(res, lang), res.skipped.length ? 'alert-circle' : 'check-circle')
       setSelected(new Set())
       void invalidate()
     },

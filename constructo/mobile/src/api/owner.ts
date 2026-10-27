@@ -455,8 +455,11 @@ export const owner = {
       body: JSON.stringify({ assigned_to: assignedTo }),
     }),
 
+  /** POST /approvals/batch/{action}. The server's actions are acknowledge |
+   *  resolve | reject | escalate — approving is `resolve` (there is no
+   *  `approve` batch action). Ids the caller may not decide are `skipped`. */
   batch: (
-    action: 'approve' | 'reject' | 'acknowledge',
+    action: 'resolve' | 'reject' | 'acknowledge' | 'escalate',
     ids: string[],
     note?: string,
   ) =>
