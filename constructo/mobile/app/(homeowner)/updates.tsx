@@ -64,6 +64,11 @@ import {
   weekRange,
   type SubTab,
 } from '../../src/screens/homeowner/updates.util'
+import {
+  milestoneSchedule,
+  schedulePill,
+  scheduleStatus,
+} from '../../src/screens/homeowner/schedule.util'
 
 // ---- localised copy ----
 const STR = {
@@ -406,6 +411,19 @@ function MilestonesCard({
   const handoverM = sorted[sorted.length - 1]
   const handoverLabel = handoverM ? shortDate(handoverM.expected_on, lang) : null
 
+  // Same schedule rule as Home (T5); shares the Property tab's cache key.
+  const propertyQ = useQuery({
+    queryKey: ['homeowner', 'property'],
+    queryFn: () => homeowner.property(),
+  })
+  const schedule = propertyQ.isLoading
+    ? null
+    : scheduleStatus({
+        milestones: sorted,
+        expectedHandoverOn: propertyQ.data?.expected_handover_on ?? null,
+      })
+  const pill = schedule ? schedulePill(schedule, lang) : null
+
   if (sorted.length === 0) return null
 
   return (
@@ -441,7 +459,7 @@ function MilestonesCard({
               {handoverLabel ? ` · ${handoverLabel}` : ''}
             </BodyStrong>
           </View>
-          <StatusPill status="ok" label="On track" size="sm" />
+          {pill ? <StatusPill status={pill.status} label={pill.label} size="sm" /> : null}
           <Feather
             name={open ? 'chevron-down' : 'chevron-right'}
             size={18}
@@ -551,6 +569,8 @@ function MilestoneTracker({ milestones, lang }: { milestones: Milestone[]; lang:
         const isDone = m.status === 'done'
         const isNow = m.status === 'now'
         const spineColor = isDone ? c.ok : isNow ? c.secondary : c.line
+        const nowSchedule = isNow ? milestoneSchedule(m) : null
+        const nowPill = nowSchedule ? schedulePill(nowSchedule, lang) : null
 
         const dateLine: string =
           m.status === 'done'
@@ -641,7 +661,9 @@ function MilestoneTracker({ milestones, lang }: { milestones: Milestone[]; lang:
                 >
                   {m.name}
                 </BodyStrong>
-                {isNow ? <StatusPill status="ok" label="On track" size="sm" /> : null}
+                {nowPill ? (
+                  <StatusPill status={nowPill.status} label={nowPill.label} size="sm" />
+                ) : null}
               </View>
               <MonoSm muted>{dateLine}</MonoSm>
             </View>

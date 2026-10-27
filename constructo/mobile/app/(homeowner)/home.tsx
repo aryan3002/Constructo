@@ -59,6 +59,7 @@ import {
 import type { AttentionItem, Update } from '../../src/api/types'
 import { REQUEST_STATUS_META, slaPromise } from '../../src/screens/requests.util'
 import { paymentsCardView } from '../../src/screens/homeowner/home_payments.util'
+import { schedulePill, scheduleStatus } from '../../src/screens/homeowner/schedule.util'
 
 // ─── i18n table (en / hi) ───────────────────────────────────────────────────
 
@@ -80,7 +81,6 @@ const STR = {
     subOk: "Nothing needs you today. We'll tell you the moment it does.",
     subAttention: 'Take a look when you have a minute — no rush.',
     subQuiet: 'Your site team is on it. Calm is good news.',
-    onTrack: 'On track',
     needsYou: 'Needs you',
     quietChip: 'Quiet',
     inProgress: 'In progress',
@@ -145,7 +145,6 @@ const STR = {
     subOk: 'आज आपकी कोई ज़रूरत नहीं। जैसे ही होगी, हम बता देंगे।',
     subAttention: 'फ़ुरसत में एक नज़र डाल लें — कोई जल्दी नहीं।',
     subQuiet: 'आपकी साइट टीम काम पर है। शांति अच्छी ख़बर है।',
-    onTrack: 'सब ठीक',
     needsYou: 'आपकी ज़रूरत',
     quietChip: 'शांत',
     inProgress: 'चल रहा है',
@@ -427,6 +426,20 @@ export default function Home() {
   const nowMilestone = milestone_now
   const nowExpected = shortDate(nowMilestone?.expected_on ?? null)
 
+  // One schedule rule (T5) for the hero chip and the milestones pill, so they
+  // can never disagree. Null → no schedule pill at all. Wait for the milestones
+  // so the pill doesn't flip once they arrive.
+  const schedule = milestonesQ.isLoading
+    ? null
+    : scheduleStatus({ milestones, expectedHandoverOn: handoverOn })
+  const schedulePillProps = schedule ? schedulePill(schedule, lang) : null
+  const heroChip =
+    state === 'quiet'
+      ? { status: 'quiet' as const, label: t.quietChip }
+      : state === 'needs-attention'
+        ? { status: 'warn' as const, label: t.needsYou }
+        : schedulePillProps
+
   // ── Payments card — real amount paid + net change cost (T5) ──────────────
   const payments = paymentsCardView(spend_summary, lang)
 
@@ -600,21 +613,21 @@ export default function Home() {
             />
           ) : null}
 
-          {/* Bottom row: On-track pill (left) + Needs pill (right) */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACE.lg }}>
-            <StatusPill
-              status={state === 'quiet' ? 'quiet' : state === 'needs-attention' ? 'warn' : 'ok'}
-              label={state === 'quiet' ? t.quietChip : state === 'needs-attention' ? t.needsYou : t.onTrack}
-            />
-            {needs_attention.length > 0 ? (
-              <View style={{ marginLeft: 'auto' }}>
-                <StatusPill
-                  status="warn"
-                  label={`${needs_attention.length} ${needs_attention.length === 1 ? 'choice' : 'choices'} for you`}
-                />
-              </View>
-            ) : null}
-          </View>
+          {/* Bottom row: state / schedule pill (left) + Needs pill (right) */}
+          {/* heroChip is always set when something needs the homeowner. */}
+          {heroChip ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACE.lg }}>
+              <StatusPill status={heroChip.status} label={heroChip.label} />
+              {needs_attention.length > 0 ? (
+                <View style={{ marginLeft: 'auto' }}>
+                  <StatusPill
+                    status="warn"
+                    label={`${needs_attention.length} ${needs_attention.length === 1 ? 'choice' : 'choices'} for you`}
+                  />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </FadeInUp>
 
@@ -765,7 +778,13 @@ export default function Home() {
                   {handoverOn ? ` · ${handoverDate(handoverOn)}` : ''}
                 </Body>
               </View>
-              <StatusPill status="ok" label={t.onTrack} size="sm" />
+              {schedulePillProps ? (
+                <StatusPill
+                  status={schedulePillProps.status}
+                  label={schedulePillProps.label}
+                  size="sm"
+                />
+              ) : null}
               <Feather name="chevron-right" size={18} color={c.textMute} />
             </View>
 
