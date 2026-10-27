@@ -36,7 +36,6 @@ import {
   MonoSm,
   Screen,
   Small,
-  StatusPill,
   SubHeader,
   Title,
   useToast,
@@ -73,7 +72,6 @@ const STR = {
     versionLabel: 'Version',
     kindLabel: 'Type',
     publishedLabel: 'Shared',
-    pendingApproval: 'Pending your approval',
     noFile: 'No file attached.',
     errorTitle: 'Could not load drawings',
     retry: 'Try again',
@@ -100,7 +98,6 @@ const STR = {
     versionLabel: 'संस्करण',
     kindLabel: 'प्रकार',
     publishedLabel: 'साझा किया',
-    pendingApproval: 'आपकी स्वीकृति बाकी',
     noFile: 'कोई फ़ाइल संलग्न नहीं।',
     errorTitle: 'नक्शे लोड नहीं हो सके',
     retry: 'पुनः प्रयास करें',
@@ -211,7 +208,7 @@ export default function DrawingDetail() {
       />
 
       <View style={{ gap: SPACE.xl, marginTop: SPACE.md }}>
-        {/* Meta row: version pill + pending status + published date */}
+        {/* Meta row: version pill + published date (drawings carry no approval state) */}
         <View
           style={{
             flexDirection: 'row',
@@ -220,7 +217,6 @@ export default function DrawingDetail() {
             gap: SPACE.sm,
           }}
         >
-          <StatusPill status="warn" size="sm" label={t.pendingApproval} />
           <View
             style={{
               backgroundColor: c.paper,

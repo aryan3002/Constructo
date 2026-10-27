@@ -9,7 +9,7 @@
  *               surfaced inline here as in the prototype where DPHub lives
  *               inside the Design tab's "Profile" sub-tab.
  *
- * Plans → grouped drawings, pending-approval callout.
+ * Plans → latest-drawing card, grouped drawings.
  * Selections → rooms × decided + pending rows, References button per room.
  *
  * All real data hooks are preserved from the previous implementation.
@@ -57,6 +57,7 @@ import {
 } from '../../src/homeowner/design_profiler.util'
 import { briefStateCard } from '../../src/homeowner/brief_state.util'
 import { briefBornDecisions } from '../../src/homeowner/brief_selections.util'
+import { latestDrawing } from '../../src/screens/homeowner/latest_drawing.util'
 import { clarCountLabel, openClarifications } from '../../src/homeowner/clarifications.util'
 import {
   DESIGN_STR,
@@ -174,9 +175,8 @@ const TAB_STR = {
     bannerEyebrow: 'YOUR STYLE',
     bannerUpdated: 'Updated',
     bannerEmpty: 'Add your style profile',
-    pendingApprovalCallout: 'Pending your approval',
-    pendingApprovalBody:
-      'Your builder shared plans waiting for your review. Tap any drawing to see details.',
+    latestDrawing: 'Latest drawing',
+    sharedOn: 'Shared',
     refsButton: 'References',
     decidedLabel: 'Decided',
     pendingLabel: 'Pending',
@@ -218,9 +218,8 @@ const TAB_STR = {
     bannerEyebrow: 'आपकी शैली',
     bannerUpdated: 'अपडेट किया गया',
     bannerEmpty: 'अपनी शैली प्रोफ़ाइल जोड़ें',
-    pendingApprovalCallout: 'आपकी मंज़ूरी बाकी',
-    pendingApprovalBody:
-      'आपके बिल्डर ने समीक्षा के लिए नक्शे साझा किए हैं। विवरण देखने के लिए किसी भी नक्शे पर टैप करें।',
+    latestDrawing: 'सबसे नया नक्शा',
+    sharedOn: 'साझा किया',
     refsButton: 'संदर्भ',
     decidedLabel: 'तय हुआ',
     pendingLabel: 'लंबित',
@@ -813,6 +812,8 @@ export default function Design() {
 
   // drawing groups
   const drawingGroups = buildDrawingGroups(drawings, T)
+  const newestDrawing = latestDrawing(drawings)
+  const newestDrawingDate = newestDrawing ? drawingDate(newestDrawing.published_at, 'en') : null
 
   // selection groups — resolved against real space names, not raw UUIDs
   const spaceNameById = Object.fromEntries(
@@ -828,43 +829,45 @@ export default function Design() {
   )
 
   // ============================================================================
-  // TAB: Plans — drawings grouped by kind, pending-approval callout
+  // TAB: Plans — latest drawing + drawings grouped by kind
   // ============================================================================
   const renderPlansTab = () => (
     <View style={{ gap: SPACE.xl }}>
-      {/* Pending approval callout — amber card (prototype: amber accent) */}
-      {drawings.length > 0 ? (
-        <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.warn }}>
-          <Eyebrow style={{ color: c.warn, marginBottom: 6 }}>
-            {T.pendingApprovalCallout.toUpperCase()} ({drawings.length})
-          </Eyebrow>
+      {/* Latest drawing — drawings carry no approval state, so this is the
+          newest current sheet, never a "pending your approval" claim (T5). */}
+      {newestDrawing ? (
+        <Card padded style={{ borderLeftWidth: 4, borderLeftColor: c.accent }}>
+          <Eyebrow style={{ marginBottom: 6 }}>{T.latestDrawing.toUpperCase()}</Eyebrow>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
             <View
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: theme.radii.chip,
-                backgroundColor: 'rgba(232,163,23,0.15)',
+                backgroundColor: AP.surfaceContainer,
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <Feather name="layout" size={19} color={c.warn} />
+              <Feather name="layout" size={19} color={c.textMute} />
             </View>
             <View style={{ flex: 1 }}>
-              <Body style={{ fontSize: 14.5, fontWeight: '600' }}>
-                {drawings[0]?.title ?? 'Drawing'}
-              </Body>
-              <Small muted style={{ marginTop: 1 }}>Sent by contractor</Small>
+              <Body style={{ fontSize: 14.5, fontWeight: '600' }}>{newestDrawing.title}</Body>
+              <Small muted style={{ marginTop: 1 }}>
+                {[
+                  newestDrawingDate ? `${T.sharedOn} ${newestDrawingDate}` : null,
+                  `v${newestDrawing.version}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Small>
             </View>
             <Button
-              title="Review"
+              title={T.viewDrawing}
               variant="ghost"
               size="md"
-              onPress={() =>
-                drawings[0] && router.push(`/(homeowner)/drawings/${drawings[0].id}`)
-              }
+              onPress={() => router.push(`/(homeowner)/drawings/${newestDrawing.id}`)}
             />
           </View>
         </Card>
