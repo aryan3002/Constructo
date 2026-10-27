@@ -34,6 +34,8 @@ import type { Site } from '../../../src/api/types'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { BodyStrong, Button, Card, Display, EmptyState, Eyebrow, Screen, Small, SyncStatus, useToast } from '../../../src/ui'
 import { useTheme } from '../../../src/theme/ThemeProvider'
+import { useAuth } from '../../../src/auth/AuthContext'
+import { loadCachedSites, loadCaptureSites, type SiteSource } from '../../../src/offline/siteCache'
 import { refusalText } from '../../../src/api/errorText'
 import { HoldToTalk, TranscriptConfirm, type RecordedAudio } from '../../../src/audio'
 import { useOutbox } from '../../../src/offline/useOutbox'
@@ -78,6 +80,7 @@ const STR = {
     micPermTitle: 'Microphone needed',
     micPermBody: 'Allow the microphone to record a voice note.',
     noSite: 'No site assigned yet — ask your PM.',
+    offlineNoSites: "You're offline. Your sites will load when you're back online.",
     tapSite: 'tap to switch site',
     recording: 'Recording… release to send',
     tooShort: 'Too short — hold the mic and speak.',
@@ -115,6 +118,7 @@ const STR = {
     micPermTitle: 'माइक चाहिए',
     micPermBody: 'आवाज़ नोट रिकॉर्ड करने के लिए माइक की अनुमति दें।',
     noSite: 'अभी कोई साइट असाइन नहीं हुई — PM से पूछो।',
+    offlineNoSites: 'आप ऑफ़लाइन हैं। ऑनलाइन होते ही आपकी साइटें आ जाएँगी।',
     tapSite: 'साइट बदलने के लिए दबाएँ',
     recording: 'रिकॉर्ड हो रहा… छोड़ो तो भेज देंगे',
     tooShort: 'बहुत छोटा — माइक दबाकर बोलो।',
@@ -141,6 +145,8 @@ function mediaFromAsset(a: ImagePicker.ImagePickerAsset): CaptureMedia {
 
 export default function Capture() {
   const { lang } = useT()
+  const { me } = useAuth()
+  const userId = me?.id ?? null
   const { online, pending, failed: failedCount, flush } = useOutbox()
   const toast = useToast()
   const str = STR[lang]
@@ -150,6 +156,7 @@ export default function Capture() {
   const [queued, setQueued] = useState<OutboxItem[]>([])
   const [failed, setFailed] = useState<FailedItem[]>([])
   const [sites, setSites] = useState<Site[]>([])
+  const [siteSource, setSiteSource] = useState<SiteSource | null>(null)
   const [siteIdx, setSiteIdx] = useState(0)
 
   // Transcript-back / numeral-confirm (CA1). `voicePending` shows the chip in
@@ -157,13 +164,36 @@ export default function Capture() {
   const [voicePending, setVoicePending] = useState(false)
   const [extraction, setExtraction] = useState<CaptureExtraction | null>(null)
 
-  // Resolve the supervisor's assigned site(s) for a real capture target.
+  // Resolve the supervisor's assigned site(s) for a real capture target. The
+  // last good list is shown at once (and kept if the fetch fails offline), so
+  // an offline start still knows the site (T9). Re-run when back online.
   useEffect(() => {
-    captureSites()
-      .then(setSites)
-      .catch(() => setSites([]))
-  }, [])
+    let live = true
+    if (userId) {
+      void loadCachedSites(userId).then((cached) => {
+        if (live && cached && cached.length > 0) {
+          setSites((cur) => (cur.length ? cur : cached))
+          setSiteSource((cur) => cur ?? 'cache')
+        }
+      })
+    }
+    void loadCaptureSites(userId, captureSites).then((res) => {
+      if (!live) return
+      // A failed fetch with nothing cached keeps whatever is already showing.
+      if (res.source === 'unavailable') {
+        setSiteSource((cur) => cur ?? 'unavailable')
+        return
+      }
+      setSites(res.sites)
+      setSiteSource(res.source)
+    })
+    return () => {
+      live = false
+    }
+  }, [userId, online])
   const site = sites[siteIdx]
+  // No site to show: offline with nothing cached is not "no site assigned".
+  const noSiteText = siteSource === 'unavailable' ? str.offlineNoSites : str.noSite
 
   const refresh = useCallback(async () => {
     const [q, f] = await Promise.all([list(), listFailed()])
@@ -200,7 +230,7 @@ export default function Capture() {
   const enqueueCapture = useCallback(
     async (media: CaptureMedia | null, text?: string, clientCaptureId?: string) => {
       if (!site) {
-        Alert.alert('•', str.noSite)
+        Alert.alert('•', noSiteText)
         return
       }
       const label = `${str.kinds[kind]} · ${media ? str.photoLabel : str.voiceNote}`
@@ -223,7 +253,7 @@ export default function Capture() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast(str.queuedToast)
     },
-    [kind, site, str, refresh, online, flush, toast],
+    [kind, site, str, noSiteText, refresh, online, flush, toast],
   )
 
   const onPhoto = useCallback(async () => {
@@ -255,7 +285,7 @@ export default function Capture() {
   const onRecorded = useCallback(
     async (audio: RecordedAudio) => {
       if (!site) {
-        Alert.alert('•', str.noSite)
+        Alert.alert('•', noSiteText)
         return
       }
       const media: CaptureMedia = { uri: audio.uri, name: audio.name, mime: audio.mime }
@@ -286,7 +316,7 @@ export default function Capture() {
         await enqueueCapture(media, undefined, clientCaptureId)
       }
     },
-    [site, kind, str, online, enqueueCapture, refresh],
+    [site, kind, str, noSiteText, online, enqueueCapture, refresh],
   )
 
   const onMicDenied = useCallback(() => {
@@ -327,7 +357,7 @@ export default function Capture() {
         <Pressable
           onPress={sites.length > 1 ? () => setSiteIdx((i) => (i + 1) % sites.length) : undefined}
         >
-          <SiteChip name={site?.name ?? str.noSite} online={online} />
+          <SiteChip name={site?.name ?? noSiteText} online={online} />
         </Pressable>
       </View>
 

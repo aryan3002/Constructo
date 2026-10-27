@@ -37,7 +37,11 @@ export const USER_KEYS = [
 ]
 
 /** Per-user key families (one key per conversation / site). */
-export const USER_KEY_PREFIXES = ['constructo.chat.cache.', 'constructo.ask.session.']
+export const USER_KEY_PREFIXES = [
+  'constructo.chat.cache.',
+  'constructo.ask.session.',
+  'constructo.capture.sites.',
+]
 
 /** Remove the queued-but-unsent chat messages. (Captures live in a per-user
  *  queue and are never removed by sign-out; see src/offline/outbox.) */
