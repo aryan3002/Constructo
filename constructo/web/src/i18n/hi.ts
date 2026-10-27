@@ -5,6 +5,7 @@ import type { TranslationKey } from './en'
 
 export const hi: Record<TranslationKey, string> = {
   'app.name': 'नींव',
+  'a11y.skip_to_content': "सीधे सामग्री पर जाएँ",
 
   'nav.brief': 'ब्रीफ़',
   'nav.latest': 'नवीनतम',

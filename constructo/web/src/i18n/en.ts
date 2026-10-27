@@ -8,6 +8,7 @@
 // Add every new user-facing string here FIRST, then mirror it in hi.ts.
 export const en = {
   'app.name': 'Neev',
+  'a11y.skip_to_content': "Skip to content",
 
   // Navigation (bottom tabs / shell)
   'nav.brief': 'Brief',

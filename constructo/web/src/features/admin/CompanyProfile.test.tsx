@@ -9,6 +9,8 @@ const getCompany = vi.fn()
 const updateCompany = vi.fn()
 const presignCompanyLogo = vi.fn()
 vi.mock('../../api/auth', () => ({
+  // A signed-in owner (useMe only asks the server when signed in).
+  isAuthenticated: () => true,
   authApi: {
     getCompany: (...a: unknown[]) => getCompany(...a),
     updateCompany: (...a: unknown[]) => updateCompany(...a),

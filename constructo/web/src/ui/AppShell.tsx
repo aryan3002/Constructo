@@ -19,6 +19,7 @@ import { SiteSwitcher, type SiteSummary } from './SiteSwitcher'
 import { NotificationsPanel } from '../features/notifications/NotificationsPanel'
 import { useUnreadCount } from '../features/notifications/useUnreadCount'
 import { useSkin } from './ThemeModeProvider'
+import { useOptionalT } from '../i18n'
 import { NeevSidebar } from './NeevSidebar'
 import { NeevTopBar } from './NeevTopBar'
 
@@ -256,6 +257,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const tabSet = tabs ?? ROLE_TABS[role]
+  const t = useOptionalT()
   // A phone shows a short bar; the other tabs live behind "More".
   const phone = phoneTabSplit(tabSet)
   const moreLabel = tabSet.find((tab) => tab.to === '/more')?.label ?? 'More'
@@ -282,6 +284,13 @@ export function AppShell({
 
   return (
     <div className="cstk-root flex min-h-screen flex-col bg-bg md:flex-row">
+      {/* First focusable thing in the frame: jump past the nav to the page. */}
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-control bg-card px-4 py-3 font-body text-small font-semibold text-text shadow-pop focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        {t ? t('a11y.skip_to_content') : 'Skip to content'}
+      </a>
       {/* Neev (owner) Command Center sidebar — desktop only. */}
       {neev ? (
         <NeevSidebar zones={neevZones} role={canonicalRole} roleBadge={roleBadge} collapsed={sidebarCollapsed} />
@@ -400,7 +409,11 @@ export function AppShell({
           )
         ) : null}
 
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 pb-24 md:max-w-5xl md:px-8 md:py-8 md:pb-10">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 pb-24 focus:outline-none md:max-w-5xl md:px-8 md:py-8 md:pb-10"
+        >
           {children}
         </main>
       </div>

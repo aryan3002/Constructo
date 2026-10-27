@@ -124,6 +124,14 @@ export function useT(): TFunction {
   return useLanguageContext().t
 }
 
+/**
+ * `useT()` for shared chrome that is also rendered without a provider (bare
+ * unit tests): null outside a <LanguageProvider> instead of throwing.
+ */
+export function useOptionalT(): TFunction | null {
+  return useContext(LanguageContext)?.t ?? null
+}
+
 /** Current language + setter: `const { lang, setLanguage } = useLanguage()`. */
 export function useLanguage(): { lang: Language; setLanguage: (lang: Language) => void } {
   const { lang, setLanguage } = useLanguageContext()

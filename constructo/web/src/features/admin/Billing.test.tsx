@@ -8,6 +8,8 @@ import type { CompanyBilling } from '../../api/auth'
 const getBilling = vi.fn()
 const updateBilling = vi.fn()
 vi.mock('../../api/auth', () => ({
+  // A signed-in owner (useMe only asks the server when signed in).
+  isAuthenticated: () => true,
   authApi: {
     getBilling: (...a: unknown[]) => getBilling(...a),
     updateBilling: (...a: unknown[]) => updateBilling(...a),
