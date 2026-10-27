@@ -25,6 +25,8 @@ export default function SurveyScreen() {
 
   const q = useQuery({ queryKey: ['owner', 'survey', id], queryFn: () => audit.survey(id), enabled: !!id })
   const onboard = useMutation({
+    // Shows its own error inline; skip the app-wide error toast.
+    meta: { errorHandled: true },
     mutationFn: () => audit.onboardSurvey(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['owner', 'survey', id] })

@@ -126,7 +126,7 @@ export default function Approvals() {
   const batch = useMutation({
     mutationFn: (ids: string[]) => owner.batch('resolve', ids),
     onSuccess: (res) => {
-      toast(batchSummary(res, lang), res.skipped.length ? 'alert-circle' : 'check-circle')
+      toast(batchSummary(res, lang), res.skipped.length ? { tone: 'info' } : 'check-circle')
       setSelected(new Set())
       void invalidate()
     },

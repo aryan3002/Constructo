@@ -16,6 +16,7 @@ import { Tabs } from 'expo-router'
 import { ThemeProvider, useTheme } from '../../../src/theme/ThemeProvider'
 import { DesTabBar } from '../../../src/screens/architect/components'
 import { RoleGuard } from '../../../src/auth/RoleGuard'
+import { ToastProvider } from '../../../src/ui'
 
 function ArchitectTabs() {
   const { theme } = useTheme()
@@ -50,7 +51,9 @@ export default function ArchitectLayout() {
   return (
     <RoleGuard role="architect">
       <ThemeProvider initial="daylight">
-        <ArchitectTabs />
+        <ToastProvider>
+          <ArchitectTabs />
+        </ToastProvider>
       </ThemeProvider>
     </RoleGuard>
   )

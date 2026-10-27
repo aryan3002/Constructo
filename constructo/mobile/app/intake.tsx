@@ -250,6 +250,8 @@ function IntakeFlow() {
 
   // PUT empty body → AI-drafted profile
   const profileMut = useMutation<DesignProfile>({
+    // Shows its own error inline; skip the app-wide error toast.
+    meta: { errorHandled: true },
     mutationFn: () =>
       request<DesignProfile>('/api/v1/homeowner/design/profile', {
         method: 'PUT',

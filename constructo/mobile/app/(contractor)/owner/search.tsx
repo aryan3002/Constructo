@@ -57,6 +57,8 @@ export default function Search() {
   const [q, setQ] = useState('')
 
   const search = useMutation<SearchResponse, Error, string>({
+    // Shows its own error inline; skip the app-wide error toast.
+    meta: { errorHandled: true },
     mutationFn: (query: string) => owner.search({ q: query }),
   })
 

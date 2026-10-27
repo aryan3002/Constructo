@@ -1139,6 +1139,8 @@ function ChangeStoryCard({
   const toast = useToast()
   // Send = a request to the builder about this change (lands in My Requests).
   const sendM = useMutation({
+    // Shows its own error inline; skip the app-wide error toast.
+    meta: { errorHandled: true },
     mutationFn: (body: { title: string; detail: string }) => homeowner.createRequest(body),
     onSuccess: () => {
       setNote('')

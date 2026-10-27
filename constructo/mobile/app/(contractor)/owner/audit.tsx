@@ -200,6 +200,8 @@ function NewAuditSheet({
   const [when, setWhen] = useState<'today' | 'this_week'>('today')
 
   const create = useMutation({
+    // Shows its own error inline; skip the app-wide error toast.
+    meta: { errorHandled: true },
     mutationFn: () => audit.create({ site_id: siteId!, sections: picked, scheduled_for: when }),
     onSuccess: () => {
       setSiteId(null)

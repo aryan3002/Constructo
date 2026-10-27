@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { authApi } from '../api/auth'
 import type { Language } from '../api/types'
+import { setActiveLang } from './activeLang'
 import { en, type Dict } from './en'
 import { hi } from './hi'
 
@@ -47,6 +48,7 @@ function interpolate(template: string, params?: TParams): string {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>('en')
+  setActiveLang(lang)
 
   useEffect(() => {
     void AsyncStorage.getItem(STORAGE_KEY).then((saved) => {

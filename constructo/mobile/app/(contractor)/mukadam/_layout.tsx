@@ -15,6 +15,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { FACES } from '../../../src/theme/fonts'
 import { RoleGuard } from '../../../src/auth/RoleGuard'
+import { ToastProvider } from '../../../src/ui'
 
 const STR = {
   en: { attendance: 'Attendance', payments: 'My Pay', help: 'Help' },
@@ -69,7 +70,9 @@ function MukadamLayoutTabs() {
 export default function MukadamLayout() {
   return (
     <RoleGuard role="labor_contractor">
-      <MukadamLayoutTabs />
+      <ToastProvider>
+        <MukadamLayoutTabs />
+      </ToastProvider>
     </RoleGuard>
   )
 }

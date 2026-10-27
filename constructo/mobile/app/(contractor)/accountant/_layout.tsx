@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { RoleGuard } from '../../../src/auth/RoleGuard'
+import { ToastProvider } from '../../../src/ui'
 
 const tabIcon =
   (name: keyof typeof Ionicons.glyphMap) =>
@@ -67,7 +68,9 @@ function AccountantLayoutTabs() {
 export default function AccountantLayout() {
   return (
     <RoleGuard role="accountant">
-      <AccountantLayoutTabs />
+      <ToastProvider>
+        <AccountantLayoutTabs />
+      </ToastProvider>
     </RoleGuard>
   )
 }

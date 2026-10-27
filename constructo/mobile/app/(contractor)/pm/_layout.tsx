@@ -15,6 +15,7 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { FACES } from '../../../src/theme/fonts'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { RoleGuard } from '../../../src/auth/RoleGuard'
+import { ToastProvider } from '../../../src/ui'
 
 const tabIcon =
   (name: keyof typeof Ionicons.glyphMap) =>
@@ -69,7 +70,9 @@ function PmLayoutTabs() {
 export default function PmLayout() {
   return (
     <RoleGuard role="pm">
-      <PmLayoutTabs />
+      <ToastProvider>
+        <PmLayoutTabs />
+      </ToastProvider>
     </RoleGuard>
   )
 }

@@ -5,7 +5,13 @@
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { AppState, Platform, View } from 'react-native'
-import { QueryClient, QueryClientProvider, focusManager, useQueryClient } from '@tanstack/react-query'
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Stack, usePathname, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -13,6 +19,7 @@ import * as Notifications from 'expo-notifications'
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext'
 import { chatApi } from '../src/api/chat'
+import { reportMutationError } from '../src/api/mutationErrors'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { I18nProvider } from '../src/i18n/I18nProvider'
 import { chatPushRoute } from '../src/push/chat_route.util'
@@ -21,7 +28,17 @@ import { useAppFonts } from '../src/theme/fonts'
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useAppFonts()
-  const client = useMemo(() => new QueryClient(), [])
+  // A failed mutation with no error handling of its own shows an error toast
+  // (through the mounted ToastProvider) instead of failing silently.
+  const client = useMemo(
+    () =>
+      new QueryClient({
+        mutationCache: new MutationCache({
+          onError: (err, _vars, _ctx, mutation) => reportMutationError(err, mutation.options),
+        }),
+      }),
+    [],
+  )
 
   // React Query refetches stale queries when the app returns to the foreground
   // (the RN equivalent of refetchOnWindowFocus). Keeps daily screens fresh.
