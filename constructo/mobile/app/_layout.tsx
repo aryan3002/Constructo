@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext'
+import { MISSING_RELEASE_CONFIG } from '../src/api/config'
 import { chatApi } from '../src/api/chat'
 import { reportMutationError } from '../src/api/mutationErrors'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
@@ -26,8 +27,18 @@ import { I18nProvider } from '../src/i18n/I18nProvider'
 import { chatPushRoute } from '../src/push/chat_route.util'
 import { designPushRoute } from '../src/push/design_route.util'
 import { useAppFonts } from '../src/theme/fonts'
+import { ConfigMissingScreen } from '../src/ui/ConfigMissingScreen'
 
 export default function RootLayout() {
+  // A release build without its API base or policy pages refuses to start
+  // (never a developer address). The list is fixed at build time.
+  if (MISSING_RELEASE_CONFIG.length > 0) {
+    return <ConfigMissingScreen missing={MISSING_RELEASE_CONFIG} />
+  }
+  return <ConfiguredRoot />
+}
+
+function ConfiguredRoot() {
   const [fontsLoaded, fontError] = useAppFonts()
   // A failed mutation with no error handling of its own shows an error toast
   // (through the mounted ToastProvider) instead of failing silently.
