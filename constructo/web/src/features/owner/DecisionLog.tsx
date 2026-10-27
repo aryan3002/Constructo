@@ -3,8 +3,10 @@
 // who-decided-what / when / on-what-proof. Sourced from the shared decisions
 // query (`qk.decisions()` → approvalsApi.list()); `useDecide` optimistically
 // prepends the in-flight row here, so a chip action shows up instantly.
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { approvalsApi, type Decision } from '../../api/approvals'
+import { authApi } from '../../api/auth'
 import { qk } from '../../api/queryKeys'
 import { useT } from '../../i18n'
 import { Mono, Small, StatusDot, type Status } from '../../ui'
@@ -14,14 +16,42 @@ import type { TranslationKey } from '../../i18n'
 /** How many most-recent decisions to surface (the log is a glance, not an audit). */
 const LOG_LIMIT = 6
 
-const KIND_META: Record<
-  Decision['kind'],
-  { status: Status; labelKey: TranslationKey }
-> = {
-  approval: { status: 'ok', labelKey: 'owner.log.kind_approved' },
-  hold_payment: { status: 'warn', labelKey: 'owner.log.kind_held' },
-  generic: { status: 'info', labelKey: 'owner.log.kind_assigned' },
-  homeowner_question: { status: 'info', labelKey: 'owner.log.kind_replied' },
+export interface LogLabel {
+  status: Status
+  labelKey: TranslationKey
+  vars?: Record<string, string>
+}
+
+const OPEN = new Set<Decision['state']>(['pending', 'acknowledged', 'escalated'])
+const MONEY = new Set<Decision['kind']>(['approval', 'hold_payment'])
+
+/**
+ * What a log row says happened, from its kind AND state — a pending approval
+ * reads "Pending", never "Approved". `names` maps user ids to display names
+ * for "Assigned to <name>".
+ */
+export function decisionLabel(d: Decision, names: Record<string, string> = {}): LogLabel {
+  if (OPEN.has(d.state)) {
+    if (d.kind === 'hold_payment') return { status: 'warn', labelKey: 'owner.log.on_hold' }
+    if (d.kind === 'generic' && d.assigned_to) {
+      const name = names[d.assigned_to]
+      return name
+        ? { status: 'info', labelKey: 'owner.log.assigned_to', vars: { name } }
+        : { status: 'info', labelKey: 'owner.log.assigned' }
+    }
+    if (d.state === 'escalated') return { status: 'risk', labelKey: 'owner.log.escalated' }
+    if (d.state === 'acknowledged') return { status: 'info', labelKey: 'owner.log.acknowledged' }
+    return { status: 'warn', labelKey: 'owner.log.pending' }
+  }
+  if (d.state === 'resolved') {
+    return MONEY.has(d.kind)
+      ? { status: 'ok', labelKey: 'owner.log.approved' }
+      : { status: 'ok', labelKey: 'owner.log.resolved' }
+  }
+  // rejected: a refused held payment stays held.
+  return d.kind === 'hold_payment'
+    ? { status: 'warn', labelKey: 'owner.log.held' }
+    : { status: 'risk', labelKey: 'owner.log.rejected' }
 }
 
 export function useDecisions() {
@@ -54,6 +84,18 @@ export function DecisionLog({
   const t = useT()
   const { data, isLoading, isError } = useDecisions()
   const items = (data?.items ?? []).slice(0, LOG_LIMIT)
+  // Teammate names for "Assigned to <name>" (owner/PM read the roster).
+  const anyAssigned = items.some((d) => d.assigned_to)
+  const team = useQuery({
+    queryKey: qk.team(),
+    queryFn: () => authApi.listTeam(),
+    enabled: anyAssigned,
+  })
+  const names = useMemo(
+    () =>
+      Object.fromEntries((team.data ?? []).map((m) => [m.id, m.name?.trim() || m.phone])),
+    [team.data],
+  )
 
   return (
     <section aria-labelledby="owner-log-heading" className="mt-2">
@@ -81,7 +123,7 @@ export function DecisionLog({
       ) : (
         <ol className="overflow-hidden rounded-card border border-line bg-card shadow-card">
           {items.map((d) => {
-            const meta = KIND_META[d.kind] ?? KIND_META.generic
+            const meta = decisionLabel(d, names)
             const site = d.site_id ? siteNames[d.site_id] : null
             return (
               <li
@@ -93,7 +135,7 @@ export function DecisionLog({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-body text-small font-semibold text-text">
-                    <span className="text-text-mute">{t(meta.labelKey)} · </span>
+                    <span className="text-text-mute">{t(meta.labelKey, meta.vars)} · </span>
                     {d.title}
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-body text-micro text-text-mute">
