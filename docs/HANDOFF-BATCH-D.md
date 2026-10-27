@@ -1,6 +1,7 @@
 # Handoff: Neev launch fixes, from Batch D onward
 
-Written 2026-10-27 for a fresh chat that picks up the pre-launch fix work.
+Written 2026-10-27 for a fresh chat that picks up the pre-launch fix work, and
+updated the same day once Batch D was verified (Batch E is next).
 Everything here is on branch `claude/bold-goodall-11ksuo` (pushed). There is no
 PR; don't open one unless the founder asks.
 
@@ -39,8 +40,8 @@ PR; don't open one unless the founder asks.
 | A | Mobile release blockers: S1 junk tabs, S5/D3 back controls, insets, dev gallery, T7 | Done, verified |
 | B | Mobile session and chat integrity: T1 outbox, T2 sign-out reset, T3 401 handling, S9 client push routing | Done, verified |
 | C | Backend security: S3 signup, S4 prod guard, S9 approvals, payment roles, T4 audience, rate limits, S6 deletion cleanup, server logout | Done, verified (details below) |
-| D | Homeowner wrong facts (T5) and lost captures (T6) | **Next.** Presented to the founder; waiting for "go" |
-| E | Money guard rails (T8 client) and capture queue (T9) | Pending |
+| D | Homeowner wrong facts (T5) and lost captures (T6) | Done, verified (details below) |
+| E | Money guard rails (T8 client) and capture queue (T9) | **Next.** Presented to the founder; waiting for "go" |
 | F | Account deletion for all roles (S6 client) and store config | Pending |
 | G | Web console trust bugs | Pending |
 
@@ -87,32 +88,50 @@ are still the founder's decisions.
   - Recommended fix: let an invited number sign in directly, matched to its pending invite, on both app and web.
   - Deletion still leaves a deleted person's name inside the `raw_messages.raw` JSON and extracted event text.
 
-## Batch D: what was presented (awaiting "go")
+### Batch D: what changed (needed for E–G)
 
-**Homeowner screens show only true facts, and nothing homeowners send gets lost.**
-Mostly the homeowner side of the mobile app (`constructo/mobile/app/(homeowner)/`),
-with backend additions only where the data is missing.
+Run in session `session_01UneWbgUazQm5EctGtLAiD4` (9 commits, `e89361f`..`c11344c`),
+plus 3 fixes from verification (`937ae92`, `5b8096b`, `1c581b6`).
 
-**Wrong facts (T5)**
-1. Home's "Total paid ₹22,500" is really the sum of change-order cost changes. Show the real amount paid from payment records, or label it for what it is.
-2. The "Pre-approved" payment pill is hard-coded. Derive it or remove it.
-3. The milestone "On track" pill is hard-coded and still shows after the handover date. Derive it from the schedule (on track, behind, handed over) or remove it.
-4. The Design screen shows "Pending your approval" on every drawing. Show it only on drawings actually waiting for the homeowner.
-5. The Messages participant list is hard-coded. Show the real people, or remove it.
+- **Home payments (T5).** `spend_summary` gains `total_paid` (homeowner→builder payments, disputed excluded, via `site_homeowner_paid` in `payments/router.py`, the same rule as the builder's "received"; null when nothing is recorded) and `approved_change_count`. The card shows "Paid so far", "Changes so far" and "N changes · M approved". The "Pre-approved" pill is gone. Updates takes `?tab=changes`.
+- **Schedule pills (T5).** `src/screens/homeowner/schedule.util.ts` is the one rule for every schedule pill: on track, running late, past handover date or handed over, judged on the phone's local date. `targetHandoverOn()` gives Home and Updates one handover date for both the label and the pill.
+- **Drawings (T5).** No "Pending your approval" anywhere; Plans shows a "Latest drawing" card. The drawing screen's Approve, Comment and Request-changes stubs are untouched (Batch F's placeholder cleanup).
+- **Household (T5).** `GET /homeowner/members/roster` now answers every household member. Owners get the manager view. Family and advisors get active members only, with `phone`, `join_code`, `invite_link` null and `notif_prefs` empty. The Messages strip, inbox row and conversation header are built from it.
+- **Request photos (T6).** `homeowner_requests.photo_ids` (migration `d7e8f9a0b1c2`). Create takes up to 5 of the caller's own visit-photo ids (else 422 `invalid_photo`). `RequestOut.photos` returns `{id, url}` on the homeowner endpoints and the builder's `GET /api/v1/requests`. My Requests and the web Requests view show thumbnails.
+- **Upload guards (T6).** `voice_key` (on `/requests` and `/flag`) must be under `homeowner/{site}/voice/`, else 422 `invalid_voice_key`. A reference `image_url` must be http(s) or under `homeowner/{site}/design/` or `design/{site}/`, else 422 `invalid_image_url`. Old device-path reference rows are hidden, not deleted.
+- **Sends (T6).** Intake uploads reference photos before saving them and says when one fails; style picks are awaited and retried. A change comment becomes a request titled "About a change: …".
+- **Verified:** backend 1788 passed, plus the known Pinterest failure; mobile 69 suites / 547 tests; web 137 files / 884 tests; ruff, typecheck and build clean; migrations up/down/up clean. On-screen walk-through done as the owner and as a family member.
 
-**Lost sends (T6)**
-6. Photos on an issue report are never attached to the request. Upload them and attach the keys.
-7. Intake reference photos upload a device `file://` path. Use the profiler's presigned upload.
-8. The change-comment Send button throws the note away. Wire it to the server, or remove it.
+### Follow-ups found while verifying D (not yet assigned)
 
-Review locations (line numbers may have drifted):
-- `(homeowner)/home.tsx:779, 1024`
-- `updates.tsx:431, 1239`
-- `design.tsx:836`
-- `issue.tsx:320`
-- `app/intake.tsx:273`
+- Home still says "Today · all calm" above "One thing for you" (D2; a one-line fix).
+- The drawing detail says "Previous version not available" even when v1 is in the list.
+- On the web build, the Messages inbox row title ("Your builder") collapses to zero width, and photo uploads fail (React Native file objects aren't web `Blob`s). This only matters if the homeowner app is served on the web (`mobile/vercel.json`).
+- `/requests` resolves to the root `app/requests.tsx` on web, not My Requests (known; "two screens answer /requests").
+- The demo seeds overlap (two "now" stages, duplicate Foundation and Handover).
+- An unnamed member shows as "—" on Members; the role line above it still says who they are.
 
-Every fix needs a test, plus a walk through the homeowner screens in a web export to confirm what's on screen comes from data.
+## Batch E: what was presented (awaiting "go")
+
+**Money approvals get guard rails, and site captures can't be lost or doubled.**
+Contractor side of the mobile app, the web approve buttons, and a small backend
+change for duplicate captures. The server role checks for money were done in C.
+
+**Money (T8 client, plus the C follow-ups)**
+1. "Approve all" on the owner's Approvals screen posts `batch/approve`, but the server only accepts `resolve`, so it has always failed with 422. Send `resolve` and say what was skipped (`owner/approvals.tsx:128`, `src/api/owner.ts:459`).
+2. Confirm before money moves: approve or reject on a payment hold or money approval asks once, showing the amount and what happens (`owner/brief.tsx:100` and the approvals screens).
+3. Undo: after confirming, the decision waits about 5 seconds with an Undo button before it's sent. Going to the background sends it at once. No server change.
+4. Failures are visible. Toasts always use the green success style today, even for errors (`src/ui/Toast.tsx`), and 35 of 50 contractor mutations have no error handling. Add an error style and one app-wide fallback for any mutation without its own error message.
+5. Non-owners aren't shown buttons that fail. For money decisions, PMs, supervisors and other roles see "Only the owner can approve this; it's waiting in their Brief" instead of Approve/Reject, on mobile and web. A 403 `owner_only` from a stale screen shows the same message.
+
+**Capture queue (T9)**
+6. One sender. Five screens each run their own drain (`useOutbox` in capture, task, tasks-asks, mukadam attendance, `SyncStatus`), so a reconnect can send the same item twice. One shared, locked sender, like the chat outbox fix in B.
+7. No doubles on retry. Each capture carries an id; the server records it and answers a repeat with the first result instead of filing it again.
+8. A queue per person. Sign-out deletes unsent captures today (B's shared-phone fix). Keep each person's queue under their own login instead: nothing is thrown away, and nothing goes out under someone else's login.
+9. Nothing dropped silently. Captures the server permanently refuses (too large, not assigned, invalid) go to a "Couldn't send" list with the reason, Retry and Delete.
+10. Offline start knows your site. The capture screen caches the user's sites, so opening it offline no longer says "No site assigned yet — ask your PM" (`supervisor/capture.tsx:141`).
+
+Every fix needs a test, plus a walk through the owner and PM approve flows and an offline capture.
 
 ## Local environment recipe
 
