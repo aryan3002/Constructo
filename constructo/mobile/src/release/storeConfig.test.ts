@@ -71,3 +71,34 @@ describe('eas.json', () => {
     }
   })
 })
+
+describe('Android notification icon', () => {
+  const plugin = appJson.plugins.find(
+    (p: unknown) => Array.isArray(p) && p[0] === 'expo-notifications',
+  )
+
+  it('keeps the marigold accent', () => {
+    expect(plugin[1].color).toBe('#f2a100')
+  })
+
+  it('is a white silhouette on transparent, not the full-colour app icon', () => {
+    // Android draws only the alpha channel of a notification icon: an opaque
+    // icon becomes a white square.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PNG } = require('pngjs')
+    const png = PNG.sync.read(fs.readFileSync(path.join(ROOT, plugin[1].icon)))
+    expect(png.width).toBeGreaterThanOrEqual(96)
+    let transparent = 0
+    let painted = 0
+    for (let i = 0; i < png.data.length; i += 4) {
+      const [r, g, b, a] = png.data.slice(i, i + 4)
+      if (a === 0) transparent++
+      else {
+        painted++
+        expect([r, g, b]).toEqual([255, 255, 255])
+      }
+    }
+    expect(transparent).toBeGreaterThan(painted) // a mark, not a filled square
+    expect(painted).toBeGreaterThan(0)
+  })
+})
