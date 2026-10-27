@@ -42,6 +42,8 @@ export interface Me {
   phone: string
   role: Role
   language: Language | null
+  /** When they agreed to AI processing (S7); null/absent = not yet. */
+  ai_consent_at?: string | null
 }
 
 // ---- Sites ----

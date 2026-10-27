@@ -53,6 +53,10 @@ class User(Base):
     # flips `is_active=False` (reuses the existing auth lockout) and scrubs
     # name/phone in place — see delete_own_account() in app/auth/router.py.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the person agreed that their photos, voice notes, chat messages and
+    # documents may go to the AI providers (S7). Null = not yet; the apps gate
+    # on it. Set once (POST /users/me/ai-consent).
+    ai_consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -106,6 +106,11 @@ export const authApi = {
    * Permanently delete the signed-in user's own account. Requires a fresh
    * step-up token from `stepUpVerify`.
    */
+  /** Record the one-time agreement to AI processing (S7). Idempotent. */
+  recordAiConsent(): Promise<Me> {
+    return request('/api/v1/users/me/ai-consent', { method: 'POST' })
+  },
+
   deleteAccount(stepUpToken: string): Promise<void> {
     return request('/api/v1/users/me', {
       method: 'DELETE',

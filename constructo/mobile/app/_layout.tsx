@@ -21,6 +21,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthContext'
 import { MISSING_RELEASE_CONFIG } from '../src/api/config'
 import { chatApi } from '../src/api/chat'
 import { reportMutationError } from '../src/api/mutationErrors'
+import { AiConsentGate } from '../src/consent/AiConsentGate'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
 import { flushPending } from '../src/owner/pendingDecisions'
 import { I18nProvider } from '../src/i18n/I18nProvider'
@@ -79,6 +80,8 @@ function ConfiguredRoot() {
             <ChatPushForeground />
             <ChatOutboxLaunchDrain />
             <Stack screenOptions={{ headerShown: false }} />
+            {/* Covers everything until a signed-in person agrees to AI use (S7). */}
+            <AiConsentGate />
           </AuthProvider>
         </I18nProvider>
       </QueryClientProvider>

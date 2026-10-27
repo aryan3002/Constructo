@@ -60,6 +60,9 @@ interface AuthContextValue {
    *  success (so callers can navigate deterministically) or null if unauthed. */
   refresh: () => Promise<Me | null>
   signOut: () => Promise<void>
+  /** Replace the signed-in profile with a fresher copy from the server (e.g.
+   *  the one returned after recording AI consent). */
+  applyMe: (profile: Me) => void
   /** True after an expired login signed the user out (the sign-in screen says
    *  so); cleared by the next successful sign-in. */
   sessionExpired: boolean
@@ -260,6 +263,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const applyMe = useCallback((profile: Me) => {
+    setMe(profile)
+    void AsyncStorage.setItem(SESSION_ME_KEY, JSON.stringify(profile)).catch(() => undefined)
+  }, [])
+
   const signOut = useCallback(async () => {
     await resetSession({ queryClient })
     setOnboarded(false)
@@ -282,8 +290,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, me, role: me?.role ?? null, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, sessionExpired }),
-    [status, me, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, sessionExpired],
+    () => ({ status, me, role: me?.role ?? null, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, applyMe, sessionExpired }),
+    [status, me, subRole, siteId, onboarded, setJoinData, markOnboarded, refresh, signOut, applyMe, sessionExpired],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

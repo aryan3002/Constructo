@@ -82,6 +82,9 @@ class MeOut(BaseModel):
     phone: str
     role: UserRole
     language: str | None
+    # When they agreed to AI processing; null until they do (the apps show
+    # the consent screen first).
+    ai_consent_at: datetime | None = None
 
 
 class MeUpdateIn(BaseModel):
@@ -290,6 +293,7 @@ def _me_out(user: User, company_name: str | None = None) -> MeOut:
         phone=user.phone,
         role=user.role,
         language=user.language,
+        ai_consent_at=user.ai_consent_at,
     )
 
 
@@ -413,6 +417,21 @@ async def update_me(
         user.language = data["language"]
     await session.commit()
     await session.refresh(user)
+    return await _me_out_with_company(session, user)
+
+
+@users_router.post("/me/ai-consent", response_model=MeOut)
+async def record_ai_consent(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeOut:
+    """Record that the person agreed to AI processing (S7, Apple 5.1.2(i)).
+    Once per person: the first agreement's time is kept, so calling it again
+    is a no-op that returns the same profile."""
+    if user.ai_consent_at is None:
+        user.ai_consent_at = datetime.now(UTC)
+        await session.commit()
+        await session.refresh(user)
     return await _me_out_with_company(session, user)
 
 

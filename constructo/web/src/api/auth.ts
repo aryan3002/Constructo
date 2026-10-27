@@ -68,6 +68,8 @@ export interface Me {
   phone: string
   role: Role
   language: Language | null
+  /** When they agreed to AI processing (S7); null/absent = not yet. */
+  ai_consent_at?: string | null
 }
 
 export interface LandingInfo {
@@ -278,6 +280,11 @@ export const authApi = {
     } catch {
       /* best-effort — the token still expires on its own */
     }
+  },
+
+  /** Record the one-time agreement to AI processing (S7). Idempotent. */
+  recordAiConsent(): Promise<Me> {
+    return call<Me>('/api/v1/users/me/ai-consent', { method: 'POST' })
   },
 
   /** Send the current user a re-verification code (no-op in dev; 000000). */

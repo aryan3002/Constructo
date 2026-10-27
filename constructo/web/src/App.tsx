@@ -16,6 +16,7 @@ import { Login } from './pages/auth/Login'
 import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
 import { Join } from './pages/auth/Join'
 import { DeleteAccount } from './pages/auth/DeleteAccount'
+import { AiConsentGate } from './components/AiConsentGate'
 import { VendorConfirm } from './pages/VendorConfirm'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RoleLanding } from './pages/auth/RoleLanding'
@@ -75,7 +76,12 @@ const RequestsView = lazy(() =>
 
 /** Wrap a page that brings its own AppShell/Theme chrome in the auth gate. */
 function Guarded({ children }: { children: React.ReactNode }) {
-  return <RequireAuth>{children}</RequireAuth>
+  // Signed in, then the one-time AI consent (S7), then the page.
+  return (
+    <RequireAuth>
+      <AiConsentGate>{children}</AiConsentGate>
+    </RequireAuth>
+  )
 }
 
 /**
