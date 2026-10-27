@@ -142,6 +142,7 @@ from app.models import (
     UserRole,
     WeeklySummary,
 )
+from app.payments.router import site_homeowner_paid
 from app.storage import get_storage
 
 router = APIRouter(prefix="/api/v1/homeowner", tags=["homeowner"])
@@ -919,10 +920,19 @@ async def home(
     changes = (
         await session.execute(select(Change).where(Change.site_id == sid))
     ).scalars().all()
+    company_id = (
+        await session.execute(select(Site.company_id).where(Site.id == sid))
+    ).scalar_one()
+    paid = await site_homeowner_paid(session, company_id, sid)
     spend = None
-    if changes:
+    if changes or paid is not None:
         total = sum(float(c.cost_delta) for c in changes if c.cost_delta is not None)
-        spend = SpendSummary(total_change_cost_delta=total, change_count=len(changes))
+        spend = SpendSummary(
+            total_change_cost_delta=total,
+            change_count=len(changes),
+            approved_change_count=sum(1 for c in changes if c.approved_by is not None),
+            total_paid=float(paid) if paid is not None else None,
+        )
 
     # Thumbnail per recent item: a DISTINCT real published photo for each update
     # (presigned), preferring one from the update's own day, else the newest

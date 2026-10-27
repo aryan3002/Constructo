@@ -266,6 +266,12 @@ class AttentionItem(BaseModel):
 class SpendSummary(BaseModel):
     total_change_cost_delta: float
     change_count: int
+    # Changes the builder has approved (``approved_by`` set).
+    approved_change_count: int = 0
+    # Homeowner→contractor payments on the site, disputed excluded — the same
+    # figure as the builder's "received". None when nothing has been paid yet.
+    # Only the total crosses to the homeowner, never payment details.
+    total_paid: float | None = None
 
 
 class QuietPeriodOut(BaseModel):

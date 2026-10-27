@@ -55,10 +55,10 @@ import {
   TimeBar,
   FLOATING_NAV_CLEARANCE,
   Logo,
-  formatINR,
 } from '../../src/ui'
 import type { AttentionItem, Update } from '../../src/api/types'
 import { REQUEST_STATUS_META, slaPromise } from '../../src/screens/requests.util'
+import { paymentsCardView } from '../../src/screens/homeowner/home_payments.util'
 
 // ─── i18n table (en / hi) ───────────────────────────────────────────────────
 
@@ -114,9 +114,6 @@ const STR = {
     // Payments card
     paymentsTitle: 'Payments',
     paymentsPreApproved: 'Pre-approved',
-    paymentsTotalPaid: 'Total paid',
-    paymentsNextPayment: 'Next payment',
-    paymentsSeeSchedule: 'See payment schedule',
     // Error
     errorLine: "Couldn't load your home.",
     tryAgain: 'Try again',
@@ -178,9 +175,6 @@ const STR = {
     activityEmpty: 'कोई हालिया गतिविधि नहीं',
     paymentsTitle: 'भुगतान',
     paymentsPreApproved: 'पूर्व-अनुमोदित',
-    paymentsTotalPaid: 'कुल भुगतान',
-    paymentsNextPayment: 'अगला भुगतान',
-    paymentsSeeSchedule: 'भुगतान शेड्यूल देखें',
     errorLine: 'आपका घर लोड नहीं हो सका।',
     tryAgain: 'फिर कोशिश करें',
     quietTitle: 'अभी साइट पर शांति है',
@@ -435,11 +429,8 @@ export default function Home() {
   const nowMilestone = milestone_now
   const nowExpected = shortDate(nowMilestone?.expected_on ?? null)
 
-  // ── Spend summary formatting ──────────────────────────────────────────────
-  const totalPaidParts = spend_summary
-    ? formatINR(spend_summary.total_change_cost_delta, { sign: 'none' })
-    : null
-  // We don't have a "next payment" from SpendSummary, show change count instead
+  // ── Payments card — real amount paid + net change cost (T5) ──────────────
+  const payments = paymentsCardView(spend_summary, lang)
 
   return (
     <ScrollView
@@ -1001,11 +992,11 @@ export default function Home() {
       ) : null}
 
       {/* ══════════════════════════════════════════════════════════════════
-          CARD 6: PaymentsCard — membrane-gated, hidden when spend_summary null.
-          Prototype: Card with wallet icon + two stat tiles + meta + "See payment
-          schedule" link.
+          CARD 6: PaymentsCard — hidden when there's nothing real to show.
+          "Paid so far" is the builder's recorded "received"; "Changes so far"
+          is the net change-log cost.
       ══════════════════════════════════════════════════════════════════ */}
-      {spend_summary ? (
+      {payments ? (
         <FadeInUp delay={70}>
           <View
             style={{
@@ -1024,63 +1015,55 @@ export default function Home() {
               <StatusPill status="ok" label={t.paymentsPreApproved} size="sm" />
             </View>
 
-            {/* Two stat tiles */}
+            {/* Stat tiles — only the ones backed by data */}
             <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
-              {/* Total paid */}
-              <View
-                style={{
-                  flex: 1,
-                  backgroundColor: AP.surfaceLow,
-                  borderRadius: theme.radii.chip,
-                  padding: SPACE.md,
-                }}
-              >
-                <Small muted>{t.paymentsTotalPaid}</Small>
-                <Body
-                  style={{
-                    fontSize: 19,
-                    fontWeight: '600',
-                    color: c.text,
-                    marginTop: SPACE.xs,
-                    fontVariant: ['tabular-nums'],
-                  }}
-                >
-                  {totalPaidParts
-                    ? `${totalPaidParts.currency}${totalPaidParts.value}`
-                    : '—'}
-                </Body>
-              </View>
-
-              {/* Change count tile — we don't have a "next payment" amount */}
-              <View
-                style={{
-                  flex: 1,
-                  backgroundColor: AP.surfaceLow,
-                  borderRadius: theme.radii.chip,
-                  padding: SPACE.md,
-                }}
-              >
-                <Small muted>Approved changes</Small>
-                <Body
-                  style={{
-                    fontSize: 19,
-                    fontWeight: '600',
-                    color: c.text,
-                    marginTop: SPACE.xs,
-                  }}
-                >
-                  {spend_summary.change_count}
-                </Body>
-              </View>
+              {[payments.paid, payments.changes].map((tile) =>
+                tile ? (
+                  <View
+                    key={tile.label}
+                    style={{
+                      flex: 1,
+                      backgroundColor: AP.surfaceLow,
+                      borderRadius: theme.radii.chip,
+                      padding: SPACE.md,
+                    }}
+                  >
+                    <Small muted>{tile.label}</Small>
+                    <Body
+                      style={{
+                        fontSize: 19,
+                        fontWeight: '600',
+                        color: c.text,
+                        marginTop: SPACE.xs,
+                        fontVariant: ['tabular-nums'],
+                      }}
+                    >
+                      {tile.value}
+                    </Body>
+                  </View>
+                ) : null,
+              )}
             </View>
 
-            {/* "See payment schedule" link */}
-            <View style={{ marginTop: SPACE.md }}>
-              <LinkRow
-                label={t.paymentsSeeSchedule}
-                onPress={() => router.push('/(homeowner)/updates')}
-              />
-            </View>
+            {payments.meta ? (
+              <Small muted style={{ marginTop: SPACE.sm }}>
+                {payments.meta}
+              </Small>
+            ) : null}
+
+            {payments.link ? (
+              <View style={{ marginTop: SPACE.md }}>
+                <LinkRow
+                  label={payments.link.label}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(homeowner)/updates',
+                      params: { tab: payments.link?.tab ?? 'changes' },
+                    })
+                  }
+                />
+              </View>
+            ) : null}
           </View>
         </FadeInUp>
       ) : null}

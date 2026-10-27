@@ -455,6 +455,28 @@ async def _site_received(session: AsyncSession, company_id: UUID, site_id: UUID)
     return _compute_totals(rows).inflow
 
 
+async def site_homeowner_paid(
+    session: AsyncSession, company_id: UUID, site_id: UUID
+) -> Decimal | None:
+    """What the homeowner has paid on a site: the same number as the builder's
+    "received" (``_site_received``), or None when no payment counts towards it
+    yet (so a homeowner screen never shows a made-up ₹0)."""
+    rows = list(
+        (
+            await session.execute(
+                select(Payment).where(
+                    Payment.company_id == company_id,
+                    Payment.site_id == site_id,
+                    Payment.direction == PaymentDirection.homeowner_to_contractor,
+                )
+            )
+        ).scalars().all()
+    )
+    if not any(_counts_in_totals(p) for p in rows):
+        return None
+    return _compute_totals(rows).inflow
+
+
 def _financials_out(site_id: UUID, fin: SiteFinancials | None, received: Decimal) -> FinancialsOut:
     billed = fin.billed_amount if fin else None
     outstanding = (billed if billed is not None else Decimal("0")) - received
@@ -572,6 +594,11 @@ async def delete_payment(
 # ---- pure ledger math (unit-testable, no I/O) ------------------------------
 
 
+def _counts_in_totals(p: Payment) -> bool:
+    """A disputed amount is not trustworthy money, so it never counts."""
+    return p.status != PaymentStatus.disputed
+
+
 def _compute_totals(payments: list[Payment]) -> LedgerTotals:
     """Sum inflow/outflow/net over payments. Disputed rows are excluded from
     totals (a disputed amount is not trustworthy money) but counted in ``count``
@@ -579,7 +606,7 @@ def _compute_totals(payments: list[Payment]) -> LedgerTotals:
     inflow = Decimal("0")
     outflow = Decimal("0")
     for p in payments:
-        if p.status == PaymentStatus.disputed:
+        if not _counts_in_totals(p):
             continue
         if p.direction == PaymentDirection.homeowner_to_contractor:
             inflow += p.amount

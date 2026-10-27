@@ -251,8 +251,14 @@ export interface AttentionItem {
 }
 
 export interface SpendSummary {
+  /** Net cost of every logged change (can be negative). */
   total_change_cost_delta: number
   change_count: number
+  /** Changes the builder has approved. */
+  approved_change_count: number
+  /** Money the homeowner has paid (the builder's "received", disputed excluded).
+   *  Null when no payment has been recorded — show nothing, never ₹0. */
+  total_paid: number | null
 }
 
 /** A contractor-confirmed quiet card — "nothing visible today, here's why".

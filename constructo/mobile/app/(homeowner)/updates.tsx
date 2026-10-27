@@ -14,10 +14,10 @@
  *
  * Data hooks + i18n kept intact. Composition upgraded to match prototype exactly.
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, TextInput, View, type TextStyle } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons'
 
@@ -236,6 +236,19 @@ export default function Updates() {
     setTab(key)
     setVisited((v) => (v.has(key) ? v : new Set(v).add(key)))
   }, [])
+
+  // Deep link to a sub-tab, e.g. Home's "See all changes" → ?tab=changes.
+  // The param is cleared once applied so a later tap with the same link (this
+  // tab screen stays mounted) switches again.
+  const router = useRouter()
+  const params = useLocalSearchParams<{ tab?: string }>()
+  useEffect(() => {
+    const want = params.tab as SubTab | undefined
+    if (want && SUB_TABS.includes(want)) {
+      showTab(want)
+      router.setParams({ tab: undefined })
+    }
+  }, [params.tab, showTab, router])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
