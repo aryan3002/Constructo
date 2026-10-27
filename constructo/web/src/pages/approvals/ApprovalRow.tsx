@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { EvidenceCard, StatusPill, Button, Mono } from '../../ui'
+import { EvidenceCard, StatusPill, Button, Mono, Small } from '../../ui'
 import type { Status } from '../../ui'
 import { useT } from '../../i18n'
 import type { TranslationKey } from '../../i18n'
@@ -30,8 +30,9 @@ const STATE_KEY: Record<DecisionState, TranslationKey> = {
   escalated: 'approvals.state.escalated',
 }
 
-/** Money-bearing decisions only the owner may bind; others propose. */
-const MONEY_KINDS = new Set<DecisionKind>(['approval', 'hold_payment'])
+/** Money-bearing decisions only the owner may decide (the server's
+ *  `_OWNER_ONLY_KINDS`); everyone else gets 403 `owner_only`. */
+export const MONEY_KINDS = new Set<DecisionKind>(['approval', 'hold_payment'])
 
 export interface ApprovalRowProps {
   decision: Decision
@@ -39,8 +40,6 @@ export interface ApprovalRowProps {
   onToggleSelect: (id: string) => void
   onApprove: (id: string) => void
   onReject: (id: string) => void
-  /** Propose a money decision to the owner (non-owner roles, WC4). */
-  onPropose: (id: string) => void
   /** True for the owner (capability `approve_money`). */
   canApproveMoney: boolean
   busy?: boolean
@@ -58,7 +57,6 @@ export function ApprovalRow({
   onToggleSelect,
   onApprove,
   onReject,
-  onPropose,
   canApproveMoney,
   busy,
 }: ApprovalRowProps) {
@@ -66,8 +64,9 @@ export function ApprovalRow({
   const status = STATE_STATUS[d.state]
   const isOpen = d.state === 'pending' || d.state === 'escalated'
   // WC4 (abort condition): a non-owner NEVER sees Approve/Release on a money
-  // decision — only "Propose to owner →". The server is the authz source too.
-  const proposeOnly = MONEY_KINDS.has(d.kind) && !canApproveMoney
+  // decision — only a note that it waits on the owner (it is already in their
+  // inbox; there is nothing to send). The server is the authz source too.
+  const ownerOnly = MONEY_KINDS.has(d.kind) && !canApproveMoney
   const overdue =
     d.sla_due_at != null && new Date(d.sla_due_at).getTime() < Date.now()
 
@@ -132,15 +131,8 @@ export function ApprovalRow({
         />
         {isOpen ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {proposeOnly ? (
-              <Button
-                size="md"
-                variant="secondary"
-                disabled={busy}
-                onClick={() => onPropose(d.id)}
-              >
-                {t('approvals.action.propose')}
-              </Button>
+            {ownerOnly ? (
+              <Small data-testid="owner-only-note">{t('approvals.owner_only')}</Small>
             ) : (
               <>
                 <Button

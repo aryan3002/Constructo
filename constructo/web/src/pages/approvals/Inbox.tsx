@@ -5,7 +5,8 @@ import { useCan } from '../../auth/useCan'
 import { useT } from '../../i18n'
 import type { TranslationKey } from '../../i18n'
 import type { DecisionState } from '../../api/approvals'
-import { ApprovalRow } from './ApprovalRow'
+import { ApiError } from '../../api/client'
+import { ApprovalRow, MONEY_KINDS } from './ApprovalRow'
 import { useApprovals, useApprovalAction, useBatchAction } from './hooks'
 
 type Tab = 'open' | 'escalated' | 'resolved'
@@ -35,7 +36,7 @@ export function ApprovalInbox() {
   const canApproveMoney = useCan('approve_money')
   const [tab, setTab] = useState<Tab>('open')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
 
   const query = useApprovals(TAB_FILTER[tab])
   const action = useApprovalAction()
@@ -58,12 +59,43 @@ export function ApprovalInbox() {
 
   const busy = action.isPending || batch.isPending
 
+  // A refusal for a money decision (403 owner_only, e.g. from a stale screen)
+  // says who can decide it, never a generic error.
+  function showError(err: unknown) {
+    const ownerOnly = err instanceof ApiError && err.code === 'owner_only'
+    setToast({ text: t(ownerOnly ? 'approvals.owner_only' : 'common.error'), error: true })
+  }
+
+  function runAction(id: string, which: 'approve' | 'reject') {
+    setToast(null)
+    action.mutate({ id, action: which }, { onError: showError })
+  }
+
+  // Money items a non-owner selected: the server skips them, so say so first.
+  const moneySelected = decisions.filter(
+    (d) => selected.has(d.id) && MONEY_KINDS.has(d.kind),
+  ).length
+
   function runBatch(batchAction: 'resolve' | 'reject') {
     const ids = [...selected]
     if (ids.length === 0) return
+    setToast(null)
     batch.mutate(
       { action: batchAction, ids },
-      { onSuccess: () => clearSelection() },
+      {
+        onSuccess: (res) => {
+          clearSelection()
+          if (res.skipped.length > 0) {
+            setToast({
+              text: t('approvals.batch.result', {
+                updated: res.updated.length,
+                skipped: res.skipped.length,
+              }),
+            })
+          }
+        },
+        onError: showError,
+      },
     )
   }
 
@@ -78,8 +110,8 @@ export function ApprovalInbox() {
         </header>
 
         {toast ? (
-          <p className="mb-4" role="status">
-            <StatusPill status="info" label={toast} />
+          <p className="mb-4" role={toast.error ? 'alert' : 'status'}>
+            <StatusPill status={toast.error ? 'risk' : 'info'} label={toast.text} />
           </p>
         ) : null}
 
@@ -142,6 +174,11 @@ export function ApprovalInbox() {
                 {t('approvals.batch.clear')}
               </Button>
             </div>
+            {!canApproveMoney && moneySelected > 0 ? (
+              <Small className="w-full" data-testid="money-skipped-note">
+                {t('approvals.batch.money_skipped', { count: moneySelected })}
+              </Small>
+            ) : null}
           </div>
         ) : null}
 
@@ -169,9 +206,8 @@ export function ApprovalInbox() {
                 onToggleSelect={toggleSelect}
                 busy={busy}
                 canApproveMoney={canApproveMoney}
-                onApprove={(id) => action.mutate({ id, action: 'approve' })}
-                onReject={(id) => action.mutate({ id, action: 'reject' })}
-                onPropose={() => setToast(t('approvals.proposed'))}
+                onApprove={(id) => runAction(id, 'approve')}
+                onReject={(id) => runAction(id, 'reject')}
               />
             ))}
           </ul>

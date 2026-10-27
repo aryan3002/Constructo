@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
+import { useT } from '../../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../../src/theme/ThemeProvider'
 import { SPACE } from '../../../../src/theme/tokens'
 import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../../src/api/supervisor'
@@ -19,12 +20,14 @@ import { enqueue } from '../../../../src/offline/outbox'
 import { useOutbox } from '../../../../src/offline/useOutbox'
 import { Body, BodyStrong, Button, Card, Small, StatusPill, Title } from '../../../../src/ui'
 import { ErrorBlock, LoadingBlock, SubHeader } from '../../../../src/screens/supervisor/eng.components'
+import { ownerOnlyNote } from '../../../../src/screens/supervisor/asks.util'
 
 let respSeq = 0
 
 export default function TaskReply() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { theme } = useTheme()
+  const { lang } = useT()
   const router = useRouter()
   const { online, flush } = useOutbox()
   const insets = useSafeAreaInsets()
@@ -43,8 +46,11 @@ export default function TaskReply() {
     [sitesQ.data, ask],
   )
 
+  // A money decision is the owner's to answer; the server would refuse a reply.
+  const ownerOnly = ask ? ownerOnlyNote(ask, lang) : null
+
   const respond = async (action: 'confirm' | 'reject') => {
-    if (!ask) return
+    if (!ask || ownerOnly) return
     setBusy(true)
     respSeq += 1
     await enqueue({
@@ -83,6 +89,14 @@ export default function TaskReply() {
           <Card flag="ok" style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
             <Ionicons name="checkmark-circle" size={20} color={theme.colors.ok} />
             <Small style={{ color: theme.colors.ok }}>You’ve already answered this.</Small>
+          </Card>
+        </>
+      ) : ownerOnly ? (
+        <>
+          <QuestionCard title={ask.title} detail={ask.detail} site={site} />
+          <Card variant="quiet" style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+            <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMute} />
+            <Small style={{ flex: 1 }}>{ownerOnly}</Small>
           </Card>
         </>
       ) : (

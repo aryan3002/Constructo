@@ -31,6 +31,7 @@ import { useOutbox } from '../../../src/offline/useOutbox'
 import { supervisorApi, ASK_RESPOND_PATH, type Approval } from '../../../src/api/supervisor'
 import { ErrorState, Loading, SPACE } from '../../../src/screens/supervisor/components'
 import { SubHeader } from '../../../src/screens/supervisor/eng.components'
+import { ownerOnlyNote } from '../../../src/screens/supervisor/asks.util'
 
 const STR = {
   en: {
@@ -111,7 +112,14 @@ export default function TasksAsks() {
       ) : null}
 
       {pending.map((a) => (
-        <AskCard key={a.id} ask={a} respondLabel={str.respond} pendingLabel={str.pending} onRespond={() => void respond(a)} />
+        <AskCard
+          key={a.id}
+          ask={a}
+          respondLabel={str.respond}
+          pendingLabel={str.pending}
+          ownerOnly={ownerOnlyNote(a, lang)}
+          onRespond={() => void respond(a)}
+        />
       ))}
     </Screen>
   )
@@ -121,11 +129,14 @@ function AskCard({
   ask,
   respondLabel,
   pendingLabel,
+  ownerOnly,
   onRespond,
 }: {
   ask: Approval
   respondLabel: string
   pendingLabel: string
+  /** Set for a money decision: only the owner can answer it. */
+  ownerOnly: string | null
   onRespond: () => void
 }) {
   return (
@@ -140,15 +151,19 @@ function AskCard({
         <Mono muted style={{ fontSize: 12 }}>
           {ask.created_at}
         </Mono>
-        {/* The single affirmative "yes" — accent (marigold). */}
-        <Button
-          title={`✓ ${respondLabel}`}
-          variant="accent"
-          block
-          size="lg"
-          onPress={onRespond}
-          style={{ marginTop: SPACE.xs }}
-        />
+        {ownerOnly ? (
+          <Body muted>{ownerOnly}</Body>
+        ) : (
+          // The single affirmative "yes" — accent (marigold).
+          <Button
+            title={`✓ ${respondLabel}`}
+            variant="accent"
+            block
+            size="lg"
+            onPress={onRespond}
+            style={{ marginTop: SPACE.xs }}
+          />
+        )}
       </View>
     </Card>
   )

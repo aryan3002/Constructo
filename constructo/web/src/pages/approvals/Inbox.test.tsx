@@ -116,19 +116,74 @@ describe('ApprovalInbox', () => {
     )
   })
 
-  it('WC4: a PM sees "Propose to owner", never Approve on a money decision', async () => {
+  it('WC4: a PM sees the owner-only note, never Approve or a fake Propose', async () => {
     list.mockResolvedValue({ items: [makeDecision()], next_cursor: null })
     wrap(<ApprovalInbox />, 'pm')
     await screen.findByText('Approve extra cement')
     expect(
-      screen.getByRole('button', { name: /propose to owner/i }),
+      screen.getByText("Only the owner can approve this. It's waiting in their inbox."),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /propose/i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
     // And no bulk-approve once selected.
     await userEvent.click(
       screen.getByRole('checkbox', { name: /select Approve extra cement/i }),
     )
     expect(screen.queryByRole('button', { name: 'Approve selected' })).toBeNull()
+  })
+
+  it('a PM keeps Approve / Reject on a non-money decision', async () => {
+    list.mockResolvedValue({
+      items: [makeDecision({ kind: 'generic', title: 'Pick tile batch' })],
+      next_cursor: null,
+    })
+    wrap(<ApprovalInbox />, 'pm')
+    await screen.findByText('Pick tile batch')
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.queryByTestId('owner-only-note')).toBeNull()
+  })
+
+  it('a PM batch-selecting money items is told they will be skipped, then sees the server count', async () => {
+    list.mockResolvedValue({
+      items: [
+        makeDecision(),
+        makeDecision({ id: 'd2', kind: 'generic', title: 'Pick tile batch' }),
+      ],
+      next_cursor: null,
+    })
+    batch.mockResolvedValue({ updated: ['d2'], skipped: ['d1'] })
+    wrap(<ApprovalInbox />, 'pm')
+    await screen.findByText('Approve extra cement')
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /select Approve extra cement/i }),
+    )
+    await userEvent.click(screen.getByRole('checkbox', { name: /select Pick tile batch/i }))
+    expect(
+      screen.getByText(
+        '1 of these involve money. Only the owner can decide them, so they will be skipped.',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reject selected' }))
+    await waitFor(() => expect(batch).toHaveBeenCalledWith('reject', ['d1', 'd2'], undefined))
+    expect(
+      await screen.findByText(
+        '1 done · 1 skipped (no longer open, or only the owner can decide them)',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('a 403 owner_only shows the owner-only message, not a generic error', async () => {
+    const { ApiError } = await import('../../api/client')
+    list.mockResolvedValue({ items: [makeDecision()], next_cursor: null })
+    approve.mockRejectedValue(new ApiError(403, 'Only the owner can decide money', 'owner_only'))
+    // A stale screen: the capability still says owner, the server says no.
+    wrap(<ApprovalInbox />, 'owner')
+    await screen.findByText('Approve extra cement')
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("Only the owner can approve this. It's waiting in their inbox.")
+    expect(alert).not.toHaveTextContent('Only the owner can decide money')
   })
 
   it('marks an SLA-overdue homeowner question as overdue', async () => {
