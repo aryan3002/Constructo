@@ -15,6 +15,7 @@ import { Sites } from './pages/Sites'
 import { Login } from './pages/auth/Login'
 import { OwnerFirstRun } from './pages/auth/OwnerFirstRun'
 import { Join } from './pages/auth/Join'
+import { DeleteAccount } from './pages/auth/DeleteAccount'
 import { VendorConfirm } from './pages/VendorConfirm'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RoleLanding } from './pages/auth/RoleLanding'
@@ -85,6 +86,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
  *
  * Route map:
  *   /login, /join/:token, /welcome, /invite, /components  — auth + gallery
+ *   /delete-account         -> Public account deletion (no login gate)
  *   /                       -> RoleLanding (redirects by role)
  *   /owner                  -> Owner/PM brief
  *   /supervisor/capture     -> Supervisor capture
@@ -109,6 +111,8 @@ export function App() {
       <Route path="/join/:token" element={<Join />} />
       {/* Public vendor confirm-loop (Phase 3.8) — no auth; token is the capability. */}
       <Route path="/vendor-confirm/:token" element={<VendorConfirm />} />
+      {/* Public account deletion (Play's deletion URL) — signs in on the page. */}
+      <Route path="/delete-account" element={<DeleteAccount />} />
       <Route path="/welcome" element={<Guarded><OwnerFirstRun /></Guarded>} />
       <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
       {/* Setup & Administration control plane (W4.1). */}

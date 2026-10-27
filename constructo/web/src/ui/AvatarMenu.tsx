@@ -88,6 +88,14 @@ export function AvatarMenu({ roleBadge }: { roleBadge: { name: string; initials:
               </a>
             ) : null,
           )}
+          <NavLink
+            to="/delete-account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex min-h-tap items-center gap-3 rounded-control px-3 font-body text-small font-semibold text-risk cstk-animate transition hover:bg-surface-hover"
+          >
+            <span>{t('delete.menu')}</span>
+          </NavLink>
           <button
             type="button"
             role="menuitem"

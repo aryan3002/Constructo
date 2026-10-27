@@ -280,6 +280,24 @@ export const authApi = {
     }
   },
 
+  /** Send the current user a re-verification code (no-op in dev; 000000). */
+  async stepUpRequestOtp(): Promise<void> {
+    if (USE_MOCKS) return
+    await call('/api/v1/auth/step-up/request-otp', { method: 'POST' })
+  },
+
+  /**
+   * Delete the signed-in account (needs a fresh step-up token). The server
+   * removes the person's name and phone everywhere and ends the login.
+   */
+  async deleteAccount(stepUpToken: string): Promise<void> {
+    if (USE_MOCKS) return
+    await call('/api/v1/users/me', {
+      method: 'DELETE',
+      headers: { 'X-Step-Up-Token': stepUpToken },
+    })
+  },
+
   /**
    * Re-verify the current user with a fresh OTP to unlock a sensitive action
    * (e.g. Tally export). Returns a short-lived step-up token + its lifetime (s).

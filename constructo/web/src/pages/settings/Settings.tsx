@@ -239,6 +239,12 @@ export function Settings() {
             <Button variant="ghost" block onClick={signOut}>
               {t('settings.signout')}
             </Button>
+            <Link
+              to="/delete-account"
+              className="block text-center font-body text-small font-semibold text-risk underline underline-offset-4 hover:no-underline"
+            >
+              {t('delete.menu')}
+            </Link>
             <LegalLinks className="justify-center" />
           </>
         )}
