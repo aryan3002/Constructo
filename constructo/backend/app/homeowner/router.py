@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -2011,7 +2011,7 @@ async def _build_site_fingerprint(
         ],
         references=[
             ReferenceInput(actor_member_id=r.actor_member_id, room_tag=r.room_tag)
-            for r in refs
+            for r in _usable_references(refs)
         ],
         members=members,
     )
@@ -2157,6 +2157,33 @@ async def upload_reference_image(
     return ReferenceUploadOut(image_url=key)
 
 
+# A picker's on-device path is never a usable image anywhere but that phone.
+_DEVICE_PATH_PREFIXES = ("file:", "content:", "ph:", "assets-library:", "blob:", "data:")
+
+
+def _is_device_path(image_url: str | None) -> bool:
+    return (image_url or "").strip().lower().startswith(_DEVICE_PATH_PREFIXES)
+
+
+def _usable_references(rows: Sequence[DesignReference]) -> list[DesignReference]:
+    """Hide reference rows that only ever held a device path (old intake bug,
+    T6) — from the list and from the design fingerprint. The rows are kept."""
+    return [r for r in rows if not _is_device_path(r.image_url)]
+
+
+def _check_reference_image_url(sid: UUID, image_url: str) -> None:
+    """An http(s) link, or a bare key under THIS site's own upload prefixes —
+    the homeowner upload (``homeowner/{sid}/design/``) or the profiler's
+    (``design/{sid}/``). Anything else (device paths, other sites' or other
+    folders' keys) would be stored and handed back as a presigned link."""
+    url = image_url.strip()
+    if url.lower().startswith(("http://", "https://")):
+        return
+    own_key = url.startswith((f"homeowner/{sid}/design/", f"design/{sid}/"))
+    if _is_device_path(url) or not own_key or ".." in url:
+        raise AppError(422, "invalid_image_url", "Upload the photo first, then add it")
+
+
 @router.post("/design/references", response_model=ReferenceOut, status_code=201)
 async def add_reference(
     body: ReferenceCreateIn,
@@ -2166,9 +2193,10 @@ async def add_reference(
     sid = await resolve_site(session, user, site_id=body.site_id)
     # References are not space-scoped; gate on the whole-house say (no room arg).
     await _gate_design_write(session, user, sid, None)
+    _check_reference_image_url(sid, body.image_url)
     actor_member_id = await _resolve_actor_member_id(session, user, sid, None)
     ref = DesignReference(
-        site_id=sid, image_url=body.image_url, room_tag=body.room_tag, source=body.source,
+        site_id=sid, image_url=body.image_url.strip(), room_tag=body.room_tag, source=body.source,
         actor_member_id=actor_member_id,
     )
     session.add(ref)
@@ -2209,7 +2237,7 @@ async def list_references(
             .order_by(DesignReference.created_at)
         )
     ).scalars().all()
-    return [_reference_out(r) for r in rows]
+    return [_reference_out(r) for r in _usable_references(rows)]
 
 
 @router.get("/design/selections", response_model=list[SelectionOut])

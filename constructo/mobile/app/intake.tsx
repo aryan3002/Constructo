@@ -3,7 +3,8 @@
  * "who designs" sub-step at the end (Step 4).
  *
  *   1. Visual preference grid (pick ≥1 style → fire-and-forget selections)
- *   2. Upload reference photos (ImagePicker → homeowner.references)
+ *   2. Upload reference photos (ImagePicker → uploadReferenceImage → homeowner.references
+ *      with the stored key — never the device URI)
  *   3. AI-drafted design profile (PUT empty body → review / adjust / confirm)
  *   4. Who gets a design say (owners only) → writes via PATCH /members/{id}/manage
  *
@@ -28,6 +29,10 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { homeowner, request } from '../src/api/client'
 import type { DesignProfile, HomeownerMember, HomeownerSubRole, Space } from '../src/api/types'
 import { useAuth } from '../src/auth/AuthContext'
+import {
+  saveStylePicks,
+  uploadIntakeReference,
+} from '../src/screens/homeowner/intake_references.util'
 import { useT } from '../src/i18n/I18nProvider'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider'
 import { AP, SPACE, TAP } from '../src/theme/tokens'
@@ -63,6 +68,9 @@ const STR = {
     s2Body: 'Add photos that capture the feeling you are going for. You can always add more later.',
     addPhotos: 'Add photos',
     photosCount: '{n} photo(s) added',
+    uploading: 'Uploading…',
+    photosFailed: "{n} photo(s) couldn't upload and were removed. Try adding them again.",
+    stylesFailed: "We couldn't save some of your picks. Check your connection and tap Continue again.",
     // step 3
     s3Title: 'Here is your design vibe',
     s3Body: 'We drafted this from your choices. Does it feel like you?',
@@ -103,6 +111,9 @@ const STR = {
     s2Body: 'ऐसी तस्वीरें जोड़ें जो आपकी पसंद की भावना दर्शाती हों। बाद में और जोड़ सकते हैं।',
     addPhotos: 'तस्वीरें जोड़ें',
     photosCount: '{n} तस्वीर(ें) जोड़ी गईं',
+    uploading: 'अपलोड हो रहा है…',
+    photosFailed: '{n} तस्वीर(ें) अपलोड नहीं हो सकीं और हटा दी गईं। फिर से जोड़कर देखें।',
+    stylesFailed: 'आपकी कुछ पसंद सेव नहीं हो सकीं। कनेक्शन देखें और फिर से आगे बढ़ें दबाएँ।',
     s3Title: 'यह रहा आपका डिज़ाइन अंदाज़',
     s3Body: 'हमने इसे आपकी पसंद से तैयार किया है। क्या यह आपके जैसा लगता है?',
     s3Eyebrow: 'आपका डिज़ाइन प्रोफ़ाइल',
@@ -134,6 +145,14 @@ const STR = {
 
 function fmt(tpl: string, vars: Record<string, string | number>): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`))
+}
+
+/** A picked reference photo: the on-screen thumbnail uses the local URI; the
+ *  server only ever gets the uploaded key. */
+interface IntakePhoto {
+  id: string
+  uri: string
+  uploading: boolean
 }
 
 type DesignSay = 'none' | 'full' | 'room'
@@ -177,11 +196,15 @@ function IntakeFlow() {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
 
-  // step 1 — style selections
+  // step 1 — style selections (and which already reached the server)
   const [selected, setSelected] = useState<string[]>([])
+  const [savedStyles, setSavedStyles] = useState<Set<string>>(() => new Set())
+  const [savingStyles, setSavingStyles] = useState(false)
+  const [stylesError, setStylesError] = useState(false)
 
-  // step 2 — reference thumbnails (local)
-  const [photos, setPhotos] = useState<string[]>([])
+  // step 2 — reference thumbnails; each uploads, failures are removed + said
+  const [photos, setPhotos] = useState<IntakePhoto[]>([])
+  const [photosFailed, setPhotosFailed] = useState(0)
 
   // step 3 — profile editing
   const [editing, setEditing] = useState(false)
@@ -260,16 +283,28 @@ function IntakeFlow() {
     )
   }
 
-  function goToStep2() {
-    for (const choice of selected) {
-      void request('/api/v1/homeowner/design/selections', {
-        method: 'POST',
-        body: JSON.stringify({ item: 'style', choice }),
-      }).catch(() => undefined)
+  // Save the style picks before moving on; a failure keeps her on step 1 with
+  // a message, and Continue retries only the picks that didn't save.
+  async function goToStep2() {
+    if (savingStyles) return
+    setSavingStyles(true)
+    setStylesError(false)
+    try {
+      const { saved, failed } = await saveStylePicks(selected, savedStyles, (choice) =>
+        request('/api/v1/homeowner/design/selections', {
+          method: 'POST',
+          body: JSON.stringify({ item: 'style', choice }),
+        }),
+      )
+      setSavedStyles((prev) => new Set([...prev, ...saved]))
+      if (failed.length > 0) setStylesError(true)
+      else setStep(2)
+    } finally {
+      setSavingStyles(false)
     }
-    setStep(2)
   }
 
+  // Upload each picked photo, then create the reference from the stored key.
   async function pickPhotos() {
     const res = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
@@ -277,11 +312,29 @@ function IntakeFlow() {
       quality: 0.8,
     })
     if (res.canceled) return
-    const uris = res.assets.map((a) => a.uri)
-    setPhotos((prev) => [...prev, ...uris])
-    for (const image_url of uris) {
-      void homeowner.references({ image_url, source: 'upload' }).catch(() => undefined)
-    }
+    setPhotosFailed(0)
+    const batch = res.assets.map((asset, i) => ({
+      id: `${Date.now()}-${i}`,
+      asset,
+    }))
+    setPhotos((prev) => [
+      ...prev,
+      ...batch.map(({ id, asset }) => ({ id, uri: asset.uri, uploading: true })),
+    ])
+    await Promise.all(
+      batch.map(async ({ id, asset }) => {
+        try {
+          await uploadIntakeReference(asset, {
+            upload: (file) => homeowner.uploadReferenceImage(file, siteId ?? undefined),
+            create: (body) => homeowner.references({ ...body, site_id: siteId ?? undefined }),
+          })
+          setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, uploading: false } : p)))
+        } catch {
+          setPhotos((prev) => prev.filter((p) => p.id !== id))
+          setPhotosFailed((n) => n + 1)
+        }
+      }),
+    )
   }
 
   async function finish() {
@@ -372,7 +425,9 @@ function IntakeFlow() {
           L={L}
           selected={selected}
           onToggle={toggleStyle}
-          onContinue={goToStep2}
+          saving={savingStyles}
+          error={stylesError}
+          onContinue={() => void goToStep2()}
         />
       ) : null}
 
@@ -380,6 +435,7 @@ function IntakeFlow() {
         <StepReferences
           tx={tx}
           photos={photos}
+          failedCount={photosFailed}
           onAdd={() => void pickPhotos()}
           onBack={() => setStep(1)}
           onContinue={() => setStep(3)}
@@ -467,12 +523,16 @@ function StepStyles({
   L,
   selected,
   onToggle,
+  saving,
+  error,
   onContinue,
 }: {
   tx: Tx
   L: Lang
   selected: string[]
   onToggle: (key: string) => void
+  saving: boolean
+  error: boolean
   onContinue: () => void
 }) {
   const { theme } = useTheme()
@@ -550,11 +610,18 @@ function StepStyles({
         })}
       </View>
 
+      {error ? (
+        <Small accessibilityRole="alert" style={{ color: theme.colors.risk }}>
+          {tx.stylesFailed}
+        </Small>
+      ) : null}
+
       <Button
         title={tx.continue}
         block
         size="lg"
         disabled={selected.length === 0}
+        loading={saving}
         onPress={onContinue}
         leading={<Feather name="arrow-right" size={18} color={theme.colors.onAccent} />}
       />
@@ -566,17 +633,20 @@ function StepStyles({
 function StepReferences({
   tx,
   photos,
+  failedCount,
   onAdd,
   onBack,
   onContinue,
 }: {
   tx: Tx
-  photos: string[]
+  photos: IntakePhoto[]
+  failedCount: number
   onAdd: () => void
   onBack: () => void
   onContinue: () => void
 }) {
   const { theme } = useTheme()
+  const uploadingCount = photos.filter((p) => p.uploading).length
   return (
     <View style={{ gap: SPACE.lg }}>
       <View style={{ gap: SPACE.xs }}>
@@ -592,22 +662,39 @@ function StepReferences({
         leading={<Feather name="image" size={18} color={theme.colors.text} />}
       />
 
+      {failedCount > 0 ? (
+        <Small accessibilityRole="alert" style={{ color: theme.colors.risk }}>
+          {fmt(tx.photosFailed, { n: failedCount })}
+        </Small>
+      ) : null}
+
       {photos.length > 0 ? (
         <View style={{ gap: SPACE.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Feather name="check" size={13} color={theme.colors.ok} />
-            <Small muted>{fmt(tx.photosCount, { n: photos.length })}</Small>
+            {uploadingCount > 0 ? (
+              <>
+                <BreathingDots color={theme.colors.accent} />
+                <Small muted>{tx.uploading}</Small>
+              </>
+            ) : (
+              <>
+                <Feather name="check" size={13} color={theme.colors.ok} />
+                <Small muted>{fmt(tx.photosCount, { n: photos.length })}</Small>
+              </>
+            )}
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm }}>
-            {photos.map((uri, i) => (
+            {photos.map((p) => (
               <Image
-                key={`${uri}-${i}`}
-                source={{ uri }}
+                key={p.id}
+                source={{ uri: p.uri }}
+                accessibilityLabel={p.uploading ? tx.uploading : undefined}
                 style={{
                   width: 88,
                   height: 88,
                   borderRadius: theme.radii.card,
                   backgroundColor: theme.colors.line,
+                  opacity: p.uploading ? 0.5 : 1,
                 }}
               />
             ))}

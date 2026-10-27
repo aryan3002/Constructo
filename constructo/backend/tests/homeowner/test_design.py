@@ -80,9 +80,10 @@ async def test_reference_key_is_served_as_resolved_url(client, ctx):
     renders as a blank thumbnail. A plain http(s) URL is passed through unchanged.
     """
     # Bare key (as a real R2 upload stores it) -> must be resolved on the way out.
+    key = f"homeowner/{ctx.site.id}/design/kids-room.jpg"
     created = await client.post(
         "/api/v1/homeowner/design/references",
-        json={"image_url": "inspo/kids-room.jpg", "source": "upload"},
+        json={"image_url": key, "source": "upload"},
         headers=auth(ctx.homeowner),
     )
     assert created.status_code == 201, created.text
@@ -90,16 +91,16 @@ async def test_reference_key_is_served_as_resolved_url(client, ctx):
     # Resolved, not the bare key. Under S3/R2 this is a presigned GET URL; under
     # local storage it's a media_dir-prefixed path. Either way the key path is
     # embedded and the value is no longer the raw key.
-    assert out_url != "inspo/kids-room.jpg"
-    assert "inspo/kids-room.jpg" in out_url
+    assert out_url != key
+    assert key in out_url
 
     # List path uses the same serializer -> also resolved.
     listed = await client.get(
         "/api/v1/homeowner/design/references", headers=auth(ctx.homeowner)
     )
     keys = [r["image_url"] for r in listed.json()]
-    assert all(k != "inspo/kids-room.jpg" for k in keys)
-    assert all("inspo/kids-room.jpg" in k for k in keys)
+    assert all(k != key for k in keys)
+    assert all(key in k for k in keys)
 
     # http(s) links are passed through untouched (legacy/stock references).
     http_ref = await client.post(
