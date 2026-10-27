@@ -12,3 +12,16 @@ describe('app.json', () => {
     expect(appJson.ios.supportsTablet).toBe(false)
   })
 })
+
+const easJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8'))
+
+describe('eas.json', () => {
+  it('numbers builds remotely and bumps them for every store build', () => {
+    // With appVersionSource "remote", a second upload with the same build
+    // number is rejected unless EAS increments it.
+    expect(easJson.cli.appVersionSource).toBe('remote')
+    for (const name of ['production', 'production-apk']) {
+      expect(easJson.build[name].autoIncrement).toBe(true)
+    }
+  })
+})
