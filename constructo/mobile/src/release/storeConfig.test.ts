@@ -13,6 +13,44 @@ describe('app.json', () => {
   })
 })
 
+// S8: Play's Photo and Video Permissions policy. The app picks photos with the
+// system picker (no permission) and saves write-only, so none of these ship.
+const BLOCKED_MEDIA_PERMISSIONS = [
+  'android.permission.READ_MEDIA_IMAGES',
+  'android.permission.READ_MEDIA_VIDEO',
+  'android.permission.READ_MEDIA_AUDIO',
+  'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+  'android.permission.ACCESS_MEDIA_LOCATION',
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.WRITE_EXTERNAL_STORAGE',
+]
+
+describe('Android media permissions', () => {
+  it('asks for none of them and blocks them all', () => {
+    for (const p of BLOCKED_MEDIA_PERMISSIONS) {
+      expect(appJson.android.permissions).not.toContain(p)
+      expect(appJson.android.blockedPermissions).toContain(p)
+    }
+  })
+
+  it('does not ask for media location', () => {
+    const plugin = appJson.plugins.find(
+      (p: unknown) => Array.isArray(p) && p[0] === 'expo-media-library',
+    )
+    expect(plugin[1].isAccessMediaLocationEnabled).toBe(false)
+  })
+
+  it('stays blocked after every config plugin has run', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getPrebuildConfigAsync } = require('@expo/prebuild-config')
+    const { exp } = await getPrebuildConfigAsync(ROOT, { platforms: ['android'] })
+    for (const p of BLOCKED_MEDIA_PERMISSIONS) {
+      expect(exp.android.permissions ?? []).not.toContain(p)
+      expect(exp.android.blockedPermissions).toContain(p)
+    }
+  }, 30000)
+})
+
 const easJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8'))
 
 describe('eas.json', () => {

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, Pressable, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../src/media/photoAccess'
 import * as Haptics from 'expo-haptics'
 
 import {
@@ -264,8 +265,7 @@ export default function Capture() {
       if (perm.granted) {
         result = await ImagePicker.launchCameraAsync({ quality: 0.7 })
       } else {
-        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
-        if (!lib.granted) {
+        if (!(await canOpenPhotoPicker())) {
           Alert.alert(str.permTitle, str.permBody)
           return
         }

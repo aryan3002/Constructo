@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../../src/media/photoAccess'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useTheme } from '../../../../src/theme/ThemeProvider'
@@ -54,8 +55,7 @@ export default function DesignerSite() {
     mutationFn: async (areaId: string) => {
       const siteId = q.data?.profile.site_id
       if (!siteId) throw new Error('not_ready')
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) throw new Error('perm')
+      if (!(await canOpenPhotoPicker())) throw new Error('perm')
       const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
       if (result.canceled || !result.assets[0]) throw new Error('canceled')
       const a = result.assets[0]

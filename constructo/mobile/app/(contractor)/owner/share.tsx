@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../src/media/photoAccess'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -33,8 +34,7 @@ export default function ShareWithOwner() {
   const [busy, setBusy] = useState(false)
 
   const pick = async () => {
-    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!lib.granted) return
+    if (!(await canOpenPhotoPicker())) return
     const result = await ImagePicker.launchImageLibraryAsync({
       quality: 0.4,
       allowsMultipleSelection: true,

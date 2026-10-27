@@ -22,6 +22,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter, useSegments } from 'ex
 import { Feather } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../../src/media/photoAccess'
 import { useQuery } from '@tanstack/react-query'
 
 import { useT } from '../../../../src/i18n/I18nProvider'
@@ -255,8 +256,7 @@ export default function OwnerConversation() {
     if (cam.granted) {
       result = await ImagePicker.launchCameraAsync({ quality: 0.6 })
     } else {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!lib.granted) return
+      if (!(await canOpenPhotoPicker())) return
       result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 })
     }
     if (result.canceled || !result.assets[0]) return

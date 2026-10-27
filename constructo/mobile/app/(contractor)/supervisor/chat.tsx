@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../src/media/photoAccess'
 import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '../../../src/auth/AuthContext'
@@ -505,8 +506,7 @@ export default function CrewChat() {
     if (cam.granted) {
       result = await ImagePicker.launchCameraAsync({ quality: 0.6 })
     } else {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!lib.granted) return
+      if (!(await canOpenPhotoPicker())) return
       result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 })
     }
     if (result.canceled || !result.assets[0]) return

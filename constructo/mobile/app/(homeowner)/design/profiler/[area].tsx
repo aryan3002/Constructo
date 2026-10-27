@@ -28,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feather } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../../src/media/photoAccess'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ApiError, design, homeowner } from '../../../../src/api/client'
@@ -588,8 +589,7 @@ export default function AreaRankScreen() {
   })
 
   async function pickAndUpload() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
+    if (!(await canOpenPhotoPicker())) {
       toast('Photo access is needed to add inspiration.')
       return
     }

@@ -22,6 +22,7 @@ import { Alert, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { canOpenPhotoPicker } from '../../../../src/media/photoAccess'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { design, homeowner } from '../../../../src/api/client'
@@ -200,8 +201,7 @@ export default function RoomReferences() {
   const [earlierOpen, setEarlierOpen] = useState(false)
 
   async function pickImage(mode: 'profiler' | 'legacy') {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
+    if (!(await canOpenPhotoPicker())) {
       Alert.alert(t.title, t.permissionDenied)
       return
     }

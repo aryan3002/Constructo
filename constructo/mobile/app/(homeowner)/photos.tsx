@@ -51,6 +51,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 
 import { homeowner } from '../../src/api/client'
+import { canOpenPhotoPicker, photoSaveAccess } from '../../src/media/photoAccess'
 import type { Photo, QuietPeriod } from '../../src/api/types'
 import { useT } from '../../src/i18n/I18nProvider'
 import { useTheme } from '../../src/theme/ThemeProvider'
@@ -844,8 +845,7 @@ export default function Photos() {
   }, [s, doUpload])
 
   const onChooseLibrary = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
+    if (!(await canOpenPhotoPicker())) {
       setUploadOpen(false)
       Alert.alert(s.permTitle, s.permLibrary)
       return
@@ -858,8 +858,14 @@ export default function Photos() {
   const onSavePhoto = useCallback(
     async (url?: string, id?: string) => {
       if (!url) return
-      const { status } = await MediaLibrary.requestPermissionsAsync()
-      if (status !== 'granted') {
+      // Write-only, photos only (S8); older Android has no gallery write
+      // access at all, so the share sheet saves it instead.
+      const access = await photoSaveAccess()
+      if (access === 'share') {
+        await Share.share({ url, message: url })
+        return
+      }
+      if (access === 'denied') {
         Alert.alert(s.permTitle, s.permLibrary)
         return
       }
