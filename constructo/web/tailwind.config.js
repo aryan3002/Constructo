@@ -1,3 +1,25 @@
+/**
+ * A colour from a CSS custom property that still takes Tailwind's opacity
+ * modifier: `bg-ok/10` becomes `color-mix(in srgb, var(--c-ok) 10%,
+ * transparent)`. A bare `var(--x)` can't carry alpha, so before this every
+ * `/10`-style class was silently dropped and status pills rendered hollow.
+ * Works for every skin, since it mixes whatever the variable holds.
+ */
+const token = (name) => ({ opacityValue }) => {
+  const alpha = Number(opacityValue)
+  if (opacityValue === undefined || Number.isNaN(alpha) || alpha >= 1) return `var(${name})`
+  return `color-mix(in srgb, var(${name}) ${+(alpha * 100).toFixed(2)}%, transparent)`
+}
+
+/** Every `'var(--x)'` entry of a colour map, made alpha-aware. */
+const tokens = (map) =>
+  Object.fromEntries(
+    Object.entries(map).map(([k, v]) => {
+      const m = /^var\((--[\w-]+)\)$/.exec(v)
+      return [k, m ? token(m[1]) : v]
+    }),
+  )
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -7,7 +29,7 @@ export default {
   darkMode: ['variant', '&:where([data-theme="dark"], [data-theme="dark"] *)'],
   theme: {
     extend: {
-      colors: {
+      colors: tokens({
         // --- Brand: repointed from the old unused blue palette to the safety-amber
         //     accent var, so `accent-brand` / `bg-brand` resolve to amber, mode-aware. ---
         brand: 'var(--brand)',
@@ -69,16 +91,29 @@ export default {
         'on-primary': 'var(--c-on-primary)',
         text: 'var(--c-text)',
         'text-mute': 'var(--c-text-mute)',
-      },
-      borderColor: {
+      }),
+      // Status and action colours used AS TEXT read at AA (4.5:1) on cards,
+      // the page and their own tints: text takes the deep `-fg` / `brand-text`
+      // tone, while dots, fills and borders keep the bright solid.
+      textColor: tokens({
+        ok: 'var(--ok-fg)',
+        warn: 'var(--warn-fg)',
+        risk: 'var(--risk-fg)',
+        info: 'var(--info-fg)',
+        done: 'var(--done-fg)',
+        brand: 'var(--brand-text)',
+        primary: 'var(--brand-text)',
+        'primary-deep': 'var(--brand-text)',
+      }),
+      borderColor: tokens({
         edge: 'var(--border)',
         strong: 'var(--border-strong)',
         divider: 'var(--divider)',
-      },
-      ringColor: {
+      }),
+      ringColor: tokens({
         DEFAULT: 'var(--ring)',
         brand: 'var(--ring)',
-      },
+      }),
       fontFamily: {
         // Bind to the CSS vars so the active theme/skin controls the face:
         // Blueprint (:root) = Anek/Hind/Spline; neev = Eczar/Hind/IBM Plex Mono.

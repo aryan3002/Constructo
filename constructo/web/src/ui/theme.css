@@ -248,9 +248,9 @@
   --celebrate-text: #9A4E2C;   /* clay-700 — eyebrow TEXT, AA 5.7:1 on sand */
 
   --ok-solid: #3E7D58;  --ok-bg: #E5EDE3;  --ok-fg: #2C6243;   /* sage = on-track */
-  --warn-solid: #B98318; --warn-bg: #FAF1D9; --warn-fg: #946410; /* amber = needs you */
+  --warn-solid: #B98318; --warn-bg: #FAF1D9; --warn-fg: #8A5C0C; /* amber = needs you (AA on its tints) */
   --risk-solid: #BC4836; --risk-bg: #F6E2DC; --risk-fg: #99372A; /* red = delay ONLY */
-  --info-solid: #3F6E96; --info-bg: #E2E8EE; --info-fg: #3F6E96;
+  --info-solid: #3F6E96; --info-bg: #E2E8EE; --info-fg: #365F82;
 
   --done-solid: #837A5F; --done-bg: #F3EFE6; --done-fg: #433D2C;
 
