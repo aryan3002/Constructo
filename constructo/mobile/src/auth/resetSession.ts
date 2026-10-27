@@ -13,6 +13,7 @@ import { clearThreadCaches } from '../chat/cache'
 import { clearChatOutbox } from '../chat/outbox'
 import { closeSharedSocket } from '../chat/useChatThread'
 import { clear as clearOfflineOutbox } from '../offline/outbox'
+import { flushPending } from '../owner/pendingDecisions'
 import { unregisterDevicePushToken } from '../push/register'
 import { clearToken, getToken } from '../store/secure'
 
@@ -51,6 +52,9 @@ export async function resetSession(opts: {
   // now — the token is cleared below, so neither request may wait on it (and an
   // offline sign-out must not hang). Logout goes second: the unregister needs
   // the token still valid. An expired login (keepQueued) has nothing to end.
+  // A money decision still in its undo window is sent while the login is
+  // still valid (logout below revokes it on the server).
+  await flushPending().catch(() => undefined)
   const authToken = await getToken()
   const serverToken = opts.keepQueued ? null : authToken
   void (async () => {

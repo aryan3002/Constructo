@@ -14,14 +14,16 @@ import { useT } from '../../../src/i18n/I18nProvider'
 import { useTheme } from '../../../src/theme/ThemeProvider'
 import { SPACE, TAP, type Status } from '../../../src/theme/tokens'
 import { owner, type Decision, type Member } from '../../../src/api/owner'
-import { Body, BodyStrong, Button, EmptyState, H1, Small, useToast } from '../../../src/ui'
+import { Body, BodyStrong, Button, EmptyState, H1, Small, showToast, useToast } from '../../../src/ui'
 import { ApprovalRow, ErrorBlock, LoadingBlock, idsToEvidence } from '../../../src/screens/owner/components'
 import {
   batchConfirm,
   batchSummary,
   decisionConfirm,
+  undoCopy,
   type ConfirmCopy,
 } from '../../../src/screens/owner/approvals.util'
+import { schedulePending, usePendingHiddenIds } from '../../../src/owner/pendingDecisions'
 import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
 
 const STR = {
@@ -116,6 +118,14 @@ export default function Approvals() {
     (siteId && homeQ.data?.sites.find((s) => s.site_id === siteId)?.name) || null
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['owner', 'approvals'] })
+  // After a held money action is sent: every list that shows decisions.
+  const refreshDecisions = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['owner', 'approvals'] }),
+      qc.invalidateQueries({ queryKey: ['owner', 'home'] }),
+    ])
+  // Rows whose money action is waiting out its undo window.
+  const hidden = usePendingHiddenIds()
 
   const act = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'approve' | 'hold' }) =>
@@ -145,7 +155,7 @@ export default function Approvals() {
     },
   })
 
-  const items: Decision[] = q.data?.items ?? []
+  const items: Decision[] = (q.data?.items ?? []).filter((d) => !hidden.has(d.id))
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -156,20 +166,55 @@ export default function Approvals() {
 
   const selectedIds = useMemo(() => items.filter((d) => selected.has(d.id)).map((d) => d.id), [items, selected])
 
-  // Approve / Hold one row: money kinds confirm first; the rest go straight out.
+  // Approve / Hold one row: money kinds confirm first, then wait out the undo
+  // window before they are sent; the rest go straight out.
   const decide = (d: Decision, action: 'approve' | 'hold') => {
-    const run = () => act.mutate({ id: d.id, action })
-    const copy = decisionConfirm(d, action === 'approve' ? 'approve' : 'reject', siteName(d.site_id), lang)
-    if (copy) setConfirm({ copy, run })
-    else run()
+    const verb = action === 'approve' ? 'approve' : 'reject'
+    const copy = decisionConfirm(d, verb, siteName(d.site_id), lang)
+    if (!copy) {
+      act.mutate({ id: d.id, action })
+      return
+    }
+    setConfirm({
+      copy,
+      run: () => {
+        setSelected((s) => {
+          const n = new Set(s)
+          n.delete(d.id)
+          return n
+        })
+        schedulePending({
+          ...undoCopy(verb, lang),
+          ids: [d.id],
+          send: () => (verb === 'approve' ? owner.approve(d.id) : owner.reject(d.id)),
+          onSent: refreshDecisions,
+        })
+      },
+    })
   }
 
   const approveSelected = () => {
     const ids = selectedIds
-    const run = () => batch.mutate(ids)
     const copy = batchConfirm(items.filter((d) => selected.has(d.id)), lang)
-    if (copy) setConfirm({ copy, run })
-    else run()
+    if (!copy) {
+      batch.mutate(ids)
+      return
+    }
+    setConfirm({
+      copy,
+      run: () => {
+        setSelected(new Set())
+        schedulePending({
+          ...undoCopy('approve', lang, ids.length),
+          ids,
+          send: () => owner.batch('resolve', ids),
+          onSent: async (res) => {
+            await refreshDecisions()
+            showToast(batchSummary(res, lang), res.skipped.length ? { tone: 'info' } : {})
+          },
+        })
+      },
+    })
   }
 
   if (q.isLoading) return <Wrap><H1>{t.title}</H1><LoadingBlock /></Wrap>

@@ -26,7 +26,8 @@ import { request } from '../../../src/api/client'
 import { owner, type Decision, type SiteCard } from '../../../src/api/owner'
 import { Body, Button, Card, Eyebrow, H1, Micro, Mono, Small, StatusPill, Title } from '../../../src/ui'
 import { ErrorBlock, LoadingBlock, SectionLabel, formatWhen } from '../../../src/screens/owner/components'
-import { decisionConfirm, type ConfirmCopy } from '../../../src/screens/owner/approvals.util'
+import { decisionConfirm, undoCopy, type ConfirmCopy } from '../../../src/screens/owner/approvals.util'
+import { schedulePending, usePendingHiddenIds } from '../../../src/owner/pendingDecisions'
 import { MoneyConfirmSheet } from '../../../src/screens/owner/MoneyConfirmSheet'
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -109,18 +110,35 @@ export default function Brief() {
     },
   })
 
-  // Approving a money decision asks once first (T8); other kinds go straight out.
+  // Approving a money decision asks once first, then waits out the undo window
+  // before it is sent (T8); other kinds go straight out.
   const [confirm, setConfirm] = useState<{ copy: ConfirmCopy; run: () => void } | null>(null)
+  const hidden = usePendingHiddenIds()
   const approve = (d: Decision) => {
-    const run = () => decide.mutate({ id: d.id, action: 'approve' })
     const siteName = homeQ.data?.sites.find((s) => s.site_id === d.site_id)?.name ?? null
     const copy = decisionConfirm(d, 'approve', siteName, lang)
-    if (copy) setConfirm({ copy, run })
-    else run()
+    if (!copy) {
+      decide.mutate({ id: d.id, action: 'approve' })
+      return
+    }
+    setConfirm({
+      copy,
+      run: () =>
+        schedulePending({
+          ...undoCopy('approve', lang),
+          ids: [d.id],
+          send: () => owner.approve(d.id),
+          onSent: () =>
+            Promise.all([
+              qc.invalidateQueries({ queryKey: ['owner', 'approvals'] }),
+              qc.invalidateQueries({ queryKey: ['owner', 'home'] }),
+            ]),
+        }),
+    })
   }
 
   const now = Date.now()
-  const decisions = pendingQ.data?.items ?? []
+  const decisions = (pendingQ.data?.items ?? []).filter((d) => !hidden.has(d.id))
   const isOverdue = (d: Decision) => !!d.sla_due_at && new Date(d.sla_due_at).getTime() < now
   const ranked = useMemo(
     () => [...decisions].sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a))),

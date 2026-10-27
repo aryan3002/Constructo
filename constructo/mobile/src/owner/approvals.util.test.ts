@@ -1,7 +1,13 @@
 /**
  * Tests for the owner decision helpers in src/screens/owner/approvals.util.
  */
-import { batchConfirm, batchSummary, decisionConfirm, isMoneyDecision } from '../screens/owner/approvals.util'
+import {
+  batchConfirm,
+  batchSummary,
+  decisionConfirm,
+  isMoneyDecision,
+  undoCopy,
+} from '../screens/owner/approvals.util'
 
 describe('batchSummary (Approve all toast)', () => {
   it('reports the approved count when nothing was skipped', () => {
@@ -71,5 +77,14 @@ describe('money confirm copy', () => {
     expect(c.lines).toEqual(['3 items selected · 2 involve money.'])
     expect(c.confirmLabel).toBe('Approve 3')
     expect(batchConfirm([{ kind: 'generic' }], 'en')).toBeNull()
+  })
+})
+
+describe('undoCopy', () => {
+  it('reads "Approved · Undo" and says what failed', () => {
+    expect(undoCopy('approve', 'en')).toEqual({ message: 'Approved', undoLabel: 'Undo', failMessage: 'Not approved.' })
+    expect(undoCopy('reject', 'en').message).toBe('Held')
+    expect(undoCopy('approve', 'en', 3).message).toBe('3 approved')
+    expect(undoCopy('approve', 'hi')).toEqual({ message: 'मंज़ूर', undoLabel: 'वापस लें', failMessage: 'मंज़ूर नहीं हुआ।' })
   })
 })

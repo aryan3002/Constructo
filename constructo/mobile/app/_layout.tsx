@@ -21,6 +21,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthContext'
 import { chatApi } from '../src/api/chat'
 import { reportMutationError } from '../src/api/mutationErrors'
 import { drainChatOutboxOnLaunch } from '../src/chat/useChatThread'
+import { flushPending } from '../src/owner/pendingDecisions'
 import { I18nProvider } from '../src/i18n/I18nProvider'
 import { chatPushRoute } from '../src/push/chat_route.util'
 import { designPushRoute } from '../src/push/design_route.util'
@@ -45,6 +46,9 @@ export default function RootLayout() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (status) => {
       focusManager.setFocused(status === 'active')
+      // A money decision waiting out its undo window goes now: the app may
+      // not get another chance to send it.
+      if (status !== 'active') void flushPending()
     })
     return () => sub.remove()
   }, [])

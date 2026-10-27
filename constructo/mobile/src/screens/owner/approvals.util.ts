@@ -126,3 +126,29 @@ export function batchConfirm(items: { kind: string }[], lang: Lang): ConfirmCopy
     cancelLabel: t.cancel,
   }
 }
+
+// ---- The undo window after confirming (T8) ---------------------------------
+
+export interface UndoCopy {
+  /** Shown with the Undo button while the action waits, e.g. "Approved". */
+  message: string
+  undoLabel: string
+  /** Prefixed to the error text when the send fails. */
+  failMessage: string
+}
+
+/** Toast copy for a held money action; `count` > 1 for Approve all. */
+export function undoCopy(action: DecideAction, lang: Lang, count = 1): UndoCopy {
+  if (lang === 'hi') {
+    return {
+      message: action === 'approve' ? (count > 1 ? `${count} मंज़ूर` : 'मंज़ूर') : 'रोका',
+      undoLabel: 'वापस लें',
+      failMessage: action === 'approve' ? 'मंज़ूर नहीं हुआ।' : 'रोका नहीं गया।',
+    }
+  }
+  return {
+    message: action === 'approve' ? (count > 1 ? `${count} approved` : 'Approved') : 'Held',
+    undoLabel: 'Undo',
+    failMessage: action === 'approve' ? 'Not approved.' : 'Not held.',
+  }
+}

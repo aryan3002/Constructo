@@ -86,3 +86,16 @@ test('an expired login keeps the queued messages and captures', async () => {
   expect(await AsyncStorage.getItem(SESSION_USER_KEY)).toBe('u1')
   expect(await AsyncStorage.getItem('constructo.site_id')).toBeNull()
 })
+
+test('a money decision in its undo window is sent before the login ends', async () => {
+  const { schedulePending, pendingCount } = require('../../owner/pendingDecisions')
+  const send = jest.fn(async () => {
+    // Still signed in when it goes out.
+    expect(mockClearToken).not.toHaveBeenCalled()
+    expect(mockLogout).not.toHaveBeenCalled()
+  })
+  schedulePending({ ids: ['d1'], send, message: 'Approved', undoLabel: 'Undo', failMessage: 'x' })
+  await resetSession({ queryClient: new QueryClient() })
+  expect(send).toHaveBeenCalledTimes(1)
+  expect(pendingCount()).toBe(0)
+})
