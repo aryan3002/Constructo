@@ -35,6 +35,11 @@ import { systemNotice } from '../../../src/chat/systemNotice'
 import { HomeownerAskRow, type AskStatus } from '../../../src/screens/homeowner/ask_row'
 import { summarizeWaiting } from '../../../src/homeowner/waiting'
 import { ThreadSummaryStrip } from '../../../src/screens/homeowner/thread_summary_strip'
+import {
+  MAX_NAMED,
+  otherParticipants,
+  participantsLabel,
+} from '../../../src/screens/homeowner/participants.util'
 
 /** An ephemeral inline @ask exchange (Slice B) — not a persisted message.
  *  `createdAt` (epoch ms) lets us interleave it with real messages by time, so a
@@ -137,6 +142,16 @@ export default function HomeownerThread() {
   const headerTitle = kind === 'homeowner' ? t.builder : title || t.builder
 
   const { siteId, me } = useAuth()
+  // Builder-channel participants from the household roster — the same query
+  // (and cache key) the Members screen uses. Never a fixed co-owner.
+  const rosterQ = useQuery({
+    queryKey: ['household-roster', siteId],
+    queryFn: () => homeowner.roster(siteId ?? undefined),
+    enabled: kind === 'homeowner',
+  })
+  const participantLang = lang === 'hi' ? 'hi' : 'en'
+  const otherMembers = otherParticipants(rosterQ.data, me?.id, participantLang).slice(0, MAX_NAMED)
+  const participants = participantsLabel(rosterQ.data, me?.id, participantLang)
   const thread = useChatThread({ conversationId: id }, { myUserId: me?.id })
   // Seeded from the deep-link's ?draft= (e.g. a "Design chat" button
   // elsewhere in the app). Tabs are persistent — this screen may already be
@@ -449,11 +464,11 @@ export default function HomeownerThread() {
           style={{ flexDirection: 'row', alignItems: 'center' }}
         >
           {kind === 'homeowner' ? (
-            /* Builder channel: stacked initials cluster — site team (hard-hat),
-               co-owner (user), you (home) — matching the prototype's participant
-               header. Three overlapping circles for a "whole team" feel. */
-            <View style={{ width: 76, height: 40, position: 'relative' }}>
-              {/* S — site team */}
+            /* Builder channel: overlapping circles — site team (tool), you
+               (home), then one per other active household member (max two),
+               all from the roster. */
+            <View style={{ width: 34 + 18 * (1 + otherMembers.length), height: 40, position: 'relative' }}>
+              {/* Site team */}
               <View style={{
                 position: 'absolute', left: 0, top: 0,
                 width: 34, height: 34, borderRadius: 17,
@@ -462,19 +477,9 @@ export default function HomeownerThread() {
               }}>
                 <Feather name="tool" size={14} color={c.textMute} />
               </View>
-              {/* R — co-owner */}
+              {/* You (homeowner, accent) */}
               <View style={{
                 position: 'absolute', left: 18, top: 0,
-                width: 34, height: 34, borderRadius: 17,
-                backgroundColor: c.secondaryContainer,
-                borderWidth: 2, borderColor: c.card,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Feather name="user" size={14} color={c.secondary} />
-              </View>
-              {/* P — you (homeowner, accent) */}
-              <View style={{
-                position: 'absolute', left: 36, top: 0,
                 width: 34, height: 34, borderRadius: 17,
                 backgroundColor: AP.chip,
                 borderWidth: 2, borderColor: c.card,
@@ -482,6 +487,20 @@ export default function HomeownerThread() {
               }}>
                 <Feather name="home" size={14} color={AP.onChip} />
               </View>
+              {/* Other household members — their initial */}
+              {otherMembers.map((p, i) => (
+                <View key={p.id} style={{
+                  position: 'absolute', left: 36 + 18 * i, top: 0,
+                  width: 34, height: 34, borderRadius: 17,
+                  backgroundColor: c.secondaryContainer,
+                  borderWidth: 2, borderColor: c.card,
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Small style={{ color: c.secondary, fontWeight: '700' }}>
+                    {p.name.charAt(0).toUpperCase()}
+                  </Small>
+                </View>
+              ))}
             </View>
           ) : (
             /* Group thread: stacked pair (the title Avatar + a "+group" cue). */
@@ -529,9 +548,7 @@ export default function HomeownerThread() {
                     : 'Connecting…'
                   : siteName
                     ? siteName
-                    : lang === 'hi'
-                      ? 'साइट टीम · आप · सह-मालिक'
-                      : 'Site team · You · Co-owner'}
+                    : participants}
               </Small>
             </View>
           ) : !thread.online ? (

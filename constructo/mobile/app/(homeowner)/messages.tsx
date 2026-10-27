@@ -19,7 +19,7 @@
  * twice. Self-themed by the (homeowner) layout's Daylight ThemeProvider.
  */
 import { useCallback, useRef } from 'react'
-import { RefreshControl, ScrollView, View } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -33,6 +33,8 @@ import { useAuth } from '../../src/auth/AuthContext'
 import { chatApi, type ConversationSummary } from '../../src/api/chat'
 import { getSharedSocket, frameHandlers, type FrameHandler } from '../../src/chat/useChatThread'
 import { ChannelRow } from '../../src/screens/homeowner/messages_components'
+import { homeowner } from '../../src/api/client'
+import { participantsLabel } from '../../src/screens/homeowner/participants.util'
 
 const STR = {
   en: {
@@ -46,6 +48,7 @@ const STR = {
     allCaughtUpBody: 'Nothing is waiting on you. Your builder channel is always here.',
     noGroups: 'Group threads appear here when your team adds you to one.',
     loading: 'Loading your messages…',
+    members: 'See who is in this chat',
   },
   hi: {
     title: 'संदेश',
@@ -58,6 +61,7 @@ const STR = {
     allCaughtUpBody: 'आपकी कोई बात बाकी नहीं। आपका बिल्डर चैनल हमेशा यहाँ है।',
     noGroups: 'ग्रुप चैट तब यहाँ दिखेंगी जब टीम आपको किसी में जोड़े।',
     loading: 'आपके संदेश लोड हो रहे हैं…',
+    members: 'देखें इस चैट में कौन है',
   },
 } as const
 
@@ -67,8 +71,16 @@ export default function HomeownerMessagesInbox() {
   const c = theme.colors
   const router = useRouter()
   const qc = useQueryClient()
-  const { siteId } = useAuth()
+  const { siteId, me } = useAuth()
   const t = STR[lang as 'en' | 'hi'] ?? STR.en
+
+  // Who's in the builder channel, from the same roster the Members screen
+  // reads (shared cache key) — never a hard-coded co-owner.
+  const rosterQ = useQuery({
+    queryKey: ['household-roster', siteId],
+    queryFn: () => homeowner.roster(siteId ?? undefined),
+  })
+  const participants = participantsLabel(rosterQ.data, me?.id, lang === 'hi' ? 'hi' : 'en')
 
   // Get-or-create her builder channel so the row is live from first open.
   const channelQ = useQuery({
@@ -216,23 +228,28 @@ export default function HomeownerMessagesInbox() {
             in the conversation, matching the prototype's header feel.
             Only shown when there's a live builder channel. */}
         {builder ? (
-          <View
-            style={{
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${participants}. ${t.members}`}
+            onPress={() => router.push('/(homeowner)/members')}
+            style={({ pressed }) => ({
               flexDirection: 'row',
               alignItems: 'center',
               gap: SPACE.sm,
               paddingHorizontal: SPACE.md,
               paddingVertical: SPACE.sm,
+              minHeight: 44,
               backgroundColor: AP.chip,
               borderRadius: theme.radii.chip,
-            }}
+              opacity: pressed ? 0.8 : 1,
+            })}
           >
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent }} />
             <Small style={{ color: AP.onChip, fontWeight: '600', flex: 1 }} numberOfLines={1}>
-              {lang === 'hi' ? 'साइट टीम · आप · सह-मालिक' : 'Site team · You · Co-owner'}
+              {participants}
             </Small>
             <Feather name="chevron-right" size={14} color={AP.onChip} />
-          </View>
+          </Pressable>
         ) : null}
       </View>
 
