@@ -21,6 +21,10 @@ async def _invite(client, owner, phone: str, role: str = "supervisor", name: str
     return resp.json()
 
 
+async def _login(client, phone: str):
+    return await client.post("/api/v1/auth/login", json={"phone": phone, "otp": "000000"})
+
+
 async def _company_count(db_session) -> int:
     return (await db_session.execute(select(func.count()).select_from(Company))).scalar_one()
 
@@ -152,7 +156,7 @@ async def test_invited_login_obeys_the_login_rate_limit(client, factory, db_sess
     await db_session.commit()
     await _invite(client, owner, "+919820011007")
 
-    first = await client.post("/api/v1/auth/login", json={"phone": "+919820011008", "otp": "000000"})
+    first = await _login(client, "+919820011008")
     assert first.status_code == 404
-    second = await client.post("/api/v1/auth/login", json={"phone": "+919820011007", "otp": "000000"})
+    second = await _login(client, "+919820011007")
     assert second.status_code == 429
