@@ -94,8 +94,19 @@ function formatDate(iso: string, lang: Lang): string {
   }
 }
 
-/** Small thumbnails of the photos attached to a report (T6). */
-function RequestThumbs({ req, label }: { req: HomeownerRequest; label: string }) {
+const hasPhotos = (req: HomeownerRequest) => (req.photos?.length ?? 0) > 0
+
+/** Small thumbnails of the photos attached to a report (T6). Drawn under the
+ *  row's text, so it carries the row divider (the ListRow above gets `last`). */
+function RequestThumbs({
+  req,
+  label,
+  last,
+}: {
+  req: HomeownerRequest
+  label: string
+  last: boolean
+}) {
   const { theme } = useTheme()
   const photos = req.photos ?? []
   if (photos.length === 0) return null
@@ -103,7 +114,14 @@ function RequestThumbs({ req, label }: { req: HomeownerRequest; label: string })
     <View
       accessible
       accessibilityLabel={label}
-      style={{ flexDirection: 'row', gap: SPACE.xs, paddingLeft: 52, paddingBottom: SPACE.sm }}
+      style={{
+        flexDirection: 'row',
+        gap: SPACE.xs,
+        paddingLeft: 52,
+        paddingBottom: SPACE.md,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: theme.colors.line,
+      }}
     >
       {photos.map((p) => (
         <Image
@@ -204,7 +222,7 @@ export default function RequestsScreen() {
                       icon="message-square"
                       title={req.title}
                       subtitle={subtitle}
-                      last={idx === open.length - 1}
+                      last={idx === open.length - 1 || hasPhotos(req)}
                       right={
                         <StatusPill
                           status={REQUEST_STATUS_META[req.status]?.status ?? 'info'}
@@ -217,7 +235,11 @@ export default function RequestsScreen() {
                         />
                       }
                     />
-                    <RequestThumbs req={req} label={t.photosAttached(req.photos?.length ?? 0)} />
+                    <RequestThumbs
+                      req={req}
+                      label={t.photosAttached(req.photos?.length ?? 0)}
+                      last={idx === open.length - 1}
+                    />
                     </View>
                   )
                   })}
@@ -249,7 +271,7 @@ export default function RequestsScreen() {
                     icon="check"
                     title={req.title}
                     subtitle={`${t.raised} · ${formatDate(req.created_at, lang as Lang)}`}
-                    last={idx === resolved.length - 1}
+                    last={idx === resolved.length - 1 || hasPhotos(req)}
                     right={
                       <StatusPill
                         status="ok"
@@ -262,7 +284,11 @@ export default function RequestsScreen() {
                       />
                     }
                   />
-                  <RequestThumbs req={req} label={t.photosAttached(req.photos?.length ?? 0)} />
+                  <RequestThumbs
+                    req={req}
+                    label={t.photosAttached(req.photos?.length ?? 0)}
+                    last={idx === resolved.length - 1}
+                  />
                   </View>
                   ))}
                 </Card>
