@@ -207,6 +207,8 @@ export default function Household() {
   }
 
   async function shareMember(member: HomeownerMember) {
+    // Only the owners' (manager) roster carries invite links.
+    if (!member.invite_link) return
     try {
       await Share.share({
         message: `Join my home on Neev: ${member.invite_link}`,

@@ -85,10 +85,11 @@ export interface HomeownerMember {
   sub_role: HomeownerSubRole
   notif_prefs: Record<string, unknown>
   phone: string | null
-  join_code: string
+  /** Null in the household view family and advisors get (no codes, no phones). */
+  join_code: string | null
   status: 'invited' | 'active'
   created_at: string
-  invite_link: string
+  invite_link: string | null
   /** Design scope — {} = no say, {all:true} = full, {space_id:'...'} = one room */
   can_design?: boolean
   design_space_id?: string | null

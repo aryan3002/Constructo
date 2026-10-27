@@ -659,16 +659,30 @@ async def members_roster(
     session: AsyncSession = Depends(get_session),
     site_id: UUID | None = Query(None),
 ) -> list[MemberOut]:
-    """All members on a SITE (manager view) — contrast GET /members (caller's own)."""
-    sid, _ = await _resolve_managed_site(session, user, site_id)
+    """All members on a SITE — contrast GET /members (caller's own).
+
+    Owners (primary / co-owner) get the manager view: every member, invites
+    included, with phone and join code. Family and advisors get the household
+    view: the active members only, without phone, join code, invite link or
+    notification settings — enough for their Members screen and the Messages
+    participant list to show the real household instead of "Just you"."""
+    sid = await resolve_site(session, user, site_id)
+    sub_role = await member_sub_role(session, user, sid)
+    manager = sub_role is not None and can_manage_members(sub_role)
+    stmt = select(HomeownerMember).where(HomeownerMember.site_id == sid)
+    if not manager:
+        stmt = stmt.where(HomeownerMember.status == MemberStatus.active)
     rows = (
-        await session.execute(
-            select(HomeownerMember)
-            .where(HomeownerMember.site_id == sid)
-            .order_by(HomeownerMember.created_at)
-        )
+        await session.execute(stmt.order_by(HomeownerMember.created_at))
     ).scalars().all()
-    return [_member_out(m) for m in rows]
+    if manager:
+        return [_member_out(m) for m in rows]
+    return [
+        _member_out(m).model_copy(
+            update={"phone": None, "join_code": None, "invite_link": None, "notif_prefs": {}}
+        )
+        for m in rows
+    ]
 
 
 @router.patch("/members/{member_id}/manage", response_model=MemberOut)

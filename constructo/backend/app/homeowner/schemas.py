@@ -101,11 +101,12 @@ class MemberOut(BaseModel):
     sub_role: HomeownerSubRole
     notif_prefs: dict
     phone: str | None
-    join_code: str
+    # None in the household view a family member or advisor gets (no codes).
+    join_code: str | None
     status: MemberStatus
     created_at: datetime
     # A deep link the contractor shares; the app reads the code from it.
-    invite_link: str
+    invite_link: str | None
     # --- multi-member management (proposal A) -------------------------------
     display_name: str | None = None
     can_design: bool = False

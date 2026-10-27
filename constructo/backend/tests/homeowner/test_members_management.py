@@ -150,6 +150,37 @@ async def test_roster_lists_site_members(client, ctx, family):
     assert str(family.member.id) in ids
 
 
+async def test_family_roster_is_the_household_without_contact_details(
+    client, db_session, ctx, family
+):
+    """Family and advisors see who is in the household (their Members screen and
+    the Messages participant list), but not phones, codes or pending invites."""
+    invited = await _member(db_session, ctx, HomeownerSubRole.family, status=MemberStatus.invited)
+    resp = await client.get(
+        f"/api/v1/homeowner/members/roster?site_id={ctx.site.id}",
+        headers=auth(family.user),
+    )
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()
+    ids = {m["id"] for m in rows}
+    assert {str(ctx.member.id), str(family.member.id)} <= ids
+    assert str(invited.id) not in ids
+    for m in rows:
+        assert m["phone"] is None
+        assert m["join_code"] is None
+        assert m["invite_link"] is None
+        assert m["notif_prefs"] == {}
+
+    # The owner's manager view is unchanged: invites and codes included.
+    owner = await client.get(
+        f"/api/v1/homeowner/members/roster?site_id={ctx.site.id}",
+        headers=auth(ctx.homeowner),
+    )
+    by_id = {m["id"]: m for m in owner.json()}
+    assert by_id[str(invited.id)]["join_code"]
+    assert by_id[str(invited.id)]["invite_link"].startswith("neev://join?code=")
+
+
 # ---- manage (role + design) ------------------------------------------------
 
 
