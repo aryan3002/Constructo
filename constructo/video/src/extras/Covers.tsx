@@ -163,7 +163,8 @@ function RecordCourse({top, brickW, brickH, offset = 0, width}: {top: number; br
   const colors = [brand.clay, '#3e7a66', '#c9bfa9', '#8a5a2b', '#4a443a'];
   const gap = brickH * 0.16;
   const n = Math.ceil((width - offset) / (brickW + gap)) + 1;
-  const mid = Math.floor(n / 2);
+  // The point sits on the brick nearest the middle of the frame.
+  const mid = Math.round((width / 2 - offset - brickW / 2) / (brickW + gap));
   return (
     <>
       <div style={{position: 'absolute', left: offset, top, display: 'flex', gap}}>
@@ -206,7 +207,7 @@ export function ThumbC() {
     <AbsoluteFill style={{background: day.surface, overflow: 'hidden'}}>
       <SurveyGrid width={1280} height={720} pitch={44} dot={2} color={day.line} />
       <div style={{position: 'absolute', left: 70, top: 64}}>
-        <div style={{transform: 'scale(2)', transformOrigin: 'left top'}}>
+        <div style={{transform: 'scale(2)', transformOrigin: 'left top', display: 'inline-block'}}>
           <Bubble side="in" time="8:48 pm" fontSize={18}>
             सब ठीक है, सर।
           </Bubble>
@@ -221,7 +222,7 @@ export function ThumbC() {
         </div>
       </div>
       <div style={{position: 'absolute', left: 740, top: 52, transform: 'rotate(3deg)'}}>
-        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26}}>
+        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26, display: 'inline-block'}}>
           <HomeCard width={460} />
         </div>
         <div style={{marginTop: 18, marginLeft: 6}}>
@@ -249,18 +250,18 @@ export function CoverC() {
           sir?
         </div>
       </div>
-      <div style={{position: 'absolute', left: 140, top: 960, transform: 'rotate(-2deg)'}}>
-        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26}}>
+      <div style={{position: 'absolute', left: 140, top: 880, transform: 'rotate(-2deg)'}}>
+        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26, display: 'inline-block'}}>
           <HomeCard width={780} />
         </div>
         <div style={{marginTop: 24, marginLeft: 8}}>
           <ProofChips size={1.6} />
         </div>
       </div>
-      <div style={{position: 'absolute', left: 0, right: 0, top: 1560, display: 'flex', justifyContent: 'center'}}>
+      <div style={{position: 'absolute', left: 0, right: 0, top: 1548, display: 'flex', justifyContent: 'center'}}>
         <Lockup size={1.2} />
       </div>
-      <RecordCourse top={1760} brickW={250} brickH={70} offset={-80} width={1080} />
+      <RecordCourse top={1770} brickW={250} brickH={70} offset={-80} width={1080} />
     </AbsoluteFill>
   );
 }
