@@ -2,8 +2,8 @@
   "note": "Voiceover for film C. `at` is seconds into the section and `dur` the expected spoken length (scripts/audio/vo.py reports the real one). `role` picks the voice from `cast` (default narrator); fx 'phone' makes a line sound like a call. Narrator: warm, unhurried Indian English.",
   "cast": {
     "narrator": {"lang": "en-IN", "voice": "eleven:2ac60c98ccb58aee264181dfa21ae14964889c1d2e3831e7c661520be7f7fd43/nAXOV8RqzafF7mI2EBhz"},
-    "owner": {"lang": "hi-IN", "voice": "eleven:7515a67a8887ebf544e2925bf41b85d86b92f8eed50f32d1676c4705900c4631/KjB3pyRrta1C1C2zoshr"},
-    "site": {"lang": "hi-IN", "voice": "eleven:6c7a6ede9b7054386b346e2c7e8d64b1cb96235826c55788c76b22202c84488b/jNTHBl47oA9XOWkV0KRe"}
+    "owner": {"lang": "hi-IN", "voice": "eleven:09231f1bca1a10b2c37dfcb26c2202e64eea6c0ff2735c07954123d5861f686f/SmpN7GDUWZlw5JBHA73U"},
+    "site": {"lang": "hi-IN", "voice": "eleven:b8e861ce368682622875d4768a192e7b7598b1df9ab8ea192da2a50e53f22f3d/z2K7IKTGiFuuLmVXQWKl"}
   },
   "youtube": [
     {"section": "hook", "at": 0.3, "dur": 1.2, "role": "owner", "fx": "phone", "text": "काम कैसा चल रहा है?"},
