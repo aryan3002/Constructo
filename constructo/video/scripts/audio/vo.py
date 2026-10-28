@@ -113,6 +113,11 @@ ELEVEN_HELP = """ElevenLabs refused the request. Check that
   - api.elevenlabs.io is allowed under Network access;
   - the account has credits left (Home → Balance)."""
 
+ELEVEN_FREE_BLOCKED = """The key works, but ElevenLabs blocks speech on free accounts used from cloud
+servers (it reads them as a proxy or VPN). Reading the voice library still works, so
+`voices` and `audition` run; `make` needs the account on a paid plan (Subscription →
+upgrade or redeem the promo). Nothing else needs changing; re-run `make` after."""
+
 
 def eleven(path: str, body: dict | None = None, raw: bool = False):
     headers = {"xi-api-key": os.environ.get("ELEVENLABS_API_KEY", "").strip(), "Content-Type": "application/json"}
@@ -123,6 +128,8 @@ def eleven(path: str, body: dict | None = None, raw: bool = False):
             return r.read() if raw else json.load(r)
     except urllib.error.HTTPError as e:
         err = TtsError(e.code, e.read().decode("utf-8", "replace"))
+        if e.code == 401 and "detected_unusual_activity" in err.detail:
+            sys.exit(f"{err}\n\n{ELEVEN_FREE_BLOCKED}")
         if e.code == 401:
             sys.exit(f"{err}\n\n{ELEVEN_HELP}")
         raise err from None

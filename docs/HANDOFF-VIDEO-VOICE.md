@@ -23,6 +23,48 @@ There is no PR; don't open one unless the founder asks.
   - **Licence:** ElevenLabs' free plan doesn't include commercial use. Drafts are fine; before the film is published, the account must be on a paid plan (the promo). Say this once when you deliver.
 - **Fallbacks:** Google TTS (`GOOGLE_TTS_API_KEY`, `--provider google`), or a recording of the founder, which drops in with `npm run vo -- duck`.
 
+## Status, 2026-10-28 (audition done, waiting on picks and the paid plan)
+
+- **The key works, but ElevenLabs blocks speech on the free plan from cloud servers.** Every text-to-speech call returns 401 `detected_unusual_activity` ("Free Tier access has been disabled … proxy or VPN"), including premade voices. Library reads (`voices`, `shared-voices`) still work. `make` needs the account on a paid plan (the promo). `vo.py` now says this plainly when it happens.
+- **Preview host:** about a third of the library's preview files live on `api.us.elevenlabs.io`, which is not on the network allowlist. The audition used only voices whose previews are on `storage.googleapis.com`. Allowing `api.us.elevenlabs.io` would widen the choice; nothing else needs it.
+- **The audition was curated by hand**, not the stock `audition` command: 12 narrators (warm, narrative or commercial, Indian English; 6 men, 6 women) and 12 Hindi men (6 suggested for the owner, 6 for Ramesh, some with Bhojpuri or Bihari accents). Each Hindi voice was also played through the film's phone filter. Casting page: https://claude.ai/artifact/3Yj5XZwoSmUAu1pJE96oAv
+- The samples are each voice's own library preview, not our lines. Once the plan is paid, have the picks read the real hook lines before the full `make`; it costs a few hundred credits.
+- **Next:** take the founder's three numbers from the table below, then `npm run vo -- make --narrator <ref> --owner <ref> --site <ref>`.
+
+Narrator (en-IN):
+
+| # | Voice | Reference |
+|---|---|---|
+| 1 | Rishab | `eleven:cc6a9ad637fc6a52899791952d7a4e5146ae59d2c5603a0801cb82126c5e590f/MTqBov4zzTaS7e2ZO6wS` |
+| 2 | Santhi Prakash | `eleven:4396be8abbcff558973963f17ed5edbff27a7086a5f743c18caf250eec95f1c8/UCYikFhJ1MxdJf40ZcRX` |
+| 3 | Aaditya | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/nz8zH5px6I7CAT1IHAwU` |
+| 4 | Pranab | `eleven:ae76cffa9f2b7c2cd9dc13c588986b40fba3a679114686f181cc3a760f85e30c/niLTODfB1j2nXIbp3M14` |
+| 5 | Lovekesh | `eleven:b385e1850cb0553c298ed71864fb4d8ad37073ccd72cd5e871dab2f48d4395d7/RdIqmYG6PHfQ62pRoH08` |
+| 6 | Anuj Bhatia | `eleven:2ac60c98ccb58aee264181dfa21ae14964889c1d2e3831e7c661520be7f7fd43/nAXOV8RqzafF7mI2EBhz` |
+| 7 | Ziina | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/N9mNpKpj7Er4N23jJ4W3` |
+| 8 | Surabhi | `eleven:01cf590a1f2f2674cc8890788b11b821cf7b562d7b98d4fce1d7b58b93c6f24d/ch9J8IB6HKlEHQaWQFdk` |
+| 9 | Rashi | `eleven:bccb356afd3d45b99fc27a4b56819e5321002fa4c0dc6efd706fe67ff72f86f7/gM97WcXnv5iYPHhVZJN8` |
+| 10 | AB | `eleven:0e14a11061b46ffbb13ad97e3373b44386ed39b37e5c085c4c4589ff580d99fe/JSZ6mrlwqYAjKBo9OVaS` |
+| 11 | Ria | `eleven:ae132125ec20aa5ff83cf87a80e8d22efe82bba057f13f8840e09ee4d0e9c0c5/M6udCbeLpbqc4ZtMMDGJ` |
+| 12 | Veda | `eleven:3bbd830df794789c268c07cf375e7acdfee53deb66fa27ff738f91b084d40f88/pIhyYpeIfZjcBDvduSln` |
+
+Owner / Ramesh (hi-IN):
+
+| # | Voice | Reference |
+|---|---|---|
+| 1 | Rohit | `eleven:09231f1bca1a10b2c37dfcb26c2202e64eea6c0ff2735c07954123d5861f686f/SmpN7GDUWZlw5JBHA73U` |
+| 2 | Pavan M | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/Py80426yZ0W2xj25PH5q` |
+| 3 | Aarav R | `eleven:3b7fa88bdfd54c21402550e5b63123193b327e568a82394b51e74b9e55037bee/x9wViLHrpGxKBhkUybpR` |
+| 4 | Avinash | `eleven:7515a67a8887ebf544e2925bf41b85d86b92f8eed50f32d1676c4705900c4631/KjB3pyRrta1C1C2zoshr` |
+| 5 | Vyom | `eleven:1bd88d7943d155480db2469284ef55cbfc2aef7a6a7df38253f0d24a947947bc/zx1lYyhBlNDJZ76WzkhR` |
+| 6 | Shivank S | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/JvXnN4vCCagzhSTjMMjl` |
+| 7 | Hemant M | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/NhwTI3t2DXME1ogDNGJX` |
+| 8 | Chandan | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/0LYOfRJKHz3pxHvP9Q2G` |
+| 9 | Ravi | `eleven:6c7a6ede9b7054386b346e2c7e8d64b1cb96235826c55788c76b22202c84488b/jNTHBl47oA9XOWkV0KRe` |
+| 10 | Guddu | `eleven:7398804d9eaf2f463899a907587c33a390591775784f87857b6d0e1e4e3e66f6/EYuRJHRGEiUhUtCLc33A` |
+| 11 | Gajendra | `eleven:c0c7d01bfa452287ca8221ec9bd14fa49d2b95ac3fa4809ccb1293f84d1136c3/6xalENe4gtaDq8XTGd7G` |
+| 12 | Amarjeet Chauhan | `eleven:b8e861ce368682622875d4768a192e7b7598b1df9ab8ea192da2a50e53f22f3d/z2K7IKTGiFuuLmVXQWKl` |
+
 ## What you need
 
 - **The key.** `ELEVENLABS_API_KEY` must be set in this environment (an environment secret or variable), from ElevenLabs → profile → API Keys.
