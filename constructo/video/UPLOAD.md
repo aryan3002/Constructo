@@ -6,6 +6,36 @@ thumbnails are in `out/stills/`.
 Before publishing, replace "Coming soon to iPhone and Android" on the end cards
 once you have a store or website link (see README → Uploading).
 
+## Film C · "सब ठीक है?" (the intro)
+
+**YouTube** (`NeevC-YouTube.mp4`, thumbnail `Thumb-C`, captions `NeevC-YouTube.srt` once the voiceover is in)
+
+Title: *सब ठीक है? · Neev, one honest record of your home*
+
+Description:
+
+> “काम कैसा चल रहा है?” “सब ठीक है, सर।” (How's the work going? All good, sir.)
+> Every family building a home has heard it. Neev keeps one honest record of
+> the build. The site team speaks or snaps an update in Hindi or English. The
+> builder sees what doesn't add up, before anyone pays. And the family, wherever
+> they are, sees where the build stands: every photo dated and placed, a weekly
+> letter they can listen to, answers from the record (never a guess about money
+> or safety), and the choices that are truly theirs, in their own language.
+> Neev tracks money but never moves it.
+>
+> Coming soon to iPhone and Android.
+>
+> 0:00 All good, sir?
+> 0:17 The site team and the builder
+> 0:40 For the family
+> 1:16 Same truth, with proof
+
+**Instagram Reel** (`NeevC-Reel.mp4`, cover `Cover-C`)
+
+> “सब ठीक है, सर।” But is it?
+> Neev keeps one honest record of your home: for the site team, the builder, and the family, wherever they are. In Hindi or English. Coming soon.
+> #Neev #BuildingAHome #HomeConstruction #NRI #Homeowners
+
 ## Film A · "All good, sir?"
 
 **YouTube** (`NeevA-YouTube.mp4`, thumbnail `Thumb-A`)

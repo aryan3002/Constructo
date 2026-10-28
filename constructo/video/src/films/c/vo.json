@@ -1,0 +1,42 @@
+{
+  "note": "Voiceover for film C. `at` is seconds into the section and `dur` the expected spoken length (scripts/audio/vo.py reports the real one). `role` picks the voice from `cast` (default narrator); fx 'phone' makes a line sound like a call. Narrator: warm, unhurried Indian English.",
+  "cast": {
+    "narrator": {"lang": "en-IN", "voice": null},
+    "owner": {"lang": "hi-IN", "voice": null},
+    "site": {"lang": "hi-IN", "voice": null}
+  },
+  "youtube": [
+    {"section": "hook", "at": 0.3, "dur": 1.2, "role": "owner", "fx": "phone", "text": "काम कैसा चल रहा है?"},
+    {"section": "hook", "at": 1.6, "dur": 1.1, "role": "site", "fx": "phone", "text": "सब ठीक है, सर।"},
+    {"section": "hook", "at": 3.0, "dur": 2.4, "text": "Every family building a home has heard this."},
+    {"section": "noise", "at": 0.4, "dur": 5.6, "text": "Building a home in India runs on WhatsApp. Calls. Voice notes. Promises."},
+    {"section": "noise", "at": 6.6, "dur": 2.0, "text": "And most of it gets lost."},
+    {"section": "turn", "at": 2.6, "dur": 4.6, "text": "Neev keeps every one of them, as one honest record of your home."},
+    {"section": "site", "at": 0.3, "dur": 6.2, "text": "On site, the team just speaks, in Hindi or English. Neev writes it down, with proof."},
+    {"section": "builder", "at": 0.3, "dur": 4.4, "text": "The builder sees what doesn't add up, before anyone pays."},
+    {"section": "family", "at": 0.3, "dur": 3.8, "text": "And the family, wherever they are, finally gets calm."},
+    {"section": "home", "at": 0.2, "dur": 2.8, "text": "One look says where the build stands."},
+    {"section": "photos", "at": 0.2, "dur": 3.4, "text": "Every photo from site, dated and in its place."},
+    {"section": "letter", "at": 0.3, "dur": 5.4, "text": "Every week, a short letter on how it's going. They can even listen to it."},
+    {"section": "ask", "at": 0.3, "dur": 6.0, "text": "Ask anything. Neev answers from the record, and never guesses about money or safety."},
+    {"section": "design", "at": 0.3, "dur": 5.0, "text": "The choices that are truly theirs come with everything they need to decide."},
+    {"section": "language", "at": 0.4, "dur": 4.8, "text": "And everyone they love sees the same truth, in their own language."},
+    {"section": "payoff", "at": 2.4, "dur": 3.0, "text": "Same words. This time, with proof."},
+    {"section": "end", "at": 2.8, "dur": 3.0, "text": "Neev. One honest record of your home."}
+  ],
+  "reel": [
+    {"section": "hook", "at": 0.15, "dur": 1.2, "role": "owner", "fx": "phone", "text": "काम कैसा चल रहा है?"},
+    {"section": "hook", "at": 1.5, "dur": 1.1, "role": "site", "fx": "phone", "text": "सब ठीक है, सर।"},
+    {"section": "hook", "at": 2.85, "dur": 0.9, "text": "But is it?"},
+    {"section": "noise", "at": 0.2, "dur": 2.2, "text": "Most of it gets lost in the chat."},
+    {"section": "turn", "at": 1.6, "dur": 3.6, "text": "Neev keeps it all, as one honest record of your home."},
+    {"section": "site", "at": 0.1, "dur": 1.6, "text": "The site team just speaks."},
+    {"section": "builder", "at": 0.1, "dur": 2.0, "text": "The builder sees what doesn't add up."},
+    {"section": "home", "at": 0.1, "dur": 2.0, "text": "And the family finally gets calm."},
+    {"section": "ask", "at": 0.1, "dur": 2.4, "text": "Ask anything. Answers come from the record."},
+    {"section": "design", "at": 0.1, "dur": 1.6, "text": "Decide what's truly yours."},
+    {"section": "language", "at": 0.1, "dur": 1.8, "text": "In everyone's own language."},
+    {"section": "payoff", "at": 0.9, "dur": 2.4, "text": "Same words. This time, with proof."},
+    {"section": "end", "at": 1.0, "dur": 0.8, "text": "Neev."}
+  ]
+}

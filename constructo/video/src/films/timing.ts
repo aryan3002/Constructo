@@ -7,7 +7,7 @@ import cuts from './cuts.json';
 
 export const FPS = 30;
 
-export type Variant = 'a' | 'b';
+export type Variant = 'a' | 'b' | 'c';
 export type Format = 'youtube' | 'reel';
 
 export type Section = {id: string; from: number; duration: number; bars: number};

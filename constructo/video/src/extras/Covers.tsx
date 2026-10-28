@@ -1,5 +1,5 @@
 /**
- * Thumbnails (YouTube 1280×720) and Reel covers (1080×1920) for both films.
+ * Thumbnails (YouTube 1280×720) and Reel covers (1080×1920) for the films.
  * Reel covers keep their words inside the centre 3:4 crop that the Instagram
  * profile grid shows.
  */
@@ -8,9 +8,10 @@ import {AbsoluteFill} from 'remotion';
 import {FONT} from '../brand/fonts';
 import {brand, day} from '../brand/tokens';
 import {BenchmarkMark} from '../components/brand/BenchmarkMark';
-import {SurveyGrid} from '../components/brand/motifs';
+import {Brick, SurveyGrid} from '../components/brand/motifs';
 import {Bubble} from '../components/ui/chat';
 import {HOME_HERO_HI, HomeHero} from '../components/ui/cards';
+import {EvidenceChip} from '../components/ui/primitives';
 import {ThemeProvider} from '../brand/theme';
 import {INK} from '../films/b/scenes';
 
@@ -156,3 +157,110 @@ export function CoverB() {
   );
 }
 
+/** A course of the record along the bottom edge, with the marigold point on top. */
+function RecordCourse({top, brickW, brickH, offset = 0, width}: {top: number; brickW: number; brickH: number; offset?: number; width: number}) {
+  const labels = ['Voice note', 'Site photo', 'Invoice', 'Weekly letter', 'Approval', 'Delivery', 'Question', 'Milestone'];
+  const colors = [brand.clay, '#3e7a66', '#c9bfa9', '#8a5a2b', '#4a443a'];
+  const gap = brickH * 0.16;
+  const n = Math.ceil((width - offset) / (brickW + gap)) + 1;
+  const mid = Math.floor(n / 2);
+  return (
+    <>
+      <div style={{position: 'absolute', left: offset, top, display: 'flex', gap}}>
+        {Array.from({length: n}, (_, i) => {
+          const color = colors[(i * 3) % colors.length];
+          return <Brick key={i} width={brickW} height={brickH} color={color} label={labels[i % labels.length]} labelColor={color === '#c9bfa9' ? '#2a2519' : '#fcfaf3'} fontSize={brickH * 0.3} />;
+        })}
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: offset + mid * (brickW + gap) + brickW / 2 - brickH * 0.36,
+          top: top - brickH * 0.92,
+          width: brickH * 0.72,
+          height: brickH * 0.72,
+          borderRadius: brickH,
+          background: brand.marigold,
+          boxShadow: '0 10px 30px rgba(240,162,31,0.35)',
+        }}
+      />
+    </>
+  );
+}
+
+function ProofChips({size = 1}: {size?: number}) {
+  return (
+    <ThemeProvider theme={day}>
+      <div style={{display: 'flex', gap: 10, zoom: size}}>
+        <EvidenceChip icon="mic" label="Site log · 6:52 am" />
+        <EvidenceChip icon="image" label="2 photos" />
+        <EvidenceChip icon="file-text" label="Weekly letter" />
+      </div>
+    </ThemeProvider>
+  );
+}
+
+/** Film C: the question, the family's answer with its proof, and the record it stands on. */
+export function ThumbC() {
+  return (
+    <AbsoluteFill style={{background: day.surface, overflow: 'hidden'}}>
+      <SurveyGrid width={1280} height={720} pitch={44} dot={2} color={day.line} />
+      <div style={{position: 'absolute', left: 70, top: 64}}>
+        <div style={{transform: 'scale(2)', transformOrigin: 'left top'}}>
+          <Bubble side="in" time="8:48 pm" fontSize={18}>
+            सब ठीक है, सर।
+          </Bubble>
+        </div>
+        <div style={{fontFamily: FONT.display, fontWeight: 700, fontSize: 124, lineHeight: 0.98, letterSpacing: -3, color: day.ink, marginTop: 96}}>
+          All good,
+          <br />
+          sir?
+        </div>
+        <div style={{marginTop: 26}}>
+          <Lockup size={0.8} />
+        </div>
+      </div>
+      <div style={{position: 'absolute', left: 740, top: 52, transform: 'rotate(3deg)'}}>
+        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26}}>
+          <HomeCard width={460} />
+        </div>
+        <div style={{marginTop: 18, marginLeft: 6}}>
+          <ProofChips size={1.25} />
+        </div>
+      </div>
+      <RecordCourse top={634} brickW={190} brickH={54} offset={-60} width={1280} />
+    </AbsoluteFill>
+  );
+}
+
+export function CoverC() {
+  return (
+    <AbsoluteFill style={{background: day.surface, overflow: 'hidden'}}>
+      <SurveyGrid width={1080} height={1920} pitch={56} dot={2.2} color={day.line} />
+      <div style={{position: 'absolute', left: 90, top: 300, right: 90}}>
+        <div style={{transform: 'scale(2.5)', transformOrigin: 'left top', display: 'inline-block'}}>
+          <Bubble side="in" time="8:48 pm" fontSize={18}>
+            सब ठीक है, सर।
+          </Bubble>
+        </div>
+        <div style={{fontFamily: FONT.display, fontWeight: 700, fontSize: 168, lineHeight: 0.96, letterSpacing: -4, color: day.ink, marginTop: 150}}>
+          All good,
+          <br />
+          sir?
+        </div>
+      </div>
+      <div style={{position: 'absolute', left: 140, top: 960, transform: 'rotate(-2deg)'}}>
+        <div style={{boxShadow: '0 40px 80px rgba(42,37,25,0.25)', borderRadius: 26}}>
+          <HomeCard width={780} />
+        </div>
+        <div style={{marginTop: 24, marginLeft: 8}}>
+          <ProofChips size={1.6} />
+        </div>
+      </div>
+      <div style={{position: 'absolute', left: 0, right: 0, top: 1560, display: 'flex', justifyContent: 'center'}}>
+        <Lockup size={1.2} />
+      </div>
+      <RecordCourse top={1760} brickW={250} brickH={70} offset={-80} width={1080} />
+    </AbsoluteFill>
+  );
+}

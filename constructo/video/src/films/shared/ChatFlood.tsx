@@ -41,7 +41,7 @@ export function ChatItemView({item, scale = 1, photoWidth = 220}: {item: ChatIte
   }
 }
 
-/** Columns of chat that rise faster and faster. */
+/** Columns of chat that rise faster and faster; `freezeAt` stops them, `fallAt` drops every bubble. */
 export function ChatColumns({
   start = 0,
   columns,
@@ -50,6 +50,8 @@ export function ChatColumns({
   v0 = 2.2,
   accel = 0.028,
   exitAt,
+  freezeAt,
+  fallAt,
   style,
 }: {
   start?: number;
@@ -60,11 +62,13 @@ export function ChatColumns({
   v0?: number;
   accel?: number;
   exitAt?: number;
+  freezeAt?: number;
+  fallAt?: number;
   style?: CSSProperties;
 }) {
   const frame = useCurrentFrame();
   const {height} = useVideoConfig();
-  const f = Math.max(0, frame - start);
+  const f = Math.max(0, (freezeAt === undefined ? frame : Math.min(frame, freezeAt)) - start);
   const out = exitAt === undefined ? 0 : prog(frame, exitAt, 18, EXIT);
   return (
     <div style={{position: 'absolute', inset: 0, opacity: clamp01(f / 10) * (1 - out), ...style}}>
@@ -86,9 +90,17 @@ export function ChatColumns({
               gap: 12 * scale,
             }}
           >
-            {items.map((item, i) => (
-              <ChatItemView key={i} item={item} scale={scale} />
-            ))}
+            {items.map((item, i) => {
+              if (fallAt === undefined) return <ChatItemView key={i} item={item} scale={scale} />;
+              // The fall: gravity with a per-bubble delay, a little spin, then gone.
+              const r = seeded(ci * 31 + i * 7 + 3);
+              const fall = Math.max(0, frame - fallAt - r * 10);
+              return (
+                <div key={i} style={{display: 'flex', flexDirection: 'column', transform: `translateY(${0.9 * fall * fall}px) rotate(${fall * (r - 0.5) * 0.8}deg)`, opacity: 1 - clamp01(fall / 24)}}>
+                  <ChatItemView item={item} scale={scale} />
+                </div>
+              );
+            })}
           </div>
         );
       })}

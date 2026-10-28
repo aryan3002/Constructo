@@ -17,6 +17,7 @@ export function PhoneShot({
   y,
   scale,
   enterAt = 0,
+  enterDur = 26,
   exitAt,
   focus = [],
   time,
@@ -30,6 +31,8 @@ export function PhoneShot({
   y: number;
   scale: number;
   enterAt?: number;
+  /** Frames the phone takes to rise into place. */
+  enterDur?: number;
   exitAt?: number;
   focus?: FocusKey[];
   time?: string;
@@ -39,7 +42,7 @@ export function PhoneShot({
   children: ReactNode;
 }) {
   const frame = useCurrentFrame();
-  const enter = prog(frame, enterAt, 26, SETTLE);
+  const enter = prog(frame, enterAt, enterDur, SETTLE);
   const leave = exitAt === undefined ? 0 : prog(frame, exitAt, 14, EXIT);
 
   // Interpolate zoom and focus between keys.

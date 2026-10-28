@@ -1,6 +1,7 @@
 // Render the Neev films (and their stills) from one bundle.
 //   node scripts/render.mjs                  → every film
 //   node scripts/render.mjs NeevA-YouTube    → just that one
+//   VO=1 node scripts/render.mjs NeevC-Reel  → with the voiceover (film C only)
 // Masters land in out/films/<id>.mp4 (H.264 + AAC, 30 fps). Then run
 // scripts/finish.sh to normalise loudness to -14 LUFS for YouTube/Instagram.
 import {bundle} from '@remotion/bundler';
@@ -13,14 +14,14 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const outDir = path.join(root, 'out', 'films');
 mkdirSync(outDir, {recursive: true});
 
-const FILMS = ['NeevA-YouTube', 'NeevA-Reel', 'NeevB-YouTube', 'NeevB-Reel'];
+const FILMS = ['NeevA-YouTube', 'NeevA-Reel', 'NeevB-YouTube', 'NeevB-Reel', 'NeevC-YouTube', 'NeevC-Reel'];
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : FILMS;
 
 const serveUrl = await bundle({entryPoint: path.join(root, 'src', 'index.ts')});
 const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE ?? null;
 
 for (const id of ids) {
-  const inputProps = {audio: true, safeGuide: false};
+  const inputProps = {audio: true, safeGuide: false, vo: process.env.VO === '1' && id.startsWith('NeevC')};
   const composition = await selectComposition({serveUrl, id, inputProps, browserExecutable});
   const output = path.join(outDir, `${id}.mp4`);
   const started = Date.now();

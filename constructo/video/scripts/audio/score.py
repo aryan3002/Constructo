@@ -1,4 +1,4 @@
-"""Compose the two Neev scores, one file per cut, on the same bar grid as the
+"""Compose the Neev scores, one file per cut, on the same bar grid as the
 picture (src/films/cuts.json), into public/audio/music/<variant>-<format>.wav.
 
 A — "All good, sir?": warm D major at 90 bpm. Plucked-string arpeggios (a
@@ -8,12 +8,18 @@ A — "All good, sir?": warm D major at 90 bpm. Plucked-string arpeggios (a
 B — "Build on the truth": E minor at 120 bpm. Hits under the numbers, a
     filtered build under the chatter, a drop when the bricks are laid (with
     dhol-style toms), three courses of groove, and a bright G major ending.
+C — "सब ठीक है?": D major at 100 bpm, A's plucked warmth with B's drums. Two
+    small phrases for the question and the answer, a filtered build under the
+    chatter that cuts dead on "lost", a heartbeat of toms while the bricks are
+    laid, the mark's motif on "Neev", then a groove that changes colour with
+    each part of the app and peaks on the two languages.
 
-Run: uv run --with numpy --with scipy python scripts/audio/score.py
+Run: uv run --with numpy --with scipy python scripts/audio/score.py [a] [b] [c]
 """
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import zlib
@@ -73,6 +79,9 @@ CHORDS = {
     "Gb": ("G2", ["G3", "B3", "D4", "G4"]),
     "Dmaj": ("D2", ["D3", "A3", "D4", "F#4"]),
     "Gadd9": ("G2", ["G3", "A3", "B3", "D4", "G4"]),
+    # C
+    "F#m": ("F#2", ["F#3", "A3", "C#4", "F#4"]),
+    "A/C#": ("C#2", ["A3", "C#4", "E4", "A4"]),
 }
 
 
@@ -414,10 +423,221 @@ def compose_b(sections, fmt: str) -> np.ndarray:
     return s.mixdown(target=-17.0, fade_out=1.4 if fmt == "youtube" else 0.4, wets={"pad": 0.25, "pluck": 0.3, "drums": 0.08, "fx": 0.05, "bass": 0.0})
 
 
+# ===================================================================== C ====
+
+C_PROGRESSIONS = {
+    "hook": ["Bm7", "Gmaj7", "A7sus4"],
+    "noise": ["Em7", "Gmaj7", "A7sus4", "A7sus4"],
+    "site": ["D", "Bm", "G", "A"],
+    "builder": ["Bm", "G", "D", "A"],
+    "family": ["G", "A"],
+    "home": ["D", "A/C#"],
+    "photos": ["Bm", "G"],
+    "letter": ["Gmaj7", "A", "Bm7"],
+    "ask": ["D", "A/C#", "Bm"],
+    "design": ["G", "A", "F#m"],
+    "language": ["G", "A", "Bm"],
+}
+
+# How full the groove is in each part of the film (see warm()).
+C_LEVELS = {
+    "site": {"pad": 0.42, "bass": 0.42, "arp": 0.26, "shaker": 0.1, "kick": 0.38},
+    "builder": {"pad": 0.44, "bass": 0.42, "arp": 0.3, "shaker": 0.1, "kick": 0.4, "counter": 0.16},
+    "family": {"pad": 0.5, "cutoff": 2800, "bass": 0.38, "arp": 0.24, "bright": 0.65, "shaker": 0.08, "kick": 0.3, "bell": 0.16},
+    "home": {"pad": 0.44, "bass": 0.4, "arp": 0.26, "shaker": 0.1, "kick": 0.36, "toms": 0.13},
+    "photos": {"pad": 0.42, "bass": 0.4, "arp": 0.24, "step": 0.25, "shaker": 0.08, "kick": 0.36, "toms": 0.14, "hat": 0.05},
+    "letter": {"pad": 0.46, "bass": 0.32, "arp": 0.2, "step": 1.0, "shaker": 0.06, "bell": 0.14},
+    "ask": {"pad": 0.42, "bass": 0.4, "arp": 0.24, "shaker": 0.1, "kick": 0.38, "counter": 0.17},
+    "design": {"pad": 0.42, "bass": 0.44, "arp": 0.28, "shaker": 0.1, "kick": 0.4, "toms": 0.18, "clap": 0.12},
+    "language": {"pad": 0.52, "cutoff": 3000, "bass": 0.44, "arp": 0.3, "bright": 0.7, "shaker": 0.1, "kick": 0.4, "toms": 0.2, "clap": 0.14, "bell": 0.18},
+}
+
+
+def segments(start: float, end: float, progression: list[str]):
+    """(bar, length, chord) from `start` to `end`, changing chord on each whole bar."""
+    out = []
+    b, i = start, 0
+    while b < end - 1e-6:
+        nxt = min(end, math.floor(b + 1e-6) + 1)
+        out.append((b, nxt - b, progression[i % len(progression)]))
+        b, i = nxt, i + 1
+    return out
+
+
+def warm(s: Score, bar: float, length: float, ch: str, lv: dict, kit: dict):
+    """One bar of C's groove; each voice plays only if it has a level in `lv`."""
+    beats = length * 4
+    s.pad(bar, length, ch, lv.get("pad", 0.4), cutoff=lv.get("cutoff", 2200))
+    if lv.get("bass"):
+        s.bass(bar, 0, ch, min(2.5, beats), lv["bass"])
+        if beats > 2.5:
+            s.bass(bar, 2.5, ch, min(1.4, beats - 2.5), lv["bass"] * 0.72)
+    if lv.get("arp"):
+        s.arp(bar, length, ch, lv.get("step", 0.5), lv["arp"], octave=1, bright=lv.get("bright", 0.55))
+    if lv.get("shaker"):
+        for i in range(int(beats * 2)):
+            s.hit(bar, i * 0.5, kit["shaker"], lv["shaker"] * (0.6 if i % 2 == 0 else 1.0), pan=0.25)
+    if lv.get("hat"):
+        for i in range(int(beats * 4)):
+            s.hit(bar, i * 0.25, kit["hat"], lv["hat"] * (1.0 if i % 4 == 2 else 0.5), pan=-0.3)
+    if lv.get("kick"):
+        for b in (0, 2):
+            if b < beats:
+                s.hit(bar, b, kit["kick"], lv["kick"])
+    if lv.get("clap"):
+        for b in (1, 3):
+            if b < beats:
+                s.hit(bar, b, kit["clap"], lv["clap"], pan=0.05)
+    if lv.get("toms"):
+        for b, which, g in ((0, "lo", 1.0), (1.5, "lo", 0.7), (2.5, "hi", 0.8), (3.25, "hi", 0.6), (3.5, "lo", 0.8)):
+            if b < beats:
+                s.hit(bar, b, kit[which], lv["toms"] * g, pan=-0.25 if which == "lo" else 0.25)
+    if lv.get("bell"):
+        s.bell(bar, 0, up(CHORDS[ch][1][-1], 1), lv["bell"])
+    if lv.get("counter"):
+        tones = [up(n, 2) for n in CHORDS[ch][1]]
+        if beats > 1.5:
+            s.pluck(bar, 1.5, tones[-1], lv["counter"], pan=0.4, bright=0.7)
+        if beats > 3.5:
+            s.pluck(bar, 3.5, tones[-2], lv["counter"] * 0.85, pan=-0.4, bright=0.7)
+
+
+def motif(s: Score, bar: float, beat: float, notes: list[str], gain: float, step: float = 0.5):
+    """The mark's rising figure: level, legs, point."""
+    for j, nm in enumerate(notes):
+        s.pluck(bar, beat + j * step, nm, gain - 0.025 * j, dur=2.6, pan=(j - 1.5) * 0.2, bright=0.7)
+
+
+def compose_c(sections, fmt: str) -> np.ndarray:
+    s = Score(100, sections, tail=3.0)
+    reel = fmt == "reel"
+    kit = {
+        "shaker": shaker(),
+        "kick": kick(0.4, f0=120, f1=48, punch=0.7),
+        "hat": hat(),
+        "clap": clap(),
+        "lo": tom(98, 0.4, bend=1.5),
+        "hi": tom(196, 0.25, bend=1.35, seed=8),
+        "crash": crash(),
+        "boom": kick(1.2, f0=110, f1=36, punch=2.2),
+    }
+
+    def fb(frames: float) -> float:
+        """Picture frames (30 fps) to bars (72 frames a bar at 100 bpm)."""
+        return frames / 72
+
+    for sid, start, bars in s.sections:
+        end = start + bars
+        if sid == "hook":
+            for bar, length, ch in s.chords(start, bars, C_PROGRESSIONS["hook"]):
+                s.pad(bar, length, ch, 0.34, cutoff=1000, attack=1.0)
+                s.bass(bar, 0, ch, length * 4 - 0.5, 0.2)
+            # The question rises, the answer settles a little too easily.
+            for j, nm in enumerate(["F#4", "A4", "B4"]):
+                s.pluck(start + fb(4 if reel else 8), j * 0.5, nm, 0.3, dur=1.8, pan=0.25)
+            for j, nm in enumerate(["D5", "B4", "A4"]):
+                s.pluck(start + fb(44 if reel else 46), j * 0.5, nm, 0.3, dur=2.2, pan=-0.25)
+            # "But is it?"
+            but = start + fb(84 if reel else 160)
+            s.hit(but, 0, kit["boom"], 0.34)
+            s.pluck(but, 0.5, "E5", 0.26, dur=3.0, bright=0.45)
+        elif sid == "noise":
+            # The chatter: a groove behind a lowpass that opens, cut dead on "lost".
+            lost = fb(80 if reel else 196)
+            tmp = Score(100, [("x", bars)])
+            for bar, length, ch in tmp.chords(0, bars, C_PROGRESSIONS["noise"]):
+                warm(tmp, bar, length, ch, {"pad": 0.3, "cutoff": 1500, "bass": 0.42, "arp": 0.22, "step": 0.25, "shaker": 0.1, "hat": 0.07, "kick": 0.5, "clap": 0.2, "toms": 0.26}, kit)
+                for b in (1.75,):
+                    tmp.hit(bar, b, kit["kick"], 0.4)
+            sub = sum(tmp.bus[k] for k in tmp.bus)
+            n = len(sub)
+            sub = sweep_lowpass(sub, 300 * (20 ** (np.arange(n) / n)))
+            stop = samples(lost * s.bar)
+            k = samples(0.04)
+            sub[stop : stop + k] *= np.linspace(1, 0, k)[:, None]
+            sub[stop + k :] = 0.0
+            place(s.bus["fx"], sub, s.t(start), 0.9)
+            # What's left once it's lost: a low hum.
+            s.pad(start + lost, bars - lost, "Em7", 0.22, cutoff=600, attack=0.05)
+        elif sid == "turn":
+            title = fb(60 if reel else 90)
+            # Dark: a heartbeat of toms while the bricks are laid.
+            s.pad(start, title, "Bm7", 0.24, cutoff=650, attack=0.2)
+            s.bass(start, 0, "Bm7", title * 4 - 0.2, 0.26)
+            n8 = int(title * 8)
+            for i in range(n8):
+                s.hit(start, i * 0.5, kit["lo"] if i % 2 == 0 else kit["hi"], 0.14 + 0.14 * i / max(1, n8 - 1), pan=-0.2 if i % 2 == 0 else 0.2)
+            # "Neev": the mark's motif and the first resolved chord.
+            s.hit(start + title, 0, kit["boom"], 0.5)
+            s.hit(start + title, 0, kit["crash"], 0.18)
+            motif(s, start + title, 0.25, ["D4", "F#4", "A4", "D5"], 0.42)
+            post = segments(start + title, end, ["Dadd9", "G", "A"])
+            for bar, length, ch in post:
+                if ch == "Dadd9":
+                    s.pad(bar, length + 0.5, ch, 0.56, cutoff=2600, attack=0.25)
+                    s.bass(bar, 0, ch, length * 4, 0.4)
+                else:
+                    warm(s, bar, length, ch, {"pad": 0.42, "bass": 0.4, "arp": 0.22, "shaker": 0.07, "kick": 0.3 if ch == "A" else 0}, kit)
+        elif sid in C_LEVELS:
+            for bar, length, ch in s.chords(start, bars, C_PROGRESSIONS[sid]):
+                warm(s, bar, length, ch, C_LEVELS[sid], kit)
+            if sid == "family":
+                # The update lands in Dubai.
+                s.bell(start + fb(64), 0, "A5", 0.2)
+        elif sid == "payoff":
+            title = fb(36 if reel else 72)
+            s.pad(start, title, "Gmaj7", 0.36, cutoff=1500, attack=0.1)
+            s.bass(start, 0, "Gmaj7", title * 4, 0.3)
+            s.hit(start + title, 0, kit["boom"], 0.46)
+            s.hit(start + title, 0, kit["crash"], 0.14)
+            sus = 0.5 if reel else 1.0
+            s.pad(start + title, sus, "A7sus4", 0.42, cutoff=2000, attack=0.05)
+            s.bass(start + title, 0, "A7sus4", sus * 4, 0.36)
+            # "…with proof."
+            motif(s, start + title, 0.5, ["A4", "D5", "F#5"], 0.34)
+            for bar, length, ch in segments(start + title + sus, end, ["Dadd9"]):
+                warm(s, bar, length, ch, {"pad": 0.5, "cutoff": 2600, "bass": 0.4, "arp": 0.22, "shaker": 0.08, "kick": 0.32}, kit)
+        elif sid == "end":
+            prog_ = ["Asus4", "Dadd9"] if bars <= 2 else ["Gmaj7", "Asus4", "Dadd9", "Dadd9"]
+            chords = s.chords(start, bars, prog_)
+            for bar, length, ch in chords:
+                last = bar == chords[-1][0]
+                arrival = ch == "Dadd9" and (bar == start or chords[int(bar - start) - 1][2] != "Dadd9")
+                s.pad(bar, length + (1.5 if last else 0), ch, 0.5, cutoff=2400, attack=0.3)
+                s.bass(bar, 0, ch, length * 4 - 0.25 + (4 if last else 0), 0.36)
+                if arrival:
+                    motif(s, bar, 0.25, ["D4", "F#4", "A4", "D5", "F#5"], 0.4)
+                elif not last:
+                    s.arp(bar, length, ch, 0.5, 0.2, octave=1)
+                    for i in range(int(length * 8)):
+                        s.hit(bar, i * 0.5, kit["shaker"], 0.05, pan=0.25)
+    s.bus["pluck"] = delay(s.bus["pluck"], s.beat * 0.75, feedback=0.28, mix=0.14)
+    curve = {
+        "hook": (-5.0, -4.0),
+        "noise": (-4.0, 0.0),
+        "turn": (-2.0, -1.0),
+        "site": (-1.5, -1.0),
+        "builder": (-1.0, -0.5),
+        "family": (0.0, 0.5),
+        "home": (-0.5, 0.0),
+        "photos": (0.0, 0.0),
+        "letter": (-2.0, -2.0),
+        "ask": (-0.5, 0.0),
+        "design": (0.0, 0.5),
+        "language": (0.5, 1.5),
+        "payoff": (-3.0, 0.0),
+        "end": (-1.0, -1.0),
+    }
+    return s.mixdown(target=-19.0, fade_out=1.6 if not reel else 0.5, wets={"pad": 0.3, "pluck": 0.34, "bass": 0.05, "drums": 0.12, "fx": 0.06}, curve=curve, ratio=1.6)
+
+
 def main() -> None:
     cuts = json.load(open(os.path.join(ROOT, "src", "films", "cuts.json")))
     os.makedirs(OUT, exist_ok=True)
-    for variant, compose in (("a", compose_a), ("b", compose_b)):
+    wanted = set(sys.argv[1:]) or {"a", "b", "c"}
+    for variant, compose in (("a", compose_a), ("b", compose_b), ("c", compose_c)):
+        if variant not in wanted:
+            continue
         for fmt in ("youtube", "reel"):
             sections = [(sid, float(bars)) for sid, bars in cuts[variant][fmt]]
             mix = compose(sections, fmt)

@@ -44,5 +44,38 @@
       ["family", 2.5],
       ["end", 2]
     ]
+  },
+  "c": {
+    "title": "सब ठीक है? · Neev intro",
+    "bpm": 100,
+    "youtube": [
+      ["hook", 3],
+      ["noise", 4],
+      ["turn", 3.5],
+      ["site", 3],
+      ["builder", 3],
+      ["family", 2],
+      ["home", 2],
+      ["photos", 2],
+      ["letter", 3],
+      ["ask", 3],
+      ["design", 3],
+      ["language", 3],
+      ["payoff", 3],
+      ["end", 4]
+    ],
+    "reel": [
+      ["hook", 2],
+      ["noise", 2],
+      ["turn", 2.5],
+      ["site", 1.5],
+      ["builder", 1.5],
+      ["home", 1.5],
+      ["ask", 1.5],
+      ["design", 1.5],
+      ["language", 1.5],
+      ["payoff", 1.5],
+      ["end", 2]
+    ]
   }
 }

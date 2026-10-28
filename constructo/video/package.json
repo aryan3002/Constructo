@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "render": "node scripts/render.mjs",
     "still": "remotion still",
-    "audio": "uv run --with numpy --with scipy python scripts/audio/sfx.py && uv run --with numpy --with scipy python scripts/audio/score.py"
+    "audio": "uv run --with numpy --with scipy python scripts/audio/sfx.py && uv run --with numpy --with scipy python scripts/audio/score.py",
+    "vo": "uv run --with numpy --with scipy python scripts/audio/vo.py"
   },
   "dependencies": {
     "@remotion/cli": "4.0.535",
