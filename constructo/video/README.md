@@ -89,12 +89,13 @@ by frame.
 
 Film C's voiceover is written in `src/films/c/vo.json`: a narrator in Indian
 English, plus the opening exchange in Hindi, heard as if on a call. It is
-generated with Google Cloud Text-to-Speech. The script needs a key in
-`GOOGLE_TTS_API_KEY`, with the Cloud Text-to-Speech API enabled on its project.
+made with ElevenLabs (key in `ELEVENLABS_API_KEY`, `api.elevenlabs.io` allowed)
+or, with `--provider google`, Google Cloud Text-to-Speech (`GOOGLE_TTS_API_KEY`).
+ElevenLabs' free plan isn't licensed for commercial use, so publish from a paid plan.
 
 ```sh
-npm run vo -- audition       # each candidate voice, back to back → out/vo/audition/en-IN.mp3, hi-IN.mp3
-npm run vo -- make --narrator en-IN-Chirp3-HD-Aoede --owner hi-IN-Chirp3-HD-Charon --site hi-IN-Chirp3-HD-Fenrir
+npm run vo -- audition       # library voices, numbered → out/vo/audition/en-IN.mp3, hi-IN.mp3 (previews cost no credits)
+npm run vo -- make --narrator eleven:<owner>/<id> --owner eleven:… --site eleven:…
 VO=1 node scripts/render.mjs NeevC-YouTube NeevC-Reel
 scripts/finish.sh out/films/NeevC-*.mp4
 ```

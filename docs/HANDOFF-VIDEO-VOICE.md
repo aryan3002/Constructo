@@ -18,18 +18,17 @@ There is no PR; don't open one unless the founder asks.
     - the owner asks "काम कैसा चल रहा है?"
     - Ramesh, on site, answers "सब ठीक है, सर।"
   - Each line has a section, a start time `at` (seconds into that section) and an expected length `dur`.
-- **The voice pipeline is built and dry-run tested:** `scripts/audio/vo.py` (`npm run vo -- …`). It uses Google Cloud Text-to-Speech.
-- **The founder chose Google TTS "for now".** If they don't like the voices, the alternatives are:
-  - Kokoro-82M or Indic Parler-TTS, if huggingface.co is allowed in the network settings
-  - ElevenLabs, which needs a paid plan for commercial use
-  - a recording of the founder; it drops in with `npm run vo -- duck`
+- **The voice pipeline is built and dry-run tested:** `scripts/audio/vo.py` (`npm run vo -- …`). It speaks ElevenLabs (the default) and Google Cloud Text-to-Speech.
+- **The founder chose ElevenLabs.** They start on the free plan (10,000 credits; the voiceover is about 1,500 characters, about 1 credit each with `eleven_multilingual_v2`). They also have a Claude startup program promo for a 12-month paid plan.
+  - **Licence:** ElevenLabs' free plan doesn't include commercial use. Drafts are fine; before the film is published, the account must be on a paid plan (the promo). Say this once when you deliver.
+- **Fallbacks:** Google TTS (`GOOGLE_TTS_API_KEY`, `--provider google`), or a recording of the founder, which drops in with `npm run vo -- duck`.
 
 ## What you need
 
-- **The key.** `GOOGLE_TTS_API_KEY` must be set in this environment (an environment secret or variable). Its Google Cloud project needs the Cloud Text-to-Speech API enabled and billing on.
+- **The key.** `ELEVENLABS_API_KEY` must be set in this environment (an environment secret or variable), from ElevenLabs → profile → API Keys.
   - **Never print the key.** Never ask the founder to paste it into the chat.
   - If it's missing, tell them to add it via the cloud environment menu → Edit, and to start a new session.
-- **The host.** `texttospeech.googleapis.com` is reachable from these containers. huggingface.co, github.com, Azure TTS and api.elevenlabs.io were blocked. Don't route around a blocked host.
+- **The host.** `api.elevenlabs.io` must be allowed under Network access (it was blocked before the founder changed it). If the voice previews' host is blocked, `audition` synthesizes the samples instead (about 120 credits a voice). Don't route around a blocked host; name it to the founder.
 
 ## Steps
 
@@ -38,16 +37,15 @@ cd constructo/video
 npm install
 export REMOTION_BROWSER_EXECUTABLE=/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell   # path in Claude's cloud containers
 npm run audio                # sound effects + scores (the WAVs aren't committed)
-npm run vo -- voices         # proves the key works; lists en-IN and hi-IN voices
-npm run vo -- audition       # each candidate says its name + a sample → out/vo/audition/en-IN.mp3, hi-IN.mp3
+npm run vo -- voices         # proves the key works; lists the account's voices
+npm run vo -- audition       # Indian-English and Hindi voices from the library, numbered → out/vo/audition/en-IN.mp3, hi-IN.mp3
 ```
 
-1. **Audition.** Send the founder the two audition MP3s with SendUserFile and ask them to pick:
-   - **narrator** (en-IN)
-   - **owner**: the man who asks; he is called "sir"
-   - **site**: Ramesh, who answers
-   - If they don't mind, suggest a warm Chirp 3: HD narrator (Aoede or Kore for a woman, Charon for a man) and two clearly different Hindi male voices (e.g. Charon and Fenrir).
-2. **Make.** Run `npm run vo -- make --narrator <name> --owner <name> --site <name>`.
+1. **Audition.** Send the founder the two audition MP3s with SendUserFile, with the numbered list the command printed, and ask them to pick by number:
+   - **narrator** (from en-IN)
+   - **owner**: the man who asks; he is called "sir" (from hi-IN)
+   - **site**: Ramesh, who answers (from hi-IN, clearly different from the owner)
+2. **Make.** Run `npm run vo -- make --narrator eleven:<owner>/<id> --owner … --site …`, using the `eleven:…` references the audition printed. The first use adds each library voice to the account.
    - It saves the cast to `vo.json`.
    - It writes `public/audio/vo/c-{youtube,reel}.wav`, the ducked scores, and `out/final/NeevC-*.srt`.
    - It prints a timing table. Fix every line flagged "overlaps" or "tight": nudge `at` in `vo.json`, try `--rate 1.05` for the narrator, or shorten the line. Then re-run `make`; synthesis is cached, so it's cheap.
@@ -96,4 +94,4 @@ prints absolute times for every line.
 
 ## Paste this into the new chat
 
-> Read `docs/HANDOFF-VIDEO-VOICE.md` on branch `claude/bold-goodall-11ksuo` of aryan3002/Constructo and add the Google TTS voiceover to Neev film C. I've added `GOOGLE_TTS_API_KEY` to this environment. Start with the voice audition and send me the samples so I can pick the voices.
+> Read `docs/HANDOFF-VIDEO-VOICE.md` on branch `claude/bold-goodall-11ksuo` of aryan3002/Constructo and add the ElevenLabs voiceover to Neev film C. I've added `ELEVENLABS_API_KEY` to this environment and allowed api.elevenlabs.io. Start with the voice audition and send me the samples so I can pick the voices.

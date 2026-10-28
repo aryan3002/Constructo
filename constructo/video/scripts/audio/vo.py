@@ -1,8 +1,9 @@
-"""Voiceover for film C, made with Google Cloud Text-to-Speech.
+"""Voiceover for film C, made with ElevenLabs or Google Cloud Text-to-Speech.
 
-  voices     list the voices Google offers for the cast's languages
-  audition   every candidate voice says its own name and a sample line →
-             out/vo/audition/<lang>.mp3 (one file per language, easy to play on a phone)
+  voices     list the voices on offer for the cast's languages
+  audition   one sample per candidate voice, back to back →
+             out/vo/audition/<lang>.mp3 (one file per language, easy to play on a phone).
+             ElevenLabs auditions use the voice library's own previews, so they cost no credits.
   make       synthesize every line of src/films/c/vo.json (cached in out/vo/cache), lay
              the lines on the cut sheet → public/audio/vo/c-<format>.wav, duck the score
              under them → public/audio/music/c-<format>-ducked.wav, write captions →
@@ -10,11 +11,13 @@
   duck       only duck the score under an existing public/audio/vo/c-<format>.wav
              (for a recorded voiceover, lined up with the film at 48 kHz).
 
-The cast is vo.json's "cast", or --narrator / --owner / --site voice names (saved
-back to vo.json). The API key is read from GOOGLE_TTS_API_KEY and never printed.
+The cast is vo.json's "cast", or --narrator / --owner / --site voices (saved back
+to vo.json). A voice written "eleven:<owner>/<voice_id>" (as `audition` prints it)
+or "eleven:<voice_id>" is made by ElevenLabs; any other name is a Google voice.
+Keys are read from ELEVENLABS_API_KEY and GOOGLE_TTS_API_KEY and never printed.
 
-Run:  uv run --with numpy --with scipy python scripts/audio/vo.py audition
-      uv run --with numpy --with scipy python scripts/audio/vo.py make --narrator en-IN-Chirp3-HD-Aoede
+Run:  uv run --with numpy --with scipy python scripts/audio/vo.py audition --provider eleven
+      uv run --with numpy --with scipy python scripts/audio/vo.py make --narrator eleven:<owner>/<id> --owner … --site …
 Then: VO=1 node scripts/render.mjs NeevC-YouTube NeevC-Reel && scripts/finish.sh out/films/NeevC-*.mp4
 """
 from __future__ import annotations
@@ -47,6 +50,13 @@ VO_OUT = os.path.join(ROOT, "public", "audio", "vo")
 MUSIC = os.path.join(ROOT, "public", "audio", "music")
 FINAL = os.path.join(ROOT, "out", "final")
 API = "https://texttospeech.googleapis.com/v1"
+ELEVEN = "https://api.elevenlabs.io/v1"
+ELEVEN_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+# Voice-library searches for the audition: (vo.json language, query).
+ELEVEN_SEARCH = {
+    "en-IN": "language=en&accent=indian",
+    "hi-IN": "language=hi",
+}
 FORMAT_NAME = {"youtube": "YouTube", "reel": "Reel"}
 
 # Voice families from most to least natural.
@@ -97,6 +107,51 @@ def call(path: str, body: dict | None = None) -> dict:
         raise
 
 
+ELEVEN_HELP = """ElevenLabs refused the request. Check that
+  - ELEVENLABS_API_KEY is set for this environment (cloud environment menu → Edit, under
+    Network secrets or environment variables); only sessions started after saving see it;
+  - api.elevenlabs.io is allowed under Network access;
+  - the account has credits left (Home → Balance)."""
+
+
+def eleven(path: str, body: dict | None = None, raw: bool = False):
+    headers = {"xi-api-key": os.environ.get("ELEVENLABS_API_KEY", "").strip(), "Content-Type": "application/json"}
+    data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
+    req = urllib.request.Request(f"{ELEVEN}/{path}", data=data, headers=headers, method="GET" if body is None else "POST")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return r.read() if raw else json.load(r)
+    except urllib.error.HTTPError as e:
+        err = TtsError(e.code, e.read().decode("utf-8", "replace"))
+        if e.code == 401:
+            sys.exit(f"{err}\n\n{ELEVEN_HELP}")
+        raise err from None
+
+
+_library: dict[str, str] = {}
+
+
+def eleven_voice_id(voice: str) -> str:
+    """A shared library voice ("owner/id") is added to the account once, then used by id."""
+    ref = voice.split(":", 1)[1]
+    if "/" not in ref:
+        return ref
+    if ref not in _library:
+        owner, vid = ref.split("/", 1)
+        mine = {v["voice_id"] for v in eleven("voices").get("voices", [])}
+        if vid not in mine:
+            try:
+                vid = eleven(f"voices/add/{owner}/{vid}", {"new_name": f"Neev {vid[:6]}"}).get("voice_id", vid)
+            except TtsError as e:
+                print(f"  could not add {vid} to the voice library ({e.code}); trying it directly")
+        _library[ref] = vid
+    return _library[ref]
+
+
+def shared_voices(lang: str, n: int) -> list[dict]:
+    return eleven(f"shared-voices?page_size={n}&sort=trending&{ELEVEN_SEARCH[lang]}").get("voices", [])
+
+
 def tier(name: str) -> int:
     return next((i for i, t in enumerate(TIERS) if f"-{t}-" in name), len(TIERS))
 
@@ -117,6 +172,13 @@ def synth(text: str, voice: str, lang: str, rate: float = 1.0) -> tuple[int, np.
     """One line as (sample rate, mono float), cached by everything that shapes it."""
     tag = hashlib.sha1(json.dumps([text, voice, lang, rate], ensure_ascii=False).encode()).hexdigest()[:16]
     path = os.path.join(CACHE, f"{tag}.wav")
+    if not os.path.exists(path) and voice.startswith("eleven:"):
+        settings = {"stability": 0.45, "similarity_boost": 0.8, "style": 0.15, "use_speaker_boost": True}
+        if rate != 1.0:
+            settings["speed"] = rate
+        pcm = eleven(f"text-to-speech/{eleven_voice_id(voice)}?output_format=pcm_24000", {"text": text, "model_id": ELEVEN_MODEL, "voice_settings": settings}, raw=True)
+        os.makedirs(CACHE, exist_ok=True)
+        wavfile.write(path, 24000, np.frombuffer(pcm, dtype="<i2"))
     if not os.path.exists(path):
         body = {"input": {"text": text}, "voice": {"languageCode": lang, "name": voice}, "audioConfig": {"audioEncoding": "LINEAR16"}}
         if rate != 1.0:
@@ -195,6 +257,11 @@ def save_vo(vo: dict) -> None:
 
 
 def cmd_voices(args) -> None:
+    if args.provider == "eleven":
+        for v in eleven("voices").get("voices", []):
+            labels = v.get("labels") or {}
+            print(f"  eleven:{v['voice_id']}  {v['name']:24s} {labels.get('gender', ''):7s} {labels.get('accent', '')}")
+        return
     for lang in sorted({c["lang"] for c in load_vo()["cast"].values()}):
         print(f"\n{lang}")
         for v in voices(lang):
@@ -212,8 +279,57 @@ def pick_candidates(lang: str, everything: bool) -> list[dict]:
     return chosen or vs
 
 
+def fetch(url: str) -> bytes | None:
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            return r.read()
+    except (urllib.error.URLError, TimeoutError) as e:
+        print(f"  preview unavailable ({e}); synthesizing the sample instead")
+        return None
+
+
+def audition_eleven(args) -> None:
+    gap = np.zeros((samples(0.9), 2))
+    for lang in sorted({c["lang"] for c in load_vo()["cast"].values()}):
+        reel = []
+        cands = shared_voices(lang, 16 if args.all else 8)
+        print(f"{lang}: {len(cands)} voices")
+        for v in cands:
+            ref = f"eleven:{v['public_owner_id']}/{v['voice_id']}"
+            mp3 = fetch(v["preview_url"]) if v.get("preview_url") else None
+            if mp3:
+                tmp = os.path.join(AUDITION, f"{v['voice_id']}.mp3")
+                with open(tmp, "wb") as f:
+                    f.write(mp3)
+                wav = tmp[:-4] + ".wav"
+                subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", tmp, "-ar", str(SR), "-ac", "1", wav], check=True)
+                clip = prepare(*synth_file(wav), None)
+            else:
+                clip = prepare(*synth(SAMPLE[lang], ref, lang, args.rate), None)
+            reel += [clip, gap]
+            print(f"  {len(reel) // 2:2d}. {ref}  {v.get('name', '')} · {v.get('gender', '')} · {v.get('age', '')} · {v.get('accent', '')}")
+        write_audition(lang, reel, gap)
+
+
+def synth_file(path: str) -> tuple[int, np.ndarray]:
+    sr, x = wavfile.read(path)
+    x = x.astype(np.float64) / (32768.0 if np.issubdtype(x.dtype, np.integer) else 1.0)
+    return sr, x.mean(axis=1) if x.ndim == 2 else x
+
+
+def write_audition(lang: str, reel: list, gap: np.ndarray) -> None:
+    both = np.concatenate(reel) if reel else gap
+    wav = os.path.join(AUDITION, f"{lang}.wav")
+    write_wav(wav, both)
+    mp3 = wav[:-4] + ".mp3"
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-b:a", "160k", mp3], check=True)
+    print(f"  → {os.path.relpath(mp3, ROOT)} ({len(both) / SR:.0f}s)")
+
+
 def cmd_audition(args) -> None:
     os.makedirs(AUDITION, exist_ok=True)
+    if args.provider == "eleven":
+        return audition_eleven(args)
     gap = np.zeros((samples(0.9), 2))
     for lang in sorted({c["lang"] for c in load_vo()["cast"].values()}):
         reel = []
@@ -226,12 +342,7 @@ def cmd_audition(args) -> None:
             write_wav(os.path.join(AUDITION, f"{v['name']}.wav"), clip)
             reel += [clip, gap]
             print(f"  {v['name']:34s} {v.get('ssmlGender', '')}")
-        both = np.concatenate(reel) if reel else gap
-        wav = os.path.join(AUDITION, f"{lang}.wav")
-        write_wav(wav, both)
-        mp3 = wav[:-4] + ".mp3"
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-b:a", "160k", mp3], check=True)
-        print(f"  → {os.path.relpath(mp3, ROOT)} ({len(both) / SR:.0f}s)")
+        write_audition(lang, reel, gap)
 
 
 def section_times(fmt: str) -> tuple[dict, float]:
@@ -298,7 +409,7 @@ def cmd_make(args) -> None:
             cast[role]["voice"] = name
     missing = [r for r, c in cast.items() if not c.get("voice")]
     if missing:
-        sys.exit(f"No voice chosen for: {', '.join(missing)}. Run `audition`, then pass e.g. --narrator en-IN-Chirp3-HD-Aoede.")
+        sys.exit(f"No voice chosen for: {', '.join(missing)}. Run `audition`, then pass e.g. --narrator eleven:<owner>/<voice_id>.")
     save_vo(vo)
     os.makedirs(VO_OUT, exist_ok=True)
     os.makedirs(FINAL, exist_ok=True)
@@ -339,8 +450,10 @@ def cmd_make(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("voices")
+    v = sub.add_parser("voices")
+    v.add_argument("--provider", choices=["eleven", "google"], default="eleven")
     a = sub.add_parser("audition")
+    a.add_argument("--provider", choices=["eleven", "google"], default="eleven")
     a.add_argument("--all", action="store_true", help="every voice of the best family, not just the shortlist")
     a.add_argument("--rate", type=float, default=1.0)
     m = sub.add_parser("make")
