@@ -118,6 +118,11 @@ servers (it reads them as a proxy or VPN). Reading the voice library still works
 `voices` and `audition` run; `make` needs the account on a paid plan (Subscription →
 upgrade or redeem the promo). Nothing else needs changing; re-run `make` after."""
 
+ELEVEN_PAID_ONLY = """Free plans can't use voice-library voices through the API (whatever a voice's
+"free users" label says), and the Indian-English and Hindi voices are all library voices.
+Put the account on a paid plan (Starter or above, which also covers commercial use), or
+use --provider google, or record the voice and run `duck`."""
+
 
 def eleven(path: str, body: dict | None = None, raw: bool = False):
     headers = {"xi-api-key": os.environ.get("ELEVENLABS_API_KEY", "").strip(), "Content-Type": "application/json"}
@@ -130,6 +135,8 @@ def eleven(path: str, body: dict | None = None, raw: bool = False):
         err = TtsError(e.code, e.read().decode("utf-8", "replace"))
         if e.code == 401 and "detected_unusual_activity" in err.detail:
             sys.exit(f"{err}\n\n{ELEVEN_FREE_BLOCKED}")
+        if e.code == 402:
+            sys.exit(f"{err}\n\n{ELEVEN_PAID_ONLY}")
         if e.code == 401:
             sys.exit(f"{err}\n\n{ELEVEN_HELP}")
         raise err from None
