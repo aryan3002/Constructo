@@ -1,9 +1,9 @@
 {
   "note": "Voiceover for film C. `at` is seconds into the section and `dur` the expected spoken length (scripts/audio/vo.py reports the real one). `role` picks the voice from `cast` (default narrator); fx 'phone' makes a line sound like a call. Narrator: warm, unhurried Indian English.",
   "cast": {
-    "narrator": {"lang": "en-IN", "voice": null},
-    "owner": {"lang": "hi-IN", "voice": null},
-    "site": {"lang": "hi-IN", "voice": null}
+    "narrator": {"lang": "en-IN", "voice": "eleven:2ac60c98ccb58aee264181dfa21ae14964889c1d2e3831e7c661520be7f7fd43/nAXOV8RqzafF7mI2EBhz"},
+    "owner": {"lang": "hi-IN", "voice": "eleven:7515a67a8887ebf544e2925bf41b85d86b92f8eed50f32d1676c4705900c4631/KjB3pyRrta1C1C2zoshr"},
+    "site": {"lang": "hi-IN", "voice": "eleven:6c7a6ede9b7054386b346e2c7e8d64b1cb96235826c55788c76b22202c84488b/jNTHBl47oA9XOWkV0KRe"}
   },
   "youtube": [
     {"section": "hook", "at": 0.3, "dur": 1.2, "role": "owner", "fx": "phone", "text": "काम कैसा चल रहा है?"},
