@@ -23,6 +23,12 @@ There is no PR; don't open one unless the founder asks.
   - **Licence:** ElevenLabs' free plan doesn't include commercial use. Drafts are fine; before the film is published, the account must be on a paid plan (the promo). Say this once when you deliver.
 - **Fallbacks:** Google TTS (`GOOGLE_TTS_API_KEY`, `--provider google`), or a recording of the founder, which drops in with `npm run vo -- duck`.
 
+## Done, 2026-10-29
+
+- The account is on Starter. Film C has its voice: the founder narrates (their English clone, `eleven:8eelzUOQB3k6pdNR03IS`) and asks the opening question (their Hindi clone, `eleven:VrNXD0zgUaZbz17SVypu`); Ramesh is Amarjeet Chauhan. The cast is in `vo.json`.
+- The call lines were nudged apart (YouTube 0.2 s / 1.65 s, Reel 0.03 s / 1.48 s); no line is tight. Both finals read -14.0 LUFS, -1.0 dB peak; the Reel's call and "But is it?" land on the bubbles and the slam.
+- Delivered: `out/final/NeevC-{YouTube,Reel}.{mp4,srt}`; the films page has the new cuts.
+
 ## Status, 2026-10-28 (audition done, waiting on picks and the paid plan)
 
 - **The free plan can't make this voiceover at all.** Library voices return 402 `paid_plan_required` ("Free users cannot use library voices via the API") from any machine, whatever the library's `free_users_allowed` flag says; Voice Design is paid-only (403); the 21 premade voices are American, British or Australian. Credits aren't the issue: the script is 1,244 characters. Every Indian-English and Hindi voice needs a paid plan.
